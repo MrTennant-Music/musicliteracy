@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Triplets</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+const { useMemo, useRef, useState } = React;
+
+const VIEWBOX_WIDTH = 920;
+const VIEWBOX_HEIGHT = 430;
+const STAFF_LEFT = 24;
+const STAFF_RIGHT = 896;
+const SYSTEM_TOPS = [112, 262];
+const LINE_GAP = 10;
+const BAR_COUNT = 8;
+const BARS_PER_SYSTEM = 4;
+const NOTE_RX = 6.3;
+const NOTE_RY = 4.6;
+const STEM_LENGTH = 32;
+
+const CLEF_X = STAFF_LEFT + 8;
+const TIME_SIG_X = STAFF_LEFT + 54;
+const MUSIC_START_X = STAFF_LEFT + 76;
+const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
+const TICK = String.fromCodePoint(0x2714);
+const CROSS = String.fromCodePoint(0x2716);
+
+const NOTE_POOL = [
+  { name: "C4", step: -2 },
+  { name: "D4", step: -1 },
+  { name: "E4", step: 0 },
+  { name: "F4", step: 1 },
+  { name: "G4", step: 2 },
+  { name: "A4", step: 3 },
+  { name: "B4", step: 4 },
+  { name: "C5", step: 5 },
+  { name: "D5", step: 6 },
+  { name: "E5", step: 7 },
+  { name: "F5", step: 8 },
+  { name: "G5", step: 9 },
+  { name: "A5", step: 10 },
+];
+
+const TIME_SIGNATURES = [
+  { id: "2/4", top: "2", bottom: "4", beats: 2 },
+  { id: "3/4", top: "3", bottom: "4", beats: 3 },
+  { id: "4/4", top: "4", bottom: "4", beats: 4 },
+];
+
+const TRIPLET_TYPES = [
+  {
+    id: "quaver-triplet",
+    label: "Quaver triplet",
+    shortLabel: "Quaver",
+    rhythm: "triplet-quaver",
+    beats: 1,
+    usesBeam: true,
+    usesBracket: false,
+  },
+  {
+    id: "crotchet-triplet",
+    label: "Crotchet triplet",
+    shortLabel: "Crotchet",
+    rhythm: "triplet-crotchet",
+    beats: 2,
+    usesBeam: false,
+    usesBracket: true,
+  },
+];
+
+const RHYTHMS = {
+  semibreve: { beats: 4, spacing: 8, open: true, stem: false, dot: false, flag: false },
+  "dotted-minim": { beats: 3, spacing: 6, open: true, stem: true, dot: true, flag: false },
+  minim: { beats: 2, spacing: 4, open: true, stem: true, dot: false, flag: false },
+  crotchet: { beats: 1, spacing: 2.2, open: false, stem: true, dot: false, flag: false },
+  quaver: { beats: 0.5, spacing: 1.15, open: false, stem: true, dot: false, flag: true },
+  "triplet-quaver": { beats: 1 / 3, spacing: 0.95, open: false, stem: true, dot: false, flag: true },
+  "triplet-crotchet": { beats: 2 / 3, spacing: 1.5, open: false, stem: true, dot: false, flag: false },
+};
+
+const FILL_PATTERNS = {
+  0: [[]],
+  1: [["crotchet"], ["quaver", "quaver"]],
+  2: [["minim"], ["crotchet", "crotchet"], ["quaver", "quaver", "crotchet"], ["crotchet", "quaver", "quaver"]],
+  3: [["dotted-minim"], ["minim", "crotchet"], ["crotchet", "minim"], ["crotchet", "crotchet", "crotchet"], ["quaver", "quaver", "crotchet", "crotchet"]],
+  4: [["semibreve"], ["minim", "minim"], ["minim", "crotchet", "crotchet"], ["crotchet", "crotchet", "minim"], ["crotchet", "crotchet", "crotchet", "crotchet"], ["quaver", "quaver", "crotchet", "crotchet", "crotchet"]],
+};
+
+const QUAVER_TEXTURE_PATTERNS = {
+  0: [[]],
+  1: [["quaver", "quaver"], ["crotchet"]],
+  2: [["quaver", "quaver", "quaver", "quaver"], ["quaver", "quaver", "crotchet"], ["crotchet", "quaver", "quaver"]],
+  3: [["quaver", "quaver", "quaver", "quaver", "crotchet"], ["quaver", "quaver", "crotchet", "quaver", "quaver"], ["crotchet", "quaver", "quaver", "crotchet"]],
+  4: [["quaver", "quaver", "quaver", "quaver", "crotchet", "crotchet"], ["quaver", "quaver", "crotchet", "quaver", "quaver", "crotchet"], ["crotchet", "quaver", "quaver", "crotchet", "quaver", "quaver"]],
+};
+
+const CROTCHET_TEXTURE_PATTERNS = {
+  0: [[]],
+  1: [["crotchet"]],
+  2: [["minim"], ["crotchet", "crotchet"]],
+  3: [["dotted-minim"], ["minim", "crotchet"], ["crotchet", "minim"], ["crotchet", "crotchet", "crotchet"]],
+  4: [["semibreve"], ["minim", "minim"], ["minim", "crotchet", "crotchet"], ["crotchet", "crotchet", "minim"], ["crotchet", "crotchet", "crotchet", "crotchet"]],
+};
+
+function randomIndex(length) {
+  return Math.floor(Math.random() * length);
+}
+
+function randomItem(items) {
+  return items[randomIndex(items.length)];
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function rhythmInfo(rhythm) {
+  return RHYTHMS[rhythm] ?? RHYTHMS.crotchet;
+}
+
+function yForStep(step, systemTop) {
+  const bottomLineY = systemTop + LINE_GAP * 4;
+  return bottomLineY - step * (LINE_GAP / 2);
+}
+
+function stepForIndex(index) {
+  return NOTE_POOL[clamp(index, 0, NOTE_POOL.length - 1)].step;
+}
+
+function stemGoesDown(step) {
+  return step > 4;
+}
+
+function nextMelodicIndex(previousIndex, stepwise = false) {
+  const move = stepwise ? randomItem([-1, 1]) : randomItem([-2, -1, 0, 0, 1, 2]);
+  return clamp(previousIndex + move, 0, NOTE_POOL.length - 1);
+}
+
+function getFillPattern(beats, texture) {
+  const roundedBeats = Math.round(beats);
+  const preferred = texture === "quaver" ? QUAVER_TEXTURE_PATTERNS[roundedBeats] : CROTCHET_TEXTURE_PATTERNS[roundedBeats];
+  const fallback = FILL_PATTERNS[roundedBeats] ?? [["crotchet"]];
+  const pool = preferred && Math.random() < 0.82 ? preferred : fallback;
+  return randomItem(pool);
+}
+
+function makeNotesFromRhythms(rhythms, previousIndex, barIndex, targetGroupId = null, targetRhythm = null) {
+  let index = previousIndex;
+  const notes = rhythms.map((rhythm, noteIndex) => {
+    const isTripletTarget = targetRhythm && rhythm === targetRhythm;
+    const isStepwise = rhythm.includes("triplet") || rhythm === "quaver";
+    index = nextMelodicIndex(index, isStepwise);
+
+    return {
+      id: `${barIndex}-${noteIndex}`,
+      rhythm,
+      step: stepForIndex(index),
+      targetGroupId: isTripletTarget ? targetGroupId : null,
+    };
+  });
+
+  return { notes, nextIndex: index };
+}
+
+function makeTargetBar(timeSignature, tripletType, previousIndex, barIndex) {
+  const remainingBeats = timeSignature.beats - tripletType.beats;
+  const texture = tripletType.id === "quaver-triplet" ? "quaver" : "crotchet";
+  const fillPattern = getFillPattern(remainingBeats, texture);
+  const tripletPattern = [tripletType.rhythm, tripletType.rhythm, tripletType.rhythm];
+
+  const tripletFirst = Math.random() < 0.5;
+  const rhythms = tripletFirst ? [...tripletPattern, ...fillPattern] : [...fillPattern, ...tripletPattern];
+  const targetGroupId = `target-${barIndex}`;
+
+  const made = makeNotesFromRhythms(rhythms, previousIndex, barIndex, targetGroupId, tripletType.rhythm);
+  return {
+    notes: made.notes,
+    nextIndex: made.nextIndex,
+    targetGroupId,
+  };
+}
+
+function makeNormalBar(timeSignature, previousIndex, texture, barIndex) {
+  const fillPattern = getFillPattern(timeSignature.beats, texture);
+  const made = makeNotesFromRhythms(fillPattern, previousIndex, barIndex);
+  return {
+    notes: made.notes,
+    nextIndex: made.nextIndex,
+    targetGroupId: null,
+  };
+}
+
+function makeQuestion() {
+  const timeSignature = randomItem(TIME_SIGNATURES);
+  const validTriplets = TRIPLET_TYPES.filter((triplet) => triplet.beats <= timeSignature.beats);
+  const tripletType = randomItem(validTriplets);
+  const targetBarIndex = randomIndex(BAR_COUNT);
+  const bars = [];
+  let previousIndex = randomIndex(NOTE_POOL.length);
+  const texture = tripletType.id === "quaver-triplet" ? "quaver" : "crotchet";
+
+  for (let barIndex = 0; barIndex < BAR_COUNT; barIndex += 1) {
+    const bar = barIndex === targetBarIndex
+      ? makeTargetBar(timeSignature, tripletType, previousIndex, barIndex)
+      : makeNormalBar(timeSignature, previousIndex, texture, barIndex);
+
+    bars.push(bar);
+    previousIndex = bar.nextIndex;
+  }
+
+  const targetNoteIds = bars[targetBarIndex].notes
+    .filter((note) => note.targetGroupId === `target-${targetBarIndex}`)
+    .map((note) => note.id);
+
+  return {
+    id: Math.random().toString(36).slice(2),
+    timeSignature,
+    tripletType,
+    targetBarIndex,
+    targetGroupId: `target-${targetBarIndex}`,
+    targetNoteIds,
+    bars,
+  };
+}
+
+function getBarNotePositions(notes, startX, endX) {
+  const units = notes.reduce((sum, note) => sum + rhythmInfo(note.rhythm).spacing, 0);
+  const usableWidth = Math.max(1, endX - startX);
+  const unitWidth = usableWidth / Math.max(1, units);
+  let cursor = startX + unitWidth * 0.35;
+
+  return notes.map((note) => {
+    const x = cursor;
+    cursor += rhythmInfo(note.rhythm).spacing * unitWidth;
+    return x;
+  });
+}
+
+function buildLayouts(question) {
+  const layouts = [];
+
+  SYSTEM_TOPS.forEach((systemTop, systemIndex) => {
+    const barWidth = (STAFF_RIGHT - MUSIC_START_X) / BARS_PER_SYSTEM;
+
+    for (let localBarIndex = 0; localBarIndex < BARS_PER_SYSTEM; localBarIndex += 1) {
+      const barIndex = systemIndex * BARS_PER_SYSTEM + localBarIndex;
+      const startX = MUSIC_START_X + localBarIndex * barWidth;
+      const endX = MUSIC_START_X + (localBarIndex + 1) * barWidth;
+      const bar = question.bars[barIndex];
+      const positions = getBarNotePositions(bar.notes, startX + 8, endX - 8);
+
+      layouts.push({ barIndex, bar, systemTop, startX, endX, positions });
+    }
+  });
+
+  return layouts;
+}
+
+function getStemData(note, x, systemTop, forcedStemDown = null) {
+  const y = yForStep(note.step, systemTop);
+  const down = forcedStemDown ?? stemGoesDown(note.step);
+  const stemX = down ? x - NOTE_RX : x + NOTE_RX;
+  const stemEndY = down ? y + STEM_LENGTH : y - STEM_LENGTH;
+
+  return { y, down, stemX, stemEndY };
+}
+
+function beamable(note) {
+  return note.rhythm === "quaver" || note.rhythm === "triplet-quaver";
+}
+
+function getBeamGroups(notes) {
+  const groups = [];
+  let index = 0;
+
+  while (index < notes.length) {
+    if (!beamable(notes[index])) {
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+    const groupId = notes[index].targetGroupId ?? `ordinary-${start}`;
+
+    while (index < notes.length) {
+      const note = notes[index];
+      const currentGroupId = note.targetGroupId ?? `ordinary-${start}`;
+      if (!beamable(note) || currentGroupId !== groupId) break;
+      index += 1;
+    }
+
+    const end = index - 1;
+    if (end > start) groups.push({ start, end });
+  }
+
+  return groups;
+}
+
+function groupContaining(groups, noteIndex) {
+  return groups.find((group) => noteIndex >= group.start && noteIndex <= group.end) ?? null;
+}
+
+function getBeamData(notes, positions, systemTop) {
+  const averageStep = notes.reduce((sum, note) => sum + note.step, 0) / notes.length;
+  const down = averageStep > 4;
+
+  const anchorStep = down
+    ? Math.max(...notes.map((note) => note.step))
+    : Math.min(...notes.map((note) => note.step));
+  const anchorIndex = notes.findIndex((note) => note.step === anchorStep);
+
+  const firstStem = getStemData(notes[0], positions[0], systemTop, down);
+  const lastStem = getStemData(notes[notes.length - 1], positions[positions.length - 1], systemTop, down);
+  const anchorStem = getStemData(notes[anchorIndex], positions[anchorIndex], systemTop, down);
+
+  const rawSlope = (notes[notes.length - 1].step - notes[0].step) * -2;
+  const totalSlope = clamp(rawSlope, -8, 8);
+  const totalX = Math.max(1, lastStem.stemX - firstStem.stemX);
+  const slopePerX = totalSlope / totalX;
+
+  return {
+    down,
+    start: {
+      x: firstStem.stemX,
+      y: anchorStem.stemEndY - slopePerX * (anchorStem.stemX - firstStem.stemX),
+    },
+    end: {
+      x: lastStem.stemX,
+      y: anchorStem.stemEndY + slopePerX * (lastStem.stemX - anchorStem.stemX),
+    },
+  };
+}
+
+function beamYAtX(x, beam) {
+  if (!beam || beam.start.x === beam.end.x) return beam?.start.y ?? 0;
+  const progress = (x - beam.start.x) / (beam.end.x - beam.start.x);
+  return beam.start.y + progress * (beam.end.y - beam.start.y);
+}
+
+function selectedColour(noteId, selectedIds, feedback, targetIds) {
+  const selected = selectedIds.includes(noteId);
+  const target = targetIds.includes(noteId);
+
+  if (!feedback) return selected ? "#16a34a" : "currentColor";
+  if (target) return "#16a34a";
+  if (selected) return "#dc2626";
+  return "currentColor";
+}
+
+function StaffLines({ systemTop }) {
+  return (
+    <g>
+      {[0, 1, 2, 3, 4].map((index) => (
+        <line
+          key={index}
+          x1={STAFF_LEFT}
+          x2={STAFF_RIGHT}
+          y1={systemTop + index * LINE_GAP}
+          y2={systemTop + index * LINE_GAP}
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+      ))}
+    </g>
+  );
+}
+
+function TrebleClef({ systemTop }) {
+  return (
+    <text x={CLEF_X} y={systemTop + 28} fontSize="80" fontFamily="serif" dominantBaseline="middle">
+      {TREBLE_CLEF}
+    </text>
+  );
+}
+
+function TimeSignature({ signature, systemTop }) {
+  return (
+    <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle" fill="currentColor">
+      <text x={TIME_SIG_X} y={systemTop + 20}>{signature.top}</text>
+      <text x={TIME_SIG_X} y={systemTop + 39}>{signature.bottom}</text>
+    </g>
+  );
+}
+
+function LedgerLines({ x, step, systemTop, colour }) {
+  const lines = [];
+  if (step <= -2) lines.push(yForStep(-2, systemTop));
+  if (step >= 10) lines.push(yForStep(10, systemTop));
+
+  return (
+    <g>
+      {lines.map((y) => (
+        <line key={y} x1={x - 12} x2={x + 12} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />
+      ))}
+    </g>
+  );
+}
+
+function Flag({ stemX, stemEndY, down, colour }) {
+  const d = down
+    ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 4}, ${stemX + 10} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 16}`
+    : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 4}, ${stemX + 10} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 16}`;
+
+  return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />;
+}
+
+function Note({ note, x, systemTop, colour = "currentColor", forcedStemDown = null, forcedStemEndY = null, showFlag = true, onPointerDown }) {
+  const info = rhythmInfo(note.rhythm);
+  const stem = getStemData(note, x, systemTop, forcedStemDown);
+  const stemEndY = forcedStemEndY ?? stem.stemEndY;
+  const dotY = Math.abs(note.step % 2) === 1 ? stem.y : stem.y - 5;
+
+  return (
+    <g onPointerDown={onPointerDown} className="cursor-pointer">
+      <circle cx={x} cy={stem.y} r="17" fill="transparent" />
+      <LedgerLines x={x} step={note.step} systemTop={systemTop} colour={colour} />
+      <ellipse
+        cx={x}
+        cy={stem.y}
+        rx={NOTE_RX}
+        ry={NOTE_RY}
+        transform={`rotate(-18 ${x} ${stem.y})`}
+        fill={info.open ? "transparent" : colour}
+        stroke={colour}
+        strokeWidth="1.7"
+      />
+      {info.stem && (
+        <line
+          x1={stem.stemX}
+          x2={stem.stemX}
+          y1={stem.y}
+          y2={stemEndY}
+          stroke={colour}
+          strokeWidth="1.5"
+        />
+      )}
+      {info.dot && <circle cx={x + 12} cy={dotY} r="2.1" fill={colour} />}
+      {info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={stemEndY} down={stem.down} colour={colour} />}
+    </g>
+  );
+}
+
+function Beam({ beam, colour = "currentColor" }) {
+  return (
+    <line
+      x1={beam.start.x - 1}
+      y1={beam.start.y}
+      x2={beam.end.x + 1}
+      y2={beam.end.y}
+      stroke={colour}
+      strokeWidth="4"
+      strokeLinecap="butt"
+    />
+  );
+}
+
+function TripletAnswerMark({ group, tripletType }) {
+  if (!group || !tripletType) return null;
+
+  if (tripletType.id === "quaver-triplet") {
+    const centreX = group.positions[1];
+    const beam = getBeamData(group.notes, group.positions, group.systemTop);
+    const yOnBeam = beamYAtX(centreX, beam);
+    const y = beam.down ? yOnBeam + 18 : yOnBeam - 12;
+    const x = beam.down ? centreX - 5 : centreX + 4;
+
+    return (
+      <text x={x} y={y + 6} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="24" fill="#16a34a">
+        3
+      </text>
+    );
+  }
+
+  const x1 = group.positions[0] - 10;
+  const x2 = group.positions[2] + 10;
+  const y = group.systemTop - 24;
+  const centreX = (x1 + x2) / 2;
+
+  return (
+    <g stroke="#16a34a" fill="#16a34a">
+      <g stroke="#16a34a" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d={`M ${x1} ${y + 8} L ${x1} ${y} L ${centreX - 12} ${y}`} />
+        <path d={`M ${centreX + 12} ${y} L ${x2} ${y} L ${x2} ${y + 8}`} />
+      </g>
+      <text x={centreX} y={y + 6} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="24">
+        3
+      </text>
+    </g>
+  );
+}
+
+function findTargetGroup(layouts, targetNoteIds) {
+  for (const layout of layouts) {
+    const indexes = layout.bar.notes
+      .map((note, index) => targetNoteIds.includes(note.id) ? index : -1)
+      .filter((index) => index >= 0);
+
+    if (indexes.length === 3) {
+      return {
+        notes: indexes.map((index) => layout.bar.notes[index]),
+        positions: indexes.map((index) => layout.positions[index]),
+        systemTop: layout.systemTop,
+      };
+    }
+  }
+
+  return null;
+}
+
+function Score({ question, selectedNoteIds, selectedTripletTypeId, feedback, onToggleNote }) {
+  const layouts = useMemo(() => buildLayouts(question), [question]);
+  const targetGroup = feedback ? findTargetGroup(layouts, question.targetNoteIds) : null;
+
+  return (
+    <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="w-full h-auto select-none touch-none" aria-label="Triplet exercise">
+      <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
+
+      {SYSTEM_TOPS.map((systemTop, systemIndex) => (
+        <g key={systemIndex}>
+          <StaffLines systemTop={systemTop} />
+          <TrebleClef systemTop={systemTop} />
+          {systemIndex === 0 && <TimeSignature signature={question.timeSignature} systemTop={systemTop} />}
+        </g>
+      ))}
+
+      {layouts.map((layout) => {
+        const groups = getBeamGroups(layout.bar.notes);
+
+        return (
+          <g key={layout.barIndex}>
+            {layout.bar.notes.map((note, noteIndex) => {
+              const group = groupContaining(groups, noteIndex);
+              const groupNotes = group ? layout.bar.notes.slice(group.start, group.end + 1) : null;
+              const groupPositions = group ? layout.positions.slice(group.start, group.end + 1) : null;
+              const beam = group ? getBeamData(groupNotes, groupPositions, layout.systemTop) : null;
+              const stem = group ? getStemData(note, layout.positions[noteIndex], layout.systemTop, beam.down) : null;
+              const forcedStemEndY = group ? beamYAtX(stem.stemX, beam) : null;
+              const colour = selectedColour(note.id, selectedNoteIds, feedback, question.targetNoteIds);
+
+              return (
+                <Note
+                  key={note.id}
+                  note={note}
+                  x={layout.positions[noteIndex]}
+                  systemTop={layout.systemTop}
+                  colour={colour}
+                  forcedStemDown={group ? beam.down : null}
+                  forcedStemEndY={forcedStemEndY}
+                  showFlag={!group}
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                    if (!feedback && selectedTripletTypeId) onToggleNote(note.id);
+                  }}
+                />
+              );
+            })}
+
+            {groups.map((group, index) => {
+              const groupNotes = layout.bar.notes.slice(group.start, group.end + 1);
+              const groupPositions = layout.positions.slice(group.start, group.end + 1);
+              const beam = getBeamData(groupNotes, groupPositions, layout.systemTop);
+              const groupNoteIds = groupNotes.map((note) => note.id);
+              const groupFullySelected = groupNoteIds.every((id) => selectedNoteIds.includes(id));
+              const groupIsTargetAfterFeedback = feedback && groupNoteIds.every((id) => question.targetNoteIds.includes(id));
+              const beamColour = groupFullySelected || groupIsTargetAfterFeedback ? "#16a34a" : "currentColor";
+              return <Beam key={index} beam={beam} colour={beamColour} />;
+            })}
+
+            {layout.barIndex === BAR_COUNT - 1 ? (
+              <g>
+                <line x1={layout.endX - 5} x2={layout.endX - 5} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />
+                <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="4" />
+              </g>
+            ) : (
+              <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />
+            )}
+          </g>
+        );
+      })}
+
+      {feedback && <TripletAnswerMark group={targetGroup} tripletType={question.tripletType} />}
+    </svg>
+  );
+}
+
+function TripletButtonGlyph({ type }) {
+  return (
+    <svg viewBox="0 -8 150 78" className="h-8 w-12 overflow-visible" aria-hidden="true">
+      <g transform="translate(-15,-10) scale(1.6)">
+        {[35, 62, 89].map((x) => (
+          <g key={x}>
+            <ellipse cx={x} cy="38" rx="6.3" ry="4.6" transform={`rotate(-18 ${x} 38)`} fill="currentColor" />
+            <line x1={x + 5.3} x2={x + 5.3} y1="38" y2="12" stroke="currentColor" strokeWidth="1.5" />
+          </g>
+        ))}
+        {type.id === "quaver-triplet" && <line x1="40.3" x2="94.3" y1="12" y2="12" stroke="currentColor" strokeWidth="4" />}
+        {type.usesBracket && (
+          <g stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round">
+            <path d="M 40 9 L 40 0 L 56 0" />
+            <path d="M 80 0 L 96 0 L 96 9" />
+          </g>
+        )}
+        <text x="67" y={type.usesBracket ? "10" : "8"} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="22" fill="currentColor">3</text>
+      </g>
+    </svg>
+  );
+}
+
+function TripletSelector({ selectedTripletTypeId, correctTripletTypeId, feedback, disabled, onSelect }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {TRIPLET_TYPES.map((type) => {
+        const isSelected = selectedTripletTypeId === type.id;
+        const isCorrectType = feedback && type.id === correctTripletTypeId;
+        const isWrongSelectedType = feedback === "wrong-type" && isSelected && type.id !== correctTripletTypeId;
+
+        const stateClass = isCorrectType
+          ? "bg-green-600 text-white border-green-600"
+          : isWrongSelectedType
+          ? "bg-red-600 text-white border-red-600"
+          : isSelected
+          ? "bg-stone-950 text-white border-stone-950"
+          : "bg-white border-stone-300 hover:bg-stone-100";
+
+        return (
+          <button
+            key={type.id}
+            type="button"
+            disabled={disabled}
+            onClick={() => onSelect(type.id)}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold ${stateClass} ${disabled ? "opacity-90" : ""}`}
+          >
+            <span className="whitespace-nowrap">{type.label}</span>
+            <TripletButtonGlyph type={type} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded-xl border bg-stone-50 p-3 text-center">
+      <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function PairedQuaversGlyph() {
+  return (
+    <svg viewBox="0 0 90 50" className="h-9" aria-hidden="true">
+      {[30, 55].map((x) => (
+        <g key={x}>
+          <ellipse cx={x} cy="34" rx="6.3" ry="4.6" transform={`rotate(-18 ${x} 34)`} fill="currentColor" />
+          <line x1={x + 5.3} x2={x + 5.3} y1="34" y2="10" stroke="currentColor" strokeWidth="1.5" />
+        </g>
+      ))}
+      <line x1="35.3" x2="60.3" y1="10" y2="10" stroke="currentColor" strokeWidth="4" />
+    </svg>
+  );
+}
+
+function TwoCrotchetsGlyph() {
+  return (
+    <svg viewBox="0 0 90 50" className="h-9" aria-hidden="true">
+      {[30, 58].map((x) => (
+        <g key={x}>
+          <ellipse cx={x} cy="34" rx="6.3" ry="4.6" transform={`rotate(-18 ${x} 34)`} fill="currentColor" />
+          <line x1={x + 5.3} x2={x + 5.3} y1="34" y2="10" stroke="currentColor" strokeWidth="1.5" />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function HelpPanel() {
+  return (
+    <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+      <div className="grid gap-4 text-sm md:grid-cols-2">
+        <div className="rounded-lg bg-white/70 p-3 flex flex-col items-center gap-3">
+          <div className="font-semibold text-center">Quaver triplets: three quavers played in the time of two quavers.</div>
+          <div className="flex items-center justify-center gap-3 translate-x-[5px]">
+            <div className="scale-110"><TripletButtonGlyph type={TRIPLET_TYPES[0]} /></div>
+            <span className="text-xl font-bold translate-x-[4px]">=</span>
+            <div className="-translate-x-[6px]"><PairedQuaversGlyph /></div>
+          </div>
+        </div>
+
+        <div className="rounded-lg bg-white/70 p-3 flex flex-col items-center gap-3">
+          <div className="font-semibold text-center">Crotchet triplets: three crotchets played in the time of two crotchets.</div>
+          <div className="flex items-center justify-center gap-3 translate-x-[5px]">
+            <div className="scale-110"><TripletButtonGlyph type={TRIPLET_TYPES[1]} /></div>
+            <span className="text-xl font-bold translate-x-[4px]">=</span>
+            <div className="-translate-x-[6px]"><TwoCrotchetsGlyph /></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PromptText({ prompt }) {
+  if (!prompt) return <span />;
+
+  const parts = prompt.split("Confirm");
+  return (
+    <p className="text-sm font-medium text-black">
+      {parts.map((part, index) => (
+        <React.Fragment key={index}>
+          {part}
+          {index < parts.length - 1 && <strong>Confirm</strong>}
+        </React.Fragment>
+      ))}
+    </p>
+  );
+}
+
+function Feedback({ feedback, correctType }) {
+  if (!feedback) return null;
+
+  const message = feedback === "correct"
+    ? `${TICK} Correct`
+    : feedback === "wrong-type"
+    ? `${CROSS} Correct three notes but it was ${correctType.label.toLowerCase()}.`
+    : `${CROSS} Incorrect`;
+
+  return (
+    <div className="mt-5 flex min-h-[96px] items-center justify-center p-4">
+      <div className={`text-center font-semibold ${feedback === "correct" ? "text-green-700" : "text-red-700"}`}>
+        <p>{message}</p>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const timeoutRef = useRef(null);
+  const [question, setQuestion] = useState(() => makeQuestion());
+  const [selectedTripletTypeId, setSelectedTripletTypeId] = useState(null);
+  const [selectedNoteIds, setSelectedNoteIds] = useState([]);
+  const [feedback, setFeedback] = useState(null);
+  const [correct, setCorrect] = useState(0);
+  const [attempted, setAttempted] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
+  const [prompt, setPrompt] = useState("Select a triplet type, select the three notes, then press Confirm.");
+
+  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+
+  function clearTimer() {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }
+
+  function nextQuestion() {
+    clearTimer();
+    setQuestion(makeQuestion());
+    setSelectedTripletTypeId(null);
+    setSelectedNoteIds([]);
+    setFeedback(null);
+    setPrompt("Select a triplet type, select the three notes, then press Confirm.");
+  }
+
+  function resetScore() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    nextQuestion();
+  }
+
+  function toggleNote(noteId) {
+    setSelectedNoteIds((current) => {
+      if (current.includes(noteId)) return current.filter((id) => id !== noteId);
+      if (current.length >= 3) return [...current.slice(1), noteId];
+      return [...current, noteId];
+    });
+    setPrompt("Notes selected. Press Confirm to check your answer.");
+  }
+
+  function selectTripletType(typeId) {
+    if (feedback) return;
+    setSelectedTripletTypeId(typeId);
+    setSelectedNoteIds([]);
+    setPrompt("Now select the three notes that form the triplet.");
+  }
+
+  function confirmAnswer() {
+    if (feedback) return;
+
+    if (!selectedTripletTypeId) {
+      setPrompt("Choose quaver triplet or crotchet triplet first.");
+      return;
+    }
+
+    if (selectedNoteIds.length !== 3) {
+      setPrompt("Select exactly three notes before pressing Confirm.");
+      return;
+    }
+
+    const selectedSet = new Set(selectedNoteIds);
+    const targetSet = new Set(question.targetNoteIds);
+    const notesCorrect = selectedSet.size === targetSet.size && [...selectedSet].every((id) => targetSet.has(id));
+    const typeCorrect = selectedTripletTypeId === question.tripletType.id;
+    const isCorrect = notesCorrect && typeCorrect;
+    const feedbackType = isCorrect ? "correct" : notesCorrect && !typeCorrect ? "wrong-type" : "incorrect";
+    const newStreak = isCorrect ? streak + 1 : 0;
+
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setStreak(newStreak);
+    setBestStreak((value) => Math.max(value, newStreak));
+    setFeedback(feedbackType);
+    setPrompt("");
+
+    clearTimer();
+    timeoutRef.current = window.setTimeout(nextQuestion, 2300);
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 text-stone-950 p-4 md:p-8">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-5 rounded-2xl bg-white shadow-sm border border-stone-200 p-5">
+          <div className="flex flex-col items-center gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Triplets</h1>
+              <p className="mt-2 text-stone-700">Identify the triplet by choosing the type and selecting the three notes.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 min-w-[280px]">
+              <StatCard label="Score" value={`${correct}/${attempted}`} />
+              <StatCard label="Accuracy" value={`${accuracy}%`} />
+              <StatCard label="Streak" value={streak} />
+            </div>
+          </div>
+        </header>
+
+        <main className="rounded-2xl bg-white shadow-sm border border-stone-200 p-4 md:p-6">
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <TripletSelector
+              selectedTripletTypeId={selectedTripletTypeId}
+              correctTripletTypeId={question.tripletType.id}
+              feedback={feedback}
+              disabled={Boolean(feedback)}
+              onSelect={selectTripletType}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                title="Help"
+                aria-label="Help"
+                onClick={() => setShowHelp((value) => !value)}
+                className={`h-10 w-10 rounded-full border text-lg font-bold ${showHelp ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"}`}
+              >
+                ?
+              </button>
+              <button type="button" onClick={resetScore} className="rounded-xl bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700">
+                Reset score
+              </button>
+            </div>
+          </div>
+
+          {showHelp && <HelpPanel />}
+
+          <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white">
+            <Score
+              question={question}
+              selectedNoteIds={selectedNoteIds}
+              selectedTripletTypeId={selectedTripletTypeId}
+              feedback={feedback}
+              onToggleNote={toggleNote}
+            />
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <PromptText prompt={prompt} />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (feedback) return;
+                  setSelectedNoteIds([]);
+                  setPrompt("Selection cleared. Select the three notes, then press Confirm.");
+                }}
+                className="rounded-xl bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={confirmAnswer}
+                disabled={Boolean(feedback)}
+                className="rounded-xl bg-green-600 text-white px-5 py-2 text-sm font-bold hover:bg-green-700 disabled:opacity-60"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+
+          <Feedback feedback={feedback} correctType={question.tripletType} />
+          <div className="mt-4 text-sm text-stone-600">Best streak: {bestStreak}</div>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+const rootElement = document.getElementById("root");
+if (!rootElement) throw new Error("Root element not found.");
+ReactDOM.render(<App />, rootElement);
+  </script>
+</body>
+</html>
