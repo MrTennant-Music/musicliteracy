@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Correct the Rhythm</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { margin: 0; }
+    svg { overflow: visible; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useEffect, useMemo, useRef, useState } = React;
+
+const VIEWBOX_WIDTH = 920;
+const VIEWBOX_HEIGHT = 165;
+const ANSWER_OVERLAY_OFFSET = 42;
+const STAFF_LEFT = 42;
+const STAFF_RIGHT = 878;
+const SYSTEM_TOP = 62;
+const LINE_GAP = 10;
+const BAR_COUNT = 4;
+const NOTE_RX = 6.3;
+const NOTE_RY = 4.6;
+const STEM_LENGTH = 28;
+const CLEF_X = STAFF_LEFT + 8;
+const KEY_SIG_X = STAFF_LEFT + 52;
+const TIME_SIG_X = STAFF_LEFT + 78;
+const MUSIC_START_X = STAFF_LEFT + 108;
+const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
+const NOTE_X_OFFSET = 5;
+const TICK = String.fromCodePoint(0x2714);
+const CROSS = String.fromCodePoint(0x2716);
+
+const BLUE = "#2563eb";
+const GREEN = "#16a34a";
+const RED = "#dc2626";
+
+const QUESTION_TYPES = [
+  { id: "correct", label: "Correct the Rhythm" },
+  { id: "insert", label: "Insert the Rhythm" },
+];
+
+const AUDIO_SPEEDS = [
+  { id: "slow", label: "Slow", bpm: 56 },
+  { id: "medium", label: "Medium", bpm: 72 },
+  { id: "fast", label: "Fast", bpm: 92 },
+];
+
+const KEYS = [
+  { id: "C", name: "C major", tonic: "C", keyAccidentals: {} },
+  { id: "F", name: "F major", tonic: "F", keyAccidentals: { B: -1 } },
+  { id: "G", name: "G major", tonic: "G", keyAccidentals: { F: 1 } },
+  { id: "Am", name: "A minor", tonic: "A", keyAccidentals: {}, harmonicGSharp: true },
+];
+
+const TIME_SIGNATURES = [
+  { id: "2/4", top: "2", bottom: "4", beats: 2, compound: false },
+  { id: "3/4", top: "3", bottom: "4", beats: 3, compound: false },
+  { id: "4/4", top: "4", bottom: "4", beats: 4, compound: false },
+  { id: "6/8", top: "6", bottom: "8", beats: 6, compound: true },
+];
+
+const RHYTHMS = {
+  notehead: { name: "Notehead", beats: 0, open: false, stem: false, flag: false, dotted: false },
+  quaver: { name: "Quaver", beats: 0.5, open: false, stem: true, flag: true, dotted: false },
+  crotchet: { name: "Crotchet", beats: 1, open: false, stem: true, flag: false, dotted: false },
+  dottedCrotchet: { name: "Dotted crotchet", beats: 1.5, open: false, stem: true, flag: false, dotted: true },
+  minim: { name: "Minim", beats: 2, open: true, stem: true, flag: false, dotted: false },
+  dottedMinim: { name: "Dotted minim", beats: 3, open: true, stem: true, flag: false, dotted: true },
+  semibreve: { name: "Semibreve", beats: 4, open: true, stem: false, flag: false, dotted: false },
+};
+
+const RHYTHM_SPACING = {
+  notehead: 1.55,
+  quaver: 0.9,
+  crotchet: 1.55,
+  dottedCrotchet: 2,
+  minim: 2.4,
+  dottedMinim: 3.2,
+  semibreve: 4.2,
+};
+
+const HELP_RHYTHMS = ["semibreve", "dottedMinim", "minim", "dottedCrotchet", "crotchet", "quaver"];
+
+const NOTE_POOL = [
+  { letter: "C", octave: 4, step: -2, midi: 60 },
+  { letter: "D", octave: 4, step: -1, midi: 62 },
+  { letter: "E", octave: 4, step: 0, midi: 64 },
+  { letter: "F", octave: 4, step: 1, midi: 65 },
+  { letter: "G", octave: 4, step: 2, midi: 67 },
+  { letter: "A", octave: 4, step: 3, midi: 69 },
+  { letter: "B", octave: 4, step: 4, midi: 71 },
+  { letter: "C", octave: 5, step: 5, midi: 72 },
+  { letter: "D", octave: 5, step: 6, midi: 74 },
+  { letter: "E", octave: 5, step: 7, midi: 76 },
+  { letter: "F", octave: 5, step: 8, midi: 77 },
+  { letter: "G", octave: 5, step: 9, midi: 79 },
+  { letter: "A", octave: 5, step: 10, midi: 81 },
+];
+
+const SCALE_LETTERS = {
+  C: ["C", "D", "E", "F", "G", "A", "B"],
+  F: ["F", "G", "A", "B", "C", "D", "E"],
+  G: ["G", "A", "B", "C", "D", "E", "F"],
+  Am: ["A", "B", "C", "D", "E", "F", "G"],
+};
+
+const CHORDS = {
+  C: [["C", "E", "G"], ["F", "A", "C"], ["G", "B", "D"], ["C", "E", "G"]],
+  F: [["F", "A", "C"], ["B", "D", "F"], ["C", "E", "G"], ["F", "A", "C"]],
+  G: [["G", "B", "D"], ["C", "E", "G"], ["D", "F", "A"], ["G", "B", "D"]],
+  Am: [["A", "C", "E"], ["D", "F", "A"], ["E", "G", "B"], ["A", "C", "E"]],
+};
+
+const SIMPLE_PATTERNS = {
+  "2/4": [["crotchet", "crotchet"], ["quaver", "quaver", "crotchet"], ["crotchet", "quaver", "quaver"], ["quaver", "crotchet", "quaver"]],
+  "3/4": [["crotchet", "crotchet", "crotchet"], ["quaver", "quaver", "crotchet", "crotchet"], ["crotchet", "quaver", "quaver", "crotchet"], ["crotchet", "crotchet", "quaver", "quaver"]],
+  "4/4": [["crotchet", "crotchet", "crotchet", "crotchet"], ["quaver", "quaver", "crotchet", "crotchet", "crotchet"], ["crotchet", "quaver", "quaver", "crotchet", "crotchet"], ["quaver", "quaver", "quaver", "quaver", "crotchet", "crotchet"]],
+  "6/8": [
+    ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
+    ["dottedCrotchet", "dottedCrotchet"],
+    ["quaver", "quaver", "quaver", "dottedCrotchet"],
+    ["dottedCrotchet", "quaver", "quaver", "quaver"],
+    ["crotchet", "quaver", "crotchet", "quaver"],
+  ],
+};
+
+function randomItem(items) { return items[Math.floor(Math.random() * items.length)]; }
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+function rhythmInfo(id) { return RHYTHMS[id] ?? RHYTHMS.crotchet; }
+function rhythmSpace(id) { return RHYTHM_SPACING[id] ?? RHYTHM_SPACING.crotchet; }
+function getDisplayRhythm(note) { return note.displayRhythm ?? note.rhythm; }
+function getAudioRhythm(note) { return note.audioRhythm ?? note.rhythm; }
+function yForStep(step, systemTop = SYSTEM_TOP) { return systemTop + LINE_GAP * 4 - step * (LINE_GAP / 2); }
+function stemGoesDown(step) { return step > 4; }
+function midiToFrequency(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+function noteIndex(note) { return NOTE_POOL.findIndex((item) => item.letter === note.letter && item.octave === note.octave); }
+function barWidth() { return (STAFF_RIGHT - MUSIC_START_X) / BAR_COUNT; }
+function cloneQuestion(question) { return JSON.parse(JSON.stringify(question)); }
+
+function noteByLetter(letter, preferredIndex = 6) {
+  const candidates = NOTE_POOL.map((note, index) => ({ ...note, index })).filter((note) => note.letter === letter);
+  return candidates.reduce((best, item) => Math.abs(item.index - preferredIndex) < Math.abs(best.index - preferredIndex) ? item : best, candidates[0]);
+}
+
+function beatTotal(pattern) { return pattern.reduce((sum, rhythm) => sum + rhythmInfo(rhythm).beats, 0); }
+function beatStarts(pattern) {
+  let cursor = 0;
+  return pattern.map((rhythm) => {
+    const start = cursor;
+    cursor += rhythmInfo(rhythm).beats;
+    return start;
+  });
+}
+
+function isSyncopated(pattern, timeSignature) {
+  if (timeSignature.id === "3/4") return false;
+  const starts = beatStarts(pattern);
+  return pattern.some((rhythm, index) => rhythm === "crotchet" && starts[index] % (timeSignature.compound ? 3 : 1) !== 0);
+}
+
+function validPattern(pattern, timeSignature, syncopationOn) {
+  if (beatTotal(pattern) !== timeSignature.beats) return false;
+  if (timeSignature.id === "6/8") {
+    const allowed = [
+      "quaver-quaver-quaver-quaver-quaver-quaver",
+      "dottedCrotchet-dottedCrotchet",
+      "quaver-quaver-quaver-dottedCrotchet",
+      "dottedCrotchet-quaver-quaver-quaver",
+      "crotchet-quaver-crotchet-quaver",
+    ];
+    return allowed.includes(pattern.join("-"));
+  }
+  if (!syncopationOn && isSyncopated(pattern, timeSignature)) return false;
+  return true;
+}
+
+function keyAccidentalForLetter(key, letter) {
+  if (key.id === "Am" && letter === "G") return 1;
+  return key.keyAccidentals[letter] ?? 0;
+}
+
+function writtenAccidentalForNote(key, note) {
+  return key.id === "Am" && note?.letter === "G" ? 1 : null;
+}
+
+function chordToneMidi(tone, key, preferredIndex) {
+  const base = noteByLetter(tone, preferredIndex);
+  return base.midi + keyAccidentalForLetter(key, base.letter);
+}
+
+function makeNote({ barIndex, noteIndex, rhythm, base, writtenAccidental = null }) {
+  return {
+    id: `${barIndex}-${noteIndex}`,
+    barIndex,
+    noteIndex,
+    rhythm,
+    displayRhythm: rhythm,
+    audioRhythm: rhythm,
+    answerRhythm: rhythm,
+    letter: base.letter,
+    octave: base.octave,
+    step: base.step,
+    midi: base.midi,
+    writtenAccidental,
+    editable: false,
+  };
+}
+
+function chooseMelodyIndex(previousIndex, key, chord, forceStep = false, direction = 0, strongBeat = false) {
+  const scale = SCALE_LETTERS[key.id] ?? SCALE_LETTERS.C;
+  const candidates = [];
+  NOTE_POOL.forEach((note, index) => {
+    if (!scale.includes(note.letter)) return;
+    if (strongBeat && !chord.includes(note.letter)) return;
+    const distance = index - previousIndex;
+    const abs = Math.abs(distance);
+    if (forceStep && abs !== 1) return;
+    let weight = chord.includes(note.letter) ? 9 : 3;
+    if (abs === 0) weight *= 1.2;
+    if (abs === 1) weight *= 5;
+    if (abs === 2) weight *= 3;
+    if (abs >= 4) weight *= 0.15;
+    if (abs > 7) weight = 0;
+    if (direction > 0 && distance > 0) weight *= 1.3;
+    if (direction < 0 && distance < 0) weight *= 1.3;
+    candidates.push({ value: index, weight });
+  });
+  const filtered = candidates.filter((candidate) => candidate.weight > 0);
+  const total = filtered.reduce((sum, item) => sum + item.weight, 0) || 1;
+  let roll = Math.random() * total;
+  for (const candidate of filtered) {
+    roll -= candidate.weight;
+    if (roll <= 0) return candidate.value;
+  }
+  return previousIndex;
+}
+
+function makeBar(barIndex, pattern, key, previousIndex) {
+  const chord = CHORDS[key.id]?.[barIndex] ?? CHORDS.C[barIndex];
+  let current = previousIndex;
+  const notes = pattern.map((rhythm, index) => {
+    const chosen = barIndex === 0 && index === 0 ? noteByLetter(key.tonic, 5).index : chooseMelodyIndex(current, key, chord, rhythm === "quaver", barIndex < 2 ? 1 : -1, index === 0);
+    current = chosen;
+    return makeNote({
+      barIndex,
+      noteIndex: index,
+      rhythm,
+      base: NOTE_POOL[chosen],
+      writtenAccidental: writtenAccidentalForNote(key, NOTE_POOL[chosen]),
+    });
+  });
+  return { bar: { barIndex, notes }, lastIndex: current };
+}
+
+function choosePattern(timeSignature, barIndex, syncopationOn) {
+  if (barIndex === 3) {
+    if (timeSignature.id === "2/4") return ["minim"];
+    if (timeSignature.id === "3/4") return ["dottedMinim"];
+    if (timeSignature.id === "4/4") return ["semibreve"];
+    return ["dottedMinim"];
+  }
+  const patterns = SIMPLE_PATTERNS[timeSignature.id].filter((pattern) => validPattern(pattern, timeSignature, syncopationOn));
+  return randomItem(patterns.length ? patterns : SIMPLE_PATTERNS[timeSignature.id]);
+}
+
+function applyCadence(bars, key) {
+  const dominant = key.id === "F" ? ["C", "E", "G"] : key.id === "G" ? ["D", "F", "A"] : key.id === "Am" ? ["E", "G", "B"] : ["G", "B", "D"];
+  const tonic = CHORDS[key.id][0];
+  bars[2].notes.forEach((note, index) => {
+    const base = noteByLetter(dominant[index % dominant.length], 5 + index);
+    Object.assign(note, { letter: base.letter, octave: base.octave, step: base.step, midi: base.midi, writtenAccidental: writtenAccidentalForNote(key, base) });
+  });
+  bars[3].notes.forEach((note, index) => {
+    const base = index === bars[3].notes.length - 1 ? noteByLetter(key.tonic, 6) : noteByLetter(tonic[index % tonic.length], 5 + index);
+    Object.assign(note, { letter: base.letter, octave: base.octave, step: base.step, midi: base.midi, writtenAccidental: writtenAccidentalForNote(key, base) });
+  });
+  const finalBar = bars[3];
+  const final = finalBar.notes.at(-1);
+  const penultimate = finalBar.notes.length > 1 ? finalBar.notes.at(-2) : bars[2].notes.at(-1);
+  const finalIndex = noteIndex(final);
+  if (penultimate && finalIndex >= 0) {
+    const scale = SCALE_LETTERS[key.id] ?? SCALE_LETTERS.C;
+    const candidates = [NOTE_POOL[clamp(finalIndex - 1, 0, NOTE_POOL.length - 1)], NOTE_POOL[clamp(finalIndex + 1, 0, NOTE_POOL.length - 1)]].filter((note) => scale.includes(note.letter));
+    const chosen = candidates.length ? randomItem(candidates) : NOTE_POOL[clamp(finalIndex - 1, 0, NOTE_POOL.length - 1)];
+    Object.assign(penultimate, { letter: chosen.letter, octave: chosen.octave, step: chosen.step, midi: chosen.midi, writtenAccidental: writtenAccidentalForNote(key, chosen) });
+  }
+}
+
+function makeBars(timeSignature, key, syncopationOn) {
+  const bars = [];
+  let previous = noteByLetter(key.tonic, 6).index;
+  for (let barIndex = 0; barIndex < BAR_COUNT; barIndex += 1) {
+    const result = makeBar(barIndex, choosePattern(timeSignature, barIndex, syncopationOn), key, previous);
+    bars.push(result.bar);
+    previous = result.lastIndex;
+  }
+  applyCadence(bars, key);
+  return bars;
+}
+
+function makeCorrectQuestion(base) {
+  if (base.timeSignature.compound) return makeInsertQuestion(base, true);
+
+  let candidates = [];
+  base.bars.forEach((bar) => {
+    if (bar.barIndex > 2) return;
+    for (let i = 0; i < bar.notes.length - 1; i += 1) {
+      if (bar.notes[i].rhythm === "crotchet" && bar.notes[i + 1].rhythm === "crotchet") candidates.push({ barIndex: bar.barIndex, noteIndices: [i, i + 1] });
+    }
+  });
+
+  if (!candidates.length) {
+    const barIndex = randomItem([0, 1, 2]);
+    const pattern = base.timeSignature.id === "2/4" ? ["crotchet", "crotchet"] : base.timeSignature.id === "3/4" ? ["crotchet", "crotchet", "crotchet"] : ["crotchet", "crotchet", "crotchet", "crotchet"];
+    base.bars[barIndex] = makeBar(barIndex, pattern, base.key, noteByLetter(base.key.tonic, 6).index).bar;
+    candidates = [{ barIndex, noteIndices: [0, 1] }];
+  }
+
+  const target = randomItem(candidates);
+  const [a, b] = target.noteIndices;
+  const first = base.bars[target.barIndex].notes[a];
+  const second = base.bars[target.barIndex].notes[b];
+  const answer = randomItem(["dot-tail", "tail-dot"]);
+
+  first.editable = true;
+  second.editable = true;
+  first.displayRhythm = "crotchet";
+  second.displayRhythm = "crotchet";
+  first.answerRhythm = answer === "dot-tail" ? "dottedCrotchet" : "quaver";
+  second.answerRhythm = answer === "dot-tail" ? "quaver" : "dottedCrotchet";
+  first.audioRhythm = first.answerRhythm;
+  second.audioRhythm = second.answerRhythm;
+
+  return { ...base, questionType: "correct", target, prompt: `Listen to the music and correct the rhythm in <strong>bar ${target.barIndex + 1}</strong> to match what you hear.` };
+}
+
+function makeInsertQuestion(base, syncopationOn) {
+  const targetBarOptions = [0, 1, 2].filter((barIndex) => {
+    if (!base.timeSignature.compound) return true;
+    const notes = base.bars[barIndex].notes;
+    return !notes.every((note) => note.rhythm === "dottedCrotchet");
+  });
+
+  const targetBarIndex = randomItem(targetBarOptions.length ? targetBarOptions : [0, 1, 2]);
+
+  const patterns = SIMPLE_PATTERNS[base.timeSignature.id].filter((pattern) => {
+    if (!validPattern(pattern, base.timeSignature, syncopationOn)) return false;
+    if (base.timeSignature.compound && pattern.every((rhythm) => rhythm === "dottedCrotchet")) return false;
+    return true;
+  });
+
+  const safePatterns = base.timeSignature.compound
+    ? patterns.filter((item) => item.some((rhythm) => rhythm !== "dottedCrotchet"))
+    : patterns;
+  const fallbackPatterns = base.timeSignature.compound
+    ? SIMPLE_PATTERNS[base.timeSignature.id].filter((item) => item.some((rhythm) => rhythm !== "dottedCrotchet"))
+    : SIMPLE_PATTERNS[base.timeSignature.id];
+  const pattern = randomItem(safePatterns.length ? safePatterns : fallbackPatterns);
+
+  const previous = targetBarIndex > 0 ? Math.max(0, noteIndex(base.bars[targetBarIndex - 1].notes.at(-1))) : noteByLetter(base.key.tonic, 6).index;
+  base.bars[targetBarIndex] = makeBar(targetBarIndex, pattern, base.key, previous).bar;
+  base.bars[targetBarIndex].notes = base.bars[targetBarIndex].notes.map((note, index) => {
+    const isCompoundDottedCrotchet = base.timeSignature.compound && pattern[index] === "dottedCrotchet";
+    return {
+      ...note,
+      id: `${targetBarIndex}-${index}`,
+      noteIndex: index,
+      editable: !isCompoundDottedCrotchet,
+      answerRhythm: pattern[index],
+      audioRhythm: pattern[index],
+      displayRhythm: isCompoundDottedCrotchet ? "dottedCrotchet" : "notehead",
+    };
+  });
+
+  return { ...base, questionType: "insert", target: { barIndex: targetBarIndex, noteIndices: pattern.map((_, index) => index) }, prompt: `Listen to the music and complete the rhythm in <strong>bar ${targetBarIndex + 1}</strong> to match what you hear.` };
+}
+
+function makeQuestion(options = {}) {
+  const enabled = options.enabledQuestionTypes?.length ? options.enabledQuestionTypes : QUESTION_TYPES.map((type) => type.id);
+  const key = randomItem(KEYS);
+  const timeSignature = randomItem(TIME_SIGNATURES);
+  const syncopationOn = options.syncopationOn ?? true;
+  const bars = makeBars(timeSignature, key, syncopationOn);
+  const base = { id: Math.random().toString(36).slice(2), key, timeSignature, bars, performedOrder: [0, 1, 2, 3] };
+  return randomItem(enabled) === "insert" ? makeInsertQuestion(base, syncopationOn) : makeCorrectQuestion(base);
+}
+
+function getBarGeometry(barIndex) {
+  const width = barWidth();
+  const startX = MUSIC_START_X + barIndex * width;
+  return { barIndex, systemTop: SYSTEM_TOP, startX, endX: startX + width, barWidth: width };
+}
+
+function getBarNotePositions(notes, startX, endX, fixedSpacing = false, barIndex = 0) {
+  let s = startX - 10;
+  let e = endX + 14;
+
+  const needsVisibleAccidental = (note, index) => {
+    if (note.writtenAccidental === null || note.writtenAccidental === undefined) return false;
+    return !notes.slice(0, index).some((prev) => prev.letter === note.letter && prev.writtenAccidental === note.writtenAccidental && prev.writtenAccidental !== null && prev.writtenAccidental !== undefined);
+  };
+
+  const units = notes.reduce((sum, note, index) => {
+    const rhythm = getDisplayRhythm(note);
+    const accidentalSpace = needsVisibleAccidental(note, index) ? 12 / 20 : 0;
+    return sum + rhythmSpace(rhythm) + accidentalSpace;
+  }, 0);
+
+  const unitWidth = Math.max(1, e - s) / Math.max(1, units);
+  const out = [];
+  let cursor = s + unitWidth * 0.28 + NOTE_X_OFFSET;
+
+  notes.forEach((note, index) => {
+    const visibleAccidental = needsVisibleAccidental(note, index);
+    if (visibleAccidental) cursor += 12;
+    const accidentalMinimum = out[index - 1] !== undefined && visibleAccidental;
+    const x = accidentalMinimum ? Math.max(cursor, out[index - 1] + 24) : cursor;
+    out.push(x);
+    cursor = x + rhythmSpace(getDisplayRhythm(note)) * unitWidth;
+  });
+
+  if (notes.length === 2) {
+    const rhythmA = getDisplayRhythm(notes[0]);
+    const rhythmB = getDisplayRhythm(notes[1]);
+    const bothCrotchets = rhythmA === "crotchet" && rhythmB === "crotchet";
+    const bothNoteheadsAnswerCrotchets = rhythmA === "notehead" && rhythmB === "notehead" && notes[0].answerRhythm === "crotchet" && notes[1].answerRhythm === "crotchet";
+    const bothDottedCrotchets = rhythmA === "dottedCrotchet" && rhythmB === "dottedCrotchet";
+    const crotchetQuaverPair = (rhythmA === "crotchet" && rhythmB === "quaver") || (rhythmA === "quaver" && rhythmB === "crotchet");
+    const dottedQuaverPair = (rhythmA === "dottedCrotchet" && rhythmB === "quaver") || (rhythmA === "quaver" && rhythmB === "dottedCrotchet");
+
+    if (dottedQuaverPair) {
+      out[0] += 17;
+      out[1] -= 17;
+    } else if (bothNoteheadsAnswerCrotchets) {
+      out[0] -= 3;
+      out[1] += 3;
+    } else if (bothDottedCrotchets || crotchetQuaverPair) {
+      out[0] += 10;
+      out[1] -= 10;
+    } else if (bothCrotchets) {
+      out[0] += 8;
+      out[1] -= 8;
+    } else if (barIndex === 0) {
+      out[0] -= 26;
+      out[1] += 52;
+    } else {
+      out[0] -= 12;
+      out[1] += 36;
+    }
+  }
+
+  return out;
+}
+
+function buildLayouts(question) {
+  return question.bars.map((bar) => {
+    const geo = getBarGeometry(bar.barIndex);
+    const fixed = question.questionType === "insert" && bar.barIndex === question.target?.barIndex;
+    return { ...geo, bar, positions: getBarNotePositions(bar.notes, geo.startX + 28, geo.endX - 28, fixed, bar.barIndex) };
+  });
+}
+
+function getStemData(note, x, systemTop, forcedDown = null) {
+  const y = yForStep(note.step, systemTop);
+  const down = forcedDown ?? stemGoesDown(note.step);
+  const stemX = down ? x - NOTE_RX : x + NOTE_RX;
+  return { y, down, stemX, stemEndY: down ? y + STEM_LENGTH : y - STEM_LENGTH };
+}
+
+function getQuaverGroups(notes, timeSignature) {
+  const groups = [];
+  if (timeSignature.id === "6/8") {
+    let beat = 0;
+    let index = 0;
+    while (index < notes.length) {
+      const rhythm = getDisplayRhythm(notes[index]);
+      if (rhythm !== "quaver") {
+        beat += rhythmInfo(rhythm).beats;
+        index += 1;
+        continue;
+      }
+      const dottedBeat = Math.floor(beat / 3);
+      const start = index;
+      let end = index;
+      let localBeat = beat;
+      while (end + 1 < notes.length && end - start + 1 < 3 && getDisplayRhythm(notes[end + 1]) === "quaver" && Math.floor((localBeat + 0.5) / 3) === dottedBeat) {
+        localBeat += 0.5;
+        end += 1;
+      }
+      if (end > start) groups.push({ start, end });
+      while (index <= end) {
+        beat += rhythmInfo(getDisplayRhythm(notes[index])).beats;
+        index += 1;
+      }
+    }
+    return groups;
+  }
+
+  let index = 0;
+  while (index < notes.length) {
+    if (getDisplayRhythm(notes[index]) !== "quaver") {
+      index += 1;
+      continue;
+    }
+    const start = index;
+    while (index + 1 < notes.length && getDisplayRhythm(notes[index + 1]) === "quaver") index += 1;
+    const end = index;
+    const count = end - start + 1;
+    if (count === 2 || count === 4) groups.push({ start, end });
+    else if (count === 3) groups.push({ start, end: start + 1 });
+    else if (count > 4) {
+      let cursor = start;
+      while (cursor <= end) {
+        const remaining = end - cursor + 1;
+        if (remaining >= 4) { groups.push({ start: cursor, end: cursor + 3 }); cursor += 4; }
+        else if (remaining >= 2) { groups.push({ start: cursor, end: cursor + 1 }); cursor += remaining; }
+        else cursor += 1;
+      }
+    }
+    index = end + 1;
+  }
+  return groups;
+}
+
+function groupContaining(groups, noteIndex) { return groups.find((group) => noteIndex >= group.start && noteIndex <= group.end) ?? null; }
+
+function getBeamData(notes, positions, systemTop) {
+  const down = notes.reduce((sum, note) => sum + note.step, 0) / notes.length > 4;
+  const first = getStemData(notes[0], positions[0], systemTop, down);
+  const last = getStemData(notes.at(-1), positions.at(-1), systemTop, down);
+  return { down, start: { x: first.stemX, y: first.stemEndY }, end: { x: last.stemX, y: last.stemEndY } };
+}
+
+function beamYAtX(x, beam) {
+  const amount = (x - beam.start.x) / (beam.end.x - beam.start.x || 1);
+  return beam.start.y + amount * (beam.end.y - beam.start.y);
+}
+
+function toolToRhythm(tool) {
+  if (tool === "dot") return "dottedCrotchet";
+  if (tool === "tail" || tool === "quaver") return "quaver";
+  return "crotchet";
+}
+
+function answerState(question) {
+  const notes = question.target.noteIndices.map((index) => question.bars[question.target.barIndex].notes[index]);
+  return { correct: notes.every((note) => getDisplayRhythm(note) === note.answerRhythm), notes };
+}
+
+function pointerToSvg(event) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return { x: ((event.clientX - rect.left) / rect.width) * VIEWBOX_WIDTH, y: ((event.clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT };
+}
+
+function findHoverTarget(pointer, question) {
+  let closest = null;
+  let best = Infinity;
+  buildLayouts(question).forEach((layout) => {
+    if (layout.barIndex !== question.target?.barIndex) return;
+    layout.bar.notes.forEach((note, index) => {
+      if (!note.editable) return;
+      if (question.questionType === "correct" && note.rhythm !== "crotchet") return;
+      const distance = Math.hypot(pointer.x - layout.positions[index], pointer.y - yForStep(note.step, layout.systemTop));
+      if (distance < best && distance < 34) {
+        best = distance;
+        closest = { barIndex: layout.barIndex, noteIndex: index };
+      }
+    });
+  });
+  return closest;
+}
+
+function applyPlacement(question, target, tool) {
+  if (!target || !tool) return question;
+  const next = cloneQuestion(question);
+  const note = next.bars[target.barIndex].notes[target.noteIndex];
+  if (!note?.editable) return question;
+  const rhythm = toolToRhythm(tool);
+
+  if (next.questionType === "correct") {
+    next.bars[next.target.barIndex].notes.forEach((item) => {
+      if (!item.editable) return;
+      if (rhythm === "dottedCrotchet" && item.displayRhythm === "dottedCrotchet") item.displayRhythm = "crotchet";
+      if (rhythm === "quaver" && item.displayRhythm === "quaver") item.displayRhythm = "crotchet";
+    });
+  }
+
+  note.displayRhythm = rhythm;
+  return next;
+}
+
+function effectiveAccidental(question, barIndex, noteIndexValue) {
+  const active = { ...question.key.keyAccidentals };
+  for (const note of question.bars[barIndex].notes) {
+    if (note.writtenAccidental !== null && note.writtenAccidental !== undefined) active[note.letter] = note.writtenAccidental;
+    if (note.noteIndex === noteIndexValue) return active[note.letter] ?? 0;
+  }
+  return 0;
+}
+
+function pitchForNote(question, barIndex, noteIndexValue) {
+  const note = question.bars[barIndex].notes[noteIndexValue];
+  return note.midi + effectiveAccidental(question, barIndex, noteIndexValue);
+}
+
+function TailGlyph({ className = "h-10 w-10", ghost = false }) {
+  return <svg viewBox="0 0 128 128" className={`${className} overflow-visible`}><ellipse cx="48" cy="96" rx="16" ry="11" transform="rotate(-18 48 96)" fill="currentColor" opacity={ghost ? 0.1 : 1} /><line x1="62" x2="62" y1="92" y2="24" stroke="currentColor" strokeWidth="4" opacity={ghost ? 0.1 : 1} /><path d="M62 24 C84 34, 88 52, 70 68" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" /></svg>;
+}
+
+function DotGlyph({ className = "h-10 w-10", ghost = false }) {
+  return <svg viewBox="0 0 128 128" className={`${className} overflow-visible`}><ellipse cx="48" cy="96" rx="16" ry="11" transform="rotate(-18 48 96)" fill="currentColor" opacity={ghost ? 0.1 : 1} /><line x1="62" x2="62" y1="92" y2="24" stroke="currentColor" strokeWidth="4" opacity={ghost ? 0.1 : 1} /><circle cx="78" cy="96" r="6" fill="currentColor" /></svg>;
+}
+
+function CrotchetGlyph({ className = "h-10 w-10" }) {
+  return <svg viewBox="0 0 128 128" className={`${className} overflow-visible`}><ellipse cx="48" cy="96" rx="16" ry="11" transform="rotate(-18 48 96)" fill="currentColor" /><line x1="62" x2="62" y1="92" y2="24" stroke="currentColor" strokeWidth="4" /></svg>;
+}
+
+function ToolGlyph({ id, className }) {
+  if (id === "dot") return <DotGlyph className={className} ghost />;
+  if (id === "tail") return <TailGlyph className={className} ghost />;
+  if (id === "quaver") return <TailGlyph className={className} />;
+  return <CrotchetGlyph className={className} />;
+}
+
+function LedgerLines({ x, step, systemTop, colour }) {
+  const lines = [];
+  if (step <= -2) lines.push(yForStep(-2, systemTop));
+  if (step >= 10) lines.push(yForStep(10, systemTop));
+  return <g>{lines.map((y) => <line key={y} x1={x - 12} x2={x + 12} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}</g>;
+}
+
+function Flag({ stemX, stemEndY, down, colour }) {
+  const d = down ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 4}, ${stemX + 10} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 16}` : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 4}, ${stemX + 10} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 16}`;
+  return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />;
+}
+
+function Accidental({ value, x, y }) {
+  if (!value) return null;
+  return <text x={x} y={y + 2} fill="currentColor" fontFamily="Georgia, serif" fontSize="26" fontWeight="700" textAnchor="middle" dominantBaseline="middle">{value === 1 ? "♯" : "♭"}</text>;
+}
+
+function Note({ note, x, systemTop, colour, forcedStemDown = null, forcedStemEndY = null, showFlag = true, showAccidental = true }) {
+  const rhythm = getDisplayRhythm(note);
+  const info = rhythmInfo(rhythm);
+  const stem = getStemData(note, x, systemTop, forcedStemDown);
+  const endY = forcedStemEndY ?? stem.stemEndY;
+  const dotY = note.step % 2 === 0 ? stem.y - 4 : stem.y;
+
+  return <g>
+    <LedgerLines x={x} step={note.step} systemTop={systemTop} colour={colour} />
+    {showAccidental && <Accidental value={note.writtenAccidental} x={x - 18} y={stem.y} />}
+    <ellipse cx={x} cy={stem.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${stem.y})`} fill={info.open ? "white" : colour} stroke={colour} strokeWidth="1.7" />
+    {info.dotted && <circle cx={x + 12} cy={dotY} r="1.7" fill={colour} />}
+    {note.step % 2 === 0 && <line x1={x - 8} x2={x + 8} y1={stem.y} y2={stem.y} stroke={colour} strokeWidth="1.2" />}
+    {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={endY} stroke={colour} strokeWidth="1.5" />}
+    {info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={endY} down={stem.down} colour={colour} />}
+  </g>;
+}
+
+function KeySignature({ keySignature }) {
+  const items = [];
+  if (keySignature.id === "F") items.push({ symbol: "♭", step: 4.2, x: KEY_SIG_X, size: 24 });
+  if (keySignature.id === "G") items.push({ symbol: "♯", step: 7.8, x: KEY_SIG_X });
+  return <g>{items.map((item, index) => <text key={index} x={item.x} y={yForStep(item.step) + 7} fontSize={item.size ?? 28} fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">{item.symbol}</text>)}</g>;
+}
+
+function TimeSignature({ timeSignature }) {
+  return <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle"><text x={TIME_SIG_X} y={SYSTEM_TOP + 20}>{timeSignature.top}</text><text x={TIME_SIG_X} y={SYSTEM_TOP + 39}>{timeSignature.bottom}</text></g>;
+}
+
+function CorrectAnswerOverlay({ question, layout, feedback }) {
+  if (!feedback || feedback.correct || layout.barIndex !== question.target?.barIndex) return null;
+  const positions = question.target.noteIndices.map((index) => layout.positions[index]);
+  const notes = question.target.noteIndices.map((index) => ({ ...layout.bar.notes[index], displayRhythm: layout.bar.notes[index].answerRhythm, step: 3, writtenAccidental: null }));
+  const top = layout.systemTop - ANSWER_OVERLAY_OFFSET;
+  const groups = getQuaverGroups(notes, question.timeSignature);
+
+  return <g>
+    {notes.map((note, index) => {
+      const group = groupContaining(groups, index);
+      const beam = group ? getBeamData(notes.slice(group.start, group.end + 1), positions.slice(group.start, group.end + 1), top) : null;
+      const stem = beam ? getStemData(note, positions[index], top, beam.down) : null;
+      return <Note key={`answer-${note.id}`} note={note} x={positions[index]} systemTop={top} colour={GREEN} forcedStemDown={beam ? beam.down : null} forcedStemEndY={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} />;
+    })}
+    {groups.map((group, index) => {
+      const beam = getBeamData(notes.slice(group.start, group.end + 1), positions.slice(group.start, group.end + 1), top);
+      return <line key={`answer-beam-${index}`} x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke={GREEN} strokeWidth="4" />;
+    })}
+  </g>;
+}
+
+function Score({ question, selectedToolId, hoverTarget, feedback, activePlaybackNoteId, helpOpen, onPointerMove, onPointerLeave, onLockPlacement }) {
+  const displayQuestion = selectedToolId && hoverTarget && !feedback ? applyPlacement(question, hoverTarget, selectedToolId) : question;
+  const layouts = useMemo(() => buildLayouts(displayQuestion), [displayQuestion]);
+
+  return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="w-full h-auto select-none touch-none overflow-visible" overflow="visible" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerDown={onLockPlacement}>
+    <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
+    {[0, 1, 2, 3, 4].map((line) => <line key={line} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={SYSTEM_TOP + line * LINE_GAP} y2={SYSTEM_TOP + line * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />)}
+    <text x={CLEF_X} y={SYSTEM_TOP + 30} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text>
+    <KeySignature keySignature={displayQuestion.key} />
+    <TimeSignature timeSignature={displayQuestion.timeSignature} />
+
+    {layouts.map((layout) => {
+      const groups = getQuaverGroups(layout.bar.notes, displayQuestion.timeSignature);
+      return <g key={layout.barIndex}>
+        <CorrectAnswerOverlay question={displayQuestion} layout={layout} feedback={feedback} />
+        <rect x={layout.startX - 8} y={layout.systemTop - 46} width={48} height={34} fill="white" />
+        <text x={layout.startX + 4} y={layout.systemTop - 18} textAnchor="start" fontSize="13" fontWeight="500">{layout.barIndex + 1}</text>
+        {layout.bar.notes.map((note, index) => {
+          const previousAccidental = layout.bar.notes.slice(0, index).some((prev) => prev.letter === note.letter && prev.writtenAccidental === note.writtenAccidental && note.writtenAccidental !== null && note.writtenAccidental !== undefined);
+          const group = groupContaining(groups, index);
+          const beam = group ? getBeamData(layout.bar.notes.slice(group.start, group.end + 1), layout.positions.slice(group.start, group.end + 1), layout.systemTop) : null;
+          const stem = beam ? getStemData(note, layout.positions[index], layout.systemTop, beam.down) : null;
+          let colour = helpOpen && activePlaybackNoteId === note.id ? BLUE : "currentColor";
+          if (feedback && note.editable) colour = getDisplayRhythm(note) === note.answerRhythm ? GREEN : getDisplayRhythm(note) !== "notehead" ? RED : "currentColor";
+          return <Note key={note.id} note={note} x={layout.positions[index]} systemTop={layout.systemTop} colour={colour} forcedStemDown={beam ? beam.down : null} forcedStemEndY={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} showAccidental={!previousAccidental} />;
+        })}
+        {groups.map((group, index) => {
+          const groupNotes = layout.bar.notes.slice(group.start, group.end + 1);
+          const beam = getBeamData(groupNotes, layout.positions.slice(group.start, group.end + 1), layout.systemTop);
+          let colour = "currentColor";
+          if (feedback && layout.barIndex === displayQuestion.target?.barIndex && groupNotes.every((note) => note.editable)) colour = groupNotes.every((note) => getDisplayRhythm(note) === note.answerRhythm) ? GREEN : RED;
+          return <line key={index} x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke={colour} strokeWidth="4" />;
+        })}
+        {layout.barIndex === BAR_COUNT - 1 ? <g><line x1={layout.endX - 5} x2={layout.endX - 5} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" /><line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="4" /></g> : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />}
+      </g>;
+    })}
+  </svg>;
+}
+
+function RhythmSymbol({ rhythmId }) {
+  const note = { id: rhythmId, rhythm: rhythmId, displayRhythm: rhythmId, letter: "A", octave: 4, step: 3, midi: 69, writtenAccidental: null };
+  return <svg viewBox="0 0 90 70" className="h-[56px] w-[74px] overflow-visible"><Note note={note} x={50} systemTop={19} colour="currentColor" /></svg>;
+}
+
+function HelpPanel() {
+  return <section className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+    <div className="flex flex-nowrap gap-3 overflow-x-auto">
+      {HELP_RHYTHMS.map((rhythmId) => {
+        const info = rhythmInfo(rhythmId);
+        return <div key={rhythmId} className="flex min-h-[82px] min-w-[155px] items-center gap-2 rounded-xl border border-stone-200 bg-white px-2 py-1"><RhythmSymbol rhythmId={rhythmId} /><div className="-ml-2"><div className="text-xs font-bold">{info.name}</div><div className="text-[11px] text-stone-700">{`${info.beats} beats`}</div></div></div>;
+      })}
+    </div>
+    <p className="mt-3 text-sm text-stone-700">When the music plays, notes are highlighted in real time if this help panel is open.</p>
+  </section>;
+}
+
+function StatCard({ label, value, footer = null }) {
+  return <div className="rounded-xl border bg-stone-50 p-3 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className="text-xl font-semibold leading-tight">{value}</div>{footer && <div className="mt-1 text-[10px] leading-none text-stone-500">{footer}</div>}</div>;
+}
+
+function Feedback({ feedback }) {
+  if (!feedback) return null;
+  return <div className={`inline-flex items-center gap-2 font-semibold ${feedback.correct ? "text-green-600" : "text-red-600"}`}><span>{feedback.correct ? TICK : CROSS}</span><span>{feedback.correct ? "Correct" : "Incorrect"}</span></div>;
+}
+
+function toolFeedbackState(question, toolId, feedback) {
+  if (!feedback) return null;
+  const rhythm = toolToRhythm(toolId);
+  const targetNotes = question.target.noteIndices.map((index) => question.bars[question.target.barIndex].notes[index]);
+  const usedCorrectly = targetNotes.some((note) => getDisplayRhythm(note) === rhythm && note.answerRhythm === rhythm);
+  const usedIncorrectly = targetNotes.some((note) => getDisplayRhythm(note) === rhythm && note.answerRhythm !== rhythm);
+  const requiredButMissing = targetNotes.some((note) => note.answerRhythm === rhythm && getDisplayRhythm(note) !== rhythm);
+  if (usedCorrectly && !usedIncorrectly && !requiredButMissing) return "correct";
+  if (usedIncorrectly || requiredButMissing) return "incorrect";
+  return null;
+}
+
+function App() {
+  const timerRef = useRef(null);
+  const customiseRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const audioStopTimerRef = useRef(null);
+  const highlightTimersRef = useRef([]);
+  const [audioSpeed, setAudioSpeed] = useState("medium");
+  const [metronomeOn, setMetronomeOn] = useState(false);
+  const [syncopationOn, setSyncopationOn] = useState(false);
+  const [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => QUESTION_TYPES.map((type) => type.id));
+  const [question, setQuestion] = useState(() => makeQuestion({ syncopationOn: false }));
+  const [selectedToolId, setSelectedToolId] = useState(null);
+  const [hoverTarget, setHoverTarget] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [prompt, setPrompt] = useState("");
+  const [correct, setCorrect] = useState(0);
+  const [attempted, setAttempted] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [activePlaybackNoteId, setActivePlaybackNoteId] = useState(null);
+
+  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const tools = question.questionType === "insert" ? [{ id: "crotchet" }, { id: "quaver" }] : [{ id: "dot" }, { id: "tail" }];
+
+  useEffect(() => {
+    const close = (event) => {
+      if (!customiseOpen) return;
+      if (customiseRef.current?.contains(event.target)) return;
+      setCustomiseOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [customiseOpen]);
+
+  useEffect(() => () => stopAudioPlayback(), []);
+
+  function stopAudioPlayback() {
+    if (audioStopTimerRef.current) window.clearTimeout(audioStopTimerRef.current);
+    highlightTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    highlightTimersRef.current = [];
+    if (audioContextRef.current) {
+      try { if (audioContextRef.current.state !== "closed") audioContextRef.current.close(); } catch {}
+    }
+    audioContextRef.current = null;
+    setIsAudioPlaying(false);
+    setActivePlaybackNoteId(null);
+  }
+
+  function newQuestion(nextTypes = enabledQuestionTypes, nextSyncopation = syncopationOn) {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    stopAudioPlayback();
+    setQuestion(makeQuestion({ enabledQuestionTypes: nextTypes, syncopationOn: nextSyncopation }));
+    setSelectedToolId(null);
+    setHoverTarget(null);
+    setFeedback(null);
+    setPrompt("");
+  }
+
+  function resetScore() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    newQuestion();
+  }
+
+  function applyResult(isCorrect) {
+    const nextStreak = isCorrect ? streak + 1 : 0;
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setStreak(nextStreak);
+    setBestStreak((value) => Math.max(value, nextStreak));
+    setFeedback({ correct: isCorrect });
+    timerRef.current = window.setTimeout(() => newQuestion(), isCorrect ? 2000 : 4000);
+  }
+
+  function toggleQuestionType(id) {
+    setEnabledQuestionTypes((current) => {
+      if (current.includes(id) && current.length === 1) return current;
+      const updated = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      window.setTimeout(() => newQuestion(updated, syncopationOn), 0);
+      return updated;
+    });
+  }
+
+  function handlePointerMove(event) {
+    if (!selectedToolId || feedback) return setHoverTarget(null);
+    setHoverTarget(findHoverTarget(pointerToSvg(event), question));
+  }
+
+  function handleLockPlacement(event) {
+    if (!selectedToolId || feedback || !hoverTarget) return;
+    event.preventDefault();
+    setQuestion((current) => applyPlacement(current, hoverTarget, selectedToolId));
+    setPrompt("");
+  }
+
+  function clearPlacements() {
+    if (feedback) return;
+    setQuestion((current) => {
+      const next = cloneQuestion(current);
+      next.bars[next.target.barIndex].notes.forEach((note) => {
+        if (!note.editable) return;
+        note.displayRhythm = current.questionType === "insert" ? "notehead" : "crotchet";
+      });
+      return next;
+    });
+    setHoverTarget(null);
+    setPrompt("");
+  }
+
+  function confirmAnswer() {
+    if (feedback) return;
+    stopAudioPlayback();
+    applyResult(answerState(question).correct);
+  }
+
+  function playOscillator(audioContext, { frequency, start, duration, volume = 0.16, type = "triangle" }) {
+    if (!Number.isFinite(frequency) || !Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) return;
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.04);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume * 0.5), start + Math.max(0.05, duration * 0.85));
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + 0.04);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.08);
+  }
+
+  function playMetronomeHit(audioContext, start, accented = false) {
+    const bufferSize = Math.floor(audioContext.sampleRate * 0.03);
+    const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for (let index = 0; index < bufferSize; index += 1) {
+      const fade = 1 - index / bufferSize;
+      data[index] = (Math.random() * 2 - 1) * 0.42 * fade;
+    }
+
+    const noise = audioContext.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = audioContext.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = accented ? 1800 : 1200;
+
+    const gain = audioContext.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(accented ? 0.07 : 0.05, start + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.03);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioContext.destination);
+    noise.start(start);
+    noise.stop(start + 0.03);
+  }
+
+  function playQuestionAudio() {
+    if (isAudioPlaying) return;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return setPrompt("Audio playback is not supported in this browser.");
+    stopAudioPlayback();
+    const audioContext = new AudioContextClass();
+    audioContextRef.current = audioContext;
+    setIsAudioPlaying(true);
+    setPrompt("");
+
+    const speed = AUDIO_SPEEDS.find((item) => item.id === audioSpeed) ?? AUDIO_SPEEDS[1];
+    const beatSeconds = 60 / speed.bpm;
+    const chords = CHORDS[question.key.id] ?? CHORDS.C;
+    let currentTime = audioContext.currentTime + 0.08;
+
+    question.performedOrder.forEach((barIndex) => {
+      const bar = question.bars[barIndex];
+      const barStart = currentTime;
+      const barDuration = bar.notes.reduce((sum, note) => sum + rhythmInfo(getAudioRhythm(note)).beats * beatSeconds, 0);
+      const chordReleaseGap = question.timeSignature.id === "6/8" ? 0.16 : 0.12;
+      const chordDuration = Math.max(0.08, barDuration - chordReleaseGap);
+      const chord = chords[barIndex % chords.length];
+
+      if (metronomeOn) {
+        const unit = question.timeSignature.id === "6/8" ? 1.5 : 1;
+        for (let beat = 0; beat < barDuration / beatSeconds; beat += unit) {
+          playMetronomeHit(audioContext, barStart + beat * beatSeconds, beat === 0);
+        }
+      }
+
+      chord.forEach((tone, index) => playOscillator(audioContext, { frequency: midiToFrequency(chordToneMidi(tone, question.key, 4 + index)), start: barStart, duration: chordDuration, volume: 0.035, type: "sine" }));
+
+      bar.notes.forEach((note, index) => {
+        const duration = Math.max(0.08, rhythmInfo(getAudioRhythm(note)).beats * beatSeconds);
+        const startMs = Math.max(0, (currentTime - audioContext.currentTime) * 1000);
+        highlightTimersRef.current.push(window.setTimeout(() => setActivePlaybackNoteId(note.id), startMs));
+        highlightTimersRef.current.push(window.setTimeout(() => setActivePlaybackNoteId(null), startMs + duration * 1000));
+        playOscillator(audioContext, { frequency: midiToFrequency(pitchForNote(question, barIndex, index)), start: currentTime, duration, volume: 0.16, type: "triangle" });
+        currentTime += duration;
+      });
+    });
+
+    audioStopTimerRef.current = window.setTimeout(() => {
+      setIsAudioPlaying(false);
+      setActivePlaybackNoteId(null);
+      audioContextRef.current = null;
+    }, Math.max(0, (currentTime - audioContext.currentTime) * 1000) + 150);
+  }
+
+  return <div className="min-h-screen bg-stone-50 p-4 text-stone-950 md:p-8">
+    <div className="mx-auto max-w-6xl">
+      <header className="mb-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Correct the Rhythm</h1><p className="mt-2 text-stone-700">Listen to the music and correct the rhythm so that it matches what you hear.</p></div>
+          <div className="grid min-w-[280px] grid-cols-3 gap-2"><StatCard label="Score" value={`${correct}/${attempted}`} /><StatCard label="Accuracy" value={`${accuracy}%`} /><StatCard label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} /></div>
+        </div>
+      </header>
+
+      <main className="overflow-visible rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="relative" ref={customiseRef}>
+            <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-100">⚙️ Customise</button>
+            {customiseOpen && <section className="absolute left-0 z-20 mt-2 w-[430px] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
+              <h2 className="mb-3 text-base font-semibold">Customise</h2>
+              <h3 className="mb-2 text-sm font-bold text-stone-700">Question types</h3>
+              <div className="mb-4 space-y-2">{QUESTION_TYPES.map((type) => <button key={type.id} type="button" onClick={() => toggleQuestionType(type.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 hover:bg-stone-100"><span className="text-sm font-semibold">{type.label}</span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${enabledQuestionTypes.includes(type.id) ? "bg-green-600" : "bg-stone-300"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${enabledQuestionTypes.includes(type.id) ? "translate-x-5" : "translate-x-0"}`} /></span></button>)}</div>
+              <h3 className="mb-2 text-sm font-bold text-stone-700">Audio speed</h3>
+              <div className="mb-4 grid grid-cols-3 gap-2">{AUDIO_SPEEDS.map((speed) => <button key={speed.id} type="button" onClick={() => { setAudioSpeed(speed.id); stopAudioPlayback(); }} className={`rounded-xl border px-3 py-3 text-sm font-bold ${audioSpeed === speed.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>{speed.label}</button>)}</div>
+              <button type="button" onClick={() => { setMetronomeOn((value) => !value); stopAudioPlayback(); }} className="mb-4 flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 hover:bg-stone-100"><span className="text-sm font-semibold">Metronome</span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${metronomeOn ? "bg-green-600" : "bg-stone-300"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${metronomeOn ? "translate-x-5" : "translate-x-0"}`} /></span></button>
+              <button type="button" onClick={() => { const next = !syncopationOn; setSyncopationOn(next); newQuestion(enabledQuestionTypes, next); }} className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 hover:bg-stone-100"><span className="text-sm font-semibold">Syncopation</span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${syncopationOn ? "bg-green-600" : "bg-stone-300"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${syncopationOn ? "translate-x-5" : "translate-x-0"}`} /></span></button>
+            </section>}
+          </div>
+          <div className="flex justify-end gap-2"><button type="button" onClick={() => setHelpOpen((value) => !value)} title="Help" aria-label="Help" className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 bg-white text-lg font-bold text-stone-700 hover:bg-stone-100">?</button><button type="button" onClick={resetScore} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Reset score</button></div>
+        </div>
+
+        {helpOpen && <HelpPanel />}
+        <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white"><Score question={question} selectedToolId={selectedToolId} hoverTarget={hoverTarget} feedback={feedback} activePlaybackNoteId={activePlaybackNoteId} helpOpen={helpOpen} onPointerMove={handlePointerMove} onPointerLeave={() => setHoverTarget(null)} onLockPlacement={handleLockPlacement} /></div>
+
+        <section className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+          <div className="mb-0 flex items-start justify-between gap-3">
+            <div><p className="text-base font-semibold" dangerouslySetInnerHTML={{ __html: question.prompt }} />{prompt && <p className="mt-1 text-sm font-medium text-red-700">{prompt}</p>}</div>
+            <button type="button" onClick={playQuestionAudio} disabled={isAudioPlaying} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"><span className="ml-0.5 text-lg leading-none">▶</span></button>
+          </div>
+
+          <div className="flex items-center justify-start gap-2">
+            {tools.map((tool) => {
+              const state = toolFeedbackState(question, tool.id, feedback);
+              const buttonClass = feedback
+                ? state === "correct"
+                  ? "border-green-700 bg-green-600 text-white"
+                  : state === "incorrect"
+                    ? "border-red-700 bg-red-600 text-white"
+                    : "border-stone-300 bg-white opacity-50"
+                : selectedToolId === tool.id
+                  ? "border-stone-950 bg-stone-950 text-white"
+                  : "border-stone-300 bg-white hover:bg-stone-100";
+
+              return <button key={tool.id} type="button" disabled={Boolean(feedback)} onClick={() => { setSelectedToolId(tool.id); setPrompt(""); }} className={`flex min-h-[66px] max-w-[92px] items-center justify-center gap-3 rounded-xl border px-2 py-3 text-sm font-semibold ${buttonClass}`}><div className="translate-x-[2px]"><ToolGlyph id={tool.id} className="h-12 w-12" /></div></button>;
+            })}
+          </div>
+
+          <p className="mt-1 text-sm text-stone-700">Choose a rhythm, hover over a note in the target bar to preview it, then click to lock it in place.</p>
+        </section>
+
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <Feedback feedback={feedback} />
+          <div className="flex w-full justify-end gap-2">
+            <button type="button" disabled={Boolean(feedback)} onClick={clearPlacements} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60">Clear</button>
+            <button type="button" disabled={Boolean(feedback)} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60">Confirm</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
