@@ -72,12 +72,9 @@ const RHYTHMS = [
   { id: "quaver", label: "Quaver", beats: 0.5 },
 ];
 
-const TOOLS = [
-  ...RHYTHMS,
-  { id: "tie", label: "Tie", type: "tie" },
-];
+const TOOLS = [...RHYTHMS, { id: "tie", label: "Tie", type: "tie" }];
 
-const RHYTHM_BEATS = Object.fromEntries(RHYTHMS.map((item) => [item.id, item.beats]));
+const RHYTHM_BEATS = Object.fromEntries(RHYTHMS.map((rhythm) => [rhythm.id, rhythm.beats]));
 
 const RHYTHM_SPACING = {
   minim: 3.4,
@@ -166,13 +163,12 @@ function stemDown(step) {
   return step > 4;
 }
 
-function getStem(x, y, step, rhythm = "crotchet", forcedDown = null, forcedStemEndY = null) {
+function getStem(x, y, step, rhythm = "crotchet", forcedDown = null, forcedEndY = null) {
   const down = forcedDown ?? stemDown(step);
-  const stemInset = rhythm === "minim" ? NOTE.rx * 0.15 : NOTE.rx;
-  const stemX = down
-    ? x - stemInset - (rhythm === "minim" ? 11 : -0.5)
-    : x + stemInset + (rhythm === "minim" ? 11 : -0.5);
-  const stemEndY = forcedStemEndY ?? (down ? y + NOTE.stemLength : y - NOTE.stemLength);
+  const openHead = rhythm === "minim";
+  const stemInset = openHead ? NOTE.rx * 0.15 : NOTE.rx;
+  const stemX = down ? x - stemInset - (openHead ? 11 : -0.5) : x + stemInset + (openHead ? 11 : -0.5);
+  const stemEndY = forcedEndY ?? (down ? y + NOTE.stemLength : y - NOTE.stemLength);
   return { down, stemX, stemEndY };
 }
 
@@ -337,11 +333,7 @@ function playFeedbackSound(correct, celebration = false, medal = null) {
       medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
     }
   } else {
-    randomItem([
-      [523.25, 659.25, 783.99],
-      [587.33, 739.99, 880],
-      [659.25, 830.61, 987.77],
-    ]).forEach((freq, index) => {
+    randomItem([[523.25, 659.25, 783.99], [587.33, 739.99, 880], [659.25, 830.61, 987.77]]).forEach((freq, index) => {
       tone(freq, now + index * 0.045, 0.42, "triangle", index === 2 ? 0.085 : 0.07);
       tone(freq * 2, now + index * 0.045, 0.24, "sine", 0.025);
     });
@@ -433,9 +425,10 @@ function Staff({ top, clef }) {
 
 function HelpLabels({ visible }) {
   if (!visible) return null;
-  const x = STAFF.left - 6;
-  const lineLabelX = x - 5;
-return (
+  const lineLabelX = STAFF.left - 11;
+  const spaceLabelX = STAFF.left + 16;
+
+  return (
     <g fontSize="14" fontFamily="system-ui, sans-serif" fontWeight="700" dominantBaseline="middle" pointerEvents="none" fill="black">
       {Object.entries(NOTE_NAME_LABELS).flatMap(([clef, data]) => [
         ...data.lines.map((note) => (
@@ -444,7 +437,7 @@ return (
           </text>
         )),
         ...data.spaces.map((note) => (
-          <text key={`${clef}-space-${note.step}`} x={x + 22} y={yForStep(data.top, note.step) + 5} textAnchor="end">
+          <text key={`${clef}-space-${note.step}`} x={spaceLabelX} y={yForStep(data.top, note.step) + 5} textAnchor="end">
             {note.letter}
           </text>
         )),
@@ -456,12 +449,9 @@ return (
 function Tie({ x1, y1, x2, y2, step1, step2, colour = "currentColor", opacity = 1 }) {
   const midX = (x1 + x2) / 2;
   const stemsUp = !stemDown(step1) && !stemDown(step2);
-
   const startY = stemsUp ? y1 + 17 : y1 - 17;
   const endY = stemsUp ? y2 + 17 : y2 - 17;
-  const controlY = stemsUp
-    ? Math.max(startY, endY) + 18
-    : Math.min(startY, endY) - 18;
+  const controlY = stemsUp ? Math.max(startY, endY) + 18 : Math.min(startY, endY) - 18;
 
   return (
     <path
@@ -489,18 +479,20 @@ function RenderPassage({ passage, top, clef, answerItems = null, feedbackDetails
         const first = source[index];
         const second = source[index + 1];
         if (!first || first.step == null || !second) return null;
+
         const secondStep = second.step ?? first.step;
         const result = feedbackDetails?.[index]?.tieCorrect;
-        if (feedbackDetails && result === true) {
-          return null;
-        }
+        if (feedbackDetails && result === true) return null;
+
         const colour = result == null ? "currentColor" : result ? COLOUR.green : COLOUR.red;
+        const errorOffset = result === false ? -3 : 0;
+
         return (
           <Tie
             key={`tie-${index}-${overlayOffset}`}
-            x1={positions[index] + (result === false ? -3 : 0)}
+            x1={positions[index] + errorOffset}
             y1={yForStep(top, first.step)}
-            x2={positions[index + 1] + (result === false ? -3 : 0)}
+            x2={positions[index + 1] + errorOffset}
             y2={yForStep(top, secondStep)}
             step1={first.step}
             step2={secondStep}
@@ -543,7 +535,9 @@ function RenderPassage({ passage, top, clef, answerItems = null, feedbackDetails
               forcedDown={beam?.down ?? null}
               forcedStemEndY={beam && stemX ? beamYAtX(stemX, beam) : null}
             />
-            {beam && group.start === index && <line x1={beam.start.x - 1} x2={beam.end.x + 1} y1={beam.start.y} y2={beam.end.y} stroke={colour} strokeWidth="6.75" />}
+            {beam && group.start === index && (
+              <line x1={beam.start.x - 1} x2={beam.end.x + 1} y1={beam.start.y} y2={beam.end.y} stroke={colour} strokeWidth="6.75" />
+            )}
           </g>
         );
       })}
@@ -652,28 +646,17 @@ function ScoreArea({
         <>
           <RenderPassage passage={question.passage} top={STAFF.trebleTop} clef="treble" />
           <RenderPassage passage={question.passage} top={STAFF.bassTop} clef="bass" answerItems={userPassage} feedbackDetails={feedbackDetails} userTies={userTies} />
-          {tiePreview && (
-            <Tie
-              x1={tiePreview.x1}
-              y1={tiePreview.y1}
-              x2={tiePreview.x2}
-              y2={tiePreview.y2}
-              step1={tiePreview.step1}
-              step2={tiePreview.step2}
-              colour={COLOUR.preview}
-              opacity={0.55}
-            />
-          )}
+          {tiePreview && <Tie {...tiePreview} colour={COLOUR.preview} opacity={0.55} />}
           {feedback && !feedback.correct && (
             <RenderPassage
-                passage={question.passage}
-                top={STAFF.bassTop}
-                clef="bass"
-                answerItems={correctPassage}
-                feedbackDetails={feedbackDetails}
-                correctOverlay
-                overlayOffset={feedbackDetails?.every((item) => item.pitchCorrect && item.rhythmCorrect) ? 0 : 28}
-              />
+              passage={question.passage}
+              top={STAFF.bassTop}
+              clef="bass"
+              answerItems={correctPassage}
+              feedbackDetails={feedbackDetails}
+              correctOverlay
+              overlayOffset={feedbackDetails?.every((item) => item.pitchCorrect && item.rhythmCorrect) ? 0 : 28}
+            />
           )}
         </>
       )}
@@ -753,7 +736,7 @@ function getStreakMedal(streak) {
 
 function StatCard({ label, value, footer, progress = null, medal = null, variant = "default", confettiKey = 0 }) {
   const safeProgress = progress == null ? null : clamp(progress, 0, 100);
-  const waterHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
+  const fillHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
   const fillColour = safeProgress == null
     ? "transparent"
     : safeProgress < 50
@@ -786,10 +769,7 @@ function StatCard({ label, value, footer, progress = null, medal = null, variant
       {safeProgress !== null && (
         <div
           className="absolute bottom-0 left-0 right-0 transition-all duration-700"
-          style={{
-            height: `${waterHeight}%`,
-            background: fillColour,
-          }}
+          style={{ height: `${fillHeight}%`, background: fillColour }}
         />
       )}
 
@@ -874,9 +854,23 @@ function HelpPanel() {
         <p className="mt-2 text-sm leading-relaxed text-stone-700">{body}</p>
       </div>
       <div className="mt-3 flex items-center justify-between">
-        <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={page === 0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">←</button>
+        <button
+          type="button"
+          onClick={() => setPage((value) => Math.max(0, value - 1))}
+          disabled={page === 0}
+          className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35"
+        >
+          ←
+        </button>
         <div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div>
-        <button type="button" onClick={() => setPage((value) => Math.min(pages.length - 1, value + 1))} disabled={page === pages.length - 1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">→</button>
+        <button
+          type="button"
+          onClick={() => setPage((value) => Math.min(pages.length - 1, value + 1))}
+          disabled={page === pages.length - 1}
+          className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35"
+        >
+          →
+        </button>
       </div>
     </div>
   );
@@ -1029,7 +1023,7 @@ function App() {
   const [userTies, setUserTies] = useState([]);
   const [activeSlot, setActiveSlot] = useState(0);
   const [touchPreview, setTouchPreview] = useState(null);
-    const [feedback, setFeedback] = useState(null);
+  const [feedback, setFeedback] = useState(null);
   const [feedbackFading, setFeedbackFading] = useState(false);
   const [feedbackDetails, setFeedbackDetails] = useState(null);
   const [prompt, setPrompt] = useState("");
@@ -1054,7 +1048,6 @@ function App() {
   const examReady = mode === "exam" && question.passage.every((_, index) => examSteps[index] != null && selectedRhythms[index] != null);
   const canConfirm = mode === "practice" ? lockedStep != null && !feedback : examReady && !feedback;
   const streakMedal = getStreakMedal(streak);
-
 
   const instruction = mode === "practice"
     ? <>Transpose the note from the treble clef <strong>down one octave</strong> into the bass clef.</>
@@ -1119,17 +1112,13 @@ function App() {
 
     if (mode === "practice") {
       setLockedStep(step);
-      setHoverStep(selectedRhythmTool === "tie" ? examSteps[targetSlot] : step);
+      setHoverStep(step);
       setPrompt("");
       return;
     }
 
     if (selectedRhythmTool === "tie") {
-      const existingTieSlot = userTies[targetSlot]
-        ? targetSlot
-        : userTies[targetSlot - 1]
-          ? targetSlot - 1
-          : null;
+      const existingTieSlot = userTies[targetSlot] ? targetSlot : userTies[targetSlot - 1] ? targetSlot - 1 : null;
 
       if (existingTieSlot != null) {
         setUserTies(Array(question.passage.length).fill(false));
@@ -1140,10 +1129,7 @@ function App() {
         return;
       }
 
-      if (targetSlot >= question.passage.length - 1) {
-        return;
-      }
-
+      if (targetSlot >= question.passage.length - 1) return;
       if (examSteps[targetSlot] == null || selectedRhythms[targetSlot] == null) {
         setPrompt("Place the note before adding a tie.");
         return;
@@ -1168,10 +1154,7 @@ function App() {
       return;
     }
 
-    const shouldRemoveExisting =
-      !touchPreview?.dragged &&
-      selectedRhythms[targetSlot] === rhythmToPlace &&
-      examSteps[targetSlot] != null;
+    const shouldRemoveExisting = !touchPreview?.dragged && selectedRhythms[targetSlot] === rhythmToPlace && examSteps[targetSlot] != null;
 
     setExamSteps((current) => {
       const next = [...current];
@@ -1210,7 +1193,7 @@ function App() {
     if (mode === "exam" && !selectedRhythmTool && !selectedRhythms[targetSlot]) return;
 
     const { pointer, step } = getPointerStep(event);
-        setActiveSlot(targetSlot);
+    setActiveSlot(targetSlot);
     setHoverStep(selectedRhythmTool === "tie" ? examSteps[targetSlot] : step);
 
     if (selectedRhythmTool === "tie") {
@@ -1223,6 +1206,7 @@ function App() {
         ...(current ?? {}),
         active: true,
         x: pointer.x,
+        y: pointer.y,
         step,
         targetSlot,
         dragged: true,
@@ -1240,18 +1224,12 @@ function App() {
     }
 
     const { pointer, step } = getPointerStep(event);
-
-    if (touchPreview?.x != null && touchPreview?.y != null) {
-      const dx = pointer.x - touchPreview.x;
-      const dy = pointer.y - touchPreview.y;
-    }
-
     setActiveSlot(targetSlot);
     setHoverStep(selectedRhythmTool === "tie" ? examSteps[targetSlot] : step);
     setTouchPreview(
       selectedRhythmTool === "tie"
-        ? { active: true, type: "tie", targetSlot }
-        : { active: true, x: pointer.x, y: pointer.y, step, targetSlot, dragged: false }
+        ? { active: true, type: "tie", targetSlot, x: pointer.x, y: pointer.y, dragged: false }
+        : { active: true, x: pointer.x, y: pointer.y, step, targetSlot, dragged: false },
     );
   }
 
@@ -1278,10 +1256,8 @@ function App() {
     setSelectedRhythmTool(tool);
     setHoverStep(null);
     setTouchPreview(null);
-        setPrompt("");
+    setPrompt("");
   }
-
-
 
   function scoreAnswer(isCorrect) {
     const nextStreak = isCorrect ? streak + 1 : 0;
@@ -1414,7 +1390,7 @@ function App() {
             />
           </div>
 
-          <div className="relative z-10 mt-3 h-[143px] rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:-mt-[98px] md:mx-3 overflow-hidden">
+          <div className="relative z-10 mt-3 h-[143px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:-mt-[98px] md:mx-3">
             <div className="space-y-3 text-stone-900">
               <p className="text-base font-semibold leading-tight">{instruction}</p>
               {prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}
@@ -1424,8 +1400,6 @@ function App() {
               {mode === "exam" && !feedback && <RhythmChooser selected={selectedRhythmTool} onSelect={selectRhythm} selectedRhythms={selectedRhythms} />}
 
               <div className="absolute bottom-4 right-4 flex shrink-0 justify-end gap-2">
-
-
                 <button type="button" disabled={!canConfirm} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>
               </div>
             </div>
@@ -1437,6 +1411,8 @@ function App() {
 }
 
 
-</script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+  </script>
 </body>
 </html>
