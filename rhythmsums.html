@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rhythms</title>
+  <title>Rhythm Sums</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -11,17 +11,22 @@
 </head>
 <body>
   <div id="root"></div>
-
   <script type="text/babel">
-const { useRef, useState } = React;
-
-const TICK = String.fromCodePoint(0x2714);
-const CROSS = String.fromCodePoint(0x2716);
+const { useEffect, useMemo, useRef, useState } = React;
 
 const NOTE_RX = 7;
 const NOTE_RY = 5;
 const STEM_LENGTH = 34;
 const LINE_GAP = 10;
+const TICK = String.fromCodePoint(0x2714);
+const CROSS = String.fromCodePoint(0x2716);
+
+const COLOUR = {
+  green: "#16a34a",
+  red: "#dc2626",
+  black: "#000000",
+};
+
 const OPERATORS = ["+", "−", "×", "÷"];
 
 const OPERATOR_LABELS = {
@@ -72,6 +77,10 @@ function randomItem(items) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function isQuarterBeat(value) {
   return Number.isFinite(value) && value >= 0 && Math.abs(value * 4 - Math.round(value * 4)) < 0.0001;
 }
@@ -90,14 +99,13 @@ function calculate(left, operator, right) {
 
 function loadSettings() {
   try {
-    const saved = window.localStorage.getItem("rhythms-app-settings");
+    const saved = window.localStorage.getItem("rhythms-golden-settings");
     if (!saved) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(saved);
+
     return {
-      enabledItems: Array.isArray(parsed.enabledItems)
-        ? parsed.enabledItems.filter((id) => BASE_RHYTHMS.some((item) => item.id === id))
-        : DEFAULT_SETTINGS.enabledItems,
-      enabledOperators: Array.isArray(parsed.enabledOperators) ? parsed.enabledOperators : DEFAULT_SETTINGS.enabledOperators,
+      enabledItems: Array.isArray(parsed.enabledItems) ? parsed.enabledItems.filter((id) => BASE_RHYTHMS.some((item) => item.id === id)) : DEFAULT_SETTINGS.enabledItems,
+      enabledOperators: Array.isArray(parsed.enabledOperators) ? parsed.enabledOperators.filter((operator) => OPERATORS.includes(operator)) : DEFAULT_SETTINGS.enabledOperators,
       includeRests: typeof parsed.includeRests === "boolean" ? parsed.includeRests : DEFAULT_SETTINGS.includeRests,
       includeBeamedGroups: typeof parsed.includeBeamedGroups === "boolean" ? parsed.includeBeamedGroups : DEFAULT_SETTINGS.includeBeamedGroups,
     };
@@ -108,7 +116,7 @@ function loadSettings() {
 
 function saveSettings(settings) {
   try {
-    window.localStorage.setItem("rhythms-app-settings", JSON.stringify(settings));
+    window.localStorage.setItem("rhythms-golden-settings", JSON.stringify(settings));
   } catch {}
 }
 
@@ -167,18 +175,22 @@ function makeQuestion(settings = DEFAULT_SETTINGS) {
     if (!isQuarterBeat(answer)) continue;
 
     return {
+      id: Math.random().toString(36).slice(2),
       left: makeDisplayItem(left, settings),
       right: makeDisplayItem(right, settings),
       operator,
       answer,
+      prompt: "Calculate the total number of beats.",
     };
   }
 
   return {
+    id: Math.random().toString(36).slice(2),
     left: makeDisplayItem(BASE_RHYTHMS.find((item) => item.id === "crotchet"), settings),
     right: makeDisplayItem(BASE_RHYTHMS.find((item) => item.id === "quaver"), settings),
     operator: "+",
     answer: 1.5,
+    prompt: "Calculate the total number of beats.",
   };
 }
 
@@ -289,9 +301,9 @@ function BeamedNotes({ rhythms, colour = "currentColor", scale = 1 }) {
   const stemEndY = systemTop - 12;
   const start = { x: positions[0] + NOTE_RX, y: stemEndY };
   const end = { x: positions[positions.length - 1] + NOTE_RX, y: stemEndY };
-
   const secondarySegments = [];
   let segmentStart = null;
+
   rhythms.forEach((rhythm, index) => {
     const isSemi = RHYTHMS[rhythm].beams === 2;
     const nextIsSemi = rhythms[index + 1] && RHYTHMS[rhythms[index + 1]].beams === 2;
@@ -335,7 +347,7 @@ function BeamedNotes({ rhythms, colour = "currentColor", scale = 1 }) {
 
 function rhythmVisualOffset(item) {
   if (item.displayType === "beamed") return 0;
-  if (item.rhythm === "semibreve") return -18;
+  if (item.rhythm === "semibreve") return -2;
   if (item.rhythm === "semibreve-rest") return -16;
   if (item.rhythm === "minim-rest" || item.rhythm === "dotted-minim-rest") return -10;
   if (item.rhythm?.includes("rest")) return -6;
@@ -362,231 +374,430 @@ function RhythmGlyph({ item, colour = "currentColor", scale = 1 }) {
   );
 }
 
-function RhythmSlot({ children }) {
-  return (
-    <div className="flex h-32 w-44 items-center justify-center overflow-visible">
-      {children}
-    </div>
-  );
+function RhythmSlot({ children, className = "" }) {
+  return <div className={`flex h-32 w-44 items-center justify-center overflow-visible ${className}`}>{children}</div>;
 }
 
 function RhythmGlyphForHelp({ rhythm }) {
   const rest = RHYTHMS[rhythm].rest;
   return (
-    <div className="flex items-center justify-center gap-1 mt-5">
-      <svg viewBox="0 0 90 80" className="h-14 w-20 overflow-visible"><Note rhythm={rhythm} x={42} systemTop={12} /></svg>
-      <svg viewBox="0 0 90 80" className="h-14 w-20 overflow-visible"><Rest rhythm={rest} x={42} systemTop={12} /></svg>
+    <div className="mt-5 flex items-center justify-center gap-0">
+      <svg viewBox="0 0 90 80" className="h-14 w-20 overflow-visible"><Note rhythm={rhythm} x={54} systemTop={12} /></svg>
+      <svg viewBox="0 0 90 80" className="h-14 w-20 -ml-[26px] overflow-visible"><Rest rhythm={rest} x={30} systemTop={12} /></svg>
     </div>
   );
 }
 
-function CustomiserGlyph({ item }) {
-  return (
-    <div className="flex h-16 w-full items-center justify-center pt-5">
-      <svg viewBox="0 0 90 80" className="h-14 w-20 overflow-visible">
-        <Note rhythm={item.id} x={42} systemTop={12} />
-      </svg>
-    </div>
-  );
+function playFeedbackSound(correct, celebration = false, medal = null) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  const context = new AudioContextClass();
+  const master = context.createGain();
+  master.gain.value = 0.16;
+  master.connect(context.destination);
+
+  function tone(freq, start, duration, type = "triangle", volume = 0.12) {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + duration + 0.05);
+  }
+
+  function trumpetTone(freq, start, duration, volume = 0.1) {
+    tone(freq, start, duration, "sawtooth", volume);
+    tone(freq * 1.002, start, duration * 0.96, "square", volume * 0.32);
+    tone(freq * 2, start, duration * 0.75, "triangle", volume * 0.16);
+  }
+
+  function medalPhrase(rootFreq, chordFreqs, startTime, beats = 4) {
+    const beatLength = 0.6;
+    const totalDuration = beats * beatLength;
+    const tripletLength = 0.13;
+    const finalNoteDuration = beats === 2 ? 0.72 : 1.95;
+    chordFreqs.forEach((freq) => trumpetTone(freq, startTime, totalDuration, 0.045));
+    trumpetTone(rootFreq, startTime, tripletLength, 0.11);
+    trumpetTone(rootFreq, startTime + tripletLength, tripletLength, 0.11);
+    trumpetTone(rootFreq, startTime + tripletLength * 2, tripletLength, 0.11);
+    trumpetTone(rootFreq, startTime + 0.42, finalNoteDuration, 0.13);
+  }
+
+  const now = context.currentTime + 0.01;
+
+  if (correct) {
+    if (celebration) {
+      if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now);
+      else if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now);
+      else if (medal === "gold") medalPhrase(830.61, [415.3, 523.25, 622.25], now);
+      else if (medal === "platinum") {
+        medalPhrase(739.99, [369.99, 466.16, 554.37], now, 2);
+        medalPhrase(830.61, [415.3, 523.25, 622.25], now + 0.82, 2);
+        medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
+      }
+    } else {
+      const chords = [[523.25, 659.25, 783.99], [587.33, 739.99, 880], [659.25, 830.61, 987.77]][Math.floor(Math.random() * 3)];
+      chords.forEach((freq, index) => {
+        tone(freq, now + index * 0.045, 0.42, "triangle", index === 2 ? 0.085 : 0.07);
+        tone(freq * 2, now + index * 0.045, 0.24, "sine", 0.025);
+      });
+    }
+  } else {
+    tone(196, now, 0.32, "sawtooth", 0.06);
+    tone(185, now + 0.04, 0.38, "triangle", 0.05);
+    tone(174, now + 0.08, 0.45, "sine", 0.04);
+  }
+
+  window.setTimeout(() => {
+    try { context.close(); } catch {}
+  }, medal === "platinum" ? 9000 : celebration ? 3500 : 900);
 }
 
-function ToggleButton({ active, disabled = false, onClick, children, title }) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      title={title}
-      onClick={onClick}
-      className={`flex items-center justify-center rounded-md border bg-white px-2 py-1 text-sm font-semibold ${active ? "border-green-600" : "border-stone-300 hover:bg-stone-100"} ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
-    >
-      {children}
-    </button>
-  );
+function medalNameForStreak(streak) {
+  if (streak === 10) return "bronze";
+  if (streak === 15) return "silver";
+  if (streak === 20) return "gold";
+  if (streak === 30) return "platinum";
+  return null;
 }
 
-function CustomiserPanel({ settings, onToggleItem, onToggleOperator, onToggleRests, onToggleBeamedGroups }) {
-  const selectedCount = settings.enabledItems.length;
-  const operatorCount = settings.enabledOperators.length;
-  const canIncludeBeamedGroups = settings.enabledItems.includes("quaver") || settings.enabledItems.includes("semiquaver") || settings.enabledItems.includes("dotted-quaver");
+function getStreakMedal(streak) {
+  if (streak >= 30) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500" };
+  if (streak >= 20) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500" };
+  if (streak >= 15) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500" };
+  if (streak >= 10) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700" };
+  return null;
+}
+
+function StatCard({ label, value, footer, progress = null, medal = null, variant = "default" }) {
+  const safeProgress = progress == null ? null : clamp(progress, 0, 100);
+  const fillHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
+  const fillColour = safeProgress == null ? "transparent" : safeProgress < 50 ? "rgba(220, 38, 38, 0.38)" : safeProgress < 70 ? "rgba(255, 120, 0, 0.42)" : "rgba(22, 163, 74, 0.38)";
+  const isStreak = variant === "streak";
 
   return (
-    <div className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-      <h2 className="mb-3 text-center text-lg font-semibold">Customise</h2>
-
-      <div className="mb-4">
-        <h3 className="mb-2 text-sm font-semibold text-stone-700">Rhythms</h3>
-        <div className="flex flex-nowrap gap-2 overflow-x-auto">
-          {BASE_RHYTHMS.map((item) => (
-            <ToggleButton
-              key={item.id}
-              active={settings.enabledItems.includes(item.id)}
-              onClick={() => onToggleItem(item.id)}
-              title={item.label}
-            >
-              <CustomiserGlyph item={item} />
-            </ToggleButton>
-          ))}
-        </div>
-
-        <div className="mt-3 flex items-center gap-6">
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={settings.includeRests}
-              onChange={onToggleRests}
-              className="h-5 w-5 accent-green-600"
-            />
-            <span className="font-semibold">Include rests</span>
-          </label>
-
-          <label className={`flex items-center gap-3 ${canIncludeBeamedGroups ? "" : "opacity-40"}`}>
-            <input
-              type="checkbox"
-              checked={settings.includeBeamedGroups && canIncludeBeamedGroups}
-              disabled={!canIncludeBeamedGroups}
-              onChange={onToggleBeamedGroups}
-              className="h-5 w-5 accent-green-600"
-            />
-            <span className="font-semibold">Include beamed groups</span>
-          </label>
-        </div>
+    <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>
+      {safeProgress !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fillHeight}%`, background: fillColour }} />}
+      <div className="relative z-10 text-center">
+        <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
+        <div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>
+        {footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}
       </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-semibold text-stone-700">Operations</h3>
-        <div className="grid grid-cols-4 gap-2">
-          {OPERATORS.map((operator) => (
-            <ToggleButton
-              key={operator}
-              active={settings.enabledOperators.includes(operator)}
-              onClick={() => onToggleOperator(operator)}
-              title={OPERATOR_LABELS[operator]}
-            >
-              <span className="text-2xl">{operator}</span>
-            </ToggleButton>
-          ))}
+      {isStreak && (
+        <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal?.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>
+          {medal?.emoji ?? "🥉"}
         </div>
-      </div>
-
-      {(selectedCount < 2 || operatorCount < 1) && (
-        <p className="mt-3 text-center text-sm font-semibold text-red-700">
-          Select at least two rhythm items and one operation.
-        </p>
       )}
     </div>
   );
 }
 
-function HelpPanel() {
+function TapIcon() {
   return (
-    <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
-      <p className="text-center font-semibold">Use the rhythm value of each symbol to calculate the answer.</p>
-      <div className="mt-4 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-        {BASE_RHYTHMS.map((item) => (
-          <div key={item.id} className="flex flex-col items-center justify-center rounded-lg bg-white/70 px-2 py-2 text-center">
-            <RhythmGlyphForHelp rhythm={item.id} />
-            <span className="font-medium mt-1">{item.label}</span>
-            <span className="text-xs text-stone-600">{formatBeat(item.beats)} beats</span>
-          </div>
-        ))}
+    <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]">
+      <path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" />
+    </svg>
+  );
+}
+
+function FeedbackBanner({ feedback, fading = false, warning = "" }) {
+  if (!feedback && warning) {
+    return (
+      <div className="relative flex w-full items-center justify-center text-center">
+        <div className="flex w-[520px] flex-col items-center justify-center whitespace-nowrap text-lg font-bold text-amber-700">{warning}</div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-function StatCard({ label, value }) {
-  return (
-    <div className="rounded-xl border bg-stone-50 p-3 text-center">
-      <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
-      <div className="text-xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
-function Feedback({ feedback, correct }) {
   if (!feedback) return null;
+
   return (
-    <div className="mt-5 flex min-h-[80px] items-center justify-center p-4">
-      <div className={`text-center font-semibold ${correct ? "text-green-700" : "text-red-700"}`}>
-        {correct ? <p>{TICK} Correct</p> : <p>{CROSS} Incorrect</p>}
+    <div className="relative flex w-full items-center justify-center text-center">
+      <div className={`flex w-[460px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${feedback.correct ? "text-green-600" : "text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}>
+        <span className="translate-y-[4px]">{feedback.correct ? "Correct" : "Incorrect"}</span>
+        {!feedback.correct && <span className="mt-2 text-sm font-semibold text-black"><span className="inline-flex items-center gap-1"><TapIcon />Click or tap anywhere to continue</span></span>}
       </div>
     </div>
   );
 }
 
-function Rhythms() {
-  const timeoutRef = useRef(null);
-  const [settings, setSettings] = useState(() => loadSettings());
-  const [question, setQuestion] = useState(() => makeQuestion(loadSettings()));
-  const [answerText, setAnswerText] = useState("");
-  const [feedback, setFeedback] = useState(null);
-  const [lastCorrect, setLastCorrect] = useState(false);
-  const [correct, setCorrect] = useState(0);
-  const [attempted, setAttempted] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-  const [showHelp, setShowHelp] = useState(false);
-  const [showCustomiser, setShowCustomiser] = useState(false);
+function AppIcon() {
+  return (
+    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
+      <svg width="56" height="56" viewBox="0 0 56 56">
+        <text x="32" y="31" fontSize="42" fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle" dominantBaseline="middle">♩</text></svg>
+    </div>
+  );
+}
 
-  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const hasAnswer = answerText.trim().length > 0;
-  const settingsValid = settings.enabledItems.length >= 2 && settings.enabledOperators.length >= 1;
-  const inputColour = feedback ? (lastCorrect ? "text-green-700 border-green-600" : "text-red-700 border-red-600") : "text-stone-950 border-stone-300";
+function ToggleSwitch({ active }) {
+  return <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active ? "bg-green-600" : "bg-stone-400"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : "translate-x-0"}`} /></span>;
+}
 
-  function clearTimer() {
-    if (timeoutRef.current) {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  }
+function CustomiseGlyphSlot({ children }) {
+  return (
+    <span className="pointer-events-none absolute left-0 top-0 flex h-full w-[58px] items-center justify-center">
+      {children}
+    </span>
+  );
+}
 
-  function nextQuestion() {
-    clearTimer();
-    setQuestion(makeQuestion(settings));
-    setAnswerText("");
-    setFeedback(null);
-    setLastCorrect(false);
-  }
+function RhythmMenuGlyph({ item }) {
+  return (
+    <CustomiseGlyphSlot>
+      <svg viewBox="0 0 90 80" className="h-[55px] w-[70px] overflow-visible">
+        <g transform="translate(0 16)">
+          <Note rhythm={item.id} x={42} systemTop={12} />
+        </g>
+      </svg>
+    </CustomiseGlyphSlot>
+  );
+}
 
-  function updateSettings(nextSettings) {
-    const cleanSettings = { ...nextSettings };
-    const canBeam = cleanSettings.enabledItems.includes("quaver") || cleanSettings.enabledItems.includes("semiquaver") || cleanSettings.enabledItems.includes("dotted-quaver");
-    if (!canBeam) cleanSettings.includeBeamedGroups = false;
-    saveSettings(cleanSettings);
-    setSettings(cleanSettings);
-    clearTimer();
-    setQuestion(makeQuestion(cleanSettings));
-    setAnswerText("");
-    setFeedback(null);
-    setLastCorrect(false);
+function RestMenuGlyph() {
+  return (
+    <CustomiseGlyphSlot>
+      <svg viewBox="0 0 90 80" className="h-[55px] w-[70px] overflow-visible">
+        <g transform="translate(2 8)">
+          <Rest rhythm="crotchet-rest" x={42} systemTop={12} />
+        </g>
+      </svg>
+    </CustomiseGlyphSlot>
+  );
+}
+
+function BeamedMenuGlyph() {
+  return (
+    <CustomiseGlyphSlot>
+      <div className="flex h-[42px] w-[54px] translate-x-[10px] -translate-y-[17px] items-center justify-center overflow-visible">
+        <BeamedNotes rhythms={["quaver", "quaver"]} scale={0.48} />
+      </div>
+    </CustomiseGlyphSlot>
+  );
+}
+
+function OperationMenuGlyph({ operator }) {
+  return (
+    <CustomiseGlyphSlot>
+      <span className="flex h-full w-full -translate-y-[3px] items-center justify-center text-2xl font-bold leading-none">{operator}</span>
+    </CustomiseGlyphSlot>
+  );
+}
+
+function CustomiseRow({ label, active, disabled = false, onClick, glyph }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`relative mb-2.5 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 py-[6px] pl-[64px] pr-[14px] text-left ${disabled ? "opacity-45" : ""}`}
+    >
+      {glyph}
+      <span className="text-sm font-semibold leading-tight">{label}</span>
+      <ToggleSwitch active={active} />
+    </button>
+  );
+}
+
+function MenuRows({ settings, updateSettings, resetScore, newQuestion }) {
+  const canIncludeBeamedGroups = settings.enabledItems.includes("quaver") || settings.enabledItems.includes("semiquaver") || settings.enabledItems.includes("dotted-quaver");
+
+  function commit(next) {
+    const clean = { ...next };
+    const canBeam = clean.enabledItems.includes("quaver") || clean.enabledItems.includes("semiquaver") || clean.enabledItems.includes("dotted-quaver");
+    if (!canBeam) clean.includeBeamedGroups = false;
+    updateSettings(clean);
+    setTimeout(() => newQuestion(clean), 0);
   }
 
   function toggleItem(id) {
     const enabled = settings.enabledItems.includes(id);
-    const nextItems = enabled
-      ? settings.enabledItems.filter((itemId) => itemId !== id)
-      : [...settings.enabledItems, id];
-
-    updateSettings({ ...settings, enabledItems: nextItems });
+    if (enabled && settings.enabledItems.length === 2) return;
+    const enabledItems = enabled ? settings.enabledItems.filter((itemId) => itemId !== id) : [...settings.enabledItems, id];
+    commit({ ...settings, enabledItems });
   }
 
   function toggleOperator(operator) {
     const enabled = settings.enabledOperators.includes(operator);
-    const nextOperators = enabled
-      ? settings.enabledOperators.filter((item) => item !== operator)
-      : [...settings.enabledOperators, operator];
-
-    updateSettings({ ...settings, enabledOperators: nextOperators });
+    if (enabled && settings.enabledOperators.length === 1) return;
+    const enabledOperators = enabled ? settings.enabledOperators.filter((item) => item !== operator) : [...settings.enabledOperators, operator];
+    commit({ ...settings, enabledOperators });
   }
 
-  function toggleRests() {
-    updateSettings({ ...settings, includeRests: !settings.includeRests });
+  return (
+    <>
+      <h3 className="mb-2 text-sm font-bold text-stone-700">Rhythms</h3>
+      {BASE_RHYTHMS.map((item) => (
+        <CustomiseRow
+          key={item.id}
+          label={item.label}
+          active={settings.enabledItems.includes(item.id)}
+          onClick={() => toggleItem(item.id)}
+          glyph={<RhythmMenuGlyph item={item} />}
+        />
+      ))}
+
+      <h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Options</h3>
+      <CustomiseRow
+        label="Rests"
+        active={settings.includeRests}
+        onClick={() => commit({ ...settings, includeRests: !settings.includeRests })}
+        glyph={<RestMenuGlyph />}
+      />
+      <CustomiseRow
+        label="Beamed Groups"
+        active={settings.includeBeamedGroups && canIncludeBeamedGroups}
+        disabled={!canIncludeBeamedGroups}
+        onClick={() => commit({ ...settings, includeBeamedGroups: !settings.includeBeamedGroups })}
+        glyph={<BeamedMenuGlyph />}
+      />
+
+      <h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Operations</h3>
+      {OPERATORS.map((operator) => (
+        <CustomiseRow
+          key={operator}
+          label={OPERATOR_LABELS[operator]}
+          active={settings.enabledOperators.includes(operator)}
+          onClick={() => toggleOperator(operator)}
+          glyph={<OperationMenuGlyph operator={operator} />}
+        />
+      ))}
+
+      <button type="button" onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button>
+    </>
+  );
+}
+
+function HelpPanel() {
+  const [page, setPage] = useState(0);
+  const pages = [
+    ["Instructions", "Work out the rhythm calculation shown on screen. Type the number of beats, then press Confirm."],
+    ["Rhythm Values", "Each rhythm has a beat value. Use the value of each symbol to calculate the answer."],
+    ["Rests", "When rests are included, they use the same beat value as the matching note."],
+    ["Beamed Groups", "Beamed groups combine smaller rhythms into one visual group, usually worth one beat."],
+    ["Operations", "You can customise which operations appear: add, subtract, multiply, and divide."],
+  ];
+  const [title, body] = pages[page];
+
+  return (
+    <div>
+      <h2 className="mb-3 text-center text-base font-semibold">Help</h2>
+      <div className="min-h-[72px] rounded-xl border border-stone-200 bg-stone-50 p-4">
+        <h3 className="text-sm font-bold text-stone-800">{title}</h3>
+        <p className="mt-2 text-sm leading-relaxed text-stone-700">{body}</p>
+        {title === "Rhythm Values" && (
+          <div className="mt-4 grid max-h-[520px] grid-cols-2 gap-2 overflow-y-auto pr-1 text-sm md:grid-cols-4">
+            {BASE_RHYTHMS.map((item) => (
+              <div key={item.id} className="flex min-h-[150px] flex-col items-center justify-start rounded-lg bg-white px-2 py-3 text-center">
+                <RhythmGlyphForHelp rhythm={item.id} />
+                <div className="mt-1 font-semibold">{item.label}</div>
+                <div className="text-xs text-stone-600">{formatBeat(item.beats)} beats</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="mt-3 flex items-center justify-between">
+        <button type="button" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold disabled:opacity-35">←</button>
+        <div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div>
+        <button type="button" onClick={() => setPage(Math.min(pages.length - 1, page + 1))} disabled={page === pages.length - 1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold disabled:opacity-35">→</button>
+      </div>
+    </div>
+  );
+}
+
+function useInjectedStyles() {
+  useEffect(() => {
+    if (document.getElementById("rhythms-golden-style")) return;
+    const style = document.createElement("style");
+    style.id = "rhythms-golden-style";
+    style.innerHTML = `button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:brightness(1.08);box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}@keyframes medalShine{0%,100%{transform:scale(1) rotate(-4deg)}50%{transform:scale(1.16) rotate(4deg);filter:drop-shadow(0 0 10px rgba(250,204,21,.9))}}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}`;
+    document.head.appendChild(style);
+  }, []);
+}
+
+function useClickOutside(refs, handlers) {
+  useEffect(() => {
+    function onPointerDown(event) {
+      refs.forEach((ref, index) => {
+        if (!ref.current?.contains(event.target)) handlers[index]?.();
+      });
+    }
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [refs, handlers]);
+}
+
+function RhythmSumsGoldenApp() {
+  useInjectedStyles();
+
+  const [settings, setSettings] = useState(() => loadSettings());
+  const [question, setQuestion] = useState(() => makeQuestion(loadSettings()));
+  const [questionVisible, setQuestionVisible] = useState(true);
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [answerText, setAnswerText] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [feedbackFading, setFeedbackFading] = useState(false);
+  const [warning, setWarning] = useState("");
+  const [correct, setCorrect] = useState(0);
+  const [attempted, setAttempted] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+
+  const customiseRef = useRef(null);
+  const helpRef = useRef(null);
+  const warningTimer = useRef(null);
+  const nextTimer = useRef(null);
+
+  useClickOutside([customiseRef, helpRef], [() => customiseOpen && setCustomiseOpen(false), () => helpOpen && setHelpOpen(false)]);
+
+  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medal = getStreakMedal(streak);
+  const hasAnswer = answerText.trim().length > 0;
+
+  function updateSettings(nextSettings) {
+    saveSettings(nextSettings);
+    setSettings(nextSettings);
   }
 
-  function toggleBeamedGroups() {
-    const canIncludeBeamedGroups = settings.enabledItems.includes("quaver") || settings.enabledItems.includes("semiquaver") || settings.enabledItems.includes("dotted-quaver");
-    if (!canIncludeBeamedGroups) return;
-    updateSettings({ ...settings, includeBeamedGroups: !settings.includeBeamedGroups });
+  function resetTask(nextQuestion = question) {
+    if (nextTimer.current) clearTimeout(nextTimer.current);
+    setQuestion(nextQuestion);
+    setAnswerText("");
+    setFeedback(null);
+    setFeedbackFading(false);
+    setWarning("");
+  }
+
+  function newQuestion(nextSettings = settings) {
+    setQuestionVisible(false);
+    setTimeout(() => {
+      resetTask(makeQuestion(nextSettings));
+      setQuestionVisible(true);
+    }, 260);
+  }
+
+  function resetScore() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    newQuestion();
+  }
+
+  function showWarning(message) {
+    setWarning(message);
+    if (warningTimer.current) clearTimeout(warningTimer.current);
+    warningTimer.current = setTimeout(() => setWarning(""), 1800);
   }
 
   function handleInput(event) {
@@ -595,125 +806,146 @@ function Rhythms() {
     if (/^\d*\.?\d*$/.test(value)) setAnswerText(value);
   }
 
-  function confirmAnswer() {
-    if (!hasAnswer || feedback || !settingsValid) return;
-
-    const userAnswer = Number(answerText);
-    const isCorrect = Math.abs(userAnswer - question.answer) < 0.0001;
-    const newStreak = isCorrect ? streak + 1 : 0;
-
+  function scoreAnswer(ok) {
+    const nextStreak = ok ? streak + 1 : 0;
+    const earnedMedal = ok ? medalNameForStreak(nextStreak) : null;
+    playFeedbackSound(ok, Boolean(earnedMedal), earnedMedal);
     setAttempted((value) => value + 1);
-    setCorrect((value) => value + (isCorrect ? 1 : 0));
-    setStreak(newStreak);
-    setBestStreak((value) => Math.max(value, newStreak));
-    setLastCorrect(isCorrect);
-    setFeedback(isCorrect ? "correct" : "incorrect");
+    setCorrect((value) => value + (ok ? 1 : 0));
+    setStreak(nextStreak);
+    setBestStreak((value) => Math.max(value, nextStreak));
+    setFeedback({ correct: ok });
 
-    clearTimer();
-    timeoutRef.current = window.setTimeout(nextQuestion, isCorrect ? 2000 : 4000);
+    if (ok) {
+      setFeedbackFading(false);
+      setTimeout(() => setFeedbackFading(true), 1700);
+      nextTimer.current = setTimeout(() => newQuestion(), 2000);
+    }
   }
 
-  function resetScore() {
-    setCorrect(0);
-    setAttempted(0);
-    setStreak(0);
-    setBestStreak(0);
-    nextQuestion();
+  function confirmAnswer() {
+    if (!hasAnswer || feedback) return showWarning("Enter an answer before pressing Confirm.");
+    const userAnswer = Number(answerText);
+    scoreAnswer(Math.abs(userAnswer - question.answer) < 0.0001);
+  }
+
+  function fadeToNextQuestion() {
+    if (!feedback || feedback.correct || feedbackFading) return;
+    setFeedbackFading(true);
+    setTimeout(() => newQuestion(), 280);
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-950 p-4 md:p-8">
+    <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-5 rounded-2xl bg-white shadow-sm border border-stone-200 p-5">
-          <div className="flex flex-col items-center md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Rhythms</h1>
-              <p className="mt-2 text-stone-700">Calculate the sum by entering the correct number of beats.</p>
+        <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <AppIcon />
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Rhythm Sums</h1>
+                <p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Calculate rhythm values using notes, rests and beamed groups.</p>
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 min-w-[280px]">
-              <StatCard label="Score" value={`${correct}/${attempted}`} />
-              <StatCard label="Accuracy" value={`${accuracy}%`} />
-              <StatCard label="Streak" value={streak} />
+
+            <div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end">
+              <StatCard label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${accuracy}%`} progress={accuracy} />
+              <div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${medal?.bg ?? "bg-stone-50"}`}>
+                <StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} medal={medal} />
+                <div className="relative z-0 flex min-h-[52px] min-w-[64px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700">
+                  <div>💎 <span className="text-cyan-500">30</span></div>
+                  <div className="mt-1">🥇 <span className="text-yellow-500">20</span></div>
+                  <div className="mt-1">🥈 <span className="text-slate-500">15</span></div>
+                  <div className="mt-1">🥉 <span className="text-amber-700">10</span></div>
+                </div>
+              </div>
             </div>
           </div>
         </header>
 
-        <main className="rounded-2xl bg-white shadow-sm border border-stone-200 p-4 md:p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex gap-2">
-              <button type="button" title="Customise" aria-label="Customise" onClick={() => setShowCustomiser((value) => !value)} className={`rounded-xl border px-4 py-2 text-sm font-bold ${showCustomiser ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"}`}>Customise</button>
-            </div>
-            <div className="flex gap-2">
-              <button type="button" title="Help" aria-label="Help" onClick={() => setShowHelp((value) => !value)} className={`h-10 w-10 rounded-full border text-lg font-bold ${showHelp ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"}`}>?</button>
-              <button type="button" onClick={resetScore} className="rounded-xl bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700">Reset score</button>
-            </div>
-          </div>
+        <main className="relative -mt-[10px] min-h-[430px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => { if (feedback && !feedback.correct) fadeToNextQuestion(); }}>
+          <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="relative" ref={customiseRef}>
+                <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="flex h-11 min-w-[124px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>
+                {customiseOpen && (
+                  <div className="absolute left-0 z-[60] mt-2 max-h-[72vh] w-[min(430px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
+                    <h2 className="mb-3 text-center text-base font-semibold">Customise</h2>
+                    <MenuRows settings={settings} updateSettings={updateSettings} resetScore={resetScore} newQuestion={newQuestion} />
+                  </div>
+                )}
+              </div>
 
-          {showCustomiser && (
-            <CustomiserPanel
-              settings={settings}
-              onToggleItem={toggleItem}
-              onToggleOperator={toggleOperator}
-              onToggleRests={toggleRests}
-              onToggleBeamedGroups={toggleBeamedGroups}
-            />
-          )}
-          {showHelp && <HelpPanel />}
-
-          <div className="rounded-2xl border border-stone-200 bg-white p-6">
-            <div className="flex items-center justify-center gap-5 overflow-visible py-4 text-4xl font-semibold">
-              <RhythmSlot>
-                <div className="flex flex-col items-center">
-                  <RhythmGlyph item={question.left} />
-                  {feedback === "incorrect" && <span className="mt-1 text-sm font-semibold text-black">{formatBeat(question.left.beats)}</span>}
-                </div>
-              </RhythmSlot>
-
-              <span className="min-w-[44px] text-center leading-none">{question.operator}</span>
-
-              <RhythmSlot>
-                <div className="flex flex-col items-center">
-                  <RhythmGlyph item={question.right} />
-                  {feedback === "incorrect" && <span className="mt-1 text-sm font-semibold text-black">{formatBeat(question.right.beats)}</span>}
-                </div>
-              </RhythmSlot>
-
-              <span className="leading-none">=</span>
-
-              <div className="flex flex-col items-center self-center -mt-5">
-                <label className="mb-1 text-sm font-semibold text-stone-700">Enter your answer here:</label>
-                <input
-                  value={answerText}
-                  onChange={handleInput}
-                  inputMode="decimal"
-                  disabled={Boolean(feedback)}
-                  className={`w-32 rounded-xl border bg-white px-3 py-2 text-center text-2xl font-semibold outline-none ${inputColour}`}
-                />
+              <div className="relative" ref={helpRef}>
+                <button type="button" onClick={() => setHelpOpen((value) => !value)} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">💡 <span>Help</span></button>
+                {helpOpen && (
+                  <div className="absolute left-0 top-12 z-[60] w-[min(460px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
+                    <HelpPanel />
+                  </div>
+                )}
               </div>
             </div>
 
-            {feedback === "incorrect" && (
-              <div className="mt-4 text-center text-sm">
-                <span className="font-semibold text-red-700">Your answer: {answerText}</span>
-                <span className="mx-2 text-stone-400">|</span>
-                <span className="font-semibold text-green-700">Correct answer: {formatBeat(question.answer)}</span>
+            <button type="button" onClick={() => newQuestion()} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
+
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible">
+              <FeedbackBanner feedback={feedback} fading={feedbackFading} warning={warning} />
+            </div>
+          </div>
+
+          <div className={`relative z-10 mt-4 transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+            <div className="flex flex-wrap items-center justify-center gap-5 overflow-visible py-7 text-4xl font-semibold">
+                <RhythmSlot className="scale-[1.18]">
+                  <div className="flex flex-col items-center">
+                    <RhythmGlyph item={question.left} />
+                    {feedback && !feedback.correct && <span className="mt-1 text-sm font-semibold text-black">{formatBeat(question.left.beats)}</span>}
+                  </div>
+                </RhythmSlot>
+
+                <span className="min-w-[44px] text-center leading-none">{question.operator}</span>
+
+                <RhythmSlot className="scale-[1.18]">
+                  <div className="flex flex-col items-center">
+                    <RhythmGlyph item={question.right} />
+                    {feedback && !feedback.correct && <span className="mt-1 text-sm font-semibold text-black">{formatBeat(question.right.beats)}</span>}
+                  </div>
+                </RhythmSlot>
+
+                <span className="leading-none">=</span>
+
+                <div className="flex flex-col items-center self-center -mt-5">
+                  <label className="mb-1 -translate-y-[6px] text-sm font-semibold text-stone-700">Tap or click here to enter your answer:</label>
+                  <input value={answerText} onChange={handleInput} inputMode="decimal" disabled={Boolean(feedback)} className={`w-32 rounded-xl border bg-white px-3 py-2 text-center text-2xl font-semibold outline-none ${feedback ? feedback.correct ? "border-green-600 text-green-700" : "border-red-600 text-red-700" : "border-stone-300 text-stone-950"}`} />
+                </div>
               </div>
-            )}
-          </div>
 
-          <div className="mt-4 flex justify-center">
-            <button type="button" disabled={!hasAnswer || Boolean(feedback) || !settingsValid} onClick={confirmAnswer} className={`rounded-xl px-6 py-3 font-semibold ${hasAnswer && !feedback && settingsValid ? "bg-stone-950 text-white hover:bg-stone-800" : "bg-stone-200 text-stone-500 cursor-not-allowed"}`}>Confirm</button>
-          </div>
+              {feedback && !feedback.correct && (
+                <div className="mt-4 text-center text-sm">
+                  <span className="font-semibold text-red-700">Your answer: {answerText}</span>
+                  <span className="mx-2 text-stone-400">|</span>
+                  <span className="font-semibold text-green-700">Correct answer: {formatBeat(question.answer)}</span>
+                </div>
+              )}
+            </div>
 
-          <Feedback feedback={feedback} correct={lastCorrect} />
-          <div className="mt-4 text-sm text-stone-600">Best streak: {bestStreak}</div>
+          <div className="relative z-10 mt-4 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-stone-900">
+              <div>
+                <p className="text-base font-semibold leading-tight">{question.prompt}</p>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" disabled={Boolean(feedback) || !answerText} onClick={() => { setAnswerText(""); setWarning(""); }} className="hidden"></button>
+                <button type="button" disabled={Boolean(feedback) || !hasAnswer} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>
+              </div>
+            </div>
+          </div>
         </main>
       </div>
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<Rhythms />);
+ReactDOM.createRoot(document.getElementById("root")).render(<RhythmSumsGoldenApp />);
   </script>
 </body>
 </html>
