@@ -11,42 +11,32 @@
 </head>
 <body>
   <div id="root"></div>
-
   <script type="text/babel">
-const { useEffect, useMemo, useState } = React;
+const { useEffect, useMemo, useRef, useState } = React;
 
-// =====================================================
-// Rhythms — Game 2: Rhythm Groups
-// Clean rebuild
-// =====================================================
+const RHYTHMS = {
+  semibreve: { label: "Semibreve", beats: "4", open: true, stem: false, dots: 0, rest: "semibreve-rest" },
+  "dotted-minim": { label: "Dotted Minim", beats: "3", open: true, stem: true, dots: 1, rest: "dotted-minim-rest" },
+  minim: { label: "Minim", beats: "2", open: true, stem: true, dots: 0, rest: "minim-rest" },
+  "dotted-crotchet": { label: "Dotted Crotchet", beats: "1.5", open: false, stem: true, dots: 1, rest: "dotted-crotchet-rest" },
+  crotchet: { label: "Crotchet", beats: "1", open: false, stem: true, dots: 0, rest: "crotchet-rest" },
+  quaver: { label: "Quaver", beats: "0.5", open: false, stem: true, dots: 0, flag: true, beams: 1, rest: "quaver-rest" },
+  semiquaver: { label: "Semiquaver", beats: "0.25", open: false, stem: true, dots: 0, flag: true, beams: 2, rest: "semiquaver-rest" },
+};
+
+const RHYTHM_ORDER = ["semibreve", "dotted-minim", "minim", "dotted-crotchet", "crotchet", "quaver", "semiquaver"];
+const CARD_TYPES = ["name", "beats", "note", "rest"];
+const CARD_TYPE_OPTIONS = [
+  { id: "name", label: "Rhythm Name", glyph: "abc" },
+  { id: "beats", label: "Rhythm Duration", glyph: "123" },
+  { id: "note", label: "Rhythm Symbol", glyph: "♪" },
+  { id: "rest", label: "Rest Symbol", glyph: "𝄽" },
+];
 
 const NOTE_RX = 7;
 const NOTE_RY = 5;
 const STEM_LENGTH = 34;
 const LINE_GAP = 10;
-
-const RHYTHMS = {
-  semibreve: { label: "Semibreve", beats: 4, open: true, stem: false, dots: 0, rest: "semibreve-rest" },
-  "dotted-minim": { label: "Dotted minim", beats: 3, open: true, stem: true, dots: 1, rest: "dotted-minim-rest" },
-  minim: { label: "Minim", beats: 2, open: true, stem: true, dots: 0, rest: "minim-rest" },
-  "dotted-crotchet": { label: "Dotted crotchet", beats: 1.5, open: false, stem: true, dots: 1, rest: "dotted-crotchet-rest" },
-  crotchet: { label: "Crotchet", beats: 1, open: false, stem: true, dots: 0, rest: "crotchet-rest" },
-  quaver: { label: "Quaver", beats: 0.5, open: false, stem: true, dots: 0, flag: true, beams: 1, rest: "quaver-rest" },
-  semiquaver: { label: "Semiquaver", beats: 0.25, open: false, stem: true, dots: 0, flag: true, beams: 2, rest: "semiquaver-rest" },
-};
-
-const RHYTHM_IDS = ["semibreve", "dotted-minim", "minim", "dotted-crotchet", "crotchet", "quaver", "semiquaver"];
-
-const SLOT_TYPES = [
-  { id: "name", label: "Name" },
-  { id: "symbol", label: "Symbol" },
-  { id: "value", label: "Beats" },
-  { id: "rest", label: "Rest" },
-];
-
-function formatBeat(value) {
-  return `${value} beats`;
-}
 
 function shuffle(items) {
   const result = [...items];
@@ -57,40 +47,114 @@ function shuffle(items) {
   return result;
 }
 
-function makeCards() {
-  return shuffle(
-    RHYTHM_IDS.flatMap((rhythmId) => {
-      const rhythm = RHYTHMS[rhythmId];
-      return [
-        { id: `${rhythmId}:name`, rhythmId, slotType: "name", contentType: "text", text: rhythm.label },
-        { id: `${rhythmId}:symbol`, rhythmId, slotType: "symbol", contentType: "note", rhythm: rhythmId },
-        { id: `${rhythmId}:value`, rhythmId, slotType: "value", contentType: "text", text: formatBeat(rhythm.beats) },
-        { id: `${rhythmId}:rest`, rhythmId, slotType: "rest", contentType: "rest", rhythm: rhythm.rest },
-      ];
-    })
-  );
-}
-
-function makeInitialSlots() {
-  const slots = {};
-  RHYTHM_IDS.forEach((_, rowIndex) => {
-    SLOT_TYPES.forEach((slot) => {
-      slots[`row-${rowIndex}:${slot.id}`] = null;
-    });
-  });
-  return slots;
-}
-
 function secondsToTime(totalSeconds) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function Rest({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
+function medalLimits(activeRhythmCount, activeCardTypeCount = 4) {
+  const removedCount = (7 - activeRhythmCount) + (4 - activeCardTypeCount);
+  return {
+    gold: Math.max(0, 45 - removedCount * 10),
+    silver: Math.max(0, 75 - removedCount * 10),
+    bronze: Math.max(0, 105 - removedCount * 10),
+  };
+}
+
+function medalForTime(seconds, activeRhythmCount, activeCardTypeCount = 4) {
+  const limits = medalLimits(activeRhythmCount, activeCardTypeCount);
+  if (seconds < limits.gold) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500" };
+  if (seconds < limits.silver) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500" };
+  if (seconds < limits.bronze) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700" };
+  return null;
+}
+
+function makeCards(enabledRhythms = [], enabledCardTypes = CARD_TYPES) {
+  if (!Array.isArray(enabledRhythms) || !Array.isArray(enabledCardTypes)) return [];
+
+  return enabledRhythms.flatMap((rhythmId) => {
+    const rhythm = RHYTHMS[rhythmId];
+    if (!rhythm) return [];
+
+    const allCards = [
+      { id: `${rhythmId}:name`, rhythmId, cardType: "name", type: "text", text: rhythm.label },
+      { id: `${rhythmId}:beats`, rhythmId, cardType: "beats", type: "text", text: rhythm.beats },
+      { id: `${rhythmId}:note`, rhythmId, cardType: "note", type: "note", rhythmId },
+      { id: `${rhythmId}:rest`, rhythmId, cardType: "rest", type: "rest", restType: rhythm.rest },
+    ];
+
+    return allCards.filter((card) => enabledCardTypes.includes(card.cardType));
+  });
+}
+
+function groupSlotKeys(groupIndex, enabledCardTypes = CARD_TYPES) {
+  return enabledCardTypes.map((_, cardIndex) => `group-${groupIndex}:slot-${cardIndex}`);
+}
+
+function getGroupCards(groupIndex, slots, cardsById, enabledCardTypes = CARD_TYPES) {
+  return groupSlotKeys(groupIndex, enabledCardTypes).map((slotKey) => cardsById[slots[slotKey]]).filter(Boolean);
+}
+
+function isGroupComplete(groupIndex, slots, cardsById, enabledCardTypes = CARD_TYPES) {
+  const cards = getGroupCards(groupIndex, slots, cardsById, enabledCardTypes);
+  if (cards.length !== enabledCardTypes.length) return false;
+
+  const rhythmId = cards[0]?.rhythmId;
+  const sameRhythm = cards.every((card) => card.rhythmId === rhythmId);
+  const typeSet = new Set(cards.map((card) => card.cardType));
+  return sameRhythm && typeSet.size === enabledCardTypes.length && enabledCardTypes.every((cardType) => typeSet.has(cardType));
+}
+
+function makeGroups(enabledRhythms, enabledCardTypes, cards) {
+  const slotKeys = enabledRhythms.flatMap((_, groupIndex) => enabledCardTypes.map((_, cardIndex) => `group-${groupIndex}:slot-${cardIndex}`));
+  const cardIds = cards.map((card) => card.id);
+  const cardsById = Object.fromEntries(cards.map((card) => [card.id, card]));
+
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const shuffledCardIds = shuffle(cardIds);
+    const slots = Object.fromEntries(slotKeys.map((slotKey, index) => [slotKey, shuffledCardIds[index]]));
+    const hasCompleteGroup = enabledRhythms.some((_, groupIndex) => isGroupComplete(groupIndex, slots, cardsById, enabledCardTypes));
+    if (!hasCompleteGroup) return slots;
+  }
+
+  return Object.fromEntries(slotKeys.map((slotKey, index) => [slotKey, shuffle(cardIds)[index]]));
+}
+
+function slotToGroupIndex(slotKey) {
+  return Number(slotKey.split(":")[0].replace("group-", ""));
+}
+
+function Note({ rhythmId, x = 45, y = 46, colour = "currentColor" }) {
+  const rhythm = RHYTHMS[rhythmId];
+  if (!rhythm) return null;
+
+  const stemX = x + NOTE_RX;
+  const stemEndY = y - STEM_LENGTH;
+
+  return (
+    <g>
+      <ellipse cx={x} cy={y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${y})`} fill={rhythm.open ? "transparent" : colour} stroke={colour} strokeWidth="1.8" />
+      {rhythm.stem ? <line x1={stemX} x2={stemX} y1={y} y2={stemEndY} stroke={colour} strokeWidth="1.7" /> : null}
+      {rhythm.dots ? <circle cx={x + 14} cy={y - 5} r="2.2" fill={colour} /> : null}
+      {rhythm.flag ? <Flag stemX={stemX} stemEndY={stemEndY} beams={rhythm.beams} colour={colour} /> : null}
+    </g>
+  );
+}
+
+function Flag({ stemX, stemEndY, beams = 1, colour = "currentColor" }) {
+  return (
+    <g fill="none" stroke={colour} strokeLinecap="round" strokeWidth="1.8">
+      <path d={`M ${stemX} ${stemEndY} C ${stemX + 12} ${stemEndY + 5}, ${stemX + 12} ${stemEndY + 14}, ${stemX + 3} ${stemEndY + 18}`} />
+      {beams === 2 ? <path d={`M ${stemX} ${stemEndY + 7} C ${stemX + 10} ${stemEndY + 10}, ${stemX + 10} ${stemEndY + 18}, ${stemX + 3} ${stemEndY + 22}`} /> : null}
+    </g>
+  );
+}
+
+function Rest({ restType, x = 45, systemTop = 18, colour = "currentColor" }) {
   const middleY = systemTop + LINE_GAP * 2;
 
-  if (rhythm === "semibreve-rest") {
+  if (restType === "semibreve-rest") {
     return (
       <g>
         <line x1={x - 10} x2={x + 10} y1={systemTop + LINE_GAP} y2={systemTop + LINE_GAP} stroke={colour} strokeWidth="1.4" />
@@ -99,22 +163,21 @@ function Rest({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
     );
   }
 
-  if (rhythm === "minim-rest" || rhythm === "dotted-minim-rest") {
+  if (restType === "minim-rest" || restType === "dotted-minim-rest") {
     return (
       <g>
         <line x1={x - 10} x2={x + 10} y1={systemTop + LINE_GAP * 2} y2={systemTop + LINE_GAP * 2} stroke={colour} strokeWidth="1.4" />
         <rect x={x - 8} y={systemTop + LINE_GAP * 2 - 5} width="16" height="5" fill={colour} />
-        {rhythm === "dotted-minim-rest" && <circle cx={x + 14} cy={systemTop + LINE_GAP * 2 - 4} r="2.1" fill={colour} />}
+        {restType === "dotted-minim-rest" ? <circle cx={x + 14} cy={systemTop + LINE_GAP * 2 - 4} r="2.1" fill={colour} /> : null}
       </g>
     );
   }
 
-  if (rhythm === "crotchet-rest" || rhythm === "dotted-crotchet-rest") {
-    const d = `M ${x} ${middleY - 14} L ${x + 4} ${middleY - 9} L ${x - 2} ${middleY - 3} L ${x + 4} ${middleY + 3} L ${x - 2} ${middleY + 11}`;
+  if (restType === "crotchet-rest" || restType === "dotted-crotchet-rest") {
     return (
       <g>
-        <path d={d} fill="none" stroke={colour} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-        {rhythm === "dotted-crotchet-rest" && <circle cx={x + 10} cy={middleY - 4} r="2.1" fill={colour} />}
+        <path d={`M ${x} ${middleY - 14} L ${x + 4} ${middleY - 9} L ${x - 2} ${middleY - 3} L ${x + 4} ${middleY + 3} L ${x - 2} ${middleY + 11}`} fill="none" stroke={colour} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.6" />
+        {restType === "dotted-crotchet-rest" ? <circle cx={x + 10} cy={middleY - 4} r="2.1" fill={colour} /> : null}
       </g>
     );
   }
@@ -122,7 +185,7 @@ function Rest({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
   const topY = middleY - 6;
   const bottomY = middleY + 10;
 
-  if (rhythm === "semiquaver-rest") {
+  if (restType === "semiquaver-rest") {
     return (
       <g stroke={colour} strokeWidth="2" strokeLinecap="round" fill="none">
         <line x1={x - 3} y1={topY} x2={x + 3} y2={topY} />
@@ -143,164 +206,290 @@ function Rest({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
   );
 }
 
-function Flag({ stemX, stemEndY, beams = 1, colour = "currentColor" }) {
-  const primaryPath = `M ${stemX} ${stemEndY} C ${stemX + 12} ${stemEndY + 5}, ${stemX + 12} ${stemEndY + 14}, ${stemX + 3} ${stemEndY + 18}`;
-  const secondaryPath = `M ${stemX} ${stemEndY + 7} C ${stemX + 10} ${stemEndY + 10}, ${stemX + 10} ${stemEndY + 18}, ${stemX + 3} ${stemEndY + 22}`;
+function CardFace({ card }) {
+  if (!card) return null;
 
-  return (
-    <g>
-      <path d={primaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />
-      {beams === 2 && <path d={secondaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />}
-    </g>
-  );
-}
-
-function Note({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
-  const info = RHYTHMS[rhythm];
-  const y = systemTop + LINE_GAP * 2 + 10;
-  const stemX = x + NOTE_RX;
-  const stemEndY = y - STEM_LENGTH;
-  const dotY = y - 5;
-
-  return (
-    <g>
-      <ellipse cx={x} cy={y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.8" />
-      {info.stem && <line x1={stemX} x2={stemX} y1={y} y2={stemEndY} stroke={colour} strokeWidth="1.6" />}
-      {info.dots === 1 && <circle cx={x + 13} cy={dotY} r="2.2" fill={colour} />}
-      {info.flag && <Flag stemX={stemX} stemEndY={stemEndY} colour={colour} beams={info.beams ?? 1} />}
-    </g>
-  );
-}
-
-function SymbolGlyph({ card }) {
-  return (
-    <svg viewBox="0 0 90 80" className="h-16 w-24 overflow-visible mx-auto">
-      {card.contentType === "note" && <Note rhythm={card.rhythm} x={42} systemTop={12} />}
-      {card.contentType === "rest" && <Rest rhythm={card.rhythm} x={42} systemTop={12} />}
-    </svg>
-  );
-}
-
-function TextCard({ text }) {
-  if (text === "Dotted crotchet") {
+  if (card.type === "note") {
     return (
-      <span className="text-center text-sm font-semibold leading-tight">
-        Dotted<br />crotchet
-      </span>
+      <svg draggable={false} viewBox="0 0 90 84" className="pointer-events-none h-[76px] w-[96px] translate-y-[4px] overflow-visible">
+        <Note rhythmId={card.rhythmId} />
+      </svg>
     );
   }
 
-  return <span className="text-center text-sm font-semibold">{text}</span>;
+  if (card.type === "rest") {
+    return (
+      <svg draggable={false} viewBox="0 0 90 84" className="pointer-events-none h-[76px] w-[96px] translate-y-[4px] overflow-visible">
+        <Rest restType={card.restType} />
+      </svg>
+    );
+  }
+
+  const isNumber = !Number.isNaN(Number(card.text));
+  return <span draggable={false} className={`pointer-events-none text-center font-semibold text-black ${isNumber ? "text-xl" : "text-sm"}`}>{card.text}</span>;
 }
 
-function CardContent({ card }) {
-  if (!card) return null;
-  if (card.contentType === "text") return <TextCard text={card.text} />;
-  return <SymbolGlyph card={card} />;
-}
-
-function rowCards(rowIndex, slots, cardsById) {
-  return SLOT_TYPES.map((slot) => {
-    const cardId = slots[`row-${rowIndex}:${slot.id}`];
-    return cardId ? cardsById[cardId] : null;
-  });
-}
-
-function getRowCardsWithSlots(rowIndex, slots, cardsById) {
-  return SLOT_TYPES.map((slot) => {
-    const slotKey = `row-${rowIndex}:${slot.id}`;
-    const cardId = slots[slotKey];
-    return { slot, card: cardId ? cardsById[cardId] : null };
-  });
-}
-
-function getMostCommonRhythmId(rowItems) {
-  const counts = {};
-  rowItems.forEach(({ card }) => {
-    if (!card) return;
-    counts[card.rhythmId] = (counts[card.rhythmId] || 0) + 1;
-  });
-
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  if (sorted.length === 0) return null;
-  if (sorted.length > 1 && sorted[0][1] === sorted[1][1]) return null;
-  return sorted[0][0];
-}
-
-function getRowStatus(rowIndex, slots, cardsById, checked) {
-  if (!checked) return "neutral";
-  const rowItems = getRowCardsWithSlots(rowIndex, slots, cardsById);
-  if (rowItems.some(({ card }) => !card)) return "neutral";
-
-  const firstRhythmId = rowItems[0].card.rhythmId;
-  const sameRhythm = rowItems.every(({ card }) => card.rhythmId === firstRhythmId);
-  const correctTypes = rowItems.every(({ slot, card }) => card.slotType === slot.id);
-
-  return sameRhythm && correctTypes ? "correct" : "incorrect";
-}
-
-function getSlotStatus(rowIndex, slotId, slots, cardsById, checked) {
-  if (!checked) return "neutral";
-
-  const slotKey = `row-${rowIndex}:${slotId}`;
-  const cardId = slots[slotKey];
-  if (!cardId) return "neutral";
-
-  const card = cardsById[cardId];
-  const rowItems = getRowCardsWithSlots(rowIndex, slots, cardsById);
-  const rowRhythmId = getMostCommonRhythmId(rowItems);
-
-  const correctType = card.slotType === slotId;
-  const correctRhythm = rowRhythmId ? card.rhythmId === rowRhythmId : rowItems.every(({ card: rowCard }) => rowCard && rowCard.rhythmId === card.rhythmId);
-
-  return correctType && correctRhythm ? "correct" : "incorrect";
-}
-
-function medalForTime(seconds) {
-  if (seconds < 60) return { emoji: "🥇", label: "Gold", colour: "text-yellow-600", bg: "bg-yellow-50", border: "border-yellow-300" };
-  if (seconds < 90) return { emoji: "🥈", label: "Silver", colour: "text-slate-500", bg: "bg-slate-50", border: "border-slate-300" };
-  if (seconds < 120) return { emoji: "🥉", label: "Bronze", colour: "text-amber-700", bg: "bg-amber-50", border: "border-amber-300" };
-  return null;
-}
-
-function MedalTargets() {
+function AppIcon() {
   return (
-    <div className="mb-5 grid gap-2 text-center sm:grid-cols-3">
-      <div className="rounded-xl border border-yellow-300 bg-yellow-50 px-4 py-2 font-semibold text-yellow-700">
-        <span className="mr-2 text-xl">🥇</span>Gold: under 1:00
-      </div>
-      <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-2 font-semibold text-slate-600">
-        <span className="mr-2 text-xl">🥈</span>Silver: under 1:30
-      </div>
-      <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 font-semibold text-amber-700">
-        <span className="mr-2 text-xl">🥉</span>Bronze: under 2:00
+    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
+      <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+        <ellipse cx="19" cy="38" rx="5.5" ry="4.2" transform="rotate(-18 19 38)" fill="black" />
+        <ellipse cx="37" cy="33" rx="5.5" ry="4.2" transform="rotate(-18 37 33)" fill="black" />
+        <line x1="24" y1="37" x2="24" y2="16" stroke="black" strokeWidth="1.2" />
+        <line x1="42" y1="32" x2="42" y2="10" stroke="black" strokeWidth="1.2" />
+        <polygon points="24,16 42,10 42,13 24,19" fill="black" />
+      </svg>
+    </div>
+  );
+}
+
+function StatCard({ label, value, footer, medal = null, variant = "default" }) {
+  const classes = variant === "medal"
+    ? `rounded-xl border border-stone-200 p-3 shadow-sm ${medal?.bg || "bg-stone-50"}`
+    : "rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-sm";
+
+  return (
+    <div className={classes}>
+      <div className="text-center">
+        <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
+        <div className={`text-xl font-semibold leading-tight ${medal ? medal.text : ""}`}>{value}</div>
+        {footer ? <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div> : null}
       </div>
     </div>
   );
 }
 
-function runTests() {
-  const cards = makeCards();
-  console.assert(cards.length === RHYTHM_IDS.length * SLOT_TYPES.length, "Incorrect number of cards generated.");
-  console.assert(new Set(cards.map((card) => card.id)).size === cards.length, "Card IDs must be unique.");
-
-  const slots = makeInitialSlots();
-  console.assert(Object.keys(slots).length === RHYTHM_IDS.length * SLOT_TYPES.length, "Incorrect number of slots generated.");
+function MedalIcon({ emoji, medalDisplay, active }) {
+  return (
+    <span className="flex h-5 w-5 items-center justify-center leading-none">
+      {active ? <span className="translate-x-[15px]">{medalDisplay}</span> : emoji}
+    </span>
+  );
 }
 
-runTests();
+function ToggleSwitch({ active }) {
+  return (
+    <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active ? "bg-green-600" : "bg-stone-400"}`}>
+      <span className={`h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : "translate-x-0"}`} />
+    </span>
+  );
+}
 
-function RhythmGroups() {
-  const [cards, setCards] = useState(() => makeCards());
-  const cardsById = useMemo(() => Object.fromEntries(cards.map((card) => [card.id, card])), [cards]);
-  const [slots, setSlots] = useState(() => makeInitialSlots());
-  const [pool, setPool] = useState(() => cards.map((card) => card.id));
-  const [draggedCardId, setDraggedCardId] = useState(null);
-  const [dragSource, setDragSource] = useState(null);
-  const [checked, setChecked] = useState(false);
-  const [success, setSuccess] = useState(false);
+function RhythmToggleGlyph({ rhythmId }) {
+  return (
+    <span className="flex h-full w-[38px] items-center justify-center overflow-visible">
+      <svg viewBox="0 0 90 84" className="block h-9 w-12 translate-y-[1px] overflow-visible">
+        <Note rhythmId={rhythmId} />
+      </svg>
+    </span>
+  );
+}
+
+function CardTypeGlyph({ cardType }) {
+  if (cardType === "note") {
+    return <span className="-ml-[1px] flex h-9 w-[44px] items-center justify-center text-[1.6rem] font-bold leading-none text-stone-900">♪</span>;
+  }
+
+  if (cardType === "rest") {
+    return (
+      <span className="-ml-[1px] flex h-9 w-[44px] items-center justify-center overflow-visible">
+        <svg viewBox="0 0 90 84" className="block h-[52px] w-[58px] overflow-visible">
+          <Rest restType="crotchet-rest" x={45} systemTop={18} />
+        </svg>
+      </span>
+    );
+  }
+
+  const option = CARD_TYPE_OPTIONS.find((item) => item.id === cardType);
+  return <span className="flex h-9 w-[38px] items-center justify-center text-base font-bold text-stone-900">{option?.glyph ?? "?"}</span>;
+}
+
+function MenuRows({ enabledRhythms, enabledCardTypes, onToggleRhythm, onToggleCardType, onResetTime }) {
+  return (
+    <>
+      <h3 className="mb-2 text-sm font-bold text-stone-700">Rhythms</h3>
+      {RHYTHM_ORDER.map((rhythmId) => {
+        const active = enabledRhythms.includes(rhythmId);
+        const disabled = active && enabledRhythms.length <= 4;
+        return (
+          <button key={rhythmId} type="button" disabled={disabled} onClick={() => onToggleRhythm(rhythmId)} className="mb-2 flex min-h-[48px] w-full items-center justify-between rounded-xl border border-stone-200 bg-stone-50 px-2 py-[2px] text-left text-sm font-semibold disabled:opacity-45">
+            <span className="flex items-center gap-1">
+              <RhythmToggleGlyph rhythmId={rhythmId} />
+              <span>{RHYTHMS[rhythmId].label}</span>
+            </span>
+            <ToggleSwitch active={active} />
+          </button>
+        );
+      })}
+
+      <h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Card Options</h3>
+      {CARD_TYPE_OPTIONS.map((option) => {
+        const active = enabledCardTypes.includes(option.id);
+        const disabled = active && enabledCardTypes.length <= 2;
+        return (
+          <button key={option.id} type="button" disabled={disabled} onClick={() => onToggleCardType(option.id)} className="mb-2 flex min-h-[48px] w-full items-center justify-between rounded-xl border border-stone-200 bg-stone-50 px-2 py-[2px] text-left text-sm font-semibold disabled:opacity-45">
+            <span className="grid grid-cols-[44px_1fr] items-center gap-0">
+              <CardTypeGlyph cardType={option.id} />
+              <span>{option.label}</span>
+            </span>
+            <ToggleSwitch active={active} />
+          </button>
+        );
+      })}
+
+      <button type="button" onClick={onResetTime} className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-xl border border-red-500 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50">
+        <span className="-translate-y-[1px] text-lg leading-none">◷</span>
+        <span>Reset time</span>
+      </button>
+    </>
+  );
+}
+
+function HelpPanel() {
+  const [page, setPage] = useState(0);
+  const pages = [
+    ["Instructions", "Hold and drag cards between groups until each group contains one complete matching rhythm set."],
+    ["Goal", "Any group can contain any rhythm. It just needs a matching set of the selected card options."],
+    ["Locking", "When a group is correct, it turns green, greys out and locks automatically."],
+    ["Timer", "The timer starts on your first move and stops automatically when all groups are complete."],
+  ];
+  const [title, body] = pages[page];
+
+  return (
+    <div>
+      <h2 className="mb-3 text-center text-base font-semibold">Help</h2>
+      <div className="min-h-[86px] rounded-xl border border-stone-200 bg-stone-50 p-4">
+        <h3 className="text-sm font-bold text-stone-800">{title}</h3>
+        <p className="mt-2 text-sm leading-relaxed text-stone-700">{body}</p>
+      </div>
+      <div className="mt-3 flex items-center justify-between">
+        <button type="button" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} className="flex h-9 w-12 items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold disabled:opacity-35">←</button>
+        <div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div>
+        <button type="button" onClick={() => setPage(Math.min(pages.length - 1, page + 1))} disabled={page === pages.length - 1} className="flex h-9 w-12 items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold disabled:opacity-35">→</button>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackBanner({ feedback, warning }) {
+  if (warning) return <div className="text-center text-lg font-bold text-amber-700">{warning}</div>;
+  if (!feedback) return null;
+  return <div className={`text-center text-xl font-bold ${feedback.correct ? "text-green-600" : "text-red-600"}`}>{feedback.correct ? "Complete" : "Incorrect"}</div>;
+}
+
+function useGlobalStyles() {
+  useEffect(() => {
+    if (document.getElementById("rhythm-groups-clean-styles")) return;
+    const style = document.createElement("style");
+    style.id = "rhythm-groups-clean-styles";
+    style.textContent = `
+      button, [data-drag-card] { -webkit-tap-highlight-color: transparent; user-select: none; }
+      [data-drag-card] { touch-action: none; }
+      button { transition: transform .08s ease, filter .08s ease, background-color .12s ease, box-shadow .12s ease; }
+      button:hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.06); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+      button:active { transform: scale(.96); }
+      @keyframes medalShine { 0%, 100% { transform: translateY(3px) scale(1) rotate(-4deg); } 50% { transform: translateY(3px) scale(1.16) rotate(4deg); filter: drop-shadow(0 0 10px rgba(250,204,21,.9)); } }
+      @keyframes swapPop { 0% { transform: scale(.96); } 55% { transform: scale(1.06); } 100% { transform: scale(1); } }
+      @keyframes groupComplete { 0% { transform: scale(.985); filter: brightness(1); } 50% { transform: scale(1.025); filter: brightness(1.08); } 100% { transform: scale(1); filter: brightness(1); } }
+    `;
+    document.head.appendChild(style);
+  }, []);
+}
+
+function playFeedbackSound(correct, celebration = false, medal = null) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  const context = new AudioContextClass();
+  const master = context.createGain();
+  master.gain.value = 0.16;
+  master.connect(context.destination);
+
+  function tone(freq, start, duration, type = "triangle", volume = 0.12) {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + duration + 0.05);
+  }
+
+  function trumpetTone(freq, start, duration, volume = 0.1) {
+    tone(freq, start, duration, "sawtooth", volume);
+    tone(freq * 1.002, start, duration * 0.96, "square", volume * 0.32);
+    tone(freq * 2, start, duration * 0.75, "triangle", volume * 0.16);
+  }
+
+  function medalPhrase(rootFreq, chordFreqs, startTime) {
+    const beatLength = 0.6;
+    const tripletLength = 0.13;
+    chordFreqs.forEach((freq) => trumpetTone(freq, startTime, beatLength * 4, 0.045));
+    trumpetTone(rootFreq, startTime, tripletLength, 0.11);
+    trumpetTone(rootFreq, startTime + tripletLength, tripletLength, 0.11);
+    trumpetTone(rootFreq, startTime + tripletLength * 2, tripletLength, 0.11);
+    trumpetTone(rootFreq, startTime + 0.42, 1.95, 0.13);
+  }
+
+  const now = context.currentTime + 0.01;
+  if (correct) {
+    if (celebration) {
+      if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now);
+      else if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now);
+      else if (medal === "gold") medalPhrase(830.61, [415.3, 523.25, 622.25], now);
+    } else {
+      [523.25, 659.25, 783.99].forEach((freq, index) => tone(freq, now + index * 0.045, 0.42, "triangle", index === 2 ? 0.085 : 0.07));
+    }
+  } else {
+    tone(196, now, 0.32, "sawtooth", 0.06);
+    tone(185, now + 0.04, 0.38, "triangle", 0.05);
+    tone(174, now + 0.08, 0.45, "sine", 0.04);
+  }
+
+  window.setTimeout(() => {
+    try { context.close(); } catch {}
+  }, celebration ? 3500 : 900);
+}
+
+function playGroupCompleteSound() {
+  playFeedbackSound(true);
+}
+
+function RhythmGroupsLandscapeApp() {
+  useGlobalStyles();
+
+  const [enabledRhythms, setEnabledRhythms] = useState(() => [...RHYTHM_ORDER]);
+  const [enabledCardTypes, setEnabledCardTypes] = useState(() => [...CARD_TYPES]);
+  const initialCards = makeCards(RHYTHM_ORDER, CARD_TYPES);
+  const [cards, setCards] = useState(() => Array.isArray(initialCards) ? initialCards : []);
+  const cardsById = useMemo(() => Object.fromEntries((Array.isArray(cards) ? cards : []).map((card) => [card.id, card])), [cards]);
+  const [slots, setSlots] = useState(() => makeGroups(RHYTHM_ORDER, CARD_TYPES, initialCards));
+  const [dragState, setDragState] = useState(null);
+  const [hoverSlotKey, setHoverSlotKey] = useState(null);
+  const [recentlySwapped, setRecentlySwapped] = useState([]);
   const [started, setStarted] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [bestTime, setBestTime] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [warning, setWarning] = useState("");
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  const dragStateRef = useRef(null);
+  const warningTimerRef = useRef(null);
+  const customiseRef = useRef(null);
+  const helpRef = useRef(null);
+  const completedRef = useRef(false);
+  const previousLockedCountRef = useRef(0);
+
+  const groupCount = enabledRhythms.length;
+  const lockedGroups = useMemo(() => new Set(Array.from({ length: groupCount }, (_, index) => index).filter((groupIndex) => isGroupComplete(groupIndex, slots, cardsById, enabledCardTypes))), [groupCount, slots, cardsById, enabledCardTypes]);
+  const success = lockedGroups.size === groupCount;
+  const bestMedal = bestTime == null ? null : medalForTime(bestTime, enabledRhythms.length, enabledCardTypes.length);
+  const currentMedalLimits = medalLimits(enabledRhythms.length, enabledCardTypes.length);
 
   useEffect(() => {
     if (!started || success) return undefined;
@@ -308,221 +497,272 @@ function RhythmGroups() {
     return () => window.clearInterval(timer);
   }, [started, success]);
 
-  const allPlaced = Object.values(slots).every(Boolean);
+  useEffect(() => {
+    if (lockedGroups.size > previousLockedCountRef.current && previousLockedCountRef.current !== 0) {
+      playGroupCompleteSound();
+      navigator.vibrate?.(12);
+    }
+    previousLockedCountRef.current = lockedGroups.size;
+  }, [lockedGroups]);
+
+  useEffect(() => {
+    if (!success || completedRef.current) return;
+    completedRef.current = true;
+    setFeedback({ correct: true });
+    setBestTime((currentBest) => (currentBest == null ? elapsed : Math.min(currentBest, elapsed)));
+    const earnedMedal = medalForTime(elapsed, enabledRhythms.length, enabledCardTypes.length);
+    if (earnedMedal?.emoji === "🥇") playFeedbackSound(true, true, "gold");
+    else if (earnedMedal?.emoji === "🥈") playFeedbackSound(true, true, "silver");
+    else if (earnedMedal?.emoji === "🥉") playFeedbackSound(true, true, "bronze");
+    else playFeedbackSound(true);
+  }, [success, elapsed, enabledRhythms.length, enabledCardTypes.length]);
+
+  useEffect(() => {
+    const closeMenus = (event) => {
+      if (customiseRef.current && !customiseRef.current.contains(event.target)) setCustomiseOpen(false);
+      if (helpRef.current && !helpRef.current.contains(event.target)) setHelpOpen(false);
+    };
+    document.addEventListener("pointerdown", closeMenus, true);
+    return () => document.removeEventListener("pointerdown", closeMenus, true);
+  }, []);
 
   function beginIfNeeded() {
     if (!started) setStarted(true);
   }
 
-  function resetGame() {
-    const freshCards = makeCards();
-    setCards(freshCards);
-    setSlots(makeInitialSlots());
-    setPool(freshCards.map((card) => card.id));
-    setDraggedCardId(null);
-    setDragSource(null);
-    setChecked(false);
-    setSuccess(false);
+  function rebuild(nextEnabledRhythms, nextEnabledCardTypes = enabledCardTypes) {
+    const nextCards = makeCards(nextEnabledRhythms, nextEnabledCardTypes);
+    setEnabledRhythms(nextEnabledRhythms);
+    setEnabledCardTypes(nextEnabledCardTypes);
+    setCards(nextCards);
+    setSlots(makeGroups(nextEnabledRhythms, nextEnabledCardTypes, nextCards));
+    setDragState(null);
+    setHoverSlotKey(null);
+    setRecentlySwapped([]);
+    dragStateRef.current = null;
     setStarted(false);
     setElapsed(0);
+    setFeedback(null);
+    setWarning("");
+    completedRef.current = false;
+    previousLockedCountRef.current = 0;
   }
 
-  function startDrag(cardId, source) {
-    setDraggedCardId(cardId);
-    setDragSource(source);
+  function restartGame() {
+    rebuild(enabledRhythms, enabledCardTypes);
   }
 
-  function clearDrag() {
-    setDraggedCardId(null);
-    setDragSource(null);
+  function resetTime() {
+    setBestTime(null);
+    restartGame();
   }
 
-  function removeDraggedCard(currentSlots, currentPool) {
-    let nextSlots = { ...currentSlots };
-    let nextPool = [...currentPool];
-
-    if (!draggedCardId || !dragSource) return { nextSlots, nextPool };
-
-    if (dragSource.type === "pool") {
-      nextPool = nextPool.filter((id) => id !== draggedCardId);
-    }
-
-    if (dragSource.type === "slot") {
-      nextSlots[dragSource.slotKey] = null;
-    }
-
-    return { nextSlots, nextPool };
+  function toggleRhythm(rhythmId) {
+    const active = enabledRhythms.includes(rhythmId);
+    if (active && enabledRhythms.length <= 4) return;
+    const nextEnabledRhythms = active ? enabledRhythms.filter((id) => id !== rhythmId) : RHYTHM_ORDER.filter((id) => [...enabledRhythms, rhythmId].includes(id));
+    rebuild(nextEnabledRhythms, enabledCardTypes);
   }
 
-  function dropOnSlot(targetSlotKey) {
-    if (!draggedCardId) return;
+  function toggleCardType(cardType) {
+    const active = enabledCardTypes.includes(cardType);
+    if (active && enabledCardTypes.length <= 2) return;
+    const nextEnabledCardTypes = active ? enabledCardTypes.filter((id) => id !== cardType) : CARD_TYPES.filter((id) => [...enabledCardTypes, cardType].includes(id));
+    rebuild(enabledRhythms, nextEnabledCardTypes);
+  }
+
+  function canMoveSlot(slotKey) {
+    const groupIndex = slotToGroupIndex(slotKey);
+    return !lockedGroups.has(groupIndex) && !success;
+  }
+
+  function swapSlots(sourceSlotKey, targetSlotKey) {
+    if (!sourceSlotKey || !targetSlotKey || sourceSlotKey === targetSlotKey) return;
+    if (!canMoveSlot(sourceSlotKey) || !canMoveSlot(targetSlotKey)) return;
     beginIfNeeded();
-    setChecked(false);
-
+    setFeedback(null);
+    setRecentlySwapped([sourceSlotKey, targetSlotKey]);
+    navigator.vibrate?.(10);
+    window.setTimeout(() => setRecentlySwapped([]), 260);
     setSlots((currentSlots) => {
-      const currentPool = pool;
-      let { nextSlots, nextPool } = removeDraggedCard(currentSlots, currentPool);
-      const displacedCardId = nextSlots[targetSlotKey];
-
-      if (displacedCardId) {
-        if (dragSource?.type === "slot") {
-          nextSlots[dragSource.slotKey] = displacedCardId;
-        } else {
-          nextPool.push(displacedCardId);
-        }
-      }
-
-      nextSlots[targetSlotKey] = draggedCardId;
-      setPool(nextPool);
+      const nextSlots = { ...currentSlots };
+      const sourceCard = nextSlots[sourceSlotKey];
+      nextSlots[sourceSlotKey] = nextSlots[targetSlotKey];
+      nextSlots[targetSlotKey] = sourceCard;
       return nextSlots;
     });
-
-    clearDrag();
   }
 
-  function dropOnPool() {
-    if (!draggedCardId) return;
-    beginIfNeeded();
-    setChecked(false);
-
-    setSlots((currentSlots) => {
-      let { nextSlots, nextPool } = removeDraggedCard(currentSlots, pool);
-      if (!nextPool.includes(draggedCardId)) nextPool.push(draggedCardId);
-      setPool(nextPool);
-      return nextSlots;
-    });
-
-    clearDrag();
+  function startPointerDrag(event, slotKey, cardId) {
+    if (!cardId || !canMoveSlot(slotKey)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const nextDragState = { sourceSlotKey: slotKey, cardId, x: event.clientX, y: event.clientY };
+    navigator.vibrate?.(8);
+    dragStateRef.current = nextDragState;
+    setDragState(nextDragState);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
-  function confirm() {
-    if (!allPlaced) return;
-    setChecked(true);
-
-    const allCorrect = RHYTHM_IDS.every((_, rowIndex) => getRowStatus(rowIndex, slots, cardsById, true) === "correct");
-    setSuccess(allCorrect);
+  function movePointerDrag(event) {
+    if (!dragStateRef.current) return;
+    const nextDragState = { ...dragStateRef.current, x: event.clientX, y: event.clientY };
+    dragStateRef.current = nextDragState;
+    setDragState(nextDragState);
+    const targetElement = document.elementFromPoint(event.clientX, event.clientY);
+    const targetSlotKey = targetElement?.closest?.("[data-slot-key]")?.getAttribute("data-slot-key");
+    setHoverSlotKey(targetSlotKey && targetSlotKey !== nextDragState.sourceSlotKey ? targetSlotKey : null);
   }
 
-  function renderCard(cardId, source) {
-    const card = cardsById[cardId];
-    if (!card) return null;
-
-    return (
-      <div
-        key={cardId}
-        draggable
-        onDragStart={() => startDrag(cardId, source)}
-        onDragEnd={clearDrag}
-        className="flex min-h-[64px] min-w-[118px] cursor-grab items-center justify-center rounded-xl border border-stone-300 bg-white px-3 py-2 text-center shadow-sm active:cursor-grabbing"
-      >
-        <CardContent card={card} />
-      </div>
-    );
+  function endPointerDrag(event) {
+    const currentDrag = dragStateRef.current;
+    if (!currentDrag) return;
+    const targetElement = document.elementFromPoint(event.clientX, event.clientY);
+    const targetSlotKey = targetElement?.closest?.("[data-slot-key]")?.getAttribute("data-slot-key");
+    if (targetSlotKey) swapSlots(currentDrag.sourceSlotKey, targetSlotKey);
+    dragStateRef.current = null;
+    setDragState(null);
+    setHoverSlotKey(null);
   }
+
+  function cancelPointerDrag() {
+    dragStateRef.current = null;
+    setDragState(null);
+    setHoverSlotKey(null);
+  }
+
+  const medalDisplay = (
+    <span
+      className="inline-block translate-y-[3px] text-3xl leading-none"
+      style={bestMedal
+        ? { animation: bestMedal ? "medalShine 1.4s ease-in-out infinite" : "none" }
+        : {
+            opacity: 0.16,
+            filter: "grayscale(1) brightness(0.7)",
+            animation: bestMedal ? "medalShine 1.4s ease-in-out infinite" : "none",
+          }}>
+      {bestMedal ? bestMedal.emoji : "🥉"}
+    </span>
+  );
 
   return (
-    <div className="min-h-screen bg-stone-50 p-4 text-stone-950 md:p-8">
+    <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Rhythms</h1>
-              <p className="mt-2 text-stone-700">Group the matching rhythm information together.</p>
+        <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <AppIcon />
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Rhythm Groups</h1>
+                <p className="mt-0.5 max-w-2xl text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">
+                  Group the matching rhythm cards together as quickly as you can.
+                </p>
+              </div>
             </div>
-            <div className="rounded-xl border bg-stone-50 px-5 py-3 text-center">
-              <div className="text-xs uppercase tracking-wide text-stone-500">Timer</div>
-              <div className="text-2xl font-semibold">{secondsToTime(elapsed)}</div>
+            <div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end">
+              <StatCard label="Time" value={secondsToTime(elapsed)} footer={`Best time: ${bestTime == null ? "N/A" : secondsToTime(bestTime)}`} />
+              <div className="relative inline-flex min-h-[34px] w-fit flex-col justify-center rounded-xl border border-stone-200 bg-stone-50 px-[10px] py-[10px] pr-[10px] text-[13px] leading-[1.15] text-stone-700 shadow-sm">
+                <div className="grid grid-cols-[72px_52px] items-center gap-3 whitespace-nowrap"><span className="flex -translate-x-[6px] items-center gap-1 text-right"><MedalIcon emoji="🥇" medalDisplay={medalDisplay} active={bestMedal?.emoji === "🥇"} /><span>Gold</span></span><span className="block min-w-[52px] text-right">{secondsToTime(currentMedalLimits.gold)}</span></div>
+                <div className="mt-1 grid grid-cols-[72px_52px] items-center gap-3 whitespace-nowrap"><span className="flex -translate-x-[6px] items-center gap-1 text-right"><MedalIcon emoji="🥈" medalDisplay={medalDisplay} active={bestMedal?.emoji === "🥈"} /><span>Silver</span></span><span className="block min-w-[52px] text-right">{secondsToTime(currentMedalLimits.silver)}</span></div>
+                <div className="mt-1 grid grid-cols-[72px_52px] items-center gap-3 whitespace-nowrap"><span className="flex -translate-x-[6px] items-center gap-1 text-right"><MedalIcon emoji="🥉" medalDisplay={medalDisplay} active={bestMedal?.emoji === "🥉"} /><span>Bronze</span></span><span className="block min-w-[52px] text-right">{secondsToTime(currentMedalLimits.bronze)}</span></div>
+                <div className="pointer-events-none absolute left-[78px] top-[calc(50%-12px)] -translate-y-1/2">
+                  {bestMedal ? (
+                    medalDisplay
+                  ) : (
+                    <span
+                      className="inline-block translate-y-[3px] text-3xl leading-none"
+                      style={{
+                        opacity: 0.16,
+                        filter: "grayscale(1) brightness(0.7)",
+                        animation: bestMedal ? "medalShine 1.4s ease-in-out infinite" : "none",
+                      }}
+                    >
+                      🥇
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </header>
 
-        <MedalTargets />
-
-        {success && (() => {
-          const medal = medalForTime(elapsed);
-          return (
-            <div className={`mb-4 rounded-xl border p-4 text-center font-semibold ${medal ? `${medal.bg} ${medal.border} ${medal.colour}` : "border-green-300 bg-green-50 text-green-800"}`}>
-              {medal && <span className="mr-2 text-2xl">{medal.emoji}</span>}
-              Well done! You got it right in {secondsToTime(elapsed)}. Can you beat this time in your next attempt?
+        <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="relative z-20 mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="relative" ref={customiseRef}>
+                <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="flex h-11 min-w-[124px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>
+                {customiseOpen ? (
+                  <div className="absolute left-0 z-[60] mt-2 max-h-[72vh] w-[min(430px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
+                    <h2 className="mb-3 text-center text-base font-semibold">Customise</h2>
+                    <MenuRows enabledRhythms={enabledRhythms} enabledCardTypes={enabledCardTypes} onToggleRhythm={toggleRhythm} onToggleCardType={toggleCardType} onResetTime={resetTime} />
+                  </div>
+                ) : null}
+              </div>
+              <div className="relative" ref={helpRef}>
+                <button type="button" onClick={() => setHelpOpen((value) => !value)} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">💡 <span>Help</span></button>
+                {helpOpen ? (
+                  <div className="absolute left-0 top-12 z-[60] w-[min(460px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
+                    <HelpPanel />
+                  </div>
+                ) : null}
+              </div>
             </div>
-          );
-        })()}
-
-        {checked && !success && (
-          <div className="mb-4 rounded-xl border border-red-300 bg-red-50 p-4 text-center font-semibold text-red-800">
-            Some cards are incorrect. Try again.
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center">
+              <FeedbackBanner feedback={feedback} warning={warning} />
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={restartGame} className="flex h-11 min-w-[112px] items-center justify-center rounded-xl bg-black px-4 text-sm font-semibold text-white">Restart</button>
+            </div>
           </div>
-        )}
 
-        <main className="grid gap-4 lg:grid-cols-[1fr_320px]">
-          <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 grid grid-cols-4 gap-2 text-center text-sm font-semibold text-stone-600">
-              {SLOT_TYPES.map((slot) => <div key={slot.id}>{slot.label}</div>)}
+          <div className="overflow-x-auto pb-2">
+            <div className="grid min-w-[920px] gap-3" style={{ gridTemplateColumns: `repeat(${groupCount}, minmax(116px, 1fr))` }}>
+              {Array.from({ length: groupCount }, (_, groupIndex) => {
+                const locked = lockedGroups.has(groupIndex);
+                return (
+                  <div key={groupIndex} className={`flex flex-col gap-2 rounded-2xl border-2 p-2 shadow-sm transition-all duration-300 ease-out ${locked ? "animate-[groupComplete_.32s_ease-out] border-green-500 bg-green-50 opacity-65" : "border-stone-200 bg-stone-50"}`}>
+                    {groupSlotKeys(groupIndex, enabledCardTypes).map((slotKey) => {
+                      const card = cardsById[slots[slotKey]];
+                      const isDragging = dragState?.sourceSlotKey === slotKey;
+                      const isHoverTarget = hoverSlotKey === slotKey;
+                      const didJustSwap = recentlySwapped.includes(slotKey);
+                      return (
+                        <div
+                          key={slotKey}
+                          data-slot-key={slotKey}
+                          onPointerDown={(event) => startPointerDrag(event, slotKey, slots[slotKey])}
+                          onPointerMove={movePointerDrag}
+                          onPointerUp={endPointerDrag}
+                          onPointerCancel={cancelPointerDrag}
+                          className={`flex h-[70px] touch-none items-center justify-center rounded-xl border-2 bg-white p-1 shadow-sm transition-all duration-200 ease-out ${locked ? "cursor-default border-green-500 bg-green-50" : "cursor-grab border-stone-300 active:cursor-grabbing"} ${isHoverTarget ? "scale-[1.035] border-black bg-stone-100 shadow-lg ring-2 ring-black/20" : ""} ${didJustSwap ? "animate-[swapPop_.24s_ease-out]" : ""}`}
+                        >
+                          <div className={`flex h-full w-full items-center justify-center transition-opacity duration-150 ${isDragging ? "opacity-55" : ""}`}>
+                            <CardFace card={card} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
-
-            <div className="space-y-2">
-              {RHYTHM_IDS.map((_, rowIndex) => (
-                <div key={rowIndex} className="grid grid-cols-4 gap-2">
-                  {SLOT_TYPES.map((slot) => {
-                    const slotKey = `row-${rowIndex}:${slot.id}`;
-                    const cardId = slots[slotKey];
-                    const status = getSlotStatus(rowIndex, slot.id, slots, cardsById, checked);
-                    const statusClass = status === "correct"
-                      ? "border-green-500 ring-2 ring-green-500 animate-pulse"
-                      : status === "incorrect"
-                      ? "border-red-500 ring-2 ring-red-500 animate-pulse"
-                      : "border-stone-300";
-
-                    return (
-                      <div
-                        key={slotKey}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={() => dropOnSlot(slotKey)}
-                        className={`flex min-h-[78px] items-center justify-center rounded-xl border-2 bg-stone-50 p-2 ${statusClass}`}
-                      >
-                        {cardId ? renderCard(cardId, { type: "slot", slotKey }) : <span className="text-xs text-stone-400">Drop here</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <aside className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-3 text-center text-lg font-semibold">Cards</h2>
-            <div
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={dropOnPool}
-              className="flex min-h-[480px] flex-wrap content-start gap-2 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-3"
-            >
-              {pool.map((cardId) => renderCard(cardId, { type: "pool" }))}
-            </div>
-          </aside>
-        </main>
-
-        <div className="mt-4 flex justify-center gap-2">
-          <button
-            type="button"
-            onClick={confirm}
-            disabled={!allPlaced || success}
-            className={`rounded-xl px-6 py-3 font-semibold ${allPlaced && !success ? "bg-stone-950 text-white hover:bg-stone-800" : "cursor-not-allowed bg-stone-200 text-stone-500"}`}
-          >
-            Confirm
-          </button>
-
-          {success && (
-            <button type="button" onClick={resetGame} className="rounded-xl bg-green-600 px-6 py-3 font-semibold text-white hover:bg-green-700">
-              Play again
-            </button>
-          )}
+          </div>
         </div>
       </div>
+
+      {dragState ? (
+        <div
+          className="pointer-events-none fixed z-[9999] flex h-[70px] w-[116px] rotate-[1.5deg] scale-[1.06] items-center justify-center rounded-xl border-2 border-black bg-white p-1 text-center shadow-2xl ring-2 ring-black/20 transition-transform duration-75"
+          style={{ left: dragState.x - 58, top: dragState.y - 35 }}
+        >
+          <CardFace card={cardsById[dragState.cardId]} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<RhythmGroups />);
+ReactDOM.createRoot(document.getElementById("root")).render(<RhythmGroupsLandscapeApp />);
   </script>
 </body>
 </html>
