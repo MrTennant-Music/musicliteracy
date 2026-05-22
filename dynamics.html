@@ -1,44 +1,42 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dynamics App</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dynamics Golden App</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    body { margin: 0; }
-    svg { overflow: visible; }
-  </style>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
+
 <script type="text/babel">
 const { useEffect, useMemo, useRef, useState } = React;
 
-const VIEWBOX_WIDTH = 920;
-const VIEWBOX_HEIGHT = 330;
-const STAFF_LEFT = 28;
-const STAFF_RIGHT = 892;
-const SYSTEM_TOPS = [69, 201];
-const LINE_GAP = 10;
-const BAR_COUNT = 8;
-const BARS_PER_SYSTEM = 4;
+const W = 920;
+const H = 430;
+const STAFF_LEFT = 24;
+const STAFF_RIGHT = 896;
+const MUSIC_START = 125;
+const SYSTEM_TOPS = [62, 187];
+const GAP = 10;
 const NOTE_RX = 6.3;
 const NOTE_RY = 4.6;
-const STEM_LENGTH = 32;
-const CLEF_X = STAFF_LEFT + 8;
-const TIME_SIG_X = STAFF_LEFT + 54;
-const MUSIC_START_X = STAFF_LEFT + 78;
-const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
+const STEM = 32;
+const BAR_COUNT = 8;
+const BARS_PER_SYSTEM = 4;
+const TREBLE = String.fromCodePoint(0x1d11e);
 const TICK = String.fromCodePoint(0x2714);
 const CROSS = String.fromCodePoint(0x2716);
 
-const BLUE = "#2563eb";
-const GREEN = "#16a34a";
-const RED = "#dc2626";
+const COLOUR = {
+  blue: "#2563eb",
+  green: "#16a34a",
+  red: "#dc2626",
+  black: "#000000",
+};
 
 const DYNAMICS = [
   { id: "pp", name: "Pianissimo", description: "Very soft", aliases: ["very soft", "very quiet", "very quite", "extremely soft"], gain: 0.055 },
@@ -52,12 +50,13 @@ const DYNAMICS = [
   { id: "diminuendo", name: "Diminuendo", description: "Gradually getting quieter", aliases: ["quieter", "quiter", "get quieter", "getting quieter", "growing quieter", "gradually getting quieter", "gradually growing quieter", "gradually get quieter", "becoming quieter", "gets quieter", "softer", "getting softer", "gradually softer"], gain: null },
 ];
 
-const QUESTION_TYPES = [
-  { id: "multiple-choice", label: "Multiple Choice Question" },
-  { id: "definition", label: "Definition Question" },
-  { id: "apply-score", label: "Apply to Score Question" },
-  { id: "audio", label: "Audio Question" },
-];
+const QUESTION_TYPES = ["multiple-choice", "definition", "apply-score", "audio"];
+const QUESTION_LABELS = {
+  "multiple-choice": "Multiple Choice",
+  definition: "Definition",
+  "apply-score": "Apply to Score",
+  audio: "Audio Question",
+};
 
 const STATIC_DYNAMIC_IDS = ["pp", "p", "mp", "mf", "f", "ff"];
 const AUDIO_BUTTON_IDS = ["p", "f", "sfz", "crescendo", "diminuendo"];
@@ -70,17 +69,13 @@ const TIME_SIGNATURES = [
   { id: "6/8", top: "6", bottom: "8", beats: 6, compound: true },
 ];
 
-const NOTE_POOL = [
-  { name: "C4", step: -2, frequency: 261.63 }, { name: "D4", step: -1, frequency: 293.66 },
-  { name: "E4", step: 0, frequency: 329.63 }, { name: "F4", step: 1, frequency: 349.23 },
-  { name: "G4", step: 2, frequency: 392.0 }, { name: "A4", step: 3, frequency: 440.0 },
-  { name: "B4", step: 4, frequency: 493.88 }, { name: "C5", step: 5, frequency: 523.25 },
-  { name: "D5", step: 6, frequency: 587.33 }, { name: "E5", step: 7, frequency: 659.25 },
-  { name: "F5", step: 8, frequency: 698.46 }, { name: "G5", step: 9, frequency: 783.99 },
-  { name: "A5", step: 10, frequency: 880.0 },
-];
+const NOTES = [
+  ["C4", -2, 261.63], ["D4", -1, 293.66], ["E4", 0, 329.63], ["F4", 1, 349.23],
+  ["G4", 2, 392], ["A4", 3, 440], ["B4", 4, 493.88], ["C5", 5, 523.25],
+  ["D5", 6, 587.33], ["E5", 7, 659.25], ["F5", 8, 698.46], ["G5", 9, 783.99], ["A5", 10, 880],
+].map(([name, step, freq]) => ({ name, step, freq }));
 
-const RHYTHMS = {
+const RH = {
   semibreve: { beats: 4, spacing: 4.4, open: true, stem: false, flag: false },
   dottedMinim: { beats: 3, spacing: 3.4, open: true, stem: true, flag: false, dotted: true },
   minim: { beats: 2, spacing: 2.6, open: true, stem: true, flag: false },
@@ -89,7 +84,7 @@ const RHYTHMS = {
   quaver: { beats: 0.5, spacing: 0.95, open: false, stem: true, flag: true },
 };
 
-const SIMPLE_BAR_PATTERNS = {
+const SIMPLE_PATTERNS = {
   2: [["crotchet", "crotchet"], ["minim"], ["quaver", "quaver", "crotchet"], ["crotchet", "quaver", "quaver"], ["quaver", "quaver", "quaver", "quaver"]],
   3: [["crotchet", "crotchet", "crotchet"], ["minim", "crotchet"], ["crotchet", "minim"], ["quaver", "quaver", "crotchet", "crotchet"], ["crotchet", "quaver", "quaver", "crotchet"], ["crotchet", "crotchet", "quaver", "quaver"]],
   4: [["crotchet", "crotchet", "crotchet", "crotchet"], ["minim", "minim"], ["minim", "crotchet", "crotchet"], ["crotchet", "crotchet", "minim"], ["quaver", "quaver", "crotchet", "crotchet", "crotchet"], ["crotchet", "quaver", "quaver", "crotchet", "crotchet"], ["quaver", "quaver", "quaver", "quaver", "crotchet", "crotchet"]],
@@ -113,537 +108,692 @@ const PROGRESSIONS = [
   ["C", "F", "C", "G", "Am", "F", "G", "C"],
 ];
 
-function randomItem(items) { return items[Math.floor(Math.random() * items.length)]; }
-function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
-function rhythmInfo(rhythm) { return RHYTHMS[rhythm] ?? RHYTHMS.crotchet; }
-function dynamicById(id) { return DYNAMICS.find((dynamic) => dynamic.id === id) ?? DYNAMICS[3]; }
+function r(items) { return items[Math.floor(Math.random() * items.length)]; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function rhythm(id) { return RH[id] || RH.crotchet; }
+function dyn(id) { return DYNAMICS.find(d => d.id === id) || DYNAMICS[3]; }
 function cleanText(text) { return String(text).toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim(); }
-function yForStep(step, systemTop) { return systemTop + LINE_GAP * 4 - step * (LINE_GAP / 2); }
-function stemGoesDown(step) { return step > 4; }
-function noteIndexFromLetter(letter, preferredIndex = 7) {
-  const candidates = NOTE_POOL.map((note, index) => ({ ...note, index })).filter((note) => note.name[0] === letter);
-  return candidates.reduce((best, item) => Math.abs(item.index - preferredIndex) < Math.abs(best.index - preferredIndex) ? item : best, candidates[0]).index;
+function y(step, top) { return top + GAP * 4 - step * (GAP / 2); }
+function stemDown(step) { return step > 4; }
+function freqForStep(step) { return (NOTES.find(n => n.step === step) || NOTES[5]).freq; }
+function barWidth() { return (STAFF_RIGHT - MUSIC_START) / BARS_PER_SYSTEM; }
+function placementKey(p) { return `${p.symbolId}:${p.barIndex}:${p.noteIndex ?? "bar"}:${p.endBarIndex ?? p.barIndex}:${p.anchor}`; }
+
+function noteIndexFromLetter(letter, preferred = 7) {
+  const candidates = NOTES.map((note, index) => ({ ...note, index })).filter(note => note.name[0] === letter);
+  return candidates.reduce((best, item) => Math.abs(item.index - preferred) < Math.abs(best.index - preferred) ? item : best, candidates[0]).index;
 }
-function weightedItem(items) {
+function weighted(items) {
   const total = items.reduce((sum, item) => sum + item.weight, 0);
   let roll = Math.random() * total;
   for (const item of items) { roll -= item.weight; if (roll <= 0) return item.value; }
   return items[items.length - 1].value;
 }
-function getBeatPositions(pattern) {
+function beatPositions(pattern) {
   let beat = 0;
-  return pattern.map((rhythm) => { const start = beat; beat += rhythmInfo(rhythm).beats; return start; });
+  return pattern.map(id => { const start = beat; beat += rhythm(id).beats; return start; });
 }
-function isStrongBeat(startBeat, timeSignature) { return startBeat === 0 || (timeSignature.id === "4/4" && startBeat === 2) || (timeSignature.id === "6/8" && startBeat === 3); }
-function quaverCanUsePassingNote(pattern, noteIndex) { return pattern[noteIndex] === "quaver" && pattern[noteIndex - 1] === "quaver"; }
-function frequencyForStep(step) { return NOTE_POOL.find((note) => note.step === step)?.frequency ?? 440; }
-function frequencyForLetter(letter, octave = 3) {
-  const semitoneMap = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 };
-  return 440 * Math.pow(2, (semitoneMap[letter] + (octave - 4) * 12) / 12);
-}
-function chordFrequencies(chordName) { return (CHORDS[chordName] ?? CHORDS.C).map((letter) => frequencyForLetter(letter, letter === "B" ? 2 : 3)); }
-function barDurationSeconds(bar, beatSeconds) { return bar.notes.reduce((sum, note) => sum + rhythmInfo(note.rhythm).beats * beatSeconds, 0); }
-
-function choosePatternForBar(timeSignature, barIndex, motifs) {
-  if (barIndex === BAR_COUNT - 1) return { "2/4": ["minim"], "3/4": ["dottedMinim"], "4/4": ["semibreve"], "6/8": ["dottedMinim"] }[timeSignature.id];
-  const source = timeSignature.compound ? SIX_EIGHT_PATTERNS : SIMPLE_BAR_PATTERNS[timeSignature.beats];
+function strongBeat(startBeat, ts) { return startBeat === 0 || (ts.id === "4/4" && startBeat === 2) || (ts.id === "6/8" && startBeat === 3); }
+function canPassing(pattern, i) { return pattern[i] === "quaver" && pattern[i - 1] === "quaver"; }
+function choosePattern(ts, barIndex, motifs) {
+  if (barIndex === 7) return { "2/4": ["minim"], "3/4": ["dottedMinim"], "4/4": ["semibreve"], "6/8": ["dottedMinim"] }[ts.id];
+  const source = ts.compound ? SIX_EIGHT_PATTERNS : SIMPLE_PATTERNS[ts.beats];
   if (barIndex === 1 && motifs[0] && Math.random() < 0.65) return motifs[0];
   if (barIndex === 3 && motifs[0] && Math.random() < 0.45) return motifs[0];
   if (barIndex === 5 && motifs[4] && Math.random() < 0.55) return motifs[4];
-  return randomItem(source);
+  return r(source);
 }
-
-function chooseMusicalNoteIndex({ previousIndex, previousMove, chordLetters, strongBeat, allowPassingNotes, forceStepwise, barIndex, noteIndex, noteCount }) {
-  if (barIndex === 0 && noteIndex === 0) return randomItem([noteIndexFromLetter("C", 0), noteIndexFromLetter("C", 7)]);
-  if (barIndex === BAR_COUNT - 1 && noteIndex === noteCount - 1) return randomItem([noteIndexFromLetter("C", 0), noteIndexFromLetter("C", 7)]);
-  const contourBias = barIndex < 3 ? 1 : barIndex > 3 ? -1 : 0;
+function chooseNoteIndex({ previousIndex, previousMove, chordLetters, isStrong, allowPassing, forceStepwise, barIndex, noteIndex, noteCount }) {
+  if (barIndex === 0 && noteIndex === 0) return r([noteIndexFromLetter("C", 0), noteIndexFromLetter("C", 7)]);
+  if (barIndex === 7 && noteIndex === noteCount - 1) return r([noteIndexFromLetter("C", 0), noteIndexFromLetter("C", 7)]);
+  const contour = barIndex < 3 ? 1 : barIndex > 3 ? -1 : 0;
   const finalPhrase = barIndex >= 6;
   const candidates = [];
-  NOTE_POOL.forEach((note, index) => {
+  NOTES.forEach((note, index) => {
     const letter = note.name[0];
     const isChordTone = chordLetters.includes(letter);
-    if (!isChordTone && !allowPassingNotes) return;
+    if (!isChordTone && !allowPassing) return;
     const distance = index - previousIndex;
-    const absDistance = Math.abs(distance);
-    if (forceStepwise && absDistance !== 1) return;
-    let weight = strongBeat ? (isChordTone ? 10 : 0) : (isChordTone ? 4 : 2.5);
-    if (absDistance === 0) weight *= 2.1;
-    if (absDistance === 1) weight *= 5.5;
-    if (absDistance === 2) weight *= 3.1;
-    if (absDistance === 3) weight *= 1.1;
-    if (absDistance >= 4) weight *= 0.15;
-    if (previousMove >= 3 && distance < 0 && absDistance <= 2) weight *= 4;
-    if (previousMove <= -3 && distance > 0 && absDistance <= 2) weight *= 4;
+    const abs = Math.abs(distance);
+    if (forceStepwise && abs !== 1) return;
+    let weight = isStrong ? (isChordTone ? 10 : 0) : (isChordTone ? 4 : 2.5);
+    if (abs === 0) weight *= 2.1;
+    if (abs === 1) weight *= 5.5;
+    if (abs === 2) weight *= 3.1;
+    if (abs === 3) weight *= 1.1;
+    if (abs >= 4) weight *= 0.15;
+    if (previousMove >= 3 && distance < 0 && abs <= 2) weight *= 4;
+    if (previousMove <= -3 && distance > 0 && abs <= 2) weight *= 4;
     if (Math.abs(previousMove) >= 3 && Math.sign(distance) === Math.sign(previousMove)) weight *= 0.2;
-    if (contourBias > 0 && distance > 0) weight *= 1.7;
-    if (contourBias < 0 && distance < 0) weight *= 1.7;
+    if (contour > 0 && distance > 0) weight *= 1.7;
+    if (contour < 0 && distance < 0) weight *= 1.7;
     if (finalPhrase && ["G", "D", "B", "C", "E"].includes(letter)) weight *= 1.6;
-    if (barIndex === BAR_COUNT - 1 && ["C", "E", "G"].includes(letter)) weight *= 3;
-    if (index < 1 || index > NOTE_POOL.length - 2) weight *= 0.35;
+    if (barIndex === 7 && ["C", "E", "G"].includes(letter)) weight *= 3;
+    if (index < 1 || index > NOTES.length - 2) weight *= 0.35;
     candidates.push({ value: index, weight });
   });
-  return weightedItem(candidates.length ? candidates : [{ value: previousIndex, weight: 1 }]);
+  return weighted(candidates.length ? candidates : [{ value: previousIndex, weight: 1 }]);
 }
-
-function makeBars(timeSignature) {
+function makeBars(ts) {
   const bars = [];
   const motifs = {};
-  const progression = [...randomItem(PROGRESSIONS)];
+  const progression = [...r(PROGRESSIONS)];
   progression[2] = progression[2] === "G" ? "F" : progression[2];
   progression[3] = "G";
   let previousIndex = noteIndexFromLetter("C", 7);
   let previousMove = 0;
-  for (let barIndex = 0; barIndex < BAR_COUNT; barIndex += 1) {
-    const pattern = choosePatternForBar(timeSignature, barIndex, motifs);
+  for (let barIndex = 0; barIndex < BAR_COUNT; barIndex++) {
+    const pattern = choosePattern(ts, barIndex, motifs);
     motifs[barIndex] = pattern;
-    const beatPositions = getBeatPositions(pattern);
-    const chordName = progression[barIndex] ?? "C";
-    const chordLetters = CHORDS[chordName] ?? CHORDS.C;
-    const notes = pattern.map((rhythm, noteIndex) => {
-      const nextIndex = chooseMusicalNoteIndex({
-        previousIndex, previousMove, chordLetters,
-        strongBeat: isStrongBeat(beatPositions[noteIndex], timeSignature),
-        allowPassingNotes: quaverCanUsePassingNote(pattern, noteIndex),
-        forceStepwise: rhythm === "quaver", barIndex, noteIndex, noteCount: pattern.length,
-      });
-      const note = { id: `${barIndex}-${noteIndex}`, barIndex, noteIndex, rhythm, step: NOTE_POOL[nextIndex].step, chord: chordName };
-      previousMove = nextIndex - previousIndex;
-      previousIndex = nextIndex;
+    const starts = beatPositions(pattern);
+    const chord = progression[barIndex] || "C";
+    const chordLetters = CHORDS[chord] || CHORDS.C;
+    const notes = pattern.map((rhythmId, noteIndex) => {
+      const next = chooseNoteIndex({ previousIndex, previousMove, chordLetters, isStrong: strongBeat(starts[noteIndex], ts), allowPassing: canPassing(pattern, noteIndex), forceStepwise: rhythmId === "quaver", barIndex, noteIndex, noteCount: pattern.length });
+      const note = { id: `${barIndex}-${noteIndex}`, barIndex, noteIndex, rhythm: rhythmId, step: NOTES[next].step, chord };
+      previousMove = next - previousIndex;
+      previousIndex = next;
       return note;
     });
-    bars.push({ barIndex, chord: chordName, notes });
+    bars.push({ barIndex, notes, chord });
   }
   return bars;
 }
-
-function getBarWidth() { return (STAFF_RIGHT - MUSIC_START_X) / BARS_PER_SYSTEM; }
-function getBarGeometry(barIndex) {
+function barGeo(barIndex) {
   const systemIndex = Math.floor(barIndex / BARS_PER_SYSTEM);
-  const localBarIndex = barIndex % BARS_PER_SYSTEM;
-  const systemTop = SYSTEM_TOPS[systemIndex];
-  const barWidth = getBarWidth();
-  const startX = MUSIC_START_X + localBarIndex * barWidth;
-  return { barIndex, systemIndex, localBarIndex, systemTop, startX, endX: startX + barWidth, barWidth };
+  const local = barIndex % BARS_PER_SYSTEM;
+  const top = SYSTEM_TOPS[systemIndex];
+  const bw = barWidth();
+  const start = MUSIC_START + local * bw;
+  const end = start + bw;
+  return { barIndex, systemIndex, local, top, start, end, bw };
 }
-function getBarNotePositions(notes, startX, endX) {
-  const units = notes.reduce((sum, note) => sum + rhythmInfo(note.rhythm).spacing, 0);
-  const unitWidth = Math.max(1, endX - startX) / Math.max(1, units);
-  let cursor = startX + unitWidth * 0.38;
-  return notes.map((note) => { const x = cursor; cursor += rhythmInfo(note.rhythm).spacing * unitWidth; return x; });
+function notePositions(notes, start, end) {
+  const innerStart = start + 12;
+  const innerEnd = end - 12;
+  const units = notes.reduce((sum, note) => sum + rhythm(note.rhythm).spacing, 0);
+  const unit = Math.max(1, innerEnd - innerStart) / Math.max(1, units);
+  let cursor = innerStart + unit * 0.38;
+  return notes.map(note => { const x = cursor; cursor += rhythm(note.rhythm).spacing * unit; return x; });
 }
-function buildLayouts(question) {
-  return question.bars.map((bar) => {
-    const geo = getBarGeometry(bar.barIndex);
-    return { ...geo, bar, positions: getBarNotePositions(bar.notes, geo.startX + 12, geo.endX - 12) };
-  });
-}
-function getSfzEligibleTargets(bars, allowedBars = null) {
+function buildLayouts(question) { return question.bars.map(bar => { const geo = barGeo(bar.barIndex); return { ...geo, bar, pos: notePositions(bar.notes, geo.start, geo.end) }; }); }
+function getSfzTargets(bars, allowedBars = null) {
   const targets = [];
-  bars.forEach((bar) => {
+  bars.forEach(bar => {
     if (allowedBars && !allowedBars.includes(bar.barIndex)) return;
     if (bar.barIndex < 1 || bar.barIndex > 6) return;
-    bar.notes.forEach((note) => {
-      if (rhythmInfo(note.rhythm).beats >= LONG_NOTE_MIN_BEATS) targets.push({ barIndex: bar.barIndex, noteIndex: note.noteIndex });
-    });
+    bar.notes.forEach(note => { if (rhythm(note.rhythm).beats >= LONG_NOTE_MIN_BEATS) targets.push({ barIndex: bar.barIndex, noteIndex: note.noteIndex }); });
   });
   return targets.length ? targets : [{ barIndex: 1, noteIndex: 0 }];
 }
-function pickEnabled(enabledDynamics, fallbackIds) {
-  const available = fallbackIds.filter((id) => enabledDynamics.includes(id));
-  return randomItem(available.length ? available : fallbackIds);
-}
-function makeMultipleChoiceOptions(answerId, enabledDynamics) {
-  const correct = dynamicById(answerId);
-  const pool = DYNAMICS.filter((dynamic) => dynamic.id !== answerId && enabledDynamics.includes(dynamic.id));
-  const fallback = DYNAMICS.filter((dynamic) => dynamic.id !== answerId);
-  const options = [correct];
-  while (options.length < 4) {
+function pickEnabled(enabledDynamics, fallbackIds) { const available = fallbackIds.filter(id => enabledDynamics.includes(id)); return r(available.length ? available : fallbackIds); }
+function makeChoices(answerId, enabledDynamics) {
+  const correct = dyn(answerId);
+  const pool = DYNAMICS.filter(d => d.id !== answerId && enabledDynamics.includes(d.id));
+  const fallback = DYNAMICS.filter(d => d.id !== answerId);
+  const out = [correct];
+  while (out.length < 4) {
     const source = pool.length ? pool : fallback;
-    const remaining = source.filter((dynamic) => !options.some((item) => item.id === dynamic.id));
+    const remaining = source.filter(d => !out.some(x => x.id === d.id));
     if (!remaining.length) break;
-    options.push(randomItem(remaining));
+    out.push(r(remaining));
   }
-  return options.sort(() => Math.random() - 0.5).map((dynamic) => ({ id: dynamic.id, text: dynamic.description }));
+  return out.sort(() => Math.random() - 0.5).map(d => ({ id: d.id, text: d.description }));
 }
-function getAvailableQuestionTypes(enabledQuestionTypes, enabledDynamics) {
-  const hasStatic = STATIC_DYNAMIC_IDS.some((id) => enabledDynamics.includes(id));
+function availableQuestionTypes(enabledTypes, enabledDynamics) {
+  const hasStatic = STATIC_DYNAMIC_IDS.some(id => enabledDynamics.includes(id));
   const hasSfz = enabledDynamics.includes("sfz");
   const hasGradual = enabledDynamics.includes("crescendo") || enabledDynamics.includes("diminuendo");
-  return enabledQuestionTypes.filter((type) => {
+  return enabledTypes.filter(type => {
     if (type === "apply-score" || type === "audio") return hasStatic || hasSfz || hasGradual;
     return enabledDynamics.length > 0;
   });
 }
 function makeApplyQuestion(enabledDynamics, bars) {
   const candidates = [];
-  STATIC_DYNAMIC_IDS.filter((id) => enabledDynamics.includes(id)).forEach((id) => {
-    const dynamic = dynamicById(id);
-    const barIndex = randomItem([0, 1, 2, 3, 4, 5, 6]);
-    candidates.push({
-      answerId: id,
-      required: [{ symbolId: id, barIndex, endBarIndex: barIndex, anchor: "below" }],
-      prompt: `The music should be played <strong>${dynamic.description.toLowerCase()}</strong> from <strong>bar ${barIndex + 1}</strong>. Place the appropriate dynamic under that bar.`,
-    });
+  STATIC_DYNAMIC_IDS.filter(id => enabledDynamics.includes(id)).forEach(id => {
+    const barIndex = r([0, 1, 2, 3, 4, 5, 6]);
+    candidates.push({ answerId: id, required: [{ symbolId: id, barIndex, endBarIndex: barIndex, anchor: "below" }], prompt: `The music should be played <strong>${dyn(id).description.toLowerCase()}</strong> from <strong>bar ${barIndex + 1}</strong>. Place the appropriate dynamic under that bar.` });
   });
   if (enabledDynamics.includes("sfz")) {
-    const target = randomItem(getSfzEligibleTargets(bars));
-    candidates.push({
-      answerId: "sfz",
-      required: [{ symbolId: "sfz", barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "below-note" }],
-      prompt: `A note in <strong>bar ${target.barIndex + 1}</strong> needs to be <strong>suddenly strongly accented</strong>. Place the appropriate dynamic under that note.`,
-    });
+    const target = r(getSfzTargets(bars));
+    candidates.push({ answerId: "sfz", required: [{ symbolId: "sfz", barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "below-note" }], prompt: `A note in <strong>bar ${target.barIndex + 1}</strong> needs to be <strong>suddenly strongly accented</strong>. Place the appropriate dynamic under that note.` });
   }
   if (enabledDynamics.includes("crescendo")) {
-    const startBar = randomItem([0, 1, 2, 4, 5, 6]);
-    candidates.push({
-      answerId: "crescendo",
-      required: [{ symbolId: "crescendo", barIndex: startBar, endBarIndex: startBar + 1, anchor: "below" }],
-      prompt: `Bars <strong>${startBar + 1}-${startBar + 2}</strong> should <strong>gradually get louder</strong>. Place the correct dynamic marking under those bars.`,
-    });
+    const startBar = r([0, 1, 2, 4, 5, 6]);
+    candidates.push({ answerId: "crescendo", required: [{ symbolId: "crescendo", barIndex: startBar, endBarIndex: startBar + 1, anchor: "below" }], prompt: `Bars <strong>${startBar + 1}-${startBar + 2}</strong> should <strong>gradually get louder</strong>. Place the correct dynamic marking under those bars.` });
   }
   if (enabledDynamics.includes("diminuendo")) {
-    const startBar = randomItem([0, 1, 2, 4, 5, 6]);
-    candidates.push({
-      answerId: "diminuendo",
-      required: [{ symbolId: "diminuendo", barIndex: startBar, endBarIndex: startBar + 1, anchor: "below" }],
-      prompt: `Bars <strong>${startBar + 1}-${startBar + 2}</strong> should <strong>gradually get quieter</strong>. Place the correct dynamic marking under those bars.`,
-    });
+    const startBar = r([0, 1, 2, 4, 5, 6]);
+    candidates.push({ answerId: "diminuendo", required: [{ symbolId: "diminuendo", barIndex: startBar, endBarIndex: startBar + 1, anchor: "below" }], prompt: `Bars <strong>${startBar + 1}-${startBar + 2}</strong> should <strong>gradually get quieter</strong>. Place the correct dynamic marking under those bars.` });
   }
-  return randomItem(candidates.length ? candidates : [{ answerId: "mf", required: [{ symbolId: "mf", barIndex: 0, endBarIndex: 0, anchor: "below" }], prompt: "The music should be played <strong>moderately loud</strong> from <strong>bar 1</strong>. Place the appropriate dynamic under that bar." }]);
+  return r(candidates.length ? candidates : [{ answerId: "mf", required: [{ symbolId: "mf", barIndex: 0, endBarIndex: 0, anchor: "below" }], prompt: "The music should be played <strong>moderately loud</strong> from <strong>bar 1</strong>. Place the appropriate dynamic under that bar." }]);
 }
 function makeAudioQuestion(enabledDynamics, bars) {
   const types = [];
   if (enabledDynamics.includes("p") && enabledDynamics.includes("f")) types.push("sudden-change");
   if (enabledDynamics.includes("crescendo") || enabledDynamics.includes("diminuendo")) types.push("gradual-change");
   if (enabledDynamics.includes("sfz")) types.push("sfz");
-  const type = randomItem(types.length ? types : ["sudden-change"]);
-  const changeBar = randomItem([2, 3, 4, 5]);
-
+  const type = r(types.length ? types : ["sudden-change"]);
+  const changeBar = r([2, 3, 4, 5]);
   if (type === "sfz") {
-    const target = randomItem(getSfzEligibleTargets(bars, [2, 3, 4, 5]));
-    return {
-      answerId: "sfz", audioQuestionKind: "sfz-location",
-      required: [{ symbolId: "sfz", barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "below-note" }],
-      visiblePlacements: [{ symbolId: randomItem(["p", "f"]), barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }],
-      prompt: "Listen to the excerpt. Place <strong><em>sfz</em></strong> under the note where it occurs.",
-      audioPlan: { kind: "sfz", baseDynamic: randomItem(["p", "f"]), accentBar: target.barIndex, accentNoteIndex: target.noteIndex },
-    };
+    const target = r(getSfzTargets(bars, [2, 3, 4, 5]));
+    return { answerId: "sfz", audioQuestionKind: "sfz-location", required: [{ symbolId: "sfz", barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "below-note" }], visiblePlacements: [{ symbolId: r(["p", "f"]), barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }], prompt: "Listen to the excerpt. Place <strong><em>sfz</em></strong> under the note where it occurs.", audioPlan: { kind: "sfz", baseDynamic: r(["p", "f"]), accentBar: target.barIndex, accentNoteIndex: target.noteIndex } };
   }
   if (type === "gradual-change") {
-    const dynamicType = enabledDynamics.includes("crescendo") && enabledDynamics.includes("diminuendo") ? randomItem(["crescendo", "diminuendo"]) : enabledDynamics.includes("crescendo") ? "crescendo" : "diminuendo";
+    const dynamicType = enabledDynamics.includes("crescendo") && enabledDynamics.includes("diminuendo") ? r(["crescendo", "diminuendo"]) : enabledDynamics.includes("crescendo") ? "crescendo" : "diminuendo";
     const startDynamic = dynamicType === "crescendo" ? "pp" : "ff";
     const endDynamic = dynamicType === "crescendo" ? "ff" : "pp";
-    return {
-      answerId: dynamicType, audioQuestionKind: "gradual-location",
-      required: [{ symbolId: dynamicType, barIndex: changeBar, endBarIndex: changeBar, anchor: "below" }],
-      visiblePlacements: [{ symbolId: startDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }],
-      prompt: "Listen to the excerpt. Place <strong><em>crescendo</em></strong> or <strong><em>diminuendo</em></strong> under the bar where it begins.",
-      audioPlan: { kind: dynamicType, startDynamic, endDynamic, changeBar },
-    };
+    return { answerId: dynamicType, audioQuestionKind: "gradual-location", required: [{ symbolId: dynamicType, barIndex: changeBar, endBarIndex: changeBar, anchor: "below" }], visiblePlacements: [{ symbolId: startDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }], prompt: "Listen to the excerpt. Place <strong><em>crescendo</em></strong> or <strong><em>diminuendo</em></strong> under the bar where it begins.", audioPlan: { kind: dynamicType, startDynamic, endDynamic, changeBar } };
   }
   const startDynamic = Math.random() < 0.5 ? "p" : "f";
   const targetDynamic = startDynamic === "p" ? "f" : "p";
-  return {
-    answerId: targetDynamic,
-    audioQuestionKind: targetDynamic === "f" ? "find-f-location" : "find-p-location",
-    required: [{ symbolId: targetDynamic, barIndex: changeBar, endBarIndex: changeBar, anchor: "below" }],
-    visiblePlacements: [{ symbolId: startDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }],
-    prompt: targetDynamic === "f" ? "Listen to the excerpt. The starting dynamic is shown. Place <strong><em>f</em></strong> under the bar where it gets loud." : "Listen to the excerpt. The starting dynamic is shown. Place <strong><em>p</em></strong> under the bar where it gets quiet.",
-    audioPlan: { kind: "sudden-change", startDynamic, targetDynamic, changeBar },
-  };
+  return { answerId: targetDynamic, audioQuestionKind: targetDynamic === "f" ? "find-f-location" : "find-p-location", required: [{ symbolId: targetDynamic, barIndex: changeBar, endBarIndex: changeBar, anchor: "below" }], visiblePlacements: [{ symbolId: startDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }], prompt: targetDynamic === "f" ? "Listen to the excerpt. The starting dynamic is shown. Place <strong><em>f</em></strong> under the bar where it gets loud." : "Listen to the excerpt. The starting dynamic is shown. Place <strong><em>p</em></strong> under the bar where it gets quiet.", audioPlan: { kind: "sudden-change", startDynamic, targetDynamic, changeBar } };
 }
-function makeQuestion(options = {}) {
-  const enabledDynamics = options.enabledDynamics?.length ? options.enabledDynamics : DYNAMICS.map((dynamic) => dynamic.id);
-  const enabledQuestionTypes = options.enabledQuestionTypes?.length ? options.enabledQuestionTypes : QUESTION_TYPES.map((type) => type.id);
-  const usableTypes = getAvailableQuestionTypes(enabledQuestionTypes, enabledDynamics);
-  const questionType = randomItem(usableTypes.length ? usableTypes : ["multiple-choice"]);
-  const timeSignature = randomItem(TIME_SIGNATURES);
-  const bars = makeBars(timeSignature);
-  const performedOrder = Array.from({ length: BAR_COUNT }, (_, index) => index);
-  let answerId = pickEnabled(enabledDynamics, DYNAMICS.map((dynamic) => dynamic.id));
+function makeQuestion(enabledTypes = QUESTION_TYPES, enabledDynamics = DYNAMICS.map(d => d.id)) {
+  const activeTypes = availableQuestionTypes(enabledTypes.length ? enabledTypes : QUESTION_TYPES, enabledDynamics.length ? enabledDynamics : DYNAMICS.map(d => d.id));
+  const type = r(activeTypes.length ? activeTypes : ["multiple-choice"]);
+  const ts = r(TIME_SIGNATURES);
+  const bars = makeBars(ts);
+  const performedOrder = Array.from({ length: BAR_COUNT }, (_, i) => i);
+  let answerId = pickEnabled(enabledDynamics, DYNAMICS.map(d => d.id));
   let prompt = "";
   let required = [];
   let visiblePlacements = [];
   let choices = [];
   let audioPlan = { kind: "static", dynamicId: answerId };
   let audioQuestionKind = null;
-
-  if (questionType === "multiple-choice") {
-    const barIndex = randomItem([0, 1, 2, 3, 4, 5, 6]);
+  if (type === "multiple-choice") {
+    const barIndex = r([0,1,2,3,4,5,6]);
     visiblePlacements = [{ symbolId: answerId, barIndex, endBarIndex: barIndex, anchor: "below", localId: "given" }];
-    choices = makeMultipleChoiceOptions(answerId, enabledDynamics);
+    choices = makeChoices(answerId, enabledDynamics);
     prompt = `The marking in <strong>bar ${barIndex + 1}</strong> is <strong><em>${answerId}</em></strong>. What does it mean?`;
   }
-  if (questionType === "definition") {
-    const barIndex = randomItem([0, 1, 2, 3, 4, 5, 6]);
+  if (type === "definition") {
+    const barIndex = r([0,1,2,3,4,5,6]);
     visiblePlacements = [{ symbolId: answerId, barIndex, endBarIndex: barIndex, anchor: "below", localId: "given" }];
     prompt = `Describe the meaning of the dynamic marking in <strong>bar ${barIndex + 1}</strong>.`;
   }
-  if (questionType === "apply-score") {
+  if (type === "apply-score") {
     const scenario = makeApplyQuestion(enabledDynamics, bars);
-    answerId = scenario.answerId; required = scenario.required; prompt = scenario.prompt;
+    answerId = scenario.answerId;
+    required = scenario.required;
+    prompt = scenario.prompt;
   }
-  if (questionType === "audio") {
+  if (type === "audio") {
     const scenario = makeAudioQuestion(enabledDynamics, bars);
-    answerId = scenario.answerId; required = scenario.required; visiblePlacements = scenario.visiblePlacements; prompt = scenario.prompt; audioPlan = scenario.audioPlan; audioQuestionKind = scenario.audioQuestionKind;
+    answerId = scenario.answerId;
+    required = scenario.required;
+    visiblePlacements = scenario.visiblePlacements;
+    prompt = scenario.prompt;
+    audioPlan = scenario.audioPlan;
+    audioQuestionKind = scenario.audioQuestionKind;
   }
-  return { id: Math.random().toString(36).slice(2), questionType, timeSignature, bars, performedOrder, answerId, prompt, required, visiblePlacements, choices, audioPlan, audioQuestionKind };
+  return { id: Math.random().toString(36).slice(2), type, timeSignature: ts, bars, performedOrder, answerId, prompt, required, visiblePlacements, choices, audioPlan, audioQuestionKind };
 }
 
-function getStemData(note, x, systemTop, forcedDown = null) {
-  const y = yForStep(note.step, systemTop);
-  const down = forcedDown ?? stemGoesDown(note.step);
-  const stemX = down ? x - NOTE_RX : x + NOTE_RX;
-  return { y, down, stemX, stemEndY: down ? y + STEM_LENGTH : y - STEM_LENGTH };
+function stemData(note, x, top, override = null) {
+  const yy = y(note.step, top);
+  const down = override === null ? stemDown(note.step) : override;
+  const sx = down ? x - NOTE_RX : x + NOTE_RX;
+  const ey = down ? yy + STEM : yy - STEM;
+  return { y: yy, down, sx, ey };
 }
-function getQuaverGroups(notes, timeSignature) {
-  const groups = [];
-  let index = 0;
-  while (index < notes.length) {
-    if (notes[index].rhythm !== "quaver") { index += 1; continue; }
-    const start = index;
-    while (index < notes.length && notes[index].rhythm === "quaver") index += 1;
-    const end = index - 1;
-    if (end <= start) continue;
-    if (timeSignature?.id === "6/8") {
-      for (let groupStart = start; groupStart <= end; groupStart += 3) {
-        const groupEnd = Math.min(groupStart + 2, end);
-        if (groupEnd > groupStart) groups.push({ start: groupStart, end: groupEnd });
-      }
-    } else groups.push({ start, end });
+function quaverGroups(notes, ts) {
+  const out = [];
+  let i = 0;
+  while (i < notes.length) {
+    if (notes[i].rhythm !== "quaver") { i++; continue; }
+    const start = i;
+    while (i < notes.length && notes[i].rhythm === "quaver") i++;
+    const end = i - 1;
+    if (end > start) {
+      if (ts.id === "6/8") {
+        for (let groupStart = start; groupStart <= end; groupStart += 3) {
+          const groupEnd = Math.min(groupStart + 2, end);
+          if (groupEnd > groupStart) out.push({ start: groupStart, end: groupEnd });
+        }
+      } else out.push({ start, end });
+    }
   }
-  return groups;
+  return out;
 }
-function groupContaining(groups, noteIndex) { return groups.find((group) => noteIndex >= group.start && noteIndex <= group.end) ?? null; }
-function getBeamData(notes, positions, systemTop) {
-  const averageStep = notes.reduce((sum, note) => sum + note.step, 0) / notes.length;
-  const down = averageStep > 4;
-  const first = getStemData(notes[0], positions[0], systemTop, down);
-  const last = getStemData(notes[notes.length - 1], positions[positions.length - 1], systemTop, down);
-  return { down, start: { x: first.stemX, y: first.stemEndY }, end: { x: last.stemX, y: last.stemEndY } };
+function groupFor(groups, i) { return groups.find(g => i >= g.start && i <= g.end) || null; }
+function beamY(x, a, b) { if (!a || !b || a.x === b.x) return a ? a.y : 0; const p = (x - a.x) / (b.x - a.x); return a.y + p * (b.y - a.y); }
+function beamData(notes, xs, top) {
+  const avg = notes.reduce((sum, note) => sum + note.step, 0) / notes.length;
+  const down = avg > 4;
+  const first = stemData(notes[0], xs[0], top, down);
+  const last = stemData(notes[notes.length - 1], xs[xs.length - 1], top, down);
+  return { down, start: { x: first.sx, y: first.ey }, end: { x: last.sx, y: last.ey } };
 }
-function beamYAtX(x, beam) {
-  if (!beam || beam.start.x === beam.end.x) return beam?.start.y ?? 0;
-  const progress = (x - beam.start.x) / (beam.end.x - beam.start.x);
-  return beam.start.y + progress * (beam.end.y - beam.start.y);
+function placementPos(placement) {
+  const geo = barGeo(placement.barIndex);
+  const yy = geo.top + 73 + (placement.offsetY || 0);
+  if (placement.symbolId === "crescendo" || placement.symbolId === "diminuendo") {
+    const endGeo = barGeo(placement.endBarIndex ?? placement.barIndex);
+    const sameSystem = geo.systemIndex === endGeo.systemIndex;
+    const width = sameSystem ? Math.max(80, endGeo.end - geo.start - 28) : Math.min(140, geo.bw * 0.85);
+    return { x: geo.start + 14, y: yy, width, ...geo };
+  }
+  if (placement.symbolId === "sfz" && placement.noteX != null) return { x: placement.noteX, y: yy, ...geo };
+  return { x: geo.start + 24, y: yy, ...geo };
 }
-function placementKey(placement) { return `${placement.symbolId}:${placement.barIndex}:${placement.noteIndex ?? "bar"}:${placement.endBarIndex ?? placement.barIndex}:${placement.anchor}`; }
-function placementsMatch(question, placements) { return question.required.every((required) => placements.some((placement) => placementKey(placement) === placementKey(required))); }
-function missingPlacements(question, placements) { return question.required.filter((required) => !placements.some((placement) => placementKey(placement) === placementKey(required))); }
-function wrongPlacements(question, placements) { return placements.filter((placement) => !question.required.some((required) => placementKey(required) === placementKey(placement))); }
-function snapPlacement(pointer, selectedSymbolId, question) {
+function placementsMatch(question, placements) { return question.required.every(req => placements.some(p => placementKey(p) === placementKey(req))); }
+function missingRequired(question, placements) { return question.required.filter(req => !placements.some(p => placementKey(p) === placementKey(req))); }
+function wrongPlacements(question, placements) { return placements.filter(p => !question.required.some(req => placementKey(req) === placementKey(p))); }
+function snap(pointer, selectedSymbolId, question) {
   if (!selectedSymbolId) return null;
   if (selectedSymbolId === "sfz") {
-    let closest = null, bestDistance = Infinity;
-    buildLayouts(question).forEach((layout) => {
+    let closest = null;
+    let best = Infinity;
+    buildLayouts(question).forEach(layout => {
       layout.bar.notes.forEach((note, noteIndex) => {
-        const x = layout.positions[noteIndex];
-        const y = layout.systemTop + 18;
-        const distance = Math.hypot(pointer.x - x, pointer.y - y);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          closest = { symbolId: "sfz", barIndex: layout.barIndex, noteIndex, anchor: "below-note", noteX: x };
-        }
+        const x = layout.pos[noteIndex];
+        const yy = layout.top + 18;
+        const distance = Math.hypot(pointer.x - x, pointer.y - yy);
+        if (distance < best) { best = distance; closest = { symbolId: "sfz", barIndex: layout.barIndex, noteIndex, anchor: "below-note", noteX: x }; }
       });
     });
     return closest;
   }
   const systemIndex = pointer.y < (SYSTEM_TOPS[0] + SYSTEM_TOPS[1]) / 2 ? 0 : 1;
-  const localBarIndex = clamp(Math.floor((pointer.x - MUSIC_START_X) / getBarWidth()), 0, BARS_PER_SYSTEM - 1);
-  return { symbolId: selectedSymbolId, barIndex: systemIndex * BARS_PER_SYSTEM + localBarIndex, anchor: "below" };
-}
-function placementPosition(placement) {
-  const geo = getBarGeometry(placement.barIndex);
-  const y = geo.systemTop + 73 + (placement.offsetY ?? 0);
-  if (placement.symbolId === "crescendo" || placement.symbolId === "diminuendo") {
-    const endGeo = getBarGeometry(placement.endBarIndex ?? placement.barIndex);
-    const sameSystem = geo.systemIndex === endGeo.systemIndex;
-    const width = sameSystem ? Math.max(80, endGeo.endX - geo.startX - 28) : Math.min(140, geo.barWidth * 0.85);
-    return { x: geo.startX + 14, y, width, ...geo };
-  }
-  if (placement.symbolId === "sfz" && placement.noteX != null) return { x: placement.noteX, y, ...geo };
-  return { x: geo.startX + 24, y, ...geo };
+  const local = clamp(Math.floor((pointer.x - MUSIC_START) / barWidth()), 0, BARS_PER_SYSTEM - 1);
+  return { symbolId: selectedSymbolId, barIndex: systemIndex * BARS_PER_SYSTEM + local, anchor: "below" };
 }
 
-function DynamicGlyph({ id, x = 50, y = 32, colour = "currentColor", opacity = 1, compact = false }) {
-  if (id === "crescendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth="2.4" strokeLinecap="round"><path d={`M ${x - 32} ${y - 2} L ${x + 32} ${y - 12}`} /><path d={`M ${x - 32} ${y - 2} L ${x + 32} ${y + 8}`} /></g>;
-  if (id === "diminuendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth="2.4" strokeLinecap="round"><path d={`M ${x - 32} ${y - 12} L ${x + 32} ${y - 2}`} /><path d={`M ${x - 32} ${y + 8} L ${x + 32} ${y - 2}`} /></g>;
-  const fontSize = compact ? (id === "sfz" ? 17.4 : 20.4) : (id === "sfz" ? 29 : 34);
-  return <g opacity={opacity} overflow="visible" style={{ overflow: "visible" }}><text x={x} y={y + (compact ? 5 : 7)} fill={colour} fontFamily="Georgia, 'Times New Roman', serif" fontSize={fontSize} fontStyle="italic" fontWeight="900" textAnchor="middle" dominantBaseline="alphabetic" style={{ overflow: "visible", fontVariantLigatures: "none" }}>{id}</text></g>;
-}
-function PlacementGlyph({ placement, colour = "currentColor", opacity = 1 }) {
-  if (!placement) return null;
-  const pos = placementPosition(placement);
-  if (placement.symbolId === "crescendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth="1.5" strokeLinecap="round"><path d={`M ${pos.x} ${pos.y} L ${pos.x + pos.width} ${pos.y - 7}`} /><path d={`M ${pos.x} ${pos.y} L ${pos.x + pos.width} ${pos.y + 7}`} /></g>;
-  if (placement.symbolId === "diminuendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth="1.5" strokeLinecap="round"><path d={`M ${pos.x} ${pos.y - 7} L ${pos.x + pos.width} ${pos.y}`} /><path d={`M ${pos.x} ${pos.y + 7} L ${pos.x + pos.width} ${pos.y}`} /></g>;
-  return <DynamicGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} compact />;
-}
-function SymbolButtonGlyph({ id }) { return <svg viewBox="0 0 100 54" className="h-10 w-16 overflow-visible" aria-hidden="true"><DynamicGlyph id={id} x={50} y={33} /></svg>; }
-function LedgerLines({ x, step, systemTop, colour }) {
+function Ledger({ x, step, top, colour }) {
   const lines = [];
-  if (step <= -2) lines.push(yForStep(-2, systemTop));
-  if (step >= 10) lines.push(yForStep(10, systemTop));
-  return <g>{lines.map((y) => <line key={y} x1={x - 12} x2={x + 12} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}</g>;
+  if (step <= -2) lines.push(y(-2, top));
+  if (step >= 10) lines.push(y(10, top));
+  return <g>{lines.map(yy => <line key={yy} x1={x - 12} x2={x + 12} y1={yy} y2={yy} stroke={colour} strokeWidth="1.2" />)}</g>;
 }
 function Flag({ stemX, stemEndY, down, colour }) {
   const d = down ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 4}, ${stemX + 10} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 16}` : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 4}, ${stemX + 10} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 16}`;
   return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />;
 }
-function Note({ note, x, systemTop, colour, forcedStemDown = null, forcedStemEndY = null, showFlag = true }) {
-  const info = rhythmInfo(note.rhythm);
-  const stem = getStemData(note, x, systemTop, forcedStemDown);
-  const stemEndY = forcedStemEndY ?? stem.stemEndY;
-  const dotOffset = note.step % 2 === 0 ? -4 : 0;
+function Note({ note, x, top, colour = "currentColor", override = null, forced = null, showFlag = true }) {
+  const info = rhythm(note.rhythm);
+  const st = stemData(note, x, top, override);
+  const ey = forced === null ? st.ey : forced;
+  const isLineNote = note.step % 2 === 0;
+  const dotOffset = isLineNote ? -4 : 0;
   return <g>
-    <LedgerLines x={x} step={note.step} systemTop={systemTop} colour={colour} />
-    <ellipse cx={x} cy={stem.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${stem.y})`} fill={info.open ? "white" : colour} stroke={colour} strokeWidth="1.7" />
-    {info.dotted && <circle cx={x + 12} cy={stem.y + dotOffset} r="1.7" fill={colour} />}
-    {note.step % 2 === 0 && <line x1={x - 8} x2={x + 8} y1={stem.y} y2={stem.y} stroke={colour} strokeWidth="1.2" />}
-    {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={stemEndY} stroke={colour} strokeWidth="1.5" />}
-    {info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={stemEndY} down={stem.down} colour={colour} />}
+    <Ledger x={x} step={note.step} top={top} colour={colour} />
+    <ellipse cx={x} cy={st.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${st.y})`} fill={info.open ? "white" : colour} stroke={colour} strokeWidth="1.7" />
+    {info.dotted && <circle cx={x + 12} cy={st.y + dotOffset} r="1.7" fill={colour} />}
+    {isLineNote && <line x1={x - 8} x2={x + 8} y1={st.y} y2={st.y} stroke={colour} strokeWidth="1.2" />}
+    {info.stem && <line x1={st.sx} x2={st.sx} y1={st.y} y2={ey} stroke={colour} strokeWidth="1.5" />}
+    {info.flag && showFlag && <Flag stemX={st.sx} stemEndY={ey} down={st.down} colour={colour} />}
   </g>;
 }
-function Score({ question, selectedSymbolId, placements, hoverPlacement, feedback, wrong, missing, activePlaybackNoteId, helpOpen, onPointerMove, onPointerLeave, onLockPlacement }) {
-  const layouts = useMemo(() => buildLayouts(question), [question]);
-  return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="w-full h-auto select-none touch-none overflow-visible" overflow="visible" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerDown={onLockPlacement}>
-    <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
-    {SYSTEM_TOPS.map((systemTop, systemIndex) => <g key={systemTop}>
-      {[0, 1, 2, 3, 4].map((line) => <line key={line} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={systemTop + line * LINE_GAP} y2={systemTop + line * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />)}
-      <text x={CLEF_X} y={systemTop + 28} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text>
-      {systemIndex === 0 && <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle"><text x={TIME_SIG_X} y={systemTop + 20}>{question.timeSignature.top}</text><text x={TIME_SIG_X} y={systemTop + 39}>{question.timeSignature.bottom}</text></g>}
+function DynamicGlyph({ id, x = 50, yy = 33, colour = "currentColor", opacity = 1, compact = false }) {
+  if (id === "crescendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth={compact ? 1.5 : 2.4} strokeLinecap="round"><path d={`M ${x - 32} ${yy - 2} L ${x + 32} ${yy - 12}`} /><path d={`M ${x - 32} ${yy - 2} L ${x + 32} ${yy + 8}`} /></g>;
+  if (id === "diminuendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth={compact ? 1.5 : 2.4} strokeLinecap="round"><path d={`M ${x - 32} ${yy - 12} L ${x + 32} ${yy - 2}`} /><path d={`M ${x - 32} ${yy + 8} L ${x + 32} ${yy - 2}`} /></g>;
+  const fontSize = compact ? (id === "sfz" ? 17.4 : 20.4) : (id === "sfz" ? 29 : 34);
+  return <text x={x} y={yy + (compact ? 5 : 7)} opacity={opacity} fill={colour} fontFamily="Georgia, 'Times New Roman', serif" fontSize={fontSize} fontStyle="italic" fontWeight="900" textAnchor="middle" dominantBaseline="alphabetic" style={{ fontVariantLigatures: "none" }}>{id}</text>;
+}
+function PlacementGlyph({ placement, colour = "currentColor", opacity = 1 }) {
+  if (!placement) return null;
+  const pos = placementPos(placement);
+  if (placement.symbolId === "crescendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth="1.5" strokeLinecap="round"><path d={`M ${pos.x} ${pos.y} L ${pos.x + pos.width} ${pos.y - 7}`} /><path d={`M ${pos.x} ${pos.y} L ${pos.x + pos.width} ${pos.y + 7}`} /></g>;
+  if (placement.symbolId === "diminuendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth="1.5" strokeLinecap="round"><path d={`M ${pos.x} ${pos.y - 7} L ${pos.x + pos.width} ${pos.y}`} /><path d={`M ${pos.x} ${pos.y + 7} L ${pos.x + pos.width} ${pos.y}`} /></g>;
+  return <DynamicGlyph id={placement.symbolId} x={pos.x} yy={pos.y} colour={colour} opacity={opacity} compact />;
+}
+function SymbolGlyph({ id }) { return <svg viewBox="0 0 100 54" className="h-[50px] w-20 overflow-visible" aria-hidden="true"><DynamicGlyph id={id} x={50} yy={33} /></svg>; }
+function QuestionTypeGlyph({ type }) {
+  const map = {
+    "multiple-choice": "📝",
+    definition: "💬",
+    "apply-score": "🎼",
+    audio: "🎧",
+  };
+
+  return (
+    <div className="flex h-9 w-9 items-center justify-center text-[21px] leading-none" aria-hidden="true">
+      {map[type]}
+    </div>
+  );
+}
+
+function TempoGlyph() {
+  return <span className="inline-flex h-6 w-6 items-center justify-center text-[20px] leading-none relative left-[8px]" aria-hidden="true">♫</span>;
+}
+
+function MetronomeGlyph() {
+  return (
+    <svg viewBox="0 0 40 40" className="h-6 w-6 overflow-visible relative left-[8px]" aria-hidden="true">
+      <g fill="currentColor">
+        <path d="M10 33 L17 8 H23 L30 33 Z" />
+        <rect x="8" y="32" width="24" height="3" rx="1.5" />
+      </g>
+      <line x1="20" y1="13" x2="25" y2="29" stroke="white" strokeWidth="2.8" strokeLinecap="round" />
+      <circle cx="22.4" cy="22.5" r="2" fill="white" />
+    </svg>
+  );
+}
+
+function EyeGlyph() {
+  return (
+    <svg viewBox="0 0 40 40" className="h-6 w-6 overflow-visible relative left-[8px]" aria-hidden="true">
+      <path d="M4 20 C8 12 14 8 20 8 C26 8 32 12 36 20 C32 28 26 32 20 32 C14 32 8 28 4 20 Z" fill="currentColor" />
+      <circle cx="20" cy="20" r="6.2" fill="white" />
+      <circle cx="20" cy="20" r="3.1" fill="currentColor" />
+    </svg>
+  );
+}
+function Score({ question, selectedSymbolId, placements, hoverPlacement, feedback, wrong, missing, activeNoteId, onPointerMove, onPointerLeave, onLockPlacement }) {
+  const ls = useMemo(() => buildLayouts(question), [question]);
+  return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none touch-none overflow-visible" aria-label="Dynamics exercise" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerDown={onLockPlacement}>
+    <rect width={W} height={H} fill="transparent" />
+    {SYSTEM_TOPS.map((top, i) => <g key={i}>
+      {[0,1,2,3,4].map(line => <line key={line} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={top + line * GAP} y2={top + line * GAP} stroke="currentColor" strokeWidth="1.2" />)}
+      <text x={STAFF_LEFT + 8} y={top + 28} fontSize="92" fontFamily="serif" dominantBaseline="middle">{TREBLE}</text>
+      {i === 0 && <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle"><text x={STAFF_LEFT + 58} y={top + 20}>{question.timeSignature.top}</text><text x={STAFF_LEFT + 58} y={top + 40.6}>{question.timeSignature.bottom}</text></g>}
     </g>)}
-    {layouts.map((layout) => {
-      const groups = getQuaverGroups(layout.bar.notes, question.timeSignature);
+    {ls.map(layout => {
+      const gs = quaverGroups(layout.bar.notes, question.timeSignature);
       return <g key={layout.barIndex}>
-        <rect x={layout.startX - 8} y={layout.systemTop - 46} width={48} height={34} fill="white" />
-        <text x={layout.startX + 4} y={layout.systemTop - 18} textAnchor="start" fontSize="13" fontWeight="500">{layout.barIndex + 1}</text>
-        {layout.bar.notes.map((note, noteIndex) => {
-          const group = groupContaining(groups, noteIndex);
-          const beam = group ? getBeamData(layout.bar.notes.slice(group.start, group.end + 1), layout.positions.slice(group.start, group.end + 1), layout.systemTop) : null;
-          const stem = beam ? getStemData(note, layout.positions[noteIndex], layout.systemTop, beam.down) : null;
-          const colour = helpOpen && activePlaybackNoteId === note.id ? BLUE : "currentColor";
-          return <Note key={note.id} note={note} x={layout.positions[noteIndex]} systemTop={layout.systemTop} colour={colour} forcedStemDown={beam ? beam.down : null} forcedStemEndY={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} />;
+        <g style={{ pointerEvents: "none" }}><rect x={layout.start - 8} y={layout.top - 31} width="34" height="18" fill="white" /><text x={layout.start + 4} y={layout.top - 18} fontSize="13" fontWeight="500">{layout.barIndex + 1}</text></g>
+        {layout.bar.notes.map((note, i) => {
+          const group = groupFor(gs, i);
+          let over = null;
+          let forced = null;
+          if (group) {
+            const ns = layout.bar.notes.slice(group.start, group.end + 1);
+            const xs = layout.pos.slice(group.start, group.end + 1);
+            const bd = beamData(ns, xs, layout.top);
+            const st = stemData(note, layout.pos[i], layout.top, bd.down);
+            over = bd.down;
+            forced = beamY(st.sx, bd.start, bd.end);
+          }
+          return <Note key={note.id} note={note} x={layout.pos[i]} top={layout.top} colour={activeNoteId === note.id ? COLOUR.blue : COLOUR.black} override={over} forced={forced} showFlag={!group} />;
         })}
-        {groups.map((group, index) => {
-          const beam = getBeamData(layout.bar.notes.slice(group.start, group.end + 1), layout.positions.slice(group.start, group.end + 1), layout.systemTop);
-          return <line key={index} x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke="currentColor" strokeWidth="4" />;
+        {gs.map((g, i) => {
+          const ns = layout.bar.notes.slice(g.start, g.end + 1);
+          const xs = layout.pos.slice(g.start, g.end + 1);
+          const bd = beamData(ns, xs, layout.top);
+          return <line key={i} x1={bd.start.x - .5} y1={bd.start.y} x2={bd.end.x + .5} y2={bd.end.y} stroke="currentColor" strokeWidth="4" strokeLinecap="butt" />;
         })}
-        {layout.barIndex === BAR_COUNT - 1 ? <g><line x1={layout.endX - 5} x2={layout.endX - 5} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" /><line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="4" /></g> : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />}
+        {layout.barIndex === BAR_COUNT - 1 ? <g><line x1={layout.end - 5} x2={layout.end - 5} y1={layout.top} y2={layout.top + GAP * 4} stroke="currentColor" strokeWidth="1.4" /><line x1={layout.end} x2={layout.end} y1={layout.top - .75} y2={layout.top + GAP * 4 + .75} stroke="currentColor" strokeWidth="4" /></g> : <line x1={layout.end} x2={layout.end} y1={layout.top} y2={layout.top + GAP * 4} stroke="currentColor" strokeWidth="1.4" />}
       </g>;
     })}
-    {(question.visiblePlacements ?? []).map((placement) => <PlacementGlyph key={placement.localId} placement={placement} />)}
-    {placements.map((placement) => <PlacementGlyph key={placement.localId} placement={placement} colour={feedback ? wrong.some((item) => placementKey(item) === placementKey(placement)) ? RED : GREEN : BLUE} />)}
-    {feedback && missing.map((placement, index) => <PlacementGlyph key={`missing-${index}`} placement={wrong.some((item) => item.barIndex === placement.barIndex && item.anchor === placement.anchor) ? { ...placement, offsetY: 22 } : placement} colour={GREEN} />)}
-    {!feedback && selectedSymbolId && hoverPlacement && <PlacementGlyph placement={hoverPlacement} colour={BLUE} opacity={0.45} />}
+    {(question.visiblePlacements || []).map(p => <PlacementGlyph key={p.localId} placement={p} colour={COLOUR.black} />)}
+    {placements.map(p => {
+      const isWrong = feedback && wrong.some(w => placementKey(w) === placementKey(p));
+      return <PlacementGlyph key={p.localId} placement={p} colour={isWrong ? COLOUR.red : feedback ? COLOUR.green : COLOUR.black} />;
+    })}
+    {feedback && missing.map((p, i) => <PlacementGlyph key={`missing-${i}`} placement={wrong.some(w => w.barIndex === p.barIndex && w.anchor === p.anchor) ? { ...p, offsetY: 22 } : p} colour={COLOUR.green} />)}
+    {!feedback && selectedSymbolId && hoverPlacement && <PlacementGlyph placement={hoverPlacement} colour={COLOUR.black} opacity={0.45} />}
   </svg>;
 }
 
-function StatCard({ label, value, footer = null }) {
-  return <div className="rounded-xl border bg-stone-50 p-3 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className="text-xl font-semibold leading-tight">{value}</div>{footer && <div className="mt-1 text-[10px] leading-none text-stone-500">{footer}</div>}</div>;
+function AppIcon() {
+  return <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50"><svg width="56" height="56" viewBox="0 0 56 56"><text x="28" y="36" fill="currentColor" fontFamily="Georgia, 'Times New Roman', serif" fontSize="27" fontStyle="italic" fontWeight="900" textAnchor="middle" dominantBaseline="alphabetic" style={{ fontVariantLigatures: "none" }}>mf</text></svg></div>;
 }
-function Feedback({ feedback, question, answerId }) {
-  if (!feedback) return null;
-  const answer = dynamicById(answerId);
-  return <div className={`inline-flex items-center gap-2 whitespace-nowrap font-semibold ${feedback.correct ? "text-green-600" : "text-red-600"}`}><span>{feedback.correct ? TICK : CROSS}</span><span>{feedback.correct ? "Correct" : "Incorrect"}</span>{!feedback.correct && question.questionType === "definition" && <span className="text-green-600">Correct answer: {answer.description}</span>}</div>;
-}
+function Toggle({ active }) { return <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active ? "bg-green-600" : "bg-stone-400"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : "translate-x-0"}`} /></span>; }
 function HelpPanel() {
-  return <section className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-4"><h2 className="mb-3 text-base font-semibold">Dynamics tell the performer how loudly or quietly to play.</h2><div className="flex flex-nowrap gap-2 overflow-x-auto">{DYNAMICS.map((dynamic) => <div key={dynamic.id} className="min-w-[148px] flex min-h-[118px] flex-col items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white p-3 text-center"><SymbolButtonGlyph id={dynamic.id} /><div className="text-sm font-bold">{dynamic.name}</div><div className="text-[11px] leading-tight text-stone-700">{dynamic.description}</div></div>)}</div></section>;
+  const [page, setPage] = useState(0);
+  const pages = [
+    { title: "Instructions", body: "Read, describe, apply, or hear dynamics. Choose the answer, or choose a dynamic and place it on the score." },
+    { title: "Dynamics", type: "dynamic-list" },
+    { title: "Crescendo and Diminuendo", body: "Crescendo means gradually getting louder. Diminuendo means gradually getting quieter.", glyph: "gradual-dynamics" },
+    { title: "Sforzando", body: "sfz means a note is suddenly strongly accented.", glyph: "sfz" },
+  ];
+  const cur = pages[page];
+  const softToLoud = DYNAMICS.filter(d => ["pp", "p", "mp", "mf", "f", "ff"].includes(d.id));
+
+  return <div>
+    <h2 className="mb-3 text-center text-base font-semibold">Help</h2>
+    <div className="min-h-[120px] rounded-xl border border-stone-200 bg-stone-50 p-4">
+      {cur.type === "dynamic-list" ? <div>
+        <h3 className="text-sm font-bold text-stone-800">{cur.title}</h3>
+        <div className="mt-3 grid grid-cols-1 gap-2">
+          {softToLoud.map(d => <div key={d.id} className="grid grid-cols-[54px_1fr_120px] items-center rounded-xl border border-stone-200 bg-white px-3 py-2">
+            <div className="flex h-8 items-center justify-start overflow-visible"><svg viewBox="0 0 52 32" className="h-8 w-[52px] overflow-visible"><DynamicGlyph id={d.id} x={23} yy={15} compact /></svg></div>
+            <div className="text-sm font-bold text-stone-800">{d.name}</div>
+            <div className="text-right text-xs font-semibold text-stone-600">{d.description}</div>
+          </div>)}
+        </div>
+      </div> : <div className="flex items-stretch gap-3">
+        <div className="flex-1"><h3 className="text-sm font-bold text-stone-800">{cur.title}</h3><p className="mt-2 text-sm leading-relaxed text-stone-700">{cur.body}</p></div>
+        {cur.glyph && <div className="flex min-h-full w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-stone-200 bg-white">
+          {cur.glyph === "gradual-dynamics" ? <svg viewBox="0 0 100 64" className="h-16 w-20 overflow-visible" aria-hidden="true">
+            <g transform="translate(0 -8)"><DynamicGlyph id="crescendo" x={50} yy={26} /></g>
+            <g transform="translate(0 28)"><DynamicGlyph id="diminuendo" x={50} yy={26} /></g>
+          </svg> : <SymbolGlyph id={cur.glyph} />}
+        </div>}
+      </div>}
+    </div>
+    <div className="mt-3 flex items-center justify-between"><button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold disabled:opacity-35">←</button><div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div><button onClick={() => setPage(Math.min(pages.length - 1, page + 1))} disabled={page === pages.length - 1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold disabled:opacity-35">→</button></div>
+  </div>;
 }
+function MenuRows({ enabledTypes, setEnabledTypes, enabledDynamics, setEnabledDynamics, resetScore, newQuestion, followPlayback, setFollowPlayback, tempo, setTempo, metronomeEnabled, setMetronomeEnabled }) {
+  const row = "mb-1.5 flex h-[46px] w-full items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 px-[12px] py-[4px]";
+  function toggleType(id) {
+    setEnabledTypes(cur => {
+      if (cur.includes(id) && cur.length === 1) return cur;
+      const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
+      setTimeout(() => newQuestion(next, enabledDynamics), 0);
+      return next;
+    });
+  }
+  function toggleDynamic(id) {
+    setEnabledDynamics(cur => {
+      if (cur.includes(id) && cur.length === 1) return cur;
+      const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
+      setTimeout(() => newQuestion(enabledTypes, next), 0);
+      return next;
+    });
+  }
+  return <>
+    <h3 className="mb-2 mt-1 text-sm font-bold text-stone-700">Dynamics</h3>
+    {DYNAMICS.map(d => <button key={d.id} onClick={() => toggleDynamic(d.id)} className={row}><span className="ml-[0px] flex items-center gap-3 text-left text-sm font-semibold tracking-normal"><span className="-translate-y-[3px] scale-[0.82]"><SymbolGlyph id={d.id} /></span><span>{d.name}</span></span><Toggle active={enabledDynamics.includes(d.id)} /></button>)}
+    <h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Question Types</h3>
+    {QUESTION_TYPES.map(type => <button key={type} onClick={() => toggleType(type)} className={row}><span className="ml-[-6px] flex items-center gap-3 text-left text-sm font-semibold"><span className="flex h-9 w-9 items-center justify-center" aria-hidden="true"><QuestionTypeGlyph type={type} /></span><span className="ml-[-4px]">{QUESTION_LABELS[type]}</span></span><Toggle active={enabledTypes.includes(type)} /></button>)}
+    <h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Playback</h3>
+    <div className="mb-1.5 flex min-h-[46px] w-full items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 px-[12px] py-[4px]"><span className="ml-[-14px] flex items-center gap-3 text-left text-sm font-semibold"><span className="flex h-9 w-9 translate-y-[1px] items-center justify-center" aria-hidden="true"><TempoGlyph /></span><span>Tempo</span></span><div className="flex items-center justify-end gap-1.5">{[["adagio", "Adagio"], ["andante", "Andante"], ["allegro", "Allegro"]].map(([id, label]) => <button key={id} type="button" onClick={() => setTempo(id)} className={`h-8 rounded-xl border px-2 text-[12px] font-bold ${tempo === id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}>{label}</button>)}</div></div>
+    <button onClick={() => setMetronomeEnabled(v => !v)} className={row}><span className="ml-[-14px] flex items-center gap-3 text-left text-sm font-semibold"><span className="flex h-9 w-9 translate-y-[1px] items-center justify-center" aria-hidden="true"><MetronomeGlyph /></span><span>Metronome</span></span><Toggle active={metronomeEnabled} /></button>
+    <button onClick={() => setFollowPlayback(v => !v)} className={row}><span className="ml-[-14px] flex items-center gap-3 text-left text-sm font-semibold"><span className="flex h-9 w-9 items-center justify-center" aria-hidden="true"><EyeGlyph /></span><span>Follow Playback</span></span><Toggle active={followPlayback} /></button>
+    <button onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button>
+  </>;
+}
+function getStreakMedal(s) { if (s >= 30) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" }; if (s >= 20) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" }; if (s >= 15) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" }; if (s >= 10) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" }; return null; }
+function StatCard({ label, value, footer, progress = null, medal = null, variant = "default" }) { const isStreak = variant === "streak"; const safe = progress === null ? null : clamp(progress, 0, 100); const fill = safe === null || safe <= 0 ? 0 : safe; const fillColour = safe === null ? "transparent" : safe < 50 ? "rgba(220,38,38,.38)" : safe < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)"; return <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>{safe !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fill}%`, background: fillColour }} />}<div className="relative z-10 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>{footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}</div>{isStreak && <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal && medal.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: .16, filter: "grayscale(1) brightness(.7)" }}>{medal && medal.emoji ? medal.emoji : "🥉"}</div>}</div>; }
+function FeedbackBanner({ feedback, fading = false, answerText = "" }) { if (!feedback) return null; return <div className="relative flex w-full items-center justify-center text-center"><div className={`flex w-[340px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${feedback.correct ? "text-green-600" : "text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}><span>{feedback.correct ? "Correct" : "Incorrect"}</span>{!feedback.correct && answerText && <span className="mt-1 text-sm font-semibold text-green-600">{answerText}</span>}{!feedback.correct && <span className="mt-2 text-sm font-semibold text-black">👆 Click or tap anywhere to continue</span>}</div></div>; }
+function DynamicAnswers({ filteredDynamics, selectedSymbolId, setSelectedSymbolId, feedback, answerId, compact = false }) {
+  const sizeClass = compact ? "h-[52px] w-[74px] px-2 py-2" : "h-[73px] w-[98px] px-3 py-3";
+  const glyphClass = compact ? "scale-[0.78]" : "";
+  return <div className="flex flex-nowrap justify-start gap-2 overflow-visible pb-1">{filteredDynamics.map(d => <button key={d.id} disabled={Boolean(feedback)} onClick={() => setSelectedSymbolId(d.id)} className={`relative flex ${sizeClass} shrink-0 items-center justify-center overflow-visible rounded-xl border text-[1.25em] font-bold transition ${feedback ? d.id === answerId ? "border-green-700 bg-green-600 text-white" : selectedSymbolId === d.id ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-900 opacity-50" : selectedSymbolId === d.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}><span className={`relative flex items-center justify-center w-full h-full ${glyphClass}`} style={{ top: '-3px' }}><SymbolGlyph id={d.id} /></span></button>)}</div>;
+}
+function ChoiceAnswers({ choices, selectedChoice, setSelectedChoice, feedback, answerId, onChoose }) { return <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{choices.map(choice => <button key={choice.id} disabled={Boolean(feedback)} onClick={() => { setSelectedChoice(choice.id); onChoose(choice.id); }} className={`min-h-[58px] rounded-xl border px-4 py-3 text-sm font-semibold ${feedback ? choice.id === answerId ? "border-green-700 bg-green-600 text-white" : choice.id === selectedChoice ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-500" : selectedChoice === choice.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}>{choice.text}</button>)}</div>; }
+function useStyles() { useEffect(() => { if (document.getElementById("golden-style")) return; const s = document.createElement("style"); s.id = "golden-style"; s.innerHTML = `button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:none;box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}@keyframes medalShine{0%,100%{transform:scale(1) rotate(-4deg);filter:drop-shadow(0 0 0 rgba(250,204,21,0))}50%{transform:scale(1.16) rotate(4deg);filter:drop-shadow(0 0 10px rgba(250,204,21,.9))}}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}`; document.head.appendChild(s); }, []); }
+function useClickOutside(refs, handlers) { useEffect(() => { function on(e) { refs.forEach((ref, i) => { if (ref.current && !ref.current.contains(e.target)) handlers[i]?.(); }); } document.addEventListener("pointerdown", on, true); return () => document.removeEventListener("pointerdown", on, true); }, [refs, handlers]); }
+function playFeedbackSound(correct, celebration = false, medal = null) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  const context = new AudioContextClass();
+  const master = context.createGain();
+  master.gain.value = 0.16;
+  master.connect(context.destination);
+
+  function tone(freq, start, duration, type = "triangle", volume = 0.12) {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, start);
+
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + duration + 0.05);
+  }
+
+  function trumpetTone(freq, start, duration, volume = 0.1) {
+    tone(freq, start, duration, "sawtooth", volume);
+    tone(freq * 1.002, start, duration * 0.96, "square", volume * 0.32);
+    tone(freq * 2, start, duration * 0.75, "triangle", volume * 0.16);
+  }
+
+  function medalPhrase(rootFreq, chordFreqs, startTime, beats = 4) {
+    const beatLength = 0.6;
+    const totalDuration = beats * beatLength;
+    const tripletLength = 0.13;
+    const finalNoteDuration = beats === 2 ? 0.72 : 1.95;
+
+    chordFreqs.forEach((freq) => trumpetTone(freq, startTime, totalDuration, 0.045));
+    trumpetTone(rootFreq, startTime, tripletLength, 0.11);
+    trumpetTone(rootFreq, startTime + tripletLength, tripletLength, 0.11);
+    trumpetTone(rootFreq, startTime + tripletLength * 2, tripletLength, 0.11);
+    trumpetTone(rootFreq, startTime + 0.42, finalNoteDuration, 0.13);
+  }
+
+  const now = context.currentTime + 0.01;
+
+  if (correct) {
+    if (celebration) {
+      if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now);
+      else if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now);
+      else if (medal === "gold") medalPhrase(830.61, [415.3, 523.25, 622.25], now);
+      else if (medal === "platinum") {
+        medalPhrase(739.99, [369.99, 466.16, 554.37], now, 2);
+        medalPhrase(830.61, [415.3, 523.25, 622.25], now + 0.82, 2);
+        medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
+      }
+    } else {
+      const chords = [
+        [523.25, 659.25, 783.99],
+        [587.33, 739.99, 880],
+        [659.25, 830.61, 987.77],
+      ][Math.floor(Math.random() * 3)];
+
+      chords.forEach((freq, index) => {
+        tone(freq, now + index * 0.045, 0.42, "triangle", index === 2 ? 0.085 : 0.07);
+        tone(freq * 2, now + index * 0.045, 0.24, "sine", 0.025);
+      });
+    }
+  } else {
+    tone(196, now, 0.32, "sawtooth", 0.06);
+    tone(185, now + 0.04, 0.38, "triangle", 0.05);
+    tone(174, now + 0.08, 0.45, "sine", 0.04);
+  }
+
+  window.setTimeout(() => {
+    try { context.close(); } catch {}
+  }, medal === "platinum" ? 9000 : celebration ? 3500 : 900);
+}
+function frequencyForLetter(letter, octave = 3) { const semitone = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 }; return 440 * Math.pow(2, (semitone[letter] + (octave - 4) * 12) / 12); }
+function chordFrequencies(chord) { return (CHORDS[chord] || CHORDS.C).map(letter => frequencyForLetter(letter, letter === "B" ? 2 : 3)); }
+function barDuration(bar, beatSeconds) { return bar.notes.reduce((sum, note) => sum + rhythm(note.rhythm).beats * beatSeconds, 0); }
 
 function App() {
-  const timerRef = useRef(null);
-  const customiseRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const audioStopTimerRef = useRef(null);
-  const highlightTimersRef = useRef([]);
-  const [enabledDynamics, setEnabledDynamics] = useState(() => DYNAMICS.map((dynamic) => dynamic.id));
-  const [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => QUESTION_TYPES.map((type) => type.id));
+  useStyles();
+  const [enabledTypes, setEnabledTypes] = useState(QUESTION_TYPES);
+  const [enabledDynamics, setEnabledDynamics] = useState(DYNAMICS.map(d => d.id));
   const [question, setQuestion] = useState(() => makeQuestion());
+  const [questionVisible, setQuestionVisible] = useState(true);
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [selectedSymbolId, setSelectedSymbolId] = useState(null);
   const [placements, setPlacements] = useState([]);
   const [hoverPlacement, setHoverPlacement] = useState(null);
   const [pendingSpanStart, setPendingSpanStart] = useState(null);
-  const [feedback, setFeedback] = useState(null);
-  const [wrong, setWrong] = useState([]);
-  const [missing, setMissing] = useState([]);
-  const [prompt, setPrompt] = useState("");
+  const [promptMessage, setPromptMessage] = useState("");
   const [typedAnswer, setTypedAnswer] = useState("");
   const [selectedChoice, setSelectedChoice] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [feedbackFading, setFeedbackFading] = useState(false);
+  const [wrong, setWrong] = useState([]);
+  const [missing, setMissing] = useState([]);
   const [correct, setCorrect] = useState(0);
   const [attempted, setAttempted] = useState(0);
   const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-  const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [activePlaybackNoteId, setActivePlaybackNoteId] = useState(null);
-  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const isPlacementQuestion = question.questionType === "apply-score" || question.questionType === "audio";
-  const isChoiceQuestion = question.questionType === "multiple-choice";
-  const isTextQuestion = question.questionType === "definition";
+  const [best, setBest] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [followPlayback, setFollowPlayback] = useState(false);
+  const [tempo, setTempo] = useState("andante");
+  const [metronomeEnabled, setMetronomeEnabled] = useState(false);
+  const [activeNoteId, setActiveNoteId] = useState(null);
+  const customiseRef = useRef(null);
+  const helpRef = useRef(null);
+  const audioRef = useRef(null);
+  const masterRef = useRef(null);
+  const endTimerRef = useRef(null);
+  const highlightTimersRef = useRef([]);
 
-  useEffect(() => {
-    const closeCustomise = (event) => {
-      if (!customiseOpen) return;
-      if (customiseRef.current && customiseRef.current.contains(event.target)) return;
-      setCustomiseOpen(false);
-    };
-    document.addEventListener("pointerdown", closeCustomise);
-    return () => document.removeEventListener("pointerdown", closeCustomise);
-  }, [customiseOpen]);
+  useClickOutside([customiseRef, helpRef], [() => customiseOpen && setCustomiseOpen(false), () => helpOpen && setHelpOpen(false)]);
+  useEffect(() => () => stopAudio(), []);
 
-  useEffect(() => () => stopAudioPlayback(), []);
+  const acc = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medal = getStreakMedal(streak);
+  const isPlacement = question.type === "apply-score" || question.type === "audio";
+  const isChoice = question.type === "multiple-choice";
+  const isText = question.type === "definition";
+  const answerText = isText ? `Correct answer: ${dyn(question.answerId).description}` : "";
+  const filteredDynamics = DYNAMICS.filter(d => enabledDynamics.includes(d.id) && (question.type !== "audio" || (question.audioQuestionKind === "find-f-location" ? d.id === "f" : question.audioQuestionKind === "find-p-location" ? d.id === "p" : question.audioQuestionKind === "gradual-location" ? ["crescendo", "diminuendo"].includes(d.id) : question.audioQuestionKind === "sfz-location" ? d.id === "sfz" : AUDIO_BUTTON_IDS.includes(d.id))));
 
-  function stopAudioPlayback() {
-    if (audioStopTimerRef.current) window.clearTimeout(audioStopTimerRef.current);
-    highlightTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+  function stopAudio(fade = false) {
+    clearTimeout(endTimerRef.current);
+    endTimerRef.current = null;
+    highlightTimersRef.current.forEach(id => clearTimeout(id));
     highlightTimersRef.current = [];
-    if (audioContextRef.current) audioContextRef.current.close();
-    audioStopTimerRef.current = null;
-    audioContextRef.current = null;
-    setIsAudioPlaying(false);
-    setActivePlaybackNoteId(null);
+    const ctx = audioRef.current;
+    if (!ctx) { setPlaying(false); setActiveNoteId(null); return; }
+    if (fade && masterRef.current) {
+      const now = ctx.currentTime;
+      try { masterRef.current.gain.cancelScheduledValues(now); masterRef.current.gain.setValueAtTime(Math.max(masterRef.current.gain.value, 0.0001), now); masterRef.current.gain.exponentialRampToValueAtTime(0.0001, now + 0.18); } catch {}
+      setTimeout(() => { try { ctx.close(); } catch {} }, 220);
+    } else { try { ctx.close(); } catch {} }
+    audioRef.current = null;
+    setPlaying(false);
+    setActiveNoteId(null);
   }
-  function newQuestion(nextDynamics = enabledDynamics, nextQuestionTypes = enabledQuestionTypes) {
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    stopAudioPlayback();
-    setQuestion(makeQuestion({ enabledDynamics: nextDynamics, enabledQuestionTypes: nextQuestionTypes }));
-    setSelectedSymbolId(null); setPlacements([]); setHoverPlacement(null); setPendingSpanStart(null); setFeedback(null); setWrong([]); setMissing([]); setPrompt(""); setTypedAnswer(""); setSelectedChoice(null);
+  function resetTask(q) {
+    stopAudio();
+    setQuestion(q);
+    setSelectedSymbolId(null);
+    setPlacements([]);
+    setHoverPlacement(null);
+    setPendingSpanStart(null);
+    setPromptMessage("");
+    setTypedAnswer("");
+    setSelectedChoice(null);
+    setFeedback(null);
+    setFeedbackFading(false);
+    setWrong([]);
+    setMissing([]);
   }
-  function applyResult(isCorrect) {
-    const nextStreak = isCorrect ? streak + 1 : 0;
-    setAttempted((value) => value + 1);
-    setCorrect((value) => value + (isCorrect ? 1 : 0));
-    setStreak(nextStreak);
-    setBestStreak((value) => Math.max(value, nextStreak));
-    setFeedback({ correct: isCorrect });
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => newQuestion(), isCorrect ? 2000 : 4000);
+  function newQuestion(types = enabledTypes, dynamics = enabledDynamics) {
+    setQuestionVisible(false);
+    setTimeout(() => { resetTask(makeQuestion(types, dynamics)); setQuestionVisible(true); }, 260);
   }
-  function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); newQuestion(); }
-  function toggleDynamic(id) {
-    setEnabledDynamics((current) => {
-      if (current.includes(id) && current.length === 1) return current;
-      const updated = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-      window.setTimeout(() => newQuestion(updated, enabledQuestionTypes), 0);
-      return updated;
-    });
+  function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBest(0); newQuestion(); }
+  function fadeToNext() { if (!feedback || feedback.correct || feedbackFading) return; setFeedbackFading(true); setTimeout(() => newQuestion(), 280); }
+  function score(ok) {
+    const ns = ok ? streak + 1 : 0;
+    const medalBefore = getStreakMedal(streak);
+    const medalAfter = getStreakMedal(ns);
+    playFeedbackSound(ok);
+    if (ok && medalAfter && (!medalBefore || medalBefore.sound !== medalAfter.sound)) {
+      setTimeout(() => playFeedbackSound(true, true, medalAfter.sound), 420);
+    }
+    setAttempted(v => v + 1);
+    setCorrect(v => v + (ok ? 1 : 0));
+    setStreak(ns);
+    setBest(v => Math.max(v, ns));
+    setFeedback({ correct: ok });
+    if (ok) { setTimeout(() => setFeedbackFading(true), 1700); setTimeout(() => newQuestion(), 2000); }
   }
-  function toggleQuestionType(id) {
-    setEnabledQuestionTypes((current) => {
-      if (current.includes(id) && current.length === 1) return current;
-      const updated = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-      window.setTimeout(() => newQuestion(enabledDynamics, updated), 0);
-      return updated;
-    });
-  }
-  function pointerToSvg(event) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return { x: ((event.clientX - rect.left) / rect.width) * VIEWBOX_WIDTH, y: ((event.clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT };
-  }
+  function pointerToSvg(event) { const rect = event.currentTarget.getBoundingClientRect(); return { x: ((event.clientX - rect.left) / rect.width) * W, y: ((event.clientY - rect.top) / rect.height) * H }; }
   function handlePointerMove(event) {
-    if (!selectedSymbolId || feedback || !isPlacementQuestion) { setHoverPlacement(null); return; }
-    const snapped = snapPlacement(pointerToSvg(event), selectedSymbolId, question);
+    if (!selectedSymbolId || feedback || !isPlacement) { setHoverPlacement(null); return; }
+    const snapped = snap(pointerToSvg(event), selectedSymbolId, question);
     const isWedge = selectedSymbolId === "crescendo" || selectedSymbolId === "diminuendo";
     if (pendingSpanStart && isWedge) {
       const maxEnd = pendingSpanStart.systemIndex === 0 ? 3 : 7;
@@ -653,149 +803,150 @@ function App() {
     setHoverPlacement(snapped);
   }
   function handleLockPlacement(event) {
-    if (!selectedSymbolId || feedback || !hoverPlacement || !isPlacementQuestion) return;
+    if (!selectedSymbolId || feedback || !hoverPlacement || !isPlacement) return;
     event.preventDefault();
     const isWedge = selectedSymbolId === "crescendo" || selectedSymbolId === "diminuendo";
-    if (isWedge && question.questionType === "apply-score" && !pendingSpanStart) {
-      const geo = getBarGeometry(hoverPlacement.barIndex);
+    if (isWedge && question.type === "apply-score" && !pendingSpanStart) {
+      const geo = barGeo(hoverPlacement.barIndex);
       setPendingSpanStart({ ...hoverPlacement, systemIndex: geo.systemIndex, endBarIndex: hoverPlacement.barIndex });
-      setPrompt("Now click the next bar to stretch the marking across both bars.");
+      setPromptMessage("Now click the next bar to stretch the marking across both bars.");
       return;
     }
     const placement = pendingSpanStart && isWedge ? { ...pendingSpanStart, endBarIndex: hoverPlacement.endBarIndex ?? hoverPlacement.barIndex } : hoverPlacement;
     setPlacements([{ ...placement, localId: Math.random().toString(36).slice(2) }]);
     setPendingSpanStart(null);
-    setPrompt("");
+    setPromptMessage("");
   }
-  function clearPlacements() {
-    if (!feedback) {
-      setPlacements([]); setHoverPlacement(null); setPendingSpanStart(null); setPrompt("");
-    }
-  }
+  function clearPlacements() { if (feedback) return; setPlacements([]); setHoverPlacement(null); setPendingSpanStart(null); setPromptMessage(""); }
   function confirmAnswer() {
     if (feedback) return;
-    stopAudioPlayback();
-    const answer = dynamicById(question.answerId);
-    if (isTextQuestion) {
-      if (!typedAnswer.trim()) return setPrompt("Type an answer before pressing Confirm.");
+    stopAudio(true);
+    if (isText) {
+      if (!typedAnswer.trim()) { setPromptMessage("Type an answer before pressing Confirm."); return; }
+      const answer = dyn(question.answerId);
       const acceptable = [...answer.aliases, answer.description, answer.name].map(cleanText);
-      return applyResult(acceptable.includes(cleanText(typedAnswer)));
+      score(acceptable.includes(cleanText(typedAnswer)));
+      return;
     }
-    if (!placements.length) return setPrompt("Place at least one dynamic on the score before pressing Confirm.");
-    const nextMissing = missingPlacements(question, placements);
-    const nextWrong = wrongPlacements(question, placements);
-    setMissing(nextMissing); setWrong(nextWrong);
-    applyResult(placementsMatch(question, placements) && nextMissing.length === 0 && nextWrong.length === 0);
+    if (!placements.length) { setPromptMessage("Place at least one dynamic on the score before pressing Confirm."); return; }
+    const miss = missingRequired(question, placements);
+    const wrongs = wrongPlacements(question, placements);
+    setMissing(miss);
+    setWrong(wrongs);
+    score(placementsMatch(question, placements) && wrongs.length === 0 && miss.length === 0);
   }
+  function chooseChoice(id) { if (feedback) return; score(id === question.answerId); }
   function gainForNote(barIndex, noteIndex, noteCount) {
-    const plan = question.audioPlan ?? { kind: "static", dynamicId: question.answerId };
-    if (plan.kind === "sfz") return barIndex === plan.accentBar && noteIndex === plan.accentNoteIndex ? dynamicById("sfz").gain : dynamicById(plan.baseDynamic ?? "mf").gain;
-    if (plan.kind === "sudden-change") return dynamicById(barIndex >= plan.changeBar ? plan.targetDynamic : plan.startDynamic).gain;
+    const plan = question.audioPlan || { kind: "static", dynamicId: question.answerId };
+    if (plan.kind === "sfz") return barIndex === plan.accentBar && noteIndex === plan.accentNoteIndex ? dyn("sfz").gain : dyn(plan.baseDynamic || "mf").gain;
+    if (plan.kind === "sudden-change") return dyn(barIndex >= plan.changeBar ? plan.targetDynamic : plan.startDynamic).gain;
     if (plan.kind === "crescendo" || plan.kind === "diminuendo") {
-      const startGain = dynamicById(plan.startDynamic).gain;
-      const endGain = dynamicById(plan.endDynamic).gain;
+      const startGain = dyn(plan.startDynamic).gain;
+      const endGain = dyn(plan.endDynamic).gain;
       if (barIndex < plan.changeBar) return startGain;
-      const rawProgress = (barIndex - plan.changeBar) / Math.max(1, BAR_COUNT - 1 - plan.changeBar) + (noteCount <= 1 ? 0 : noteIndex / Math.max(1, noteCount - 1)) / BAR_COUNT;
-      const progress = clamp(Math.pow(rawProgress, plan.kind === "crescendo" ? 0.55 : 0.7), 0, 1);
+      const raw = (barIndex - plan.changeBar) / Math.max(1, BAR_COUNT - 1 - plan.changeBar) + (noteCount <= 1 ? 0 : noteIndex / Math.max(1, noteCount - 1)) / BAR_COUNT;
+      const progress = clamp(Math.pow(raw, plan.kind === "crescendo" ? 0.55 : 0.7), 0, 1);
       return startGain + (endGain - startGain) * progress;
     }
-    return dynamicById(plan.dynamicId ?? question.answerId).gain ?? 0.19;
+    return dyn(plan.dynamicId || question.answerId).gain || 0.19;
   }
-  function playQuestionAudio() {
-    if (isAudioPlaying) return;
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return setPrompt("Audio playback is not supported in this browser.");
-    stopAudioPlayback();
-    const audioContext = new AudioContextClass();
-    audioContextRef.current = audioContext;
-    setIsAudioPlaying(true);
-    const beatSeconds = 60 / 80;
-    let currentTime = audioContext.currentTime + 0.08;
-    question.performedOrder.forEach((barIndex) => {
+  function playExcerpt() {
+    if (playing) return stopAudio(true);
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { setPromptMessage("Audio playback is not supported in this browser."); return; }
+    stopAudio();
+    const ctx = new AC();
+    audioRef.current = ctx;
+    setPlaying(true);
+    const master = ctx.createGain();
+    master.gain.value = 1;
+    master.connect(ctx.destination);
+    masterRef.current = master;
+    const tempoBpm = tempo === "adagio" ? 66 : tempo === "allegro" ? 120 : 88;
+    const beatSeconds = 60 / tempoBpm;
+    let t = ctx.currentTime + 0.08;
+    question.performedOrder.forEach(barIndex => {
+      if (metronomeEnabled) {
+        for (let beat = 0; beat < question.timeSignature.beats; beat += 1) {
+          const clickTime = t + beat * beatSeconds;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "square";
+          osc.frequency.setValueAtTime(beat === 0 ? 1400 : 1000, clickTime);
+          gain.gain.setValueAtTime(0.0001, clickTime);
+          gain.gain.exponentialRampToValueAtTime(0.09, clickTime + 0.002);
+          gain.gain.exponentialRampToValueAtTime(0.0001, clickTime + 0.06);
+          osc.connect(gain); gain.connect(master); osc.start(clickTime); osc.stop(clickTime + 0.07);
+        }
+      }
       const bar = question.bars[barIndex];
-      const chordStart = currentTime;
-      const chordDuration = barDurationSeconds(bar, beatSeconds);
+      const chordStart = t;
+      const chordDur = barDuration(bar, beatSeconds);
       const chordGain = gainForNote(barIndex, 0, bar.notes.length) * 0.16;
-      chordFrequencies(bar.chord).forEach((frequency) => {
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        const filter = audioContext.createBiquadFilter();
-        oscillator.type = "sine"; oscillator.frequency.setValueAtTime(frequency, chordStart);
-        filter.type = "lowpass"; filter.frequency.setValueAtTime(700, chordStart);
-        gain.gain.setValueAtTime(0.0001, chordStart);
-        gain.gain.exponentialRampToValueAtTime(Math.max(0.002, chordGain), chordStart + 0.03);
-        gain.gain.exponentialRampToValueAtTime(0.0001, chordStart + chordDuration);
-        oscillator.connect(filter); filter.connect(gain); gain.connect(audioContext.destination);
-        oscillator.start(chordStart); oscillator.stop(chordStart + chordDuration);
+      chordFrequencies(bar.chord).forEach(f => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+        o.type = "sine";
+        o.frequency.setValueAtTime(f, chordStart);
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(700, chordStart);
+        g.gain.setValueAtTime(0.0001, chordStart);
+        g.gain.exponentialRampToValueAtTime(Math.max(0.002, chordGain), chordStart + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, chordStart + chordDur);
+        o.connect(filter); filter.connect(g); g.connect(master); o.start(chordStart); o.stop(chordStart + chordDur);
       });
       bar.notes.forEach((note, noteIndex) => {
-        const duration = rhythmInfo(note.rhythm).beats * beatSeconds;
-        const startMs = Math.max(0, (currentTime - audioContext.currentTime) * 1000);
-        highlightTimersRef.current.push(window.setTimeout(() => setActivePlaybackNoteId(note.id), startMs));
-        highlightTimersRef.current.push(window.setTimeout(() => setActivePlaybackNoteId(null), startMs + duration * 1000));
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
+        const dur = rhythm(note.rhythm).beats * beatSeconds;
+        const startMs = Math.max(0, (t - ctx.currentTime) * 1000);
+        highlightTimersRef.current.push(setTimeout(() => setActiveNoteId(note.id), startMs));
+        highlightTimersRef.current.push(setTimeout(() => setActiveNoteId(null), startMs + dur * 1000));
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
         const targetGain = gainForNote(barIndex, noteIndex, bar.notes.length);
         const isSfzHit = question.audioPlan?.kind === "sfz" && barIndex === question.audioPlan.accentBar && noteIndex === question.audioPlan.accentNoteIndex;
-        oscillator.type = "triangle"; oscillator.frequency.setValueAtTime(frequencyForStep(note.step), currentTime);
-        gain.gain.setValueAtTime(0.0001, currentTime);
+        o.type = "triangle";
+        o.frequency.setValueAtTime(freqForStep(note.step), t);
+        g.gain.setValueAtTime(0.0001, t);
         if (isSfzHit) {
-          gain.gain.exponentialRampToValueAtTime(targetGain, currentTime + 0.008);
-          gain.gain.exponentialRampToValueAtTime(0.14, currentTime + Math.min(0.22, duration * 0.45));
+          g.gain.exponentialRampToValueAtTime(targetGain, t + 0.008);
+          g.gain.exponentialRampToValueAtTime(0.14, t + Math.min(0.22, dur * 0.45));
         } else {
-          gain.gain.exponentialRampToValueAtTime(Math.max(0.002, targetGain), currentTime + 0.015);
-          gain.gain.exponentialRampToValueAtTime(Math.max(0.001, targetGain * 0.45), currentTime + duration * 0.86);
+          g.gain.exponentialRampToValueAtTime(Math.max(0.002, targetGain), t + 0.015);
+          g.gain.exponentialRampToValueAtTime(Math.max(0.001, targetGain * 0.45), t + dur * 0.86);
         }
-        gain.gain.exponentialRampToValueAtTime(0.0001, currentTime + duration);
-        oscillator.connect(gain); gain.connect(audioContext.destination);
-        oscillator.start(currentTime); oscillator.stop(currentTime + duration);
-        currentTime += duration;
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g); g.connect(master); o.start(t); o.stop(t + dur);
+        t += dur;
       });
     });
-    audioStopTimerRef.current = window.setTimeout(() => {
-      setIsAudioPlaying(false); setActivePlaybackNoteId(null); audioContextRef.current = null;
-    }, Math.max(0, (currentTime - audioContext.currentTime) * 1000) + 100);
+    endTimerRef.current = setTimeout(() => { setPlaying(false); setActiveNoteId(null); highlightTimersRef.current = []; audioRef.current = null; try { ctx.close(); } catch {} }, Math.max(0, (t - ctx.currentTime) * 1000) + 120);
   }
 
-  const filteredDynamics = DYNAMICS.filter((dynamic) => enabledDynamics.includes(dynamic.id) && (question.questionType !== "audio" || (question.audioQuestionKind === "find-f-location" ? dynamic.id === "f" : question.audioQuestionKind === "find-p-location" ? dynamic.id === "p" : question.audioQuestionKind === "gradual-location" ? ["crescendo", "diminuendo"].includes(dynamic.id) : question.audioQuestionKind === "sfz-location" ? dynamic.id === "sfz" : AUDIO_BUTTON_IDS.includes(dynamic.id))));
-
-  return <div className="min-h-screen bg-stone-50 p-4 text-stone-950 md:p-8">
-    <div className="mx-auto max-w-6xl">
-      <header className="mb-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Dynamics</h1><p className="mt-2 text-stone-700">Learn to interpret dynamics in music.</p></div>
-          <div className="grid min-w-[280px] grid-cols-3 gap-2"><StatCard label="Score" value={`${correct}/${attempted}`} /><StatCard label="Accuracy" value={`${accuracy}%`} /><StatCard label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} /></div>
-        </div>
-      </header>
-      <main className="overflow-visible rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="relative" ref={customiseRef}>
-            <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-100">⚙️ Customise</button>
-            {customiseOpen && <section className="absolute left-0 z-20 mt-2 max-h-[72vh] w-[390px] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
-              <h2 className="mb-3 text-base font-semibold">Customise</h2>
-              <h3 className="mb-2 text-sm font-bold text-stone-700">Dynamics</h3>
-              <div className="mb-4 space-y-2">{DYNAMICS.map((dynamic) => <button key={dynamic.id} type="button" onClick={() => toggleDynamic(dynamic.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 hover:bg-stone-100"><span className="flex items-center gap-3"><span className="flex h-12 w-16 items-center justify-center overflow-hidden rounded-lg border border-stone-200 bg-white"><SymbolButtonGlyph id={dynamic.id} /></span><span className="text-sm font-semibold">{dynamic.name}</span></span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${enabledDynamics.includes(dynamic.id) ? "bg-green-600" : "bg-stone-300"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${enabledDynamics.includes(dynamic.id) ? "translate-x-5" : "translate-x-0"}`} /></span></button>)}</div>
-              <h3 className="mb-2 text-sm font-bold text-stone-700">Question types</h3>
-              <div className="space-y-2">{QUESTION_TYPES.map((type) => <button key={type.id} type="button" onClick={() => toggleQuestionType(type.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 hover:bg-stone-100"><span className="text-sm font-semibold">{type.label}</span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${enabledQuestionTypes.includes(type.id) ? "bg-green-600" : "bg-stone-300"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${enabledQuestionTypes.includes(type.id) ? "translate-x-5" : "translate-x-0"}`} /></span></button>)}</div>
-            </section>}
-          </div>
-          <div className="flex justify-end gap-2"><button type="button" onClick={() => setHelpOpen((value) => !value)} title="Help" aria-label="Help" className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 bg-white text-lg font-bold text-stone-700 hover:bg-stone-100">?</button><button type="button" onClick={resetScore} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Reset score</button></div>
-        </div>
-        {helpOpen && <HelpPanel />}
-        <div className="relative overflow-visible rounded-xl border border-stone-200 bg-white pb-1"><Score question={question} selectedSymbolId={selectedSymbolId} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} activePlaybackNoteId={activePlaybackNoteId} helpOpen={helpOpen} onPointerMove={handlePointerMove} onPointerLeave={() => setHoverPlacement(null)} onLockPlacement={handleLockPlacement} /></div>
-        <section className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-          <div className="mb-4 flex items-start justify-between gap-3"><div><p className="text-base font-semibold" dangerouslySetInnerHTML={{ __html: question.prompt }} />{prompt && <p className="mt-1 text-sm font-medium text-red-700">{prompt}</p>}</div>{question.questionType === "audio" && <button type="button" onClick={playQuestionAudio} disabled={isAudioPlaying} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"><span className="ml-0.5 text-lg leading-none">▶</span></button>}</div>
-          {isChoiceQuestion && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{question.choices.map((choice) => <button key={choice.id} type="button" disabled={Boolean(feedback)} onClick={() => { if (feedback) return; setSelectedChoice(choice.id); applyResult(choice.id === question.answerId); }} className={`min-h-[52px] rounded-xl border px-4 py-3 text-sm font-semibold ${feedback ? choice.id === question.answerId ? "border-green-700 bg-green-600 text-white" : choice.id === selectedChoice ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-500" : selectedChoice === choice.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>{choice.text}</button>)}</div>}
-          {isTextQuestion && <input value={typedAnswer} disabled={Boolean(feedback)} onChange={(event) => { setTypedAnswer(event.target.value); setPrompt(""); }} onKeyDown={(event) => { if (event.key === "Enter") confirmAnswer(); }} placeholder="Type your answer..." className="w-full max-w-md rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:border-stone-950" />}
-          {isPlacementQuestion && <><div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-9">{filteredDynamics.map((dynamic) => { const correctDynamic = question.answerId === dynamic.id; const selectedWrong = feedback && !feedback.correct && selectedSymbolId === dynamic.id && !correctDynamic; return <button key={dynamic.id} type="button" disabled={Boolean(feedback)} onClick={() => { setSelectedSymbolId(dynamic.id); setPrompt(""); }} className={`flex flex-col items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold ${feedback ? correctDynamic ? "border-green-700 bg-green-600 text-white" : selectedWrong ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white opacity-50" : selectedSymbolId === dynamic.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}><SymbolButtonGlyph id={dynamic.id} /></button>; })}</div><p className="mt-3 text-sm text-stone-700">Choose a dynamic, hover over the score to preview it, then click to lock it in place.</p></>}
-        </section>
-        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><Feedback feedback={feedback} question={question} answerId={question.answerId} /><div className="flex w-full justify-end gap-2">{isPlacementQuestion && <button type="button" disabled={Boolean(feedback)} onClick={clearPlacements} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60">Clear</button>}{!isChoiceQuestion && <button type="button" onClick={confirmAnswer} disabled={Boolean(feedback)} className="rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60">Confirm</button>}</div></div>
-      </main>
-    </div>
-  </div>;
+  return <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2"><div className="mx-auto max-w-6xl">
+    <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-4"><AppIcon/><div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Dynamics</h1><p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Interpret and apply dynamics in music.</p></div></div><div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end"><StatCard label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${acc}%`} progress={acc}/><div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}><StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${best}`} medal={medal}/><div className="relative z-0 flex min-h-[52px] min-w-[30px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700"><div>💎 <span className="text-cyan-500">30</span></div><div className="mt-1">🥇 <span className="text-yellow-500">20</span></div><div className="mt-1">🥈 <span className="text-slate-500">15</span></div><div className="mt-1">🥉 <span className="text-amber-700">10</span></div></div></div></div></div></header>
+    <main className="relative -mt-[10px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-8 pt-[10px] shadow-sm md:h-auto md:overflow-visible md:px-6 md:pb-10 md:pt-[14px]" onPointerDown={() => { if (feedback && !feedback.correct) fadeToNext(); }}>
+      <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2"><div className="relative" ref={customiseRef}><button onClick={() => setCustomiseOpen(v => !v)} className="flex h-11 min-w-[30px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>{customiseOpen && <div className="absolute left-0 z-[100] mt-2 max-h-[72vh] w-[min(430px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><h2 className="mb-3 text-center text-base font-semibold">Customise</h2><MenuRows enabledTypes={enabledTypes} setEnabledTypes={setEnabledTypes} enabledDynamics={enabledDynamics} setEnabledDynamics={setEnabledDynamics} resetScore={resetScore} newQuestion={newQuestion} followPlayback={followPlayback} setFollowPlayback={setFollowPlayback} tempo={tempo} setTempo={setTempo} metronomeEnabled={metronomeEnabled} setMetronomeEnabled={setMetronomeEnabled}/></div>}</div><div className="relative" ref={helpRef}><button onClick={() => setHelpOpen(v => !v)} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">💡 <span>Help</span></button>{helpOpen && <div className="absolute left-0 top-12 z-[100] w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><HelpPanel/></div>}</div></div>
+        <button onClick={() => newQuestion()} className="flex h-11 min-w-[30px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading} answerText={answerText}/></div>
+      </div>
+      <div className={`relative -top-[18px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbolId={selectedSymbolId} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} activeNoteId={followPlayback ? activeNoteId : null} onPointerMove={handlePointerMove} onPointerLeave={() => setHoverPlacement(null)} onLockPlacement={handleLockPlacement}/></div>
+      <div className="relative z-10 mt-3 min-h-[126px] overflow-visible rounded-xl border border-stone-200 bg-stone-50 px-4 py-2 shadow-md md:-mt-[190px] md:mx-3">
+        <div className="pr-[140px] text-stone-900"><p className="text-base font-semibold leading-tight" dangerouslySetInnerHTML={{ __html: question.prompt }} />{promptMessage && <p className="mt-2 text-sm font-bold text-red-600">{promptMessage}</p>}</div>
+        {question.type === "audio" && <button onClick={playExcerpt} disabled={Boolean(feedback)} className={`absolute right-4 top-3 flex h-11 w-[120px] shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold ${Boolean(feedback) ? "border-stone-300 bg-stone-200 text-stone-500" : "border-stone-950 bg-stone-950 text-white"}`}><span className="text-lg leading-none">{playing ? "■" : "▶"}</span><span>{playing ? "Stop" : "Play"}</span></button>}
+        {isChoice && <ChoiceAnswers choices={question.choices} selectedChoice={selectedChoice} setSelectedChoice={setSelectedChoice} feedback={feedback} answerId={question.answerId} onChoose={chooseChoice}/>} 
+        {isText && <div className="mt-4"><input value={typedAnswer} disabled={Boolean(feedback)} onChange={e => { setTypedAnswer(e.target.value); setPromptMessage(""); }} onKeyDown={e => { if (e.key === "Enter") confirmAnswer(); }} placeholder="Type your answer" className="w-full max-w-md rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:border-stone-950" /></div>}
+        {isPlacement && <><div className="mt-4 flex flex-nowrap items-center justify-start gap-3 overflow-visible pb-[2px] pr-0"><DynamicAnswers filteredDynamics={filteredDynamics} selectedSymbolId={selectedSymbolId} setSelectedSymbolId={(id) => { setSelectedSymbolId(id); setPromptMessage(""); }} feedback={feedback} answerId={question.answerId} compact={question.type === "apply-score"}/></div></>}
+        <div className="absolute bottom-4 right-4 flex items-center gap-2">{isPlacement && <button disabled={Boolean(feedback) || placements.length === 0} onClick={clearPlacements} className={`flex h-11 items-center justify-center rounded-xl border px-4 text-sm font-semibold ${Boolean(feedback) || placements.length === 0 ? "border-stone-300 bg-stone-200 text-stone-500" : "border-stone-300 bg-white text-black "}`}>Clear</button>}{!isChoice && <button disabled={Boolean(feedback) || (isPlacement && placements.length === 0)} onClick={confirmAnswer} className={`flex h-11 items-center justify-center rounded-xl border px-4 text-sm font-semibold ${Boolean(feedback) || (isPlacement && placements.length === 0) ? "border-stone-300 bg-stone-200 text-stone-500" : "border-green-700 bg-green-600 text-white hover:bg-green-700"}`}>Confirm</button>}</div>
+      </div>
+    </main>
+  </div></div>;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+const root = document.getElementById("root");
+if (ReactDOM.createRoot) ReactDOM.createRoot(root).render(<App />);
+else ReactDOM.render(<App />, root);
 </script>
 </body>
 </html>
