@@ -5,13 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Correct the Rhythm</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    body { margin: 0; }
-    svg { overflow: visible; }
-  </style>
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -19,25 +15,21 @@
 const { useEffect, useMemo, useRef, useState } = React;
 
 const VIEWBOX_WIDTH = 920;
-const VIEWBOX_HEIGHT = 165;
+const VIEWBOX_HEIGHT = 190;
 const ANSWER_OVERLAY_OFFSET = 42;
 const STAFF_LEFT = 42;
 const STAFF_RIGHT = 878;
-const SYSTEM_TOP = 62;
+const SYSTEM_TOP = 68;
 const LINE_GAP = 10;
 const BAR_COUNT = 4;
 const NOTE_RX = 6.3;
 const NOTE_RY = 4.6;
-const STEM_LENGTH = 28;
+const STEM_LENGTH = 32;
 const CLEF_X = STAFF_LEFT + 8;
 const KEY_SIG_X = STAFF_LEFT + 52;
 const TIME_SIG_X = STAFF_LEFT + 78;
 const MUSIC_START_X = STAFF_LEFT + 108;
 const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
-const NOTE_X_OFFSET = 5;
-const TICK = String.fromCodePoint(0x2714);
-const CROSS = String.fromCodePoint(0x2716);
-
 const BLUE = "#2563eb";
 const GREEN = "#16a34a";
 const RED = "#dc2626";
@@ -47,10 +39,10 @@ const QUESTION_TYPES = [
   { id: "insert", label: "Insert the Rhythm" },
 ];
 
-const AUDIO_SPEEDS = [
-  { id: "slow", label: "Slow", bpm: 56 },
-  { id: "medium", label: "Medium", bpm: 72 },
-  { id: "fast", label: "Fast", bpm: 92 },
+const TEMPOS = [
+  { id: "slow", label: "Adagio", bpm: 56 },
+  { id: "medium", label: "Andante", bpm: 72 },
+  { id: "fast", label: "Allegro", bpm: 92 },
 ];
 
 const KEYS = [
@@ -90,18 +82,12 @@ const RHYTHM_SPACING = {
 const HELP_RHYTHMS = ["semibreve", "dottedMinim", "minim", "dottedCrotchet", "crotchet", "quaver"];
 
 const NOTE_POOL = [
-  { letter: "C", octave: 4, step: -2, midi: 60 },
-  { letter: "D", octave: 4, step: -1, midi: 62 },
-  { letter: "E", octave: 4, step: 0, midi: 64 },
-  { letter: "F", octave: 4, step: 1, midi: 65 },
-  { letter: "G", octave: 4, step: 2, midi: 67 },
-  { letter: "A", octave: 4, step: 3, midi: 69 },
-  { letter: "B", octave: 4, step: 4, midi: 71 },
-  { letter: "C", octave: 5, step: 5, midi: 72 },
-  { letter: "D", octave: 5, step: 6, midi: 74 },
-  { letter: "E", octave: 5, step: 7, midi: 76 },
-  { letter: "F", octave: 5, step: 8, midi: 77 },
-  { letter: "G", octave: 5, step: 9, midi: 79 },
+  { letter: "C", octave: 4, step: -2, midi: 60 }, { letter: "D", octave: 4, step: -1, midi: 62 },
+  { letter: "E", octave: 4, step: 0, midi: 64 }, { letter: "F", octave: 4, step: 1, midi: 65 },
+  { letter: "G", octave: 4, step: 2, midi: 67 }, { letter: "A", octave: 4, step: 3, midi: 69 },
+  { letter: "B", octave: 4, step: 4, midi: 71 }, { letter: "C", octave: 5, step: 5, midi: 72 },
+  { letter: "D", octave: 5, step: 6, midi: 74 }, { letter: "E", octave: 5, step: 7, midi: 76 },
+  { letter: "F", octave: 5, step: 8, midi: 77 }, { letter: "G", octave: 5, step: 9, midi: 79 },
   { letter: "A", octave: 5, step: 10, midi: 81 },
 ];
 
@@ -123,13 +109,7 @@ const SIMPLE_PATTERNS = {
   "2/4": [["crotchet", "crotchet"], ["quaver", "quaver", "crotchet"], ["crotchet", "quaver", "quaver"], ["quaver", "crotchet", "quaver"]],
   "3/4": [["crotchet", "crotchet", "crotchet"], ["quaver", "quaver", "crotchet", "crotchet"], ["crotchet", "quaver", "quaver", "crotchet"], ["crotchet", "crotchet", "quaver", "quaver"]],
   "4/4": [["crotchet", "crotchet", "crotchet", "crotchet"], ["quaver", "quaver", "crotchet", "crotchet", "crotchet"], ["crotchet", "quaver", "quaver", "crotchet", "crotchet"], ["quaver", "quaver", "quaver", "quaver", "crotchet", "crotchet"]],
-  "6/8": [
-    ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
-    ["dottedCrotchet", "dottedCrotchet"],
-    ["quaver", "quaver", "quaver", "dottedCrotchet"],
-    ["dottedCrotchet", "quaver", "quaver", "quaver"],
-    ["crotchet", "quaver", "crotchet", "quaver"],
-  ],
+  "6/8": [["quaver", "quaver", "quaver", "quaver", "quaver", "quaver"], ["dottedCrotchet", "dottedCrotchet"], ["quaver", "quaver", "quaver", "dottedCrotchet"], ["dottedCrotchet", "quaver", "quaver", "quaver"], ["crotchet", "quaver", "crotchet", "quaver"]],
 };
 
 function randomItem(items) { return items[Math.floor(Math.random() * items.length)]; }
@@ -141,7 +121,7 @@ function getAudioRhythm(note) { return note.audioRhythm ?? note.rhythm; }
 function yForStep(step, systemTop = SYSTEM_TOP) { return systemTop + LINE_GAP * 4 - step * (LINE_GAP / 2); }
 function stemGoesDown(step) { return step > 4; }
 function midiToFrequency(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
-function noteIndex(note) { return NOTE_POOL.findIndex((item) => item.letter === note.letter && item.octave === note.octave); }
+function noteIndex(note) { return NOTE_POOL.findIndex((item) => item.letter === note?.letter && item.octave === note?.octave); }
 function barWidth() { return (STAFF_RIGHT - MUSIC_START_X) / BAR_COUNT; }
 function cloneQuestion(question) { return JSON.parse(JSON.stringify(question)); }
 
@@ -149,69 +129,21 @@ function noteByLetter(letter, preferredIndex = 6) {
   const candidates = NOTE_POOL.map((note, index) => ({ ...note, index })).filter((note) => note.letter === letter);
   return candidates.reduce((best, item) => Math.abs(item.index - preferredIndex) < Math.abs(best.index - preferredIndex) ? item : best, candidates[0]);
 }
-
 function beatTotal(pattern) { return pattern.reduce((sum, rhythm) => sum + rhythmInfo(rhythm).beats, 0); }
-function beatStarts(pattern) {
-  let cursor = 0;
-  return pattern.map((rhythm) => {
-    const start = cursor;
-    cursor += rhythmInfo(rhythm).beats;
-    return start;
-  });
-}
-
-function isSyncopated(pattern, timeSignature) {
-  if (timeSignature.id === "3/4") return false;
-  const starts = beatStarts(pattern);
-  return pattern.some((rhythm, index) => rhythm === "crotchet" && starts[index] % (timeSignature.compound ? 3 : 1) !== 0);
-}
-
+function beatStarts(pattern) { let cursor = 0; return pattern.map((rhythm) => { const start = cursor; cursor += rhythmInfo(rhythm).beats; return start; }); }
+function isSyncopated(pattern, timeSignature) { if (timeSignature.id === "3/4") return false; const starts = beatStarts(pattern); return pattern.some((rhythm, index) => rhythm === "crotchet" && starts[index] % (timeSignature.compound ? 3 : 1) !== 0); }
 function validPattern(pattern, timeSignature, syncopationOn) {
   if (beatTotal(pattern) !== timeSignature.beats) return false;
-  if (timeSignature.id === "6/8") {
-    const allowed = [
-      "quaver-quaver-quaver-quaver-quaver-quaver",
-      "dottedCrotchet-dottedCrotchet",
-      "quaver-quaver-quaver-dottedCrotchet",
-      "dottedCrotchet-quaver-quaver-quaver",
-      "crotchet-quaver-crotchet-quaver",
-    ];
-    return allowed.includes(pattern.join("-"));
-  }
+  if (timeSignature.id === "6/8") return ["quaver-quaver-quaver-quaver-quaver-quaver", "dottedCrotchet-dottedCrotchet", "quaver-quaver-quaver-dottedCrotchet", "dottedCrotchet-quaver-quaver-quaver", "crotchet-quaver-crotchet-quaver"].includes(pattern.join("-"));
   if (!syncopationOn && isSyncopated(pattern, timeSignature)) return false;
   return true;
 }
-
-function keyAccidentalForLetter(key, letter) {
-  if (key.id === "Am" && letter === "G") return 1;
-  return key.keyAccidentals[letter] ?? 0;
-}
-
-function writtenAccidentalForNote(key, note) {
-  return key.id === "Am" && note?.letter === "G" ? 1 : null;
-}
-
-function chordToneMidi(tone, key, preferredIndex) {
-  const base = noteByLetter(tone, preferredIndex);
-  return base.midi + keyAccidentalForLetter(key, base.letter);
-}
+function keyAccidentalForLetter(key, letter) { if (key.id === "Am" && letter === "G") return 1; return key.keyAccidentals[letter] ?? 0; }
+function writtenAccidentalForNote(key, note) { return key.id === "Am" && note?.letter === "G" ? 1 : null; }
+function chordToneMidi(tone, key, preferredIndex) { const base = noteByLetter(tone, preferredIndex); return base.midi + keyAccidentalForLetter(key, base.letter); }
 
 function makeNote({ barIndex, noteIndex, rhythm, base, writtenAccidental = null }) {
-  return {
-    id: `${barIndex}-${noteIndex}`,
-    barIndex,
-    noteIndex,
-    rhythm,
-    displayRhythm: rhythm,
-    audioRhythm: rhythm,
-    answerRhythm: rhythm,
-    letter: base.letter,
-    octave: base.octave,
-    step: base.step,
-    midi: base.midi,
-    writtenAccidental,
-    editable: false,
-  };
+  return { id: `${barIndex}-${noteIndex}`, barIndex, noteIndex, rhythm, displayRhythm: rhythm, audioRhythm: rhythm, answerRhythm: rhythm, letter: base.letter, octave: base.octave, step: base.step, midi: base.midi, writtenAccidental, editable: false };
 }
 
 function chooseMelodyIndex(previousIndex, key, chord, forceStep = false, direction = 0, strongBeat = false) {
@@ -236,10 +168,7 @@ function chooseMelodyIndex(previousIndex, key, chord, forceStep = false, directi
   const filtered = candidates.filter((candidate) => candidate.weight > 0);
   const total = filtered.reduce((sum, item) => sum + item.weight, 0) || 1;
   let roll = Math.random() * total;
-  for (const candidate of filtered) {
-    roll -= candidate.weight;
-    if (roll <= 0) return candidate.value;
-  }
+  for (const candidate of filtered) { roll -= candidate.weight; if (roll <= 0) return candidate.value; }
   return previousIndex;
 }
 
@@ -249,17 +178,10 @@ function makeBar(barIndex, pattern, key, previousIndex) {
   const notes = pattern.map((rhythm, index) => {
     const chosen = barIndex === 0 && index === 0 ? noteByLetter(key.tonic, 5).index : chooseMelodyIndex(current, key, chord, rhythm === "quaver", barIndex < 2 ? 1 : -1, index === 0);
     current = chosen;
-    return makeNote({
-      barIndex,
-      noteIndex: index,
-      rhythm,
-      base: NOTE_POOL[chosen],
-      writtenAccidental: writtenAccidentalForNote(key, NOTE_POOL[chosen]),
-    });
+    return makeNote({ barIndex, noteIndex: index, rhythm, base: NOTE_POOL[chosen], writtenAccidental: writtenAccidentalForNote(key, NOTE_POOL[chosen]) });
   });
   return { bar: { barIndex, notes }, lastIndex: current };
 }
-
 function choosePattern(timeSignature, barIndex, syncopationOn) {
   if (barIndex === 3) {
     if (timeSignature.id === "2/4") return ["minim"];
@@ -270,30 +192,12 @@ function choosePattern(timeSignature, barIndex, syncopationOn) {
   const patterns = SIMPLE_PATTERNS[timeSignature.id].filter((pattern) => validPattern(pattern, timeSignature, syncopationOn));
   return randomItem(patterns.length ? patterns : SIMPLE_PATTERNS[timeSignature.id]);
 }
-
 function applyCadence(bars, key) {
   const dominant = key.id === "F" ? ["C", "E", "G"] : key.id === "G" ? ["D", "F", "A"] : key.id === "Am" ? ["E", "G", "B"] : ["G", "B", "D"];
   const tonic = CHORDS[key.id][0];
-  bars[2].notes.forEach((note, index) => {
-    const base = noteByLetter(dominant[index % dominant.length], 5 + index);
-    Object.assign(note, { letter: base.letter, octave: base.octave, step: base.step, midi: base.midi, writtenAccidental: writtenAccidentalForNote(key, base) });
-  });
-  bars[3].notes.forEach((note, index) => {
-    const base = index === bars[3].notes.length - 1 ? noteByLetter(key.tonic, 6) : noteByLetter(tonic[index % tonic.length], 5 + index);
-    Object.assign(note, { letter: base.letter, octave: base.octave, step: base.step, midi: base.midi, writtenAccidental: writtenAccidentalForNote(key, base) });
-  });
-  const finalBar = bars[3];
-  const final = finalBar.notes.at(-1);
-  const penultimate = finalBar.notes.length > 1 ? finalBar.notes.at(-2) : bars[2].notes.at(-1);
-  const finalIndex = noteIndex(final);
-  if (penultimate && finalIndex >= 0) {
-    const scale = SCALE_LETTERS[key.id] ?? SCALE_LETTERS.C;
-    const candidates = [NOTE_POOL[clamp(finalIndex - 1, 0, NOTE_POOL.length - 1)], NOTE_POOL[clamp(finalIndex + 1, 0, NOTE_POOL.length - 1)]].filter((note) => scale.includes(note.letter));
-    const chosen = candidates.length ? randomItem(candidates) : NOTE_POOL[clamp(finalIndex - 1, 0, NOTE_POOL.length - 1)];
-    Object.assign(penultimate, { letter: chosen.letter, octave: chosen.octave, step: chosen.step, midi: chosen.midi, writtenAccidental: writtenAccidentalForNote(key, chosen) });
-  }
+  bars[2].notes.forEach((note, index) => { const base = noteByLetter(dominant[index % dominant.length], 5 + index); Object.assign(note, { letter: base.letter, octave: base.octave, step: base.step, midi: base.midi, writtenAccidental: writtenAccidentalForNote(key, base) }); });
+  bars[3].notes.forEach((note, index) => { const base = index === bars[3].notes.length - 1 ? noteByLetter(key.tonic, 6) : noteByLetter(tonic[index % tonic.length], 5 + index); Object.assign(note, { letter: base.letter, octave: base.octave, step: base.step, midi: base.midi, writtenAccidental: writtenAccidentalForNote(key, base) }); });
 }
-
 function makeBars(timeSignature, key, syncopationOn) {
   const bars = [];
   let previous = noteByLetter(key.tonic, 6).index;
@@ -313,7 +217,9 @@ function makeCorrectQuestion(base) {
   base.bars.forEach((bar) => {
     if (bar.barIndex > 2) return;
     for (let i = 0; i < bar.notes.length - 1; i += 1) {
-      if (bar.notes[i].rhythm === "crotchet" && bar.notes[i + 1].rhythm === "crotchet") candidates.push({ barIndex: bar.barIndex, noteIndices: [i, i + 1] });
+      if (bar.notes[i].rhythm === "crotchet" && bar.notes[i + 1].rhythm === "crotchet") {
+        candidates.push({ barIndex: bar.barIndex, noteIndices: [i, i + 1] });
+      }
     }
   });
 
@@ -330,6 +236,13 @@ function makeCorrectQuestion(base) {
   const second = base.bars[target.barIndex].notes[b];
   const answer = randomItem(["dot-tail", "tail-dot"]);
 
+  base.bars[target.barIndex].notes.forEach((note) => {
+    note.editable = false;
+    note.answerRhythm = note.rhythm;
+    note.displayRhythm = note.rhythm;
+    note.audioRhythm = note.rhythm;
+  });
+
   first.editable = true;
   second.editable = true;
   first.displayRhythm = "crotchet";
@@ -343,43 +256,17 @@ function makeCorrectQuestion(base) {
 }
 
 function makeInsertQuestion(base, syncopationOn) {
-  const targetBarOptions = [0, 1, 2].filter((barIndex) => {
-    if (!base.timeSignature.compound) return true;
-    const notes = base.bars[barIndex].notes;
-    return !notes.every((note) => note.rhythm === "dottedCrotchet");
-  });
-
+  const targetBarOptions = [0, 1, 2].filter((barIndex) => !base.timeSignature.compound || !base.bars[barIndex].notes.every((note) => note.rhythm === "dottedCrotchet"));
   const targetBarIndex = randomItem(targetBarOptions.length ? targetBarOptions : [0, 1, 2]);
-
-  const patterns = SIMPLE_PATTERNS[base.timeSignature.id].filter((pattern) => {
-    if (!validPattern(pattern, base.timeSignature, syncopationOn)) return false;
-    if (base.timeSignature.compound && pattern.every((rhythm) => rhythm === "dottedCrotchet")) return false;
-    return true;
-  });
-
-  const safePatterns = base.timeSignature.compound
-    ? patterns.filter((item) => item.some((rhythm) => rhythm !== "dottedCrotchet"))
-    : patterns;
-  const fallbackPatterns = base.timeSignature.compound
-    ? SIMPLE_PATTERNS[base.timeSignature.id].filter((item) => item.some((rhythm) => rhythm !== "dottedCrotchet"))
-    : SIMPLE_PATTERNS[base.timeSignature.id];
-  const pattern = randomItem(safePatterns.length ? safePatterns : fallbackPatterns);
-
+  const patterns = SIMPLE_PATTERNS[base.timeSignature.id].filter((pattern) => validPattern(pattern, base.timeSignature, syncopationOn) && (!base.timeSignature.compound || !pattern.every((rhythm) => rhythm === "dottedCrotchet")));
+  const fallbackPatterns = base.timeSignature.compound ? SIMPLE_PATTERNS[base.timeSignature.id].filter((item) => item.some((rhythm) => rhythm !== "dottedCrotchet")) : SIMPLE_PATTERNS[base.timeSignature.id];
+  const pattern = randomItem(patterns.length ? patterns : fallbackPatterns);
   const previous = targetBarIndex > 0 ? Math.max(0, noteIndex(base.bars[targetBarIndex - 1].notes.at(-1))) : noteByLetter(base.key.tonic, 6).index;
   base.bars[targetBarIndex] = makeBar(targetBarIndex, pattern, base.key, previous).bar;
   base.bars[targetBarIndex].notes = base.bars[targetBarIndex].notes.map((note, index) => {
     const isCompoundDottedCrotchet = base.timeSignature.compound && pattern[index] === "dottedCrotchet";
-    return {
-      ...note,
-      id: `${targetBarIndex}-${index}`,
-      noteIndex: index,
-      editable: !isCompoundDottedCrotchet,
-      answerRhythm: pattern[index],
-      audioRhythm: pattern[index],
-      displayRhythm: isCompoundDottedCrotchet ? "dottedCrotchet" : "notehead",
-    };
+    return { ...note, id: `${targetBarIndex}-${index}`, noteIndex: index, editable: !isCompoundDottedCrotchet, answerRhythm: pattern[index], audioRhythm: pattern[index], displayRhythm: isCompoundDottedCrotchet ? "dottedCrotchet" : "notehead" };
   });
-
   return { ...base, questionType: "insert", target: { barIndex: targetBarIndex, noteIndices: pattern.map((_, index) => index) }, prompt: `Listen to the music and complete the rhythm in <strong>bar ${targetBarIndex + 1}</strong> to match what you hear.` };
 }
 
@@ -393,93 +280,37 @@ function makeQuestion(options = {}) {
   return randomItem(enabled) === "insert" ? makeInsertQuestion(base, syncopationOn) : makeCorrectQuestion(base);
 }
 
-function getBarGeometry(barIndex) {
-  const width = barWidth();
-  const startX = MUSIC_START_X + barIndex * width;
-  return { barIndex, systemTop: SYSTEM_TOP, startX, endX: startX + width, barWidth: width };
-}
-
-function getBarNotePositions(notes, startX, endX, fixedSpacing = false, barIndex = 0) {
+function getBarGeometry(barIndex) { const width = barWidth(); const startX = MUSIC_START_X + barIndex * width; return { barIndex, systemTop: SYSTEM_TOP, startX, endX: startX + width, barWidth: width }; }
+function getBarNotePositions(notes, startX, endX, barIndex = 0) {
   let s = startX - 10;
   let e = endX + 14;
-
-  const needsVisibleAccidental = (note, index) => {
-    if (note.writtenAccidental === null || note.writtenAccidental === undefined) return false;
-    return !notes.slice(0, index).some((prev) => prev.letter === note.letter && prev.writtenAccidental === note.writtenAccidental && prev.writtenAccidental !== null && prev.writtenAccidental !== undefined);
-  };
-
-  const units = notes.reduce((sum, note, index) => {
-    const rhythm = getDisplayRhythm(note);
-    const accidentalSpace = needsVisibleAccidental(note, index) ? 12 / 20 : 0;
-    return sum + rhythmSpace(rhythm) + accidentalSpace;
-  }, 0);
-
+  const units = notes.reduce((sum, note) => sum + rhythmSpace(getDisplayRhythm(note)), 0);
   const unitWidth = Math.max(1, e - s) / Math.max(1, units);
   const out = [];
-  let cursor = s + unitWidth * 0.28 + NOTE_X_OFFSET;
-
-  notes.forEach((note, index) => {
-    const visibleAccidental = needsVisibleAccidental(note, index);
-    if (visibleAccidental) cursor += 12;
-    const accidentalMinimum = out[index - 1] !== undefined && visibleAccidental;
-    const x = accidentalMinimum ? Math.max(cursor, out[index - 1] + 24) : cursor;
-    out.push(x);
-    cursor = x + rhythmSpace(getDisplayRhythm(note)) * unitWidth;
-  });
-
+  let cursor = s + unitWidth * 0.28 + 5;
+  notes.forEach((note) => { const x = cursor; out.push(x); cursor = x + rhythmSpace(getDisplayRhythm(note)) * unitWidth; });
   if (notes.length === 2) {
     const rhythmA = getDisplayRhythm(notes[0]);
     const rhythmB = getDisplayRhythm(notes[1]);
-    const bothCrotchets = rhythmA === "crotchet" && rhythmB === "crotchet";
-    const bothNoteheadsAnswerCrotchets = rhythmA === "notehead" && rhythmB === "notehead" && notes[0].answerRhythm === "crotchet" && notes[1].answerRhythm === "crotchet";
-    const bothDottedCrotchets = rhythmA === "dottedCrotchet" && rhythmB === "dottedCrotchet";
-    const crotchetQuaverPair = (rhythmA === "crotchet" && rhythmB === "quaver") || (rhythmA === "quaver" && rhythmB === "crotchet");
     const dottedQuaverPair = (rhythmA === "dottedCrotchet" && rhythmB === "quaver") || (rhythmA === "quaver" && rhythmB === "dottedCrotchet");
-
+    const bothCrotchets = rhythmA === "crotchet" && rhythmB === "crotchet";
     if (dottedQuaverPair) {
-      out[0] += 17;
-      out[1] -= 17;
-    } else if (bothNoteheadsAnswerCrotchets) {
-      out[0] -= 3;
-      out[1] += 3;
-    } else if (bothDottedCrotchets || crotchetQuaverPair) {
       out[0] += 10;
-      out[1] -= 10;
-    } else if (bothCrotchets) {
-      out[0] += 8;
-      out[1] -= 8;
-    } else if (barIndex === 0) {
-      out[0] -= 26;
-      out[1] += 52;
-    } else {
-      out[0] -= 12;
-      out[1] += 36;
+      out[1] -= 6;
     }
+    else if (bothCrotchets) { out[0] += 8; out[1] -= 8; }
   }
-
   return out;
 }
-
-function buildLayouts(question) {
-  return question.bars.map((bar) => {
-    const geo = getBarGeometry(bar.barIndex);
-    const fixed = question.questionType === "insert" && bar.barIndex === question.target?.barIndex;
-    return { ...geo, bar, positions: getBarNotePositions(bar.notes, geo.startX + 28, geo.endX - 28, fixed, bar.barIndex) };
-  });
-}
-
-function getStemData(note, x, systemTop, forcedDown = null) {
-  const y = yForStep(note.step, systemTop);
-  const down = forcedDown ?? stemGoesDown(note.step);
-  const stemX = down ? x - NOTE_RX : x + NOTE_RX;
-  return { y, down, stemX, stemEndY: down ? y + STEM_LENGTH : y - STEM_LENGTH };
-}
-
+function buildLayouts(question) { return question.bars.map((bar) => { const geo = getBarGeometry(bar.barIndex); return { ...geo, bar, positions: getBarNotePositions(bar.notes, geo.startX + 28, geo.endX - 28, bar.barIndex) }; }); }
+function getStemData(note, x, systemTop, forcedDown = null) { const y = yForStep(note.step, systemTop); const down = forcedDown ?? stemGoesDown(note.step); const stemX = down ? x - NOTE_RX : x + NOTE_RX; return { y, down, stemX, stemEndY: down ? y + STEM_LENGTH : y - STEM_LENGTH }; }
 function getQuaverGroups(notes, timeSignature) {
   const groups = [];
+
   if (timeSignature.id === "6/8") {
     let beat = 0;
     let index = 0;
+
     while (index < notes.length) {
       const rhythm = getDisplayRhythm(notes[index]);
       if (rhythm !== "quaver") {
@@ -487,20 +318,30 @@ function getQuaverGroups(notes, timeSignature) {
         index += 1;
         continue;
       }
+
       const dottedBeat = Math.floor(beat / 3);
       const start = index;
       let end = index;
       let localBeat = beat;
-      while (end + 1 < notes.length && end - start + 1 < 3 && getDisplayRhythm(notes[end + 1]) === "quaver" && Math.floor((localBeat + 0.5) / 3) === dottedBeat) {
+
+      while (
+        end + 1 < notes.length &&
+        end - start + 1 < 3 &&
+        getDisplayRhythm(notes[end + 1]) === "quaver" &&
+        Math.floor((localBeat + 0.5) / 3) === dottedBeat
+      ) {
         localBeat += 0.5;
         end += 1;
       }
+
       if (end > start) groups.push({ start, end });
+
       while (index <= end) {
         beat += rhythmInfo(getDisplayRhythm(notes[index])).beats;
         index += 1;
       }
     }
+
     return groups;
   }
 
@@ -510,56 +351,36 @@ function getQuaverGroups(notes, timeSignature) {
       index += 1;
       continue;
     }
-    const start = index;
+
+    const runStart = index;
     while (index + 1 < notes.length && getDisplayRhythm(notes[index + 1]) === "quaver") index += 1;
-    const end = index;
-    const count = end - start + 1;
-    if (count === 2 || count === 4) groups.push({ start, end });
-    else if (count === 3) groups.push({ start, end: start + 1 });
-    else if (count > 4) {
-      let cursor = start;
-      while (cursor <= end) {
-        const remaining = end - cursor + 1;
-        if (remaining >= 4) { groups.push({ start: cursor, end: cursor + 3 }); cursor += 4; }
-        else if (remaining >= 2) { groups.push({ start: cursor, end: cursor + 1 }); cursor += remaining; }
-        else cursor += 1;
+    const runEnd = index;
+    let cursor = runStart;
+
+    while (cursor <= runEnd) {
+      const remaining = runEnd - cursor + 1;
+      if (remaining >= 4) {
+        groups.push({ start: cursor, end: cursor + 3 });
+        cursor += 4;
+      } else if (remaining >= 2) {
+        groups.push({ start: cursor, end: cursor + 1 });
+        cursor += 2;
+      } else {
+        cursor += 1;
       }
     }
-    index = end + 1;
+
+    index = runEnd + 1;
   }
+
   return groups;
 }
-
-function groupContaining(groups, noteIndex) { return groups.find((group) => noteIndex >= group.start && noteIndex <= group.end) ?? null; }
-
-function getBeamData(notes, positions, systemTop) {
-  const down = notes.reduce((sum, note) => sum + note.step, 0) / notes.length > 4;
-  const first = getStemData(notes[0], positions[0], systemTop, down);
-  const last = getStemData(notes.at(-1), positions.at(-1), systemTop, down);
-  return { down, start: { x: first.stemX, y: first.stemEndY }, end: { x: last.stemX, y: last.stemEndY } };
-}
-
-function beamYAtX(x, beam) {
-  const amount = (x - beam.start.x) / (beam.end.x - beam.start.x || 1);
-  return beam.start.y + amount * (beam.end.y - beam.start.y);
-}
-
-function toolToRhythm(tool) {
-  if (tool === "dot") return "dottedCrotchet";
-  if (tool === "tail" || tool === "quaver") return "quaver";
-  return "crotchet";
-}
-
-function answerState(question) {
-  const notes = question.target.noteIndices.map((index) => question.bars[question.target.barIndex].notes[index]);
-  return { correct: notes.every((note) => getDisplayRhythm(note) === note.answerRhythm), notes };
-}
-
-function pointerToSvg(event) {
-  const rect = event.currentTarget.getBoundingClientRect();
-  return { x: ((event.clientX - rect.left) / rect.width) * VIEWBOX_WIDTH, y: ((event.clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT };
-}
-
+function groupContaining(groups, noteIndexValue) { return groups.find((group) => noteIndexValue >= group.start && noteIndexValue <= group.end) ?? null; }
+function getBeamData(notes, positions, systemTop) { const down = notes.reduce((sum, note) => sum + note.step, 0) / notes.length > 4; const first = getStemData(notes[0], positions[0], systemTop, down); const last = getStemData(notes.at(-1), positions.at(-1), systemTop, down); return { down, start: { x: first.stemX, y: first.stemEndY }, end: { x: last.stemX, y: last.stemEndY } }; }
+function beamYAtX(x, beam) { const amount = (x - beam.start.x) / (beam.end.x - beam.start.x || 1); return beam.start.y + amount * (beam.end.y - beam.start.y); }
+function toolToRhythm(tool) { if (tool === "dot") return "dottedCrotchet"; if (tool === "tail" || tool === "quaver") return "quaver"; return "crotchet"; }
+function answerState(question) { const notes = question.target.noteIndices.map((index) => question.bars[question.target.barIndex].notes[index]); return { correct: notes.every((note) => getDisplayRhythm(note) === note.answerRhythm), notes }; }
+function pointerToSvg(event) { const svg = event.currentTarget.ownerSVGElement ?? event.currentTarget; const rect = svg.getBoundingClientRect(); return { x: ((event.clientX - rect.left) / rect.width) * VIEWBOX_WIDTH, y: ((event.clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT }; }
 function findHoverTarget(pointer, question) {
   let closest = null;
   let best = Infinity;
@@ -567,201 +388,140 @@ function findHoverTarget(pointer, question) {
     if (layout.barIndex !== question.target?.barIndex) return;
     layout.bar.notes.forEach((note, index) => {
       if (!note.editable) return;
-      if (question.questionType === "correct" && note.rhythm !== "crotchet") return;
       const distance = Math.hypot(pointer.x - layout.positions[index], pointer.y - yForStep(note.step, layout.systemTop));
-      if (distance < best && distance < 34) {
-        best = distance;
-        closest = { barIndex: layout.barIndex, noteIndex: index };
-      }
+      if (distance < best && distance < 34) { best = distance; closest = { barIndex: layout.barIndex, noteIndex: index }; }
     });
   });
   return closest;
 }
-
 function applyPlacement(question, target, tool) {
   if (!target || !tool) return question;
+
   const next = cloneQuestion(question);
   const note = next.bars[target.barIndex].notes[target.noteIndex];
   if (!note?.editable) return question;
+
   const rhythm = toolToRhythm(tool);
 
   if (next.questionType === "correct") {
-    next.bars[next.target.barIndex].notes.forEach((item) => {
-      if (!item.editable) return;
-      if (rhythm === "dottedCrotchet" && item.displayRhythm === "dottedCrotchet") item.displayRhythm = "crotchet";
-      if (rhythm === "quaver" && item.displayRhythm === "quaver") item.displayRhythm = "crotchet";
-    });
+    note.displayRhythm = rhythm;
+    return next;
   }
 
   note.displayRhythm = rhythm;
   return next;
 }
 
-function effectiveAccidental(question, barIndex, noteIndexValue) {
-  const active = { ...question.key.keyAccidentals };
-  for (const note of question.bars[barIndex].notes) {
-    if (note.writtenAccidental !== null && note.writtenAccidental !== undefined) active[note.letter] = note.writtenAccidental;
-    if (note.noteIndex === noteIndexValue) return active[note.letter] ?? 0;
-  }
-  return 0;
-}
+function effectiveAccidental(question, barIndex, noteIndexValue) { const active = { ...question.key.keyAccidentals }; for (const note of question.bars[barIndex].notes) { if (note.writtenAccidental !== null && note.writtenAccidental !== undefined) active[note.letter] = note.writtenAccidental; if (note.noteIndex === noteIndexValue) return active[note.letter] ?? 0; } return 0; }
+function pitchForNote(question, barIndex, noteIndexValue) { const note = question.bars[barIndex].notes[noteIndexValue]; return note.midi + effectiveAccidental(question, barIndex, noteIndexValue); }
 
-function pitchForNote(question, barIndex, noteIndexValue) {
-  const note = question.bars[barIndex].notes[noteIndexValue];
-  return note.midi + effectiveAccidental(question, barIndex, noteIndexValue);
-}
-
-function TailGlyph({ className = "h-10 w-10", ghost = false }) {
-  return <svg viewBox="0 0 128 128" className={`${className} overflow-visible`}><ellipse cx="48" cy="96" rx="16" ry="11" transform="rotate(-18 48 96)" fill="currentColor" opacity={ghost ? 0.1 : 1} /><line x1="62" x2="62" y1="92" y2="24" stroke="currentColor" strokeWidth="4" opacity={ghost ? 0.1 : 1} /><path d="M62 24 C84 34, 88 52, 70 68" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" /></svg>;
-}
-
-function DotGlyph({ className = "h-10 w-10", ghost = false }) {
-  return <svg viewBox="0 0 128 128" className={`${className} overflow-visible`}><ellipse cx="48" cy="96" rx="16" ry="11" transform="rotate(-18 48 96)" fill="currentColor" opacity={ghost ? 0.1 : 1} /><line x1="62" x2="62" y1="92" y2="24" stroke="currentColor" strokeWidth="4" opacity={ghost ? 0.1 : 1} /><circle cx="78" cy="96" r="6" fill="currentColor" /></svg>;
-}
-
-function CrotchetGlyph({ className = "h-10 w-10" }) {
-  return <svg viewBox="0 0 128 128" className={`${className} overflow-visible`}><ellipse cx="48" cy="96" rx="16" ry="11" transform="rotate(-18 48 96)" fill="currentColor" /><line x1="62" x2="62" y1="92" y2="24" stroke="currentColor" strokeWidth="4" /></svg>;
-}
-
-function ToolGlyph({ id, className }) {
-  if (id === "dot") return <DotGlyph className={className} ghost />;
-  if (id === "tail") return <TailGlyph className={className} ghost />;
-  if (id === "quaver") return <TailGlyph className={className} />;
-  return <CrotchetGlyph className={className} />;
-}
-
-function LedgerLines({ x, step, systemTop, colour }) {
-  const lines = [];
-  if (step <= -2) lines.push(yForStep(-2, systemTop));
-  if (step >= 10) lines.push(yForStep(10, systemTop));
-  return <g>{lines.map((y) => <line key={y} x1={x - 12} x2={x + 12} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}</g>;
-}
-
-function Flag({ stemX, stemEndY, down, colour }) {
-  const d = down ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 4}, ${stemX + 10} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 16}` : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 4}, ${stemX + 10} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 16}`;
-  return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />;
-}
-
-function Accidental({ value, x, y }) {
-  if (!value) return null;
-  return <text x={x} y={y + 2} fill="currentColor" fontFamily="Georgia, serif" fontSize="26" fontWeight="700" textAnchor="middle" dominantBaseline="middle">{value === 1 ? "♯" : "♭"}</text>;
-}
-
+function LedgerLines({ x, step, systemTop, colour }) { const lines = []; if (step <= -2) lines.push(yForStep(-2, systemTop)); if (step >= 10) lines.push(yForStep(10, systemTop)); return <g>{lines.map((y) => <line key={y} x1={x - 12} x2={x + 12} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}</g>; }
+function Flag({ stemX, stemEndY, down, colour }) { const d = down ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 4}, ${stemX + 10} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 16}` : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 4}, ${stemX + 10} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 16}`; return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />; }
+function Accidental({ value, x, y }) { if (!value) return null; return <text x={x} y={y + 2} fill="currentColor" fontFamily="Georgia, serif" fontSize="26" fontWeight="700" textAnchor="middle" dominantBaseline="middle">{value === 1 ? "♯" : "♭"}</text>; }
 function Note({ note, x, systemTop, colour, forcedStemDown = null, forcedStemEndY = null, showFlag = true, showAccidental = true }) {
   const rhythm = getDisplayRhythm(note);
   const info = rhythmInfo(rhythm);
   const stem = getStemData(note, x, systemTop, forcedStemDown);
   const endY = forcedStemEndY ?? stem.stemEndY;
   const dotY = note.step % 2 === 0 ? stem.y - 4 : stem.y;
-
-  return <g>
-    <LedgerLines x={x} step={note.step} systemTop={systemTop} colour={colour} />
-    {showAccidental && <Accidental value={note.writtenAccidental} x={x - 18} y={stem.y} />}
-    <ellipse cx={x} cy={stem.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${stem.y})`} fill={info.open ? "white" : colour} stroke={colour} strokeWidth="1.7" />
-    {info.dotted && <circle cx={x + 12} cy={dotY} r="1.7" fill={colour} />}
-    {note.step % 2 === 0 && <line x1={x - 8} x2={x + 8} y1={stem.y} y2={stem.y} stroke={colour} strokeWidth="1.2" />}
-    {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={endY} stroke={colour} strokeWidth="1.5" />}
-    {info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={endY} down={stem.down} colour={colour} />}
-  </g>;
+  return <g pointerEvents="none"><LedgerLines x={x} step={note.step} systemTop={systemTop} colour={colour} />{showAccidental && <Accidental value={note.writtenAccidental} x={x - 18} y={stem.y} />}<ellipse cx={x} cy={stem.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${stem.y})`} fill={info.open ? "white" : colour} stroke={colour} strokeWidth="1.7" />{info.dotted && <circle cx={x + 12} cy={dotY} r="1.7" fill={colour} />}{note.step % 2 === 0 && <line x1={x - 8} x2={x + 8} y1={stem.y} y2={stem.y} stroke={colour} strokeWidth="1.2" />}{info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={endY} stroke={colour} strokeWidth="1.5" />}{info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={endY} down={stem.down} colour={colour} />}</g>;
 }
-
-function KeySignature({ keySignature }) {
-  const items = [];
-  if (keySignature.id === "F") items.push({ symbol: "♭", step: 4.2, x: KEY_SIG_X, size: 24 });
-  if (keySignature.id === "G") items.push({ symbol: "♯", step: 7.8, x: KEY_SIG_X });
-  return <g>{items.map((item, index) => <text key={index} x={item.x} y={yForStep(item.step) + 7} fontSize={item.size ?? 28} fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">{item.symbol}</text>)}</g>;
-}
-
-function TimeSignature({ timeSignature }) {
-  return <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle"><text x={TIME_SIG_X} y={SYSTEM_TOP + 20}>{timeSignature.top}</text><text x={TIME_SIG_X} y={SYSTEM_TOP + 39}>{timeSignature.bottom}</text></g>;
-}
-
+function KeySignature({ keySignature }) { const items = []; if (keySignature.id === "F") items.push({ symbol: "♭", step: 4.2, x: KEY_SIG_X, size: 24 }); if (keySignature.id === "G") items.push({ symbol: "♯", step: 7.8, x: KEY_SIG_X }); return <g>{items.map((item, index) => <text key={index} x={item.x} y={yForStep(item.step) + 7} fontSize={item.size ?? 28} fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">{item.symbol}</text>)}</g>; }
+function TimeSignature({ timeSignature }) { return <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle"><text x={TIME_SIG_X} y={SYSTEM_TOP + 20}>{timeSignature.top}</text><text x={TIME_SIG_X} y={SYSTEM_TOP + 39}>{timeSignature.bottom}</text></g>; }
 function CorrectAnswerOverlay({ question, layout, feedback }) {
   if (!feedback || feedback.correct || layout.barIndex !== question.target?.barIndex) return null;
   const positions = question.target.noteIndices.map((index) => layout.positions[index]);
   const notes = question.target.noteIndices.map((index) => ({ ...layout.bar.notes[index], displayRhythm: layout.bar.notes[index].answerRhythm, step: 3, writtenAccidental: null }));
   const top = layout.systemTop - ANSWER_OVERLAY_OFFSET;
   const groups = getQuaverGroups(notes, question.timeSignature);
-
-  return <g>
-    {notes.map((note, index) => {
-      const group = groupContaining(groups, index);
-      const beam = group ? getBeamData(notes.slice(group.start, group.end + 1), positions.slice(group.start, group.end + 1), top) : null;
-      const stem = beam ? getStemData(note, positions[index], top, beam.down) : null;
-      return <Note key={`answer-${note.id}`} note={note} x={positions[index]} systemTop={top} colour={GREEN} forcedStemDown={beam ? beam.down : null} forcedStemEndY={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} />;
-    })}
-    {groups.map((group, index) => {
-      const beam = getBeamData(notes.slice(group.start, group.end + 1), positions.slice(group.start, group.end + 1), top);
-      return <line key={`answer-beam-${index}`} x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke={GREEN} strokeWidth="4" />;
-    })}
-  </g>;
+  return <g>{notes.map((note, index) => { const group = groupContaining(groups, index); const beam = group ? getBeamData(notes.slice(group.start, group.end + 1), positions.slice(group.start, group.end + 1), top) : null; const stem = beam ? getStemData(note, positions[index], top, beam.down) : null; return <Note key={`answer-${note.id}`} note={note} x={positions[index]} systemTop={top} colour={GREEN} forcedStemDown={beam ? beam.down : null} forcedStemEndY={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} />; })}{groups.map((group, index) => { const beam = getBeamData(notes.slice(group.start, group.end + 1), positions.slice(group.start, group.end + 1), top); return <line key={`answer-beam-${index}`} x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke={GREEN} strokeWidth="4" />; })}</g>;
 }
-
-function Score({ question, selectedToolId, hoverTarget, feedback, activePlaybackNoteId, helpOpen, onPointerMove, onPointerLeave, onLockPlacement }) {
+function Score({ question, selectedToolId, hoverTarget, feedback, activePlaybackNoteId, followPlayback, onPointerMove, onPointerLeave, onLockPlacement }) {
   const displayQuestion = selectedToolId && hoverTarget && !feedback ? applyPlacement(question, hoverTarget, selectedToolId) : question;
   const layouts = useMemo(() => buildLayouts(displayQuestion), [displayQuestion]);
-
-  return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="w-full h-auto select-none touch-none overflow-visible" overflow="visible" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerDown={onLockPlacement}>
-    <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
-    {[0, 1, 2, 3, 4].map((line) => <line key={line} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={SYSTEM_TOP + line * LINE_GAP} y2={SYSTEM_TOP + line * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />)}
-    <text x={CLEF_X} y={SYSTEM_TOP + 30} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text>
-    <KeySignature keySignature={displayQuestion.key} />
-    <TimeSignature timeSignature={displayQuestion.timeSignature} />
-
-    {layouts.map((layout) => {
-      const groups = getQuaverGroups(layout.bar.notes, displayQuestion.timeSignature);
-      return <g key={layout.barIndex}>
-        <CorrectAnswerOverlay question={displayQuestion} layout={layout} feedback={feedback} />
-        <rect x={layout.startX - 8} y={layout.systemTop - 46} width={48} height={34} fill="white" />
-        <text x={layout.startX + 4} y={layout.systemTop - 18} textAnchor="start" fontSize="13" fontWeight="500">{layout.barIndex + 1}</text>
-        {layout.bar.notes.map((note, index) => {
-          const previousAccidental = layout.bar.notes.slice(0, index).some((prev) => prev.letter === note.letter && prev.writtenAccidental === note.writtenAccidental && note.writtenAccidental !== null && note.writtenAccidental !== undefined);
-          const group = groupContaining(groups, index);
-          const beam = group ? getBeamData(layout.bar.notes.slice(group.start, group.end + 1), layout.positions.slice(group.start, group.end + 1), layout.systemTop) : null;
-          const stem = beam ? getStemData(note, layout.positions[index], layout.systemTop, beam.down) : null;
-          let colour = helpOpen && activePlaybackNoteId === note.id ? BLUE : "currentColor";
-          if (feedback && note.editable) colour = getDisplayRhythm(note) === note.answerRhythm ? GREEN : getDisplayRhythm(note) !== "notehead" ? RED : "currentColor";
-          return <Note key={note.id} note={note} x={layout.positions[index]} systemTop={layout.systemTop} colour={colour} forcedStemDown={beam ? beam.down : null} forcedStemEndY={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} showAccidental={!previousAccidental} />;
-        })}
-        {groups.map((group, index) => {
-          const groupNotes = layout.bar.notes.slice(group.start, group.end + 1);
-          const beam = getBeamData(groupNotes, layout.positions.slice(group.start, group.end + 1), layout.systemTop);
-          let colour = "currentColor";
-          if (feedback && layout.barIndex === displayQuestion.target?.barIndex && groupNotes.every((note) => note.editable)) colour = groupNotes.every((note) => getDisplayRhythm(note) === note.answerRhythm) ? GREEN : RED;
-          return <line key={index} x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke={colour} strokeWidth="4" />;
-        })}
-        {layout.barIndex === BAR_COUNT - 1 ? <g><line x1={layout.endX - 5} x2={layout.endX - 5} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" /><line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="4" /></g> : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />}
-      </g>;
-    })}
-  </svg>;
+  return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="h-auto w-full select-none overflow-visible touch-none" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerDown={onLockPlacement}><rect width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={SYSTEM_TOP + line * LINE_GAP} y2={SYSTEM_TOP + line * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />)}<text x={CLEF_X} y={SYSTEM_TOP + 30} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text><KeySignature keySignature={displayQuestion.key} /><TimeSignature timeSignature={displayQuestion.timeSignature} />{layouts.map((layout) => { const groups = getQuaverGroups(layout.bar.notes, displayQuestion.timeSignature); return <g key={layout.barIndex}><CorrectAnswerOverlay question={displayQuestion} layout={layout} feedback={feedback} />
+        {layout.barIndex === displayQuestion.target?.barIndex && <rect x={layout.startX + 6} y={layout.systemTop - 54} width={layout.endX - layout.startX - 12} height="118" rx="10" fill="none" stroke="currentColor" strokeWidth="3" opacity="0.16" />}<text x={layout.startX + 4} y={layout.systemTop - 18} textAnchor="start" fontSize="13" fontWeight="500">{layout.barIndex + 1}</text>{layout.bar.notes.map((note, index) => { const previousAccidental = layout.bar.notes.slice(0, index).some((prev) => prev.letter === note.letter && prev.writtenAccidental === note.writtenAccidental && note.writtenAccidental !== null && note.writtenAccidental !== undefined); const group = groupContaining(groups, index); const beam = group ? getBeamData(layout.bar.notes.slice(group.start, group.end + 1), layout.positions.slice(group.start, group.end + 1), layout.systemTop) : null; const stem = beam ? getStemData(note, layout.positions[index], layout.systemTop, beam.down) : null; let colour = followPlayback && activePlaybackNoteId === note.id ? BLUE : "currentColor"; if (feedback && note.editable) colour = getDisplayRhythm(note) === note.answerRhythm ? GREEN : getDisplayRhythm(note) !== "notehead" ? RED : "currentColor"; return <Note key={note.id} note={note} x={layout.positions[index]} systemTop={layout.systemTop} colour={colour} forcedStemDown={beam ? beam.down : null} forcedStemEndY={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} showAccidental={!previousAccidental} />; })}{groups.map((group, index) => { const groupNotes = layout.bar.notes.slice(group.start, group.end + 1); const beam = getBeamData(groupNotes, layout.positions.slice(group.start, group.end + 1), layout.systemTop); let colour = "currentColor"; if (feedback && layout.barIndex === displayQuestion.target?.barIndex && groupNotes.every((note) => note.editable)) colour = groupNotes.every((note) => getDisplayRhythm(note) === note.answerRhythm) ? GREEN : RED; return <line key={`beam-${layout.barIndex}-${index}`} x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke={colour} strokeWidth="4" />; })}{layout.barIndex === BAR_COUNT - 1 ? <g><line x1={layout.endX - 5} x2={layout.endX - 5} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" /><line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="4" /></g> : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />}</g>; })}</svg>;
 }
 
-function RhythmSymbol({ rhythmId }) {
-  const note = { id: rhythmId, rhythm: rhythmId, displayRhythm: rhythmId, letter: "A", octave: 4, step: 3, midi: 69, writtenAccidental: null };
-  return <svg viewBox="0 0 90 70" className="h-[56px] w-[74px] overflow-visible"><Note note={note} x={50} systemTop={19} colour="currentColor" /></svg>;
-}
+function TailGlyph({ className = "h-10 w-10", ghost = false }) { return <svg viewBox="0 0 128 128" className={`${className} overflow-visible`}><ellipse cx="48" cy="96" rx="16" ry="11" transform="rotate(-18 48 96)" fill="currentColor" opacity={ghost ? 0.12 : 1} /><line x1="62" x2="62" y1="92" y2="24" stroke="currentColor" strokeWidth="4" opacity={ghost ? 0.12 : 1} /><path d="M62 24 C84 34, 88 52, 70 68" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" /></svg>; }
+function DotGlyph({ className = "h-10 w-10", ghost = false }) { return <svg viewBox="0 0 128 128" className={`${className} overflow-visible`}><ellipse cx="48" cy="96" rx="16" ry="11" transform="rotate(-18 48 96)" fill="currentColor" opacity={ghost ? 0.12 : 1} /><line x1="62" x2="62" y1="92" y2="24" stroke="currentColor" strokeWidth="4" opacity={ghost ? 0.12 : 1} /><circle cx="78" cy="96" r="6" fill="currentColor" /></svg>; }
+function CrotchetGlyph({ className = "h-10 w-10" }) { return <svg viewBox="0 0 128 128" className={`${className} overflow-visible`}><ellipse cx="48" cy="96" rx="16" ry="11" transform="rotate(-18 48 96)" fill="currentColor" /><line x1="62" x2="62" y1="92" y2="24" stroke="currentColor" strokeWidth="4" /></svg>; }
+function ToolGlyph({ id, className }) { if (id === "dot") return <DotGlyph className={className} ghost />; if (id === "tail") return <TailGlyph className={className} ghost />; if (id === "quaver") return <TailGlyph className={className} />; return <CrotchetGlyph className={className} />; }
+function RhythmSymbol({ rhythmId }) { const note = { id: rhythmId, rhythm: rhythmId, displayRhythm: rhythmId, letter: "A", octave: 4, step: 3, midi: 69, writtenAccidental: null }; return <svg viewBox="0 0 90 70" className="h-[56px] w-[74px] overflow-visible"><Note note={note} x={50} systemTop={19} colour="currentColor" /></svg>; }
 
 function HelpPanel() {
-  return <section className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-    <div className="flex flex-nowrap gap-3 overflow-x-auto">
-      {HELP_RHYTHMS.map((rhythmId) => {
-        const info = rhythmInfo(rhythmId);
-        return <div key={rhythmId} className="flex min-h-[82px] min-w-[155px] items-center gap-2 rounded-xl border border-stone-200 bg-white px-2 py-1"><RhythmSymbol rhythmId={rhythmId} /><div className="-ml-2"><div className="text-xs font-bold">{info.name}</div><div className="text-[11px] text-stone-700">{`${info.beats} beats`}</div></div></div>;
-      })}
+  const [page, setPage] = useState(0);
+  const pages = [
+    { title: "Instructions", body: "Listen first. Choose the rhythm symbol below, hover over the target note to preview it, then click or tap to place it." },
+    { title: "Correct the Rhythm", body: "Use dot and tail tools to turn two crotchets into a dotted crotchet and quaver pattern." },
+    { title: "Insert the Rhythm", body: "Use crotchet and quaver tools to complete the missing rhythm values on the noteheads." },
+  ];
+  const current = pages[page];
+  return <section><h2 className="mb-3 text-center text-base font-semibold">Help</h2><div className="min-h-[120px] rounded-xl border border-stone-200 bg-stone-50 p-4"><h3 className="text-sm font-bold text-stone-800">{current.title}</h3><p className="mt-2 text-sm leading-relaxed text-stone-700">{current.body}</p></div><div className="mt-3 flex items-center justify-between"><button type="button" onClick={() => setPage((v) => Math.max(0, v - 1))} disabled={page === 0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 hover-bg-stone-100 disabled:opacity-35">←</button><div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div><button type="button" onClick={() => setPage((v) => Math.min(pages.length - 1, v + 1))} disabled={page === pages.length - 1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 hover-bg-stone-100 disabled:opacity-35">→</button></div></section>;
+}
+
+function streakMedal(streak) { if (streak >= 10) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" }; if (streak >= 6) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" }; if (streak >= 4) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" }; if (streak >= 2) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" }; return null; }
+function StatCard({ label, value, footer, progress = null, medal = null, variant = "default", confettiKey = 0 }) {
+  const safeProgress = progress == null ? null : clamp(progress, 0, 100);
+  const fillHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
+  const fillColour = safeProgress == null ? "transparent" : safeProgress < 50 ? "rgba(220, 38, 38, 0.38)" : safeProgress < 70 ? "rgba(255, 120, 0, 0.42)" : "rgba(22, 163, 74, 0.38)";
+  const isStreak = variant === "streak";
+  return <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>{isStreak && confettiKey > 0 && <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">{Array.from({ length: 18 }).map((_, index) => <span key={index} className="absolute block h-1.5 w-1 rounded-sm" style={{ left: `${8 + ((index * 19) % 84)}%`, top: "-8px", backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5], animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`, animationDelay: `${(index % 6) * 0.035}s` }} />)}</div>}{safeProgress !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fillHeight}%`, background: fillColour }} />}<div className="relative z-10 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>{footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}</div>{isStreak && <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal?.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>{medal?.emoji ?? "🥉"}</div>}</div>;
+}
+function Feedback({ feedback }) { if (!feedback) return null; return <div className="relative flex w-full items-center justify-center text-center"><div className={`flex w-[260px] flex-col items-center justify-center text-center whitespace-nowrap text-xl font-bold ${feedback.correct ? "text-green-600" : "text-red-600"}`} style={{ animation: feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}><span className="translate-y-[4px]">{feedback.correct ? "Correct" : "Incorrect"}</span>{!feedback.correct && <span className="mt-2 inline-flex -translate-x-[5px] items-center gap-2 text-sm font-semibold text-black"><TapIcon /><span>Click or tap anywhere to continue</span></span>}</div></div>; }
+function TapIcon() { return <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]"><path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" /></svg>; }
+function MenuIcon({ type }) { const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "currentColor", className: "h-[22.5px] w-[22.5px] shrink-0 text-stone-700", "aria-hidden": "true" }; if (type === "difficulty") return <svg {...common}><path d="M4 18h16v2H4v-2Z" /><path d="M5 14h3v3H5v-3Z" /><path d="M10.5 10h3v7h-3v-7Z" /><path d="M16 5h3v12h-3V5Z" /></svg>; if (type === "tempo") return <span className="flex h-[22.5px] w-[22.5px] shrink-0 items-center justify-center text-base leading-none text-stone-700">♫</span>; if (type === "metronome") return <svg {...common}><path d="M8.5 3.5h7L20 20.5H4L8.5 3.5Z" /><path d="M12.7 5.8 16 15.2l-1.7.6-3.3-9.4 1.7-.6Z" fill="white" opacity=".9" /><circle cx="12" cy="16.4" r="1.25" fill="white" opacity=".9" /></svg>; if (type === "follow") return <svg {...common}><path d="M12 5.2c5.2 0 8.7 5.05 9.55 6.48a.63.63 0 0 1 0 .64C20.7 13.75 17.2 18.8 12 18.8S3.3 13.75 2.45 12.32a.63.63 0 0 1 0-.64C3.3 10.25 6.8 5.2 12 5.2Z" /><circle cx="12" cy="12" r="3.15" fill="white" opacity=".95" /><circle cx="12" cy="12" r="1.55" /></svg>; return null; }
+function AppIcon() {
+  return (
+    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
+      <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" className="overflow-visible">
+        <g>
+          {[21, 25, 29, 33, 37].map((y) => (
+            <line key={y} x1="-4" y1={y} x2="62" y2={y} stroke="#000" strokeWidth="1.2" />
+          ))}
+          <ellipse cx="18" cy="34" rx="3" ry="2.2" transform="rotate(-18 18 34)" fill="#000" />
+          <line x1="20.6" y1="33" x2="20.6" y2="22" stroke="#000" strokeWidth="1.2" />
+          <ellipse cx="31" cy="29" rx="3" ry="2.2" transform="rotate(-18 31 29)" fill="#000" />
+          <line x1="33.6" y1="28" x2="33.6" y2="18" stroke="#000" strokeWidth="1.2" />
+          <ellipse cx="42" cy="26" rx="3" ry="2.2" transform="rotate(-18 42 26)" fill="#000" />
+          <line x1="44.6" y1="25" x2="44.6" y2="15" stroke="#000" strokeWidth="1.2" />
+          <path d="M33.6 18 L44.6 15" stroke="#000" strokeWidth="2.2" strokeLinecap="round" />
+        </g>
+      </svg>
     </div>
-    <p className="mt-3 text-sm text-stone-700">When the music plays, notes are highlighted in real time if this help panel is open.</p>
-  </section>;
+  );
 }
 
-function StatCard({ label, value, footer = null }) {
-  return <div className="rounded-xl border bg-stone-50 p-3 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className="text-xl font-semibold leading-tight">{value}</div>{footer && <div className="mt-1 text-[10px] leading-none text-stone-500">{footer}</div>}</div>;
-}
+function ToolButton({ tool, selectedToolId, feedback, question, onSelect }) {
+  const state = toolFeedbackState(question, tool.id, feedback);
+  const buttonClass = selectedToolId === tool.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100";
 
-function Feedback({ feedback }) {
-  if (!feedback) return null;
-  return <div className={`inline-flex items-center gap-2 font-semibold ${feedback.correct ? "text-green-600" : "text-red-600"}`}><span>{feedback.correct ? TICK : CROSS}</span><span>{feedback.correct ? "Correct" : "Incorrect"}</span></div>;
-}
+  const labels = {
+    dot: "Dot",
+    tail: "Tail",
+    crotchet: "Crotchet",
+    quaver: "Quaver",
+  };
 
+  const active = selectedToolId === tool.id;
+
+  return (
+    <div className="relative flex flex-col items-center">
+      <div className={`pointer-events-none absolute top-[92px] rounded-lg bg-stone-950 px-3 py-1 text-xs font-bold text-white transition-all ${active ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+        {labels[tool.id]}
+      </div>
+
+      <button
+        type="button"
+        disabled={Boolean(feedback)}
+        onClick={() => onSelect(tool.id)}
+        className={`group flex min-h-[78px] w-[110px] items-center justify-center rounded-xl border px-2 py-2 text-sm font-semibold ${buttonClass}`}
+      >
+        <ToolGlyph id={tool.id} className="h-16 w-16" />
+      </button>
+    </div>
+  );
+}
 function toolFeedbackState(question, toolId, feedback) {
   if (!feedback) return null;
   const rhythm = toolToRhythm(toolId);
@@ -773,107 +533,83 @@ function toolFeedbackState(question, toolId, feedback) {
   if (usedIncorrectly || requiredButMissing) return "incorrect";
   return null;
 }
+function QuestionTypeGlyph({ type, className = "h-[22.5px] w-[22.5px]" }) {
+  return (
+    <span className="flex h-[22.5px] w-[22.5px] shrink-0 items-center justify-center text-stone-700">
+      {type === "correct" ? <DotGlyph className={className} /> : <TailGlyph className={className} />}
+    </span>
+  );
+}
+
+function QuestionTypeRow({ type, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mb-2.5 flex h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px] hover-bg-stone-100"
+    >
+      <span className="relative -left-[4px] flex items-center gap-2 text-sm font-semibold">
+        <QuestionTypeGlyph type={type.id} />
+        <span>{type.label}</span>
+      </span>
+      <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active ? "bg-green-600" : "bg-stone-400"}`}>
+        <span className={`h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : "translate-x-0"}`} />
+      </span>
+    </button>
+  );
+}
+
+function MenuRows({ enabledQuestionTypes, toggleQuestionType, tempo, setTempo, stopAudioPlayback, metronomeOn, setMetronomeOn, syncopationOn, setSyncopationOn, followPlayback, setFollowPlayback, resetScore }) {
+  const row = "mb-2.5 flex h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]";
+  return <>
+    <div className="mb-2 text-sm font-bold text-stone-700">Question Types</div>
+    <div className="mb-4">
+      {QUESTION_TYPES.map((type) => (
+        <QuestionTypeRow
+          key={type.id}
+          type={type}
+          active={enabledQuestionTypes.includes(type.id)}
+          onClick={() => toggleQuestionType(type.id)}
+        />
+      ))}
+    </div>
+    <div className="mb-2 mt-4 pl-\[10px\] text-sm font-bold text-stone-700">Playback</div>
+    <div className={row}>
+      <h3 className="flex items-center gap-2 text-sm font-bold text-stone-700"><MenuIcon type="tempo"/><span>Tempo</span></h3>
+      <div className="flex gap-2">
+        {TEMPOS.map((speed) => <button key={speed.id} type="button" onClick={() => { setTempo(speed.id); stopAudioPlayback(); }} className={`rounded-lg border px-2.5 py-[8px] text-xs font-semibold ${tempo === speed.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover-bg-stone-100"}`}>{speed.label}</button>)}
+      </div>
+    </div>
+    <ToggleRow label="Metronome" icon={<MenuIcon type="metronome" />} checked={metronomeOn} onClick={() => { setMetronomeOn((v) => !v); stopAudioPlayback(); }} />
+    
+    <ToggleRow label="Follow Playback" icon={<MenuIcon type="follow" />} checked={followPlayback} onClick={() => setFollowPlayback((v) => !v)} />
+    <button type="button" onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button>
+  </>;
+}
+
+function ToggleRow({ label, icon, checked, onClick }) { return <button type="button" onClick={onClick} className="mb-2.5 flex h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px] hover-bg-stone-100"><span className="flex items-center gap-2 text-sm font-semibold"><span className="flex h-[22.5px] w-[22.5px] shrink-0 items-center justify-center text-stone-700">{icon}</span><span>{label}</span></span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${checked ? "bg-green-600" : "bg-stone-400"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${checked ? "translate-x-5" : "translate-x-0"}`} /></span></button>; }
 
 function App() {
-  const timerRef = useRef(null);
-  const customiseRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const audioStopTimerRef = useRef(null);
-  const highlightTimersRef = useRef([]);
-  const [audioSpeed, setAudioSpeed] = useState("medium");
-  const [metronomeOn, setMetronomeOn] = useState(false);
-  const [syncopationOn, setSyncopationOn] = useState(false);
-  const [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => QUESTION_TYPES.map((type) => type.id));
-  const [question, setQuestion] = useState(() => makeQuestion({ syncopationOn: false }));
-  const [selectedToolId, setSelectedToolId] = useState(null);
-  const [hoverTarget, setHoverTarget] = useState(null);
-  const [feedback, setFeedback] = useState(null);
-  const [prompt, setPrompt] = useState("");
-  const [correct, setCorrect] = useState(0);
-  const [attempted, setAttempted] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-  const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [activePlaybackNoteId, setActivePlaybackNoteId] = useState(null);
-
+  const timerRef = useRef(null), customiseRef = useRef(null), helpRef = useRef(null), audioContextRef = useRef(null), audioStopTimerRef = useRef(null), highlightTimersRef = useRef([]), playbackFrameRef = useRef(null), playbackBarRef = useRef(null);
+  const [tempo, setTempo] = useState("medium"), [metronomeOn, setMetronomeOn] = useState(false), [syncopationOn, setSyncopationOn] = useState(false), [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => QUESTION_TYPES.map((type) => type.id)), [question, setQuestion] = useState(() => makeQuestion({ syncopationOn: false })), [selectedToolId, setSelectedToolId] = useState(null), [hoverTarget, setHoverTarget] = useState(null), [feedback, setFeedback] = useState(null), [prompt, setPrompt] = useState(""), [correct, setCorrect] = useState(0), [attempted, setAttempted] = useState(0), [streak, setStreak] = useState(0), [bestStreak, setBestStreak] = useState(0), [confettiKey, setConfettiKey] = useState(0), [customiseOpen, setCustomiseOpen] = useState(false), [helpOpen, setHelpOpen] = useState(false), [isAudioPlaying, setIsAudioPlaying] = useState(false), [activePlaybackNoteId, setActivePlaybackNoteId] = useState(null), [playbackElapsed, setPlaybackElapsed] = useState(0), [playbackTotal, setPlaybackTotal] = useState(0), [followPlayback, setFollowPlayback] = useState(false), [questionVisible, setQuestionVisible] = useState(true);
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const tools = question.questionType === "insert" ? [{ id: "crotchet" }, { id: "quaver" }] : [{ id: "dot" }, { id: "tail" }];
+  const selectedTempo = TEMPOS.find((item) => item.id === tempo) ?? TEMPOS[1];
+  const displayedTotal = playbackTotal || question.bars.reduce((sum, bar) => sum + bar.notes.reduce((inner, note) => inner + rhythmInfo(getAudioRhythm(note)).beats * (60 / selectedTempo.bpm), 0), 0);
+  const progressPercent = displayedTotal > 0 ? clamp((playbackElapsed / displayedTotal) * 100, 0, 100) : 0;
 
-  useEffect(() => {
-    const close = (event) => {
-      if (!customiseOpen) return;
-      if (customiseRef.current?.contains(event.target)) return;
-      setCustomiseOpen(false);
-    };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [customiseOpen]);
+  useEffect(() => { const close = (event) => { if (customiseOpen && !customiseRef.current?.contains(event.target)) setCustomiseOpen(false); if (helpOpen && !helpRef.current?.contains(event.target)) setHelpOpen(false); }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, [customiseOpen, helpOpen]);
+  useEffect(() => { injectStyles(); return () => stopAudioPlayback(); }, []);
+  useEffect(() => { newQuestion(enabledQuestionTypes, syncopationOn); }, [syncopationOn]);
 
-  useEffect(() => () => stopAudioPlayback(), []);
-
-  function stopAudioPlayback() {
-    if (audioStopTimerRef.current) window.clearTimeout(audioStopTimerRef.current);
-    highlightTimersRef.current.forEach((timer) => window.clearTimeout(timer));
-    highlightTimersRef.current = [];
-    if (audioContextRef.current) {
-      try { if (audioContextRef.current.state !== "closed") audioContextRef.current.close(); } catch {}
-    }
-    audioContextRef.current = null;
-    setIsAudioPlaying(false);
-    setActivePlaybackNoteId(null);
-  }
-
-  function newQuestion(nextTypes = enabledQuestionTypes, nextSyncopation = syncopationOn) {
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    stopAudioPlayback();
-    setQuestion(makeQuestion({ enabledQuestionTypes: nextTypes, syncopationOn: nextSyncopation }));
-    setSelectedToolId(null);
-    setHoverTarget(null);
-    setFeedback(null);
-    setPrompt("");
-  }
-
-  function resetScore() {
-    setCorrect(0);
-    setAttempted(0);
-    setStreak(0);
-    setBestStreak(0);
-    newQuestion();
-  }
-
-  function applyResult(isCorrect) {
-    const nextStreak = isCorrect ? streak + 1 : 0;
-    setAttempted((value) => value + 1);
-    setCorrect((value) => value + (isCorrect ? 1 : 0));
-    setStreak(nextStreak);
-    setBestStreak((value) => Math.max(value, nextStreak));
-    setFeedback({ correct: isCorrect });
-    timerRef.current = window.setTimeout(() => newQuestion(), isCorrect ? 2000 : 4000);
-  }
-
-  function toggleQuestionType(id) {
-    setEnabledQuestionTypes((current) => {
-      if (current.includes(id) && current.length === 1) return current;
-      const updated = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-      window.setTimeout(() => newQuestion(updated, syncopationOn), 0);
-      return updated;
-    });
-  }
-
-  function handlePointerMove(event) {
-    if (!selectedToolId || feedback) return setHoverTarget(null);
-    setHoverTarget(findHoverTarget(pointerToSvg(event), question));
-  }
-
-  function handleLockPlacement(event) {
-    if (!selectedToolId || feedback || !hoverTarget) return;
-    event.preventDefault();
-    setQuestion((current) => applyPlacement(current, hoverTarget, selectedToolId));
-    setPrompt("");
-  }
-
+  function injectStyles() { if (document.getElementById("correct-rhythm-golden-style")) return; const style = document.createElement("style"); style.id = "correct-rhythm-golden-style"; style.innerHTML = `button { -webkit-tap-highlight-color: transparent; user-select: none; transition: transform .08s ease, filter .08s ease, background-color .12s ease, box-shadow .12s ease; } button:active { transform: scale(.96); filter: brightness(.92); } @media (hover:hover) and (pointer:fine) { .hover-bg-stone-100:hover { background-color: rgb(245 245 244); } .hover-bg-stone-800:hover { background-color: rgb(41 37 36); } .hover-bg-green-700:hover { background-color: rgb(21 128 61); } } @keyframes medalShine { 0%,100% { transform: scale(1) rotate(-4deg); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.16) rotate(4deg); filter: drop-shadow(0 0 10px rgba(250,204,21,.9)); } } @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } } @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } } @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }`; document.head.appendChild(style); }
+  function formatPlaybackTime(seconds) { const safe = Math.max(0, Math.floor(seconds || 0)); return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`; }
+  function stopAudioPlayback() { if (audioStopTimerRef.current) window.clearTimeout(audioStopTimerRef.current); if (playbackFrameRef.current) window.cancelAnimationFrame(playbackFrameRef.current); highlightTimersRef.current.forEach((timer) => window.clearTimeout(timer)); highlightTimersRef.current = []; if (audioContextRef.current) { try { if (audioContextRef.current.state !== "closed") audioContextRef.current.close(); } catch {} } audioContextRef.current = null; setIsAudioPlaying(false); setActivePlaybackNoteId(null); setPlaybackElapsed(0); setPlaybackTotal(0); }
+  function newQuestion(nextTypes = enabledQuestionTypes, nextSyncopation = syncopationOn) { if (timerRef.current) window.clearTimeout(timerRef.current); stopAudioPlayback(); setQuestionVisible(false); window.setTimeout(() => { setQuestion(makeQuestion({ enabledQuestionTypes: nextTypes, syncopationOn: nextSyncopation })); setSelectedToolId(null); setHoverTarget(null); setFeedback(null); setPrompt(""); setQuestionVisible(true); }, 300); }
+  function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); setConfettiKey(0); newQuestion(); }
+  function toggleQuestionType(id) { setEnabledQuestionTypes((current) => { if (current.includes(id) && current.length === 1) return current; const updated = current.includes(id) ? current.filter((item) => item !== id) : [...current, id]; window.setTimeout(() => newQuestion(updated, syncopationOn), 0); return updated; }); }
+  function handlePointerMove(event) { if (!selectedToolId || feedback) return setHoverTarget(null); setHoverTarget(findHoverTarget(pointerToSvg(event), question)); }
+  function handleLockPlacement(event) { if (!selectedToolId || feedback || !hoverTarget) return; event.preventDefault(); setQuestion((current) => applyPlacement(current, hoverTarget, selectedToolId)); setPrompt(""); }
   function clearPlacements() {
     if (feedback) return;
     setQuestion((current) => {
@@ -882,177 +618,28 @@ function App() {
         if (!note.editable) return;
         note.displayRhythm = current.questionType === "insert" ? "notehead" : "crotchet";
       });
+
+      next.bars.forEach((bar) => {
+        bar.notes.forEach((note) => {
+          if (current.questionType === "correct") {
+            note.displayRhythm = note.rhythm;
+          }
+        });
+      });
+
       return next;
     });
+    setSelectedToolId(null);
     setHoverTarget(null);
     setPrompt("");
   }
+function confirmAnswer() { if (feedback) return; stopAudioPlayback(); const isCorrect = answerState(question).correct; const nextStreak = isCorrect ? streak + 1 : 0; setAttempted((value) => value + 1); setCorrect((value) => value + (isCorrect ? 1 : 0)); setStreak(nextStreak); setBestStreak((value) => Math.max(value, nextStreak)); setFeedback({ correct: isCorrect }); playFeedbackSound(isCorrect); if (isCorrect && [2, 4, 6, 10].includes(nextStreak)) { const medal = streakMedal(nextStreak); setConfettiKey((value) => value + 1); window.setTimeout(() => playFeedbackSound(true, true, medal?.sound), 180); } if (isCorrect) timerRef.current = window.setTimeout(() => newQuestion(), 2300); }
+  function playOscillator(audioContext, { frequency, start, duration, volume = 0.16, type = "triangle" }) { if (!Number.isFinite(frequency) || !Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) return; const oscillator = audioContext.createOscillator(); const gain = audioContext.createGain(); oscillator.type = type; oscillator.frequency.setValueAtTime(frequency, start); gain.gain.setValueAtTime(0.0001, start); gain.gain.exponentialRampToValueAtTime(volume, start + 0.04); gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume * 0.5), start + Math.max(0.05, duration * 0.85)); gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + 0.04); oscillator.connect(gain); gain.connect(audioContext.destination); oscillator.start(start); oscillator.stop(start + duration + 0.08); }
+  function playFeedbackSound(correctSound, celebration = false, medal = null) { const AudioContextClass = window.AudioContext || window.webkitAudioContext; if (!AudioContextClass) return; const context = new AudioContextClass(); const master = context.createGain(); master.gain.value = 0.16; master.connect(context.destination); function tone(freq,start,duration,type="triangle",volume=0.12){const osc=context.createOscillator(); const gain=context.createGain(); osc.type=type; osc.frequency.setValueAtTime(freq,start); gain.gain.setValueAtTime(0.0001,start); gain.gain.exponentialRampToValueAtTime(volume,start+0.02); gain.gain.exponentialRampToValueAtTime(0.0001,start+duration); osc.connect(gain); gain.connect(master); osc.start(start); osc.stop(start+duration+0.05);} function trumpet(freq,start,duration,volume=0.1){tone(freq,start,duration,"sawtooth",volume); tone(freq*1.002,start,duration*0.96,"square",volume*0.32); tone(freq*2,start,duration*0.75,"triangle",volume*0.16);} function medalPhrase(root,chord,start,beats=4){const beat=.6, triplet=.13, finalDuration=beats===2?.72:1.95; chord.forEach((freq)=>trumpet(freq,start,beats*beat,.045)); trumpet(root,start,triplet,.11); trumpet(root,start+triplet,triplet,.11); trumpet(root,start+triplet*2,triplet,.11); trumpet(root,start+.42,finalDuration,.13);} const now=context.currentTime+.01; if (!correctSound) { tone(196,now,.32,"sawtooth",.06); tone(185,now+.04,.38,"triangle",.05); tone(174,now+.08,.45,"sine",.04); } else if (celebration) { if (medal === "bronze") medalPhrase(659.25,[329.63,415.3,493.88],now); else if (medal === "silver") medalPhrase(739.99,[369.99,466.16,554.37],now); else if (medal === "gold") medalPhrase(830.61,[415.3,523.25,622.25],now); else if (medal === "platinum") { medalPhrase(739.99,[369.99,466.16,554.37],now,2); medalPhrase(830.61,[415.3,523.25,622.25],now+.82,2); medalPhrase(932.33,[466.16,587.33,698.46],now+1.64,4); } } else { randomItem([[523.25,659.25,783.99],[587.33,739.99,880],[659.25,830.61,987.77]]).forEach((freq,index)=>{tone(freq,now+index*.045,.42,"triangle",index===2?.085:.07); tone(freq*2,now+index*.045,.24,"sine",.025);}); } window.setTimeout(()=>{try{context.close();}catch{}}, medal === "platinum" ? 9000 : celebration ? 3500 : 900); }
+  function playMetronomeHit(audioContext, start, accented = false) { const bufferSize = Math.floor(audioContext.sampleRate * 0.03); const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate); const data = buffer.getChannelData(0); for (let index = 0; index < bufferSize; index += 1) data[index] = (Math.random() * 2 - 1) * 0.42 * (1 - index / bufferSize); const noise = audioContext.createBufferSource(); const filter = audioContext.createBiquadFilter(); const gain = audioContext.createGain(); noise.buffer = buffer; filter.type = "highpass"; filter.frequency.value = accented ? 1800 : 1200; gain.gain.setValueAtTime(0.0001, start); gain.gain.exponentialRampToValueAtTime(accented ? 0.07 : 0.05, start + 0.002); gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.03); noise.connect(filter); filter.connect(gain); gain.connect(audioContext.destination); noise.start(start); noise.stop(start + 0.03); }
+  function playQuestionAudio() { if (isAudioPlaying) { stopAudioPlayback(); return; } const AudioContextClass = window.AudioContext || window.webkitAudioContext; if (!AudioContextClass) return setPrompt("Audio playback is not supported in this browser."); stopAudioPlayback(); const audioContext = new AudioContextClass(); audioContextRef.current = audioContext; setIsAudioPlaying(true); setPrompt(""); const beatSeconds = 60 / selectedTempo.bpm; const chords = CHORDS[question.key.id] ?? CHORDS.C; let currentTime = audioContext.currentTime + 0.08; const startTime = currentTime; question.performedOrder.forEach((barIndex) => { const bar = question.bars[barIndex]; const barStart = currentTime; const barDuration = bar.notes.reduce((sum, note) => sum + rhythmInfo(getAudioRhythm(note)).beats * beatSeconds, 0); const chord = chords[barIndex % chords.length]; if (metronomeOn) { const unit = question.timeSignature.id === "6/8" ? 1.5 : 1; for (let beat = 0; beat < barDuration / beatSeconds; beat += unit) playMetronomeHit(audioContext, barStart + beat * beatSeconds, beat === 0); } chord.forEach((tone, index) => playOscillator(audioContext, { frequency: midiToFrequency(chordToneMidi(tone, question.key, 4 + index)), start: barStart, duration: Math.max(0.08, barDuration - 0.12), volume: 0.035, type: "sine" })); bar.notes.forEach((note, index) => { const duration = Math.max(0.08, rhythmInfo(getAudioRhythm(note)).beats * beatSeconds); const startMs = Math.max(0, (currentTime - audioContext.currentTime) * 1000); highlightTimersRef.current.push(window.setTimeout(() => setActivePlaybackNoteId(note.id), startMs)); highlightTimersRef.current.push(window.setTimeout(() => setActivePlaybackNoteId(null), startMs + duration * 1000)); playOscillator(audioContext, { frequency: midiToFrequency(pitchForNote(question, barIndex, index)), start: currentTime, duration, volume: 0.15, type: "triangle" }); currentTime += duration; }); }); const total = currentTime - startTime; setPlaybackTotal(total); const tick = () => { if (!audioContextRef.current) return; const elapsed = Math.min(total, Math.max(0, audioContext.currentTime - startTime)); setPlaybackElapsed(elapsed); if (elapsed < total) playbackFrameRef.current = window.requestAnimationFrame(tick); }; playbackFrameRef.current = window.requestAnimationFrame(tick); audioStopTimerRef.current = window.setTimeout(() => { setIsAudioPlaying(false); setActivePlaybackNoteId(null); setPlaybackElapsed(0); setPlaybackTotal(0); audioContextRef.current = null; }, Math.max(0, total * 1000) + 150); }
 
-  function confirmAnswer() {
-    if (feedback) return;
-    stopAudioPlayback();
-    applyResult(answerState(question).correct);
-  }
-
-  function playOscillator(audioContext, { frequency, start, duration, volume = 0.16, type = "triangle" }) {
-    if (!Number.isFinite(frequency) || !Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) return;
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(frequency, start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.04);
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume * 0.5), start + Math.max(0.05, duration * 0.85));
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + 0.04);
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    oscillator.start(start);
-    oscillator.stop(start + duration + 0.08);
-  }
-
-  function playMetronomeHit(audioContext, start, accented = false) {
-    const bufferSize = Math.floor(audioContext.sampleRate * 0.03);
-    const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-    const data = buffer.getChannelData(0);
-
-    for (let index = 0; index < bufferSize; index += 1) {
-      const fade = 1 - index / bufferSize;
-      data[index] = (Math.random() * 2 - 1) * 0.42 * fade;
-    }
-
-    const noise = audioContext.createBufferSource();
-    noise.buffer = buffer;
-
-    const filter = audioContext.createBiquadFilter();
-    filter.type = "highpass";
-    filter.frequency.value = accented ? 1800 : 1200;
-
-    const gain = audioContext.createGain();
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(accented ? 0.07 : 0.05, start + 0.002);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.03);
-
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(audioContext.destination);
-    noise.start(start);
-    noise.stop(start + 0.03);
-  }
-
-  function playQuestionAudio() {
-    if (isAudioPlaying) return;
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return setPrompt("Audio playback is not supported in this browser.");
-    stopAudioPlayback();
-    const audioContext = new AudioContextClass();
-    audioContextRef.current = audioContext;
-    setIsAudioPlaying(true);
-    setPrompt("");
-
-    const speed = AUDIO_SPEEDS.find((item) => item.id === audioSpeed) ?? AUDIO_SPEEDS[1];
-    const beatSeconds = 60 / speed.bpm;
-    const chords = CHORDS[question.key.id] ?? CHORDS.C;
-    let currentTime = audioContext.currentTime + 0.08;
-
-    question.performedOrder.forEach((barIndex) => {
-      const bar = question.bars[barIndex];
-      const barStart = currentTime;
-      const barDuration = bar.notes.reduce((sum, note) => sum + rhythmInfo(getAudioRhythm(note)).beats * beatSeconds, 0);
-      const chordReleaseGap = question.timeSignature.id === "6/8" ? 0.16 : 0.12;
-      const chordDuration = Math.max(0.08, barDuration - chordReleaseGap);
-      const chord = chords[barIndex % chords.length];
-
-      if (metronomeOn) {
-        const unit = question.timeSignature.id === "6/8" ? 1.5 : 1;
-        for (let beat = 0; beat < barDuration / beatSeconds; beat += unit) {
-          playMetronomeHit(audioContext, barStart + beat * beatSeconds, beat === 0);
-        }
-      }
-
-      chord.forEach((tone, index) => playOscillator(audioContext, { frequency: midiToFrequency(chordToneMidi(tone, question.key, 4 + index)), start: barStart, duration: chordDuration, volume: 0.035, type: "sine" }));
-
-      bar.notes.forEach((note, index) => {
-        const duration = Math.max(0.08, rhythmInfo(getAudioRhythm(note)).beats * beatSeconds);
-        const startMs = Math.max(0, (currentTime - audioContext.currentTime) * 1000);
-        highlightTimersRef.current.push(window.setTimeout(() => setActivePlaybackNoteId(note.id), startMs));
-        highlightTimersRef.current.push(window.setTimeout(() => setActivePlaybackNoteId(null), startMs + duration * 1000));
-        playOscillator(audioContext, { frequency: midiToFrequency(pitchForNote(question, barIndex, index)), start: currentTime, duration, volume: 0.16, type: "triangle" });
-        currentTime += duration;
-      });
-    });
-
-    audioStopTimerRef.current = window.setTimeout(() => {
-      setIsAudioPlaying(false);
-      setActivePlaybackNoteId(null);
-      audioContextRef.current = null;
-    }, Math.max(0, (currentTime - audioContext.currentTime) * 1000) + 150);
-  }
-
-  return <div className="min-h-screen bg-stone-50 p-4 text-stone-950 md:p-8">
-    <div className="mx-auto max-w-6xl">
-      <header className="mb-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Correct the Rhythm</h1><p className="mt-2 text-stone-700">Listen to the music and correct the rhythm so that it matches what you hear.</p></div>
-          <div className="grid min-w-[280px] grid-cols-3 gap-2"><StatCard label="Score" value={`${correct}/${attempted}`} /><StatCard label="Accuracy" value={`${accuracy}%`} /><StatCard label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} /></div>
-        </div>
-      </header>
-
-      <main className="overflow-visible rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="relative" ref={customiseRef}>
-            <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-100">⚙️ Customise</button>
-            {customiseOpen && <section className="absolute left-0 z-20 mt-2 w-[430px] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
-              <h2 className="mb-3 text-base font-semibold">Customise</h2>
-              <h3 className="mb-2 text-sm font-bold text-stone-700">Question types</h3>
-              <div className="mb-4 space-y-2">{QUESTION_TYPES.map((type) => <button key={type.id} type="button" onClick={() => toggleQuestionType(type.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 hover:bg-stone-100"><span className="text-sm font-semibold">{type.label}</span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${enabledQuestionTypes.includes(type.id) ? "bg-green-600" : "bg-stone-300"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${enabledQuestionTypes.includes(type.id) ? "translate-x-5" : "translate-x-0"}`} /></span></button>)}</div>
-              <h3 className="mb-2 text-sm font-bold text-stone-700">Audio speed</h3>
-              <div className="mb-4 grid grid-cols-3 gap-2">{AUDIO_SPEEDS.map((speed) => <button key={speed.id} type="button" onClick={() => { setAudioSpeed(speed.id); stopAudioPlayback(); }} className={`rounded-xl border px-3 py-3 text-sm font-bold ${audioSpeed === speed.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>{speed.label}</button>)}</div>
-              <button type="button" onClick={() => { setMetronomeOn((value) => !value); stopAudioPlayback(); }} className="mb-4 flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 hover:bg-stone-100"><span className="text-sm font-semibold">Metronome</span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${metronomeOn ? "bg-green-600" : "bg-stone-300"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${metronomeOn ? "translate-x-5" : "translate-x-0"}`} /></span></button>
-              <button type="button" onClick={() => { const next = !syncopationOn; setSyncopationOn(next); newQuestion(enabledQuestionTypes, next); }} className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 hover:bg-stone-100"><span className="text-sm font-semibold">Syncopation</span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${syncopationOn ? "bg-green-600" : "bg-stone-300"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${syncopationOn ? "translate-x-5" : "translate-x-0"}`} /></span></button>
-            </section>}
-          </div>
-          <div className="flex justify-end gap-2"><button type="button" onClick={() => setHelpOpen((value) => !value)} title="Help" aria-label="Help" className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 bg-white text-lg font-bold text-stone-700 hover:bg-stone-100">?</button><button type="button" onClick={resetScore} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Reset score</button></div>
-        </div>
-
-        {helpOpen && <HelpPanel />}
-        <div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white"><Score question={question} selectedToolId={selectedToolId} hoverTarget={hoverTarget} feedback={feedback} activePlaybackNoteId={activePlaybackNoteId} helpOpen={helpOpen} onPointerMove={handlePointerMove} onPointerLeave={() => setHoverTarget(null)} onLockPlacement={handleLockPlacement} /></div>
-
-        <section className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-          <div className="mb-0 flex items-start justify-between gap-3">
-            <div><p className="text-base font-semibold" dangerouslySetInnerHTML={{ __html: question.prompt }} />{prompt && <p className="mt-1 text-sm font-medium text-red-700">{prompt}</p>}</div>
-            <button type="button" onClick={playQuestionAudio} disabled={isAudioPlaying} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-50"><span className="ml-0.5 text-lg leading-none">▶</span></button>
-          </div>
-
-          <div className="flex items-center justify-start gap-2">
-            {tools.map((tool) => {
-              const state = toolFeedbackState(question, tool.id, feedback);
-              const buttonClass = feedback
-                ? state === "correct"
-                  ? "border-green-700 bg-green-600 text-white"
-                  : state === "incorrect"
-                    ? "border-red-700 bg-red-600 text-white"
-                    : "border-stone-300 bg-white opacity-50"
-                : selectedToolId === tool.id
-                  ? "border-stone-950 bg-stone-950 text-white"
-                  : "border-stone-300 bg-white hover:bg-stone-100";
-
-              return <button key={tool.id} type="button" disabled={Boolean(feedback)} onClick={() => { setSelectedToolId(tool.id); setPrompt(""); }} className={`flex min-h-[66px] max-w-[92px] items-center justify-center gap-3 rounded-xl border px-2 py-3 text-sm font-semibold ${buttonClass}`}><div className="translate-x-[2px]"><ToolGlyph id={tool.id} className="h-12 w-12" /></div></button>;
-            })}
-          </div>
-
-          <p className="mt-1 text-sm text-stone-700">Choose a rhythm, hover over a note in the target bar to preview it, then click to lock it in place.</p>
-        </section>
-
-        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <Feedback feedback={feedback} />
-          <div className="flex w-full justify-end gap-2">
-            <button type="button" disabled={Boolean(feedback)} onClick={clearPlacements} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60">Clear</button>
-            <button type="button" disabled={Boolean(feedback)} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60">Confirm</button>
-          </div>
-        </div>
-      </main>
-    </div>
-  </div>;
+  return <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2"><div className="mx-auto max-w-6xl"><header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-4"><AppIcon/><div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Correct the Rhythm</h1><p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Listen to the music and correct or insert the rhythm so it matches what you hear.</p></div></div><div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-start"><StatCard variant="score" label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${accuracy}%`} progress={accuracy}/><div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${streakMedal(streak)?.bg??"bg-stone-50"}`}><StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} medal={streakMedal(streak)} confettiKey={confettiKey}/><div className="relative z-0 flex min-h-[52px] min-w-[64px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700"><div className="flex items-center gap-1"><span>💎</span><span className="text-cyan-500">10</span></div><div className="mt-1">🥇 <span className="text-yellow-500">6</span></div><div className="mt-1">🥈 <span className="text-slate-500">4</span></div><div className="mt-1">🥉 <span className="text-amber-700">2</span></div></div></div></div></div></header><main className="relative -mt-[10px] min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => { if (feedback && !feedback.correct) newQuestion(); }}><div className="relative mb-2.5 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><div className="relative" ref={customiseRef}><button type="button" onClick={() => setCustomiseOpen((v) => !v)} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800 hover-bg-stone-100">⚙️ <span>Customise</span></button>{customiseOpen && <section className="absolute left-0 z-20 mt-2 w-[min(430px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><h2 className="mb-3 text-center text-base font-semibold">Customise</h2><MenuRows enabledQuestionTypes={enabledQuestionTypes} toggleQuestionType={toggleQuestionType} tempo={tempo} setTempo={setTempo} stopAudioPlayback={stopAudioPlayback} metronomeOn={metronomeOn} setMetronomeOn={setMetronomeOn} syncopationOn={syncopationOn} setSyncopationOn={setSyncopationOn} followPlayback={followPlayback} setFollowPlayback={setFollowPlayback} resetScore={resetScore}/></section>}</div><div className="relative" ref={helpRef}><button type="button" onClick={() => setHelpOpen((v) => !v)} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800 hover-bg-stone-100">💡 <span>Help</span></button>{helpOpen && <div className="absolute left-0 top-12 z-20 w-[min(430px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><HelpPanel/></div>}</div></div><button type="button" onClick={() => newQuestion()} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800 hover-bg-stone-100"><span>Skip Question</span><span className="text-lg leading-none">→</span></button><div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 flex -translate-y-1/2 justify-center overflow-visible">{feedback && <Feedback feedback={feedback}/>}</div></div><div className={`relative -top-[2px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedToolId={selectedToolId} hoverTarget={hoverTarget} feedback={feedback} activePlaybackNoteId={activePlaybackNoteId} followPlayback={followPlayback || helpOpen} onPointerMove={handlePointerMove} onPointerLeave={() => setHoverTarget(null)} onLockPlacement={handleLockPlacement}/></div><section className="relative z-10 mt-3 rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:mx-3"><div className="space-y-3 text-stone-900"><p className="text-base font-semibold leading-tight" dangerouslySetInnerHTML={{ __html: question.prompt }} />{prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}</div><div className="mt-5 grid grid-cols-[1fr_auto] items-start gap-3"><div className="flex shrink-0 items-center justify-start gap-2 lg:w-auto">{tools.map((tool) => <ToolButton key={tool.id} tool={tool} selectedToolId={selectedToolId} feedback={feedback} question={question} onSelect={(id) => { setSelectedToolId(id); setPrompt(""); }}/>)}</div><div className="flex justify-end items-start gap-2 justify-self-end"><button type="button" onClick={playQuestionAudio} className="absolute right-4 top-4 z-10 flex h-11 w-[120px] shrink-0 items-center justify-center gap-2 rounded-xl bg-stone-950 px-[18px] py-[10px] text-sm font-bold text-white hover:bg-stone-800"><span className="text-lg leading-none">{isAudioPlaying ? "■" : "▶"}</span><span>{isAudioPlaying ? "Stop" : "Play"}</span></button><div className="relative top-[38px] flex items-end gap-2"><button type="button" disabled={Boolean(feedback)} onClick={clearPlacements} className="flex h-11 w-auto min-w-[78px] items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-bold text-stone-800 hover-bg-stone-100 disabled:opacity-40">Clear</button><button type="button" disabled={Boolean(feedback)} onClick={confirmAnswer} className="flex h-11 w-[120px] items-center justify-center rounded-xl bg-green-600 px-[22px] py-[10px] text-sm font-bold text-white hover-bg-green-700 disabled:opacity-60">Confirm</button></div></div></div></section></main></div></div>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
