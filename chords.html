@@ -1,60 +1,56 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Chords</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chords Golden App</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
+<div id="root"></div>
+
+<script type="text/babel">
 const { useEffect, useMemo, useRef, useState } = React;
 
-const VIEWBOX_WIDTH = 920;
-const VIEWBOX_HEIGHT = 360;
+const W = 920;
+const H = 430;
 const STAFF_LEFT = 42;
 const STAFF_RIGHT = 878;
 const SYSTEM_TOPS = [96, 240];
-const LINE_GAP = 10;
+const GAP = 10;
 const BAR_COUNT = 8;
 const BARS_PER_SYSTEM = 4;
 const NOTE_RX = 6.3;
 const NOTE_RY = 4.6;
-const STEM_LENGTH = 32;
+const STEM = 32;
 const CLEF_X = STAFF_LEFT + 8;
 const KEY_SIG_X = STAFF_LEFT + 54;
 const TIME_SIG_X = STAFF_LEFT + 82;
 const MUSIC_START_X = STAFF_LEFT + 118;
-const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
-const TICK = String.fromCodePoint(0x2714);
-const CROSS = String.fromCodePoint(0x2716);
-
-const BLUE = "#111111";
-const GREEN = "#16a34a";
-const RED = "#dc2626";
+const TREBLE = String.fromCodePoint(0x1d11e);
+const COLOUR = { blue:"#2563eb", green:"#16a34a", red:"#dc2626", black:"#000" };
 
 const TIME_SIGNATURES = [
-  { id: "2/4", top: 2, bottom: 4, beats: 2 },
-  { id: "3/4", top: 3, bottom: 4, beats: 3 },
-  { id: "4/4", top: 4, bottom: 4, beats: 4 },
+  { id:"2/4", top:2, bottom:4, beats:2 },
+  { id:"3/4", top:3, bottom:4, beats:3 },
+  { id:"4/4", top:4, bottom:4, beats:4 },
 ];
 
 const TEMPOS = [
-  { id: "slow", label: "Adagio", bpm: 58 },
-  { id: "medium", label: "Andante", bpm: 76 },
-  { id: "fast", label: "Allegro", bpm: 96 },
+  { id:"slow", label:"Adagio", bpm:58 },
+  { id:"medium", label:"Andante", bpm:76 },
+  { id:"fast", label:"Allegro", bpm:96 },
 ];
 
-const RHYTHMS = {
-  quaver: { beats: 0.5, spacing: 0.95, open: false, stem: true, flag: true, dotted: false },
-  crotchet: { beats: 1, spacing: 1.65, open: false, stem: true, flag: false, dotted: false },
-  minim: { beats: 2, spacing: 2.6, open: true, stem: true, flag: false, dotted: false },
-  dottedMinim: { beats: 3, spacing: 3.4, open: true, stem: true, flag: false, dotted: true },
-  semibreve: { beats: 4, spacing: 4.4, open: true, stem: false, flag: false, dotted: false },
+const RH = {
+  quaver:{ beats:.5, spacing:.95, open:false, stem:true, flag:true, dotted:false },
+  crotchet:{ beats:1, spacing:1.65, open:false, stem:true, flag:false, dotted:false },
+  minim:{ beats:2, spacing:2.6, open:true, stem:true, flag:false, dotted:false },
+  dottedMinim:{ beats:3, spacing:3.4, open:true, stem:true, flag:false, dotted:true },
+  semibreve:{ beats:4, spacing:4.4, open:true, stem:false, flag:false, dotted:false },
 };
 
 const RHYTHM_PATTERNS = {
@@ -86,1004 +82,382 @@ const RHYTHM_PATTERNS = {
 };
 
 const KEYS = [
-  {
-    id: "C",
-    name: "C major",
-    tonic: "C",
-    keyAccidentals: {},
-    chords: {
-      I: { name: "C major", shortName: "C", notes: ["C", "E", "G"], quality: "major" },
-      IV: { name: "F major", shortName: "F", notes: ["F", "A", "C"], quality: "major" },
-      V: { name: "G major", shortName: "G", notes: ["G", "B", "D"], quality: "major" },
-      VI: { name: "A minor", shortName: "Am", notes: ["A", "C", "E"], quality: "minor" },
-    },
-  },
-  {
-    id: "F",
-    name: "F major",
-    tonic: "F",
-    keyAccidentals: { B: -1 },
-    chords: {
-      I: { name: "F major", shortName: "F", notes: ["F", "A", "C"], quality: "major" },
-      IV: { name: "B♭ major", shortName: "B♭", notes: ["B", "D", "F"], quality: "major" },
-      V: { name: "C major", shortName: "C", notes: ["C", "E", "G"], quality: "major" },
-      VI: { name: "D minor", shortName: "Dm", notes: ["D", "F", "A"], quality: "minor" },
-    },
-  },
-  {
-    id: "G",
-    name: "G major",
-    tonic: "G",
-    keyAccidentals: { F: 1 },
-    chords: {
-      I: { name: "G major", shortName: "G", notes: ["G", "B", "D"], quality: "major" },
-      IV: { name: "C major", shortName: "C", notes: ["C", "E", "G"], quality: "major" },
-      V: { name: "D major", shortName: "D", notes: ["D", "F", "A"], quality: "major" },
-      VI: { name: "E minor", shortName: "Em", notes: ["E", "G", "B"], quality: "minor" },
-    },
-  },
-  {
-    id: "Am",
-    name: "A minor",
-    tonic: "A",
-    keyAccidentals: {},
-    chords: {
-      I: { name: "A minor", shortName: "Am", notes: ["A", "C", "E"], quality: "minor" },
-      IV: { name: "D minor", shortName: "Dm", notes: ["D", "F", "A"], quality: "minor" },
-      V: { name: "E major", shortName: "E", notes: ["E", "G", "B"], quality: "major", raised: { G: 1 } },
-      VI: { name: "F major", shortName: "F", notes: ["F", "A", "C"], quality: "major" },
-    },
-  },
+  { id:"C", name:"C major", tonic:"C", keyAccidentals:{}, chords:{
+    I:{ name:"C major", shortName:"C", notes:["C","E","G"], quality:"major" },
+    IV:{ name:"F major", shortName:"F", notes:["F","A","C"], quality:"major" },
+    V:{ name:"G major", shortName:"G", notes:["G","B","D"], quality:"major" },
+    VI:{ name:"A minor", shortName:"Am", notes:["A","C","E"], quality:"minor" },
+  }},
+  { id:"F", name:"F major", tonic:"F", keyAccidentals:{ B:-1 }, chords:{
+    I:{ name:"F major", shortName:"F", notes:["F","A","C"], quality:"major" },
+    IV:{ name:"B♭ major", shortName:"B♭", notes:["B","D","F"], quality:"major" },
+    V:{ name:"C major", shortName:"C", notes:["C","E","G"], quality:"major" },
+    VI:{ name:"D minor", shortName:"Dm", notes:["D","F","A"], quality:"minor" },
+  }},
+  { id:"G", name:"G major", tonic:"G", keyAccidentals:{ F:1 }, chords:{
+    I:{ name:"G major", shortName:"G", notes:["G","B","D"], quality:"major" },
+    IV:{ name:"C major", shortName:"C", notes:["C","E","G"], quality:"major" },
+    V:{ name:"D major", shortName:"D", notes:["D","F","A"], quality:"major" },
+    VI:{ name:"E minor", shortName:"Em", notes:["E","G","B"], quality:"minor" },
+  }},
+  { id:"Am", name:"A minor", tonic:"A", keyAccidentals:{}, chords:{
+    I:{ name:"A minor", shortName:"Am", notes:["A","C","E"], quality:"minor" },
+    IV:{ name:"D minor", shortName:"Dm", notes:["D","F","A"], quality:"minor" },
+    V:{ name:"E major", shortName:"E", notes:["E","G","B"], quality:"major", raised:{ G:1 } },
+    VI:{ name:"F major", shortName:"F", notes:["F","A","C"], quality:"major" },
+  }},
 ];
 
 const NOTE_POOL = [
-  { letter: "C", octave: 4, step: -2, midi: 60 },
-  { letter: "D", octave: 4, step: -1, midi: 62 },
-  { letter: "E", octave: 4, step: 0, midi: 64 },
-  { letter: "F", octave: 4, step: 1, midi: 65 },
-  { letter: "G", octave: 4, step: 2, midi: 67 },
-  { letter: "A", octave: 4, step: 3, midi: 69 },
-  { letter: "B", octave: 4, step: 4, midi: 71 },
-  { letter: "C", octave: 5, step: 5, midi: 72 },
-  { letter: "D", octave: 5, step: 6, midi: 74 },
-  { letter: "E", octave: 5, step: 7, midi: 76 },
-  { letter: "F", octave: 5, step: 8, midi: 77 },
-  { letter: "G", octave: 5, step: 9, midi: 79 },
-  { letter: "A", octave: 5, step: 10, midi: 81 },
+  { letter:"C", octave:4, step:-2, midi:60 }, { letter:"D", octave:4, step:-1, midi:62 },
+  { letter:"E", octave:4, step:0, midi:64 }, { letter:"F", octave:4, step:1, midi:65 },
+  { letter:"G", octave:4, step:2, midi:67 }, { letter:"A", octave:4, step:3, midi:69 },
+  { letter:"B", octave:4, step:4, midi:71 }, { letter:"C", octave:5, step:5, midi:72 },
+  { letter:"D", octave:5, step:6, midi:74 }, { letter:"E", octave:5, step:7, midi:76 },
+  { letter:"F", octave:5, step:8, midi:77 }, { letter:"G", octave:5, step:9, midi:79 },
+  { letter:"A", octave:5, step:10, midi:81 },
 ];
 
-function randomItem(items) {
-  return items[Math.floor(Math.random() * items.length)];
+function r(items){ return items[Math.floor(Math.random()*items.length)]; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function y(step, top=SYSTEM_TOPS[0]){ return top + GAP * 4 - step * (GAP / 2); }
+function rhythmInfo(id){ return RH[id] || RH.crotchet; }
+function patternBeats(pattern){ return pattern.reduce((sum,id)=>sum+rhythmInfo(id).beats,0); }
+function validPatternsFor(ts){ return (RHYTHM_PATTERNS[ts.id] || RHYTHM_PATTERNS["4/4"]).filter(p => patternBeats(p) === ts.beats && p.filter(x=>x==="quaver").length <= 2); }
+function midiToFrequency(midi){ return 440 * Math.pow(2, (midi - 69) / 12); }
+function firstSystemBarWidth(){ return (STAFF_RIGHT - MUSIC_START_X) / BARS_PER_SYSTEM; }
+function secondSystemStartX(){ return TIME_SIG_X - 18; }
+function secondSystemBarWidth(){ return (STAFF_RIGHT - secondSystemStartX()) / BARS_PER_SYSTEM; }
+function barWidth(barIndex=0){ return barIndex >= 4 ? secondSystemBarWidth() : firstSystemBarWidth(); }
+function getBarStart(barIndex){ const local = barIndex % BARS_PER_SYSTEM; return (barIndex >= 4 ? secondSystemStartX() : MUSIC_START_X) + local * barWidth(barIndex); }
+function getSystemTop(barIndex){ return barIndex < 4 ? SYSTEM_TOPS[0] : SYSTEM_TOPS[1]; }
+function noteByLetter(letter, preferredIndex=6){ const c = NOTE_POOL.map((n,i)=>({...n,index:i})).filter(n=>n.letter===letter); return c.reduce((best,item)=>Math.abs(item.index-preferredIndex)<Math.abs(best.index-preferredIndex)?item:best,c[0]); }
+function notePoolIndex(note){ return NOTE_POOL.findIndex(n => n.letter === note.letter && n.octave === note.octave); }
+function keyAccidentalForLetter(key, letter){ return key.keyAccidentals[letter] || 0; }
+function chordAccidentalForLetter(chord, letter){ return chord.raised?.[letter] ?? null; }
+function writtenAccidentalForMelody(key, chord, letter){ const a = chordAccidentalForLetter(chord, letter); return a !== null ? a : null; }
+function pitchForChordLetter(key, chord, letter, preferredIndex=6){ const base=noteByLetter(letter, preferredIndex); const ca=chordAccidentalForLetter(chord, letter); const acc=ca!==null?ca:keyAccidentalForLetter(key, letter); return base.midi + acc; }
+function effectivePitchForMelodyNote(question, bar, noteIndex){
+  const note=bar.notes[noteIndex]; let active=null;
+  for(let i=0;i<=noteIndex;i++){ const cur=bar.notes[i]; if(cur.letter===note.letter && cur.writtenAccidental !== null && cur.writtenAccidental !== undefined) active=cur.writtenAccidental; }
+  return note.midi + keyAccidentalForLetter(question.key, note.letter) + (active ?? 0);
 }
-
-function rhythmInfo(rhythm) {
-  return RHYTHMS[rhythm] ?? RHYTHMS.crotchet;
-}
-
-function patternBeats(pattern) {
-  return pattern.reduce((sum, rhythm) => sum + rhythmInfo(rhythm).beats, 0);
-}
-
-function validPatternsFor(timeSignature) {
-  return (RHYTHM_PATTERNS[timeSignature.id] ?? RHYTHM_PATTERNS["4/4"]).filter(
-    (pattern) => patternBeats(pattern) === timeSignature.beats && pattern.filter((rhythm) => rhythm === "quaver").length <= 2
-  );
-}
-
-function yForStep(step, systemTop = SYSTEM_TOPS[0]) {
-  return systemTop + LINE_GAP * 4 - step * (LINE_GAP / 2);
-}
-
-function midiToFrequency(midi) {
-  return 440 * Math.pow(2, (midi - 69) / 12);
-}
-
-function firstSystemBarWidth() {
-  return (STAFF_RIGHT - MUSIC_START_X) / BARS_PER_SYSTEM;
-}
-
-function secondSystemStartX() {
-  return TIME_SIG_X - 18;
-}
-
-function secondSystemBarWidth() {
-  return (STAFF_RIGHT - secondSystemStartX()) / BARS_PER_SYSTEM;
-}
-
-function barWidth(barIndex = 0) {
-  return barIndex >= 4 ? secondSystemBarWidth() : firstSystemBarWidth();
-}
-
-function getBarStart(barIndex) {
-  const localBar = barIndex % BARS_PER_SYSTEM;
-  return (barIndex >= 4 ? secondSystemStartX() : MUSIC_START_X) + localBar * barWidth(barIndex);
-}
-
-function getSystemTop(barIndex) {
-  return barIndex < 4 ? SYSTEM_TOPS[0] : SYSTEM_TOPS[1];
-}
-
-function noteByLetter(letter, preferredIndex = 6) {
-  const candidates = NOTE_POOL.map((note, index) => ({ ...note, index })).filter((note) => note.letter === letter);
-  return candidates.reduce((best, item) => Math.abs(item.index - preferredIndex) < Math.abs(best.index - preferredIndex) ? item : best, candidates[0]);
-}
-
-function notePoolIndex(note) {
-  return NOTE_POOL.findIndex((item) => item.letter === note.letter && item.octave === note.octave);
-}
-
-function keyAccidentalForLetter(key, letter) {
-  return key.keyAccidentals[letter] ?? 0;
-}
-
-function chordAccidentalForLetter(chord, letter) {
-  return chord.raised?.[letter] ?? null;
-}
-
-function writtenAccidentalForMelody(key, chord, letter) {
-  const chordAccidental = chordAccidentalForLetter(chord, letter);
-  return chordAccidental !== null ? chordAccidental : null;
-}
-
-function pitchForChordLetter(key, chord, letter, preferredIndex = 6) {
-  const base = noteByLetter(letter, preferredIndex);
-  const chordAccidental = chordAccidentalForLetter(chord, letter);
-  const accidental = chordAccidental !== null ? chordAccidental : keyAccidentalForLetter(key, letter);
-  return base.midi + accidental;
-}
-
-function effectivePitchForMelodyNote(question, bar, noteIndex) {
-  const note = bar.notes[noteIndex];
-  let activeWrittenAccidental = null;
-
-  for (let index = 0; index <= noteIndex; index += 1) {
-    const current = bar.notes[index];
-    if (current.letter === note.letter && current.writtenAccidental !== null && current.writtenAccidental !== undefined) {
-      activeWrittenAccidental = current.writtenAccidental;
-    }
-  }
-
-  const keyAccidental = keyAccidentalForLetter(question.key, note.letter);
-  return note.midi + keyAccidental + (activeWrittenAccidental ?? 0);
-}
-
-function getChordShortName(chord) {
-  return chord?.shortName ?? "";
-}
-
-function optionLabel(symbol, chord) {
-  return `${symbol} – ${chord.name}`;
-}
-
-function getChordOptions(key) {
-  return ["I", "IV", "V", "VI"].map((symbol) => ({
-    symbol,
-    label: optionLabel(symbol, key.chords[symbol]),
-    chord: key.chords[symbol],
-  }));
-}
-
-function normaliseAnswer(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[ ]+/g, "")
-    .replace("♭", "b")
-    .replace("#", "♯");
-}
-
-function isAnswerCorrect(value, symbol, chord) {
-  const answer = normaliseAnswer(value);
-  if (!answer) return false;
-
-  const accepted = [
-    symbol,
-    chord.shortName,
-    chord.name,
-    chord.name.replace(" major", ""),
-    chord.name.replace(" minor", "m"),
-  ].map(normaliseAnswer);
-
+function getChordShortName(chord){ return chord?.shortName || ""; }
+function normaliseAnswer(value){ return String(value||"").trim().toLowerCase().replace(/[ ]+/g,"").replace("♭","b").replace("#","♯"); }
+function isAnswerCorrect(value, symbol, chord){
+  const answer=normaliseAnswer(value); if(!answer) return false;
+  const accepted=[symbol,chord.shortName,chord.name,chord.name.replace(" major",""),chord.name.replace(" minor","m")].map(normaliseAnswer);
   return accepted.includes(answer);
 }
-
-function displayChordNote(questionKey, option, note) {
-  if (questionKey.id === "F" && note === "B") return "B♭";
-  if (questionKey.id === "G" && note === "F") return "F♯";
-  if (questionKey.id === "Am" && option.symbol === "V" && note === "G") return "G♯";
+function displayChordNote(questionKey, option, note){
+  if(questionKey.id === "F" && note === "B") return "B♭";
+  if(questionKey.id === "G" && note === "F") return "F♯";
+  if(questionKey.id === "Am" && option.symbol === "V" && note === "G") return "G♯";
   return note;
 }
-
-function makeChordProgression(key) {
-  const options = ["IV", "V", "VI"];
-  const progression = ["I"];
-
-  for (let index = 1; index < BAR_COUNT - 1; index += 1) {
-    const available = options.filter((symbol) => symbol !== progression[index - 1]);
-    progression.push(randomItem(available));
-  }
-
-  const finalChordOptions = ["I", "V"].filter((symbol) => symbol !== progression[progression.length - 1]);
-  progression.push(randomItem(finalChordOptions));
-
-  return progression;
+function getChordOptions(key){ return ["I","IV","V","VI"].map(symbol=>({ symbol, label:`${symbol} – ${key.chords[symbol].name}`, chord:key.chords[symbol] })); }
+function makeChordProgression(key){
+  const opts=["IV","V","VI"], prog=["I"];
+  for(let i=1;i<BAR_COUNT-1;i++){ const available=opts.filter(s=>s!==prog[i-1]); prog.push(r(available)); }
+  const final=["I","V"].filter(s=>s!==prog[prog.length-1]); prog.push(r(final));
+  return prog;
 }
-
-function chooseMelodyBase({ key, chord, rhythmId, previousBase, currentIndex, strongBeat, phraseDirection, previousMove, phraseAnchorIndex, repeatedCount }) {
+function chooseMelodyBase({ key, chord, rhythmId, previousBase, currentIndex, strongBeat, phraseDirection, previousMove, phraseAnchorIndex, repeatedCount }){
   const previousIndex = notePoolIndex(previousBase) >= 0 ? notePoolIndex(previousBase) : currentIndex;
-  const candidates = [];
-
-  NOTE_POOL.forEach((candidate, candidateIndex) => {
-    const isChordTone = chord.notes.includes(candidate.letter);
-    const distance = candidateIndex - previousIndex;
-    const absDistance = Math.abs(distance);
-    const rangeFromAnchor = Math.abs(candidateIndex - phraseAnchorIndex);
-
-    if (rangeFromAnchor > 8) return;
-    if (absDistance > 4) return;
-    if (strongBeat && !isChordTone) return;
-    if (rhythmId === "quaver" && absDistance !== 1) return;
-    if (rhythmId === "quaver" && previousBase && candidate.letter === previousBase.letter) return;
-    if (candidate.letter === previousBase?.letter && repeatedCount >= 1) return;
-
-    if (!strongBeat && !isChordTone) {
-      const stepwisePassingNote = absDistance === 1;
-      if (!stepwisePassingNote) return;
-    }
-
-    if (Math.abs(previousMove) >= 3) {
-      const recoveredByStep = absDistance === 1 && Math.sign(distance) === -Math.sign(previousMove);
-      if (!recoveredByStep) return;
-    }
-
-    let weight = 1;
-    if (strongBeat) weight *= 10;
-    else weight *= isChordTone ? 5 : 2.5;
-
-    if (absDistance === 0) weight *= 1.4;
-    if (absDistance === 1) weight *= 7;
-    if (absDistance === 2) weight *= 3;
-    if (absDistance === 3) weight *= 0.8;
-    if (absDistance === 4) weight *= 0.35;
-
-    if (phraseDirection > 0 && distance > 0) weight *= 1.5;
-    if (phraseDirection < 0 && distance < 0) weight *= 1.5;
-    if (phraseDirection > 0 && candidateIndex > phraseAnchorIndex + 5) weight *= 0.45;
-    if (phraseDirection < 0 && candidateIndex < phraseAnchorIndex - 5) weight *= 0.45;
-
-    if (candidateIndex < 1 || candidateIndex > NOTE_POOL.length - 2) weight *= 0.35;
-
-    candidates.push({ candidate, weight });
+  const candidates=[];
+  NOTE_POOL.forEach((candidate,candidateIndex)=>{
+    const isChordTone=chord.notes.includes(candidate.letter);
+    const distance=candidateIndex-previousIndex;
+    const abs=Math.abs(distance);
+    const range=Math.abs(candidateIndex-phraseAnchorIndex);
+    if(range>8 || abs>4) return;
+    if(strongBeat && !isChordTone) return;
+    if(rhythmId==="quaver" && abs!==1) return;
+    if(rhythmId==="quaver" && previousBase && candidate.letter===previousBase.letter) return;
+    if(candidate.letter===previousBase?.letter && repeatedCount>=1) return;
+    if(!strongBeat && !isChordTone && abs!==1) return;
+    if(Math.abs(previousMove)>=3){ const recovered=abs===1 && Math.sign(distance)===-Math.sign(previousMove); if(!recovered) return; }
+    let weight=1;
+    if(strongBeat) weight*=10; else weight*=isChordTone?5:2.5;
+    if(abs===0) weight*=1.4; if(abs===1) weight*=7; if(abs===2) weight*=3; if(abs===3) weight*=.8; if(abs===4) weight*=.35;
+    if(phraseDirection>0 && distance>0) weight*=1.5; if(phraseDirection<0 && distance<0) weight*=1.5;
+    if(phraseDirection>0 && candidateIndex>phraseAnchorIndex+5) weight*=.45;
+    if(phraseDirection<0 && candidateIndex<phraseAnchorIndex-5) weight*=.45;
+    if(candidateIndex<1 || candidateIndex>NOTE_POOL.length-2) weight*=.35;
+    candidates.push({candidate,weight});
   });
-
-  if (!candidates.length) return noteByLetter(randomItem(chord.notes), currentIndex);
-
-  const total = candidates.reduce((sum, item) => sum + item.weight, 0);
-  let roll = Math.random() * total;
-
-  for (const item of candidates) {
-    roll -= item.weight;
-    if (roll <= 0) return item.candidate;
-  }
-
-  return candidates.at(-1).candidate;
+  if(!candidates.length) return noteByLetter(r(chord.notes), currentIndex);
+  const total=candidates.reduce((s,i)=>s+i.weight,0); let roll=Math.random()*total;
+  for(const item of candidates){ roll-=item.weight; if(roll<=0) return item.candidate; }
+  return candidates[candidates.length-1].candidate;
 }
-
-function makeMelodyForBar(key, chordSymbol, barIndex, previousIndex, timeSignature) {
-  const chord = key.chords[chordSymbol];
-  const pattern = barIndex === BAR_COUNT - 1
-    ? { "2/4": ["minim"], "3/4": ["dottedMinim"], "4/4": ["semibreve"] }[timeSignature.id]
-    : randomItem(validPatternsFor(timeSignature));
-  const accidentalMemory = {};
-  let currentIndex = previousIndex;
-  let beatPosition = 0;
-  let previousBase = NOTE_POOL[currentIndex] ?? noteByLetter(key.tonic, 6);
-  let previousMove = 0;
-  let repeatedCount = 0;
-  const phraseAnchorIndex = currentIndex;
-  const phraseDirection = barIndex < 4 ? 1 : -1;
-
-  const notes = pattern.map((rhythmId, noteIndex) => {
-    const beats = rhythmInfo(rhythmId).beats;
-    const strongBeat = beatPosition === 0 || (timeSignature.id === "4/4" && beatPosition === 2);
-    let base = chooseMelodyBase({
-      key,
-      chord,
-      rhythmId,
-      previousBase,
-      currentIndex,
-      strongBeat,
-      phraseDirection,
-      previousMove,
-      phraseAnchorIndex,
-      repeatedCount,
-    });
-
-    if (barIndex === 0 && noteIndex === 0) base = noteByLetter(key.tonic, 6);
-    if (barIndex === BAR_COUNT - 1 && noteIndex === pattern.length - 1) {
-      const finalChord = chordSymbol === "V" ? key.chords.V : key.chords.I;
-      base = noteByLetter(finalChord.notes[0], currentIndex);
-    }
-
-    currentIndex = notePoolIndex(base) >= 0 ? notePoolIndex(base) : currentIndex;
-
-    const accidentalValue = writtenAccidentalForMelody(key, chord, base.letter);
-    const shouldShowAccidental = accidentalValue !== null && accidentalMemory[base.letter] !== accidentalValue;
-    if (accidentalValue !== null) accidentalMemory[base.letter] = accidentalValue;
-
-    const note = {
-      id: `${barIndex}-${noteIndex}`,
-      barIndex,
-      noteIndex,
-      rhythm: rhythmId,
-      beats,
-      beatPosition,
-      letter: base.letter,
-      octave: base.octave,
-      step: base.step,
-      midi: base.midi,
-      writtenAccidental: shouldShowAccidental ? accidentalValue : null,
-    };
-
-    const newIndex = notePoolIndex(base);
-    previousMove = newIndex >= 0 ? newIndex - currentIndex : 0;
-    repeatedCount = base.letter === previousBase?.letter ? repeatedCount + 1 : 0;
-    previousBase = base;
-    beatPosition += beats;
+function makeMelodyForBar(key, chordSymbol, barIndex, previousIndex, ts){
+  const chord=key.chords[chordSymbol];
+  const pattern = barIndex === BAR_COUNT - 1 ? { "2/4":["minim"], "3/4":["dottedMinim"], "4/4":["semibreve"] }[ts.id] : r(validPatternsFor(ts));
+  const accidentalMemory={}; let currentIndex=previousIndex, beatPosition=0, previousBase=NOTE_POOL[currentIndex] || noteByLetter(key.tonic,6), previousMove=0, repeatedCount=0;
+  const phraseAnchorIndex=currentIndex, phraseDirection=barIndex<4?1:-1;
+  const notes=pattern.map((rhythmId,noteIndex)=>{
+    const beats=rhythmInfo(rhythmId).beats;
+    const strongBeat=beatPosition===0 || (ts.id==="4/4" && beatPosition===2);
+    let base=chooseMelodyBase({ key,chord,rhythmId,previousBase,currentIndex,strongBeat,phraseDirection,previousMove,phraseAnchorIndex,repeatedCount });
+    if(barIndex===0 && noteIndex===0) base=noteByLetter(key.tonic,6);
+    if(barIndex===BAR_COUNT-1 && noteIndex===pattern.length-1){ const finalChord=chordSymbol==="V"?key.chords.V:key.chords.I; base=noteByLetter(finalChord.notes[0],currentIndex); }
+    const before=currentIndex;
+    currentIndex=notePoolIndex(base)>=0?notePoolIndex(base):currentIndex;
+    const accidentalValue=writtenAccidentalForMelody(key,chord,base.letter);
+    const shouldShow=accidentalValue!==null && accidentalMemory[base.letter]!==accidentalValue;
+    if(accidentalValue!==null) accidentalMemory[base.letter]=accidentalValue;
+    const note={ id:`${barIndex}-${noteIndex}`, barIndex, noteIndex, rhythm:rhythmId, beats, beatPosition, letter:base.letter, octave:base.octave, step:base.step, midi:base.midi, writtenAccidental:shouldShow?accidentalValue:null };
+    const newIndex=notePoolIndex(base);
+    previousMove=newIndex>=0?newIndex-before:0;
+    repeatedCount=base.letter===previousBase?.letter?repeatedCount+1:0;
+    previousBase=base;
+    beatPosition+=beats;
     return note;
   });
-
-  return { notes, lastIndex: currentIndex };
+  return { notes, lastIndex:currentIndex };
 }
-
-function makeQuestion() {
-  const majorKeys = KEYS.filter((key) => key.id !== "Am");
-  const key = Math.random() < 0.8 ? randomItem(majorKeys) : KEYS.find((item) => item.id === "Am");
-  const timeSignature = randomItem(TIME_SIGNATURES);
-  const progression = makeChordProgression(key);
-  let previousIndex = notePoolIndex(noteByLetter(key.tonic, 6));
-
-  const bars = progression.map((symbol, barIndex) => {
-    const melody = makeMelodyForBar(key, symbol, barIndex, previousIndex, timeSignature);
-    previousIndex = melody.lastIndex;
-    return {
-      barIndex,
-      chordSymbol: symbol,
-      chord: key.chords[symbol],
-      notes: melody.notes,
-    };
-  });
-
-  return {
-    id: Math.random().toString(36).slice(2),
-    key,
-    timeSignature,
-    bars,
-    targetBars: [5, 6],
-  };
+function makeQuestion(){
+  const majorKeys=KEYS.filter(k=>k.id!=="Am");
+  const key=Math.random()<.8?r(majorKeys):KEYS.find(k=>k.id==="Am");
+  const timeSignature=r(TIME_SIGNATURES);
+  const progression=makeChordProgression(key);
+  let previousIndex=notePoolIndex(noteByLetter(key.tonic,6));
+  const bars=progression.map((symbol,barIndex)=>{ const melody=makeMelodyForBar(key,symbol,barIndex,previousIndex,timeSignature); previousIndex=melody.lastIndex; return { barIndex, chordSymbol:symbol, chord:key.chords[symbol], notes:melody.notes }; });
+  return { id:Math.random().toString(36).slice(2), key, timeSignature, bars, targetBars:[5,6] };
 }
-
-function stemGoesDown(step) {
-  return step > 4;
-}
-
-function getStemData(note, x, systemTop, forcedDown = null) {
-  const y = yForStep(note.step, systemTop);
-  const down = forcedDown ?? stemGoesDown(note.step);
-  const stemX = down ? x - NOTE_RX : x + NOTE_RX;
-  return { y, down, stemX, stemEndY: down ? y + STEM_LENGTH : y - STEM_LENGTH };
-}
-
-function LedgerLines({ x, step, systemTop, colour }) {
-  const lines = [];
-  if (step <= -2) lines.push(yForStep(-2, systemTop));
-  if (step >= 10) lines.push(yForStep(10, systemTop));
-  return <g>{lines.map((y) => <line key={y} x1={x - 12} x2={x + 12} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}</g>;
-}
-
-function Accidental({ value, x, y }) {
-  if (!value) return null;
-  return <text x={x} y={y + 2} fill="currentColor" fontFamily="Georgia, serif" fontSize="24" fontWeight="700" textAnchor="middle" dominantBaseline="middle">{value === 1 ? "♯" : "♭"}</text>;
-}
-
-function Flag({ stemX, stemEndY, down, colour }) {
-  const d = down
-    ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 4}, ${stemX + 10} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 16}`
-    : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 4}, ${stemX + 10} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 16}`;
-  return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />;
-}
-
-function Note({ note, x, systemTop, colour = "currentColor", active = false, showFlag = true, forcedStemDown = null, forcedStemEndY = null }) {
-  const info = rhythmInfo(note.rhythm);
-  const stem = getStemData(note, x, systemTop, forcedStemDown);
-  const noteColour = active ? BLUE : colour;
-  const stemEndY = forcedStemEndY ?? stem.stemEndY;
-  const isLineNote = note.step % 2 === 0;
-  const dotOffset = isLineNote ? -4 : 0;
-
-  return <g opacity={active ? 1 : 0.98}>
-    <LedgerLines x={x} step={note.step} systemTop={systemTop} colour={noteColour} />
-    <Accidental value={note.writtenAccidental} x={x - 17} y={stem.y} />
-    <ellipse cx={x} cy={stem.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${stem.y})`} fill={info.open ? "white" : noteColour} stroke={noteColour} strokeWidth="1.7" />
-    {info.dotted && <circle cx={x + 12} cy={stem.y + dotOffset} r="1.7" fill={noteColour} />}
-    {isLineNote && <line x1={x - 8} x2={x + 8} y1={stem.y} y2={stem.y} stroke={noteColour} strokeWidth="1.2" />}
-    {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={stemEndY} stroke={noteColour} strokeWidth="1.5" />}
-    {info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={stemEndY} down={stem.down} colour={noteColour} />}
+function stemDown(step){ return step > 4; }
+function stemData(note,x,top,override=null){ const yy=y(note.step,top), down=override===null?stemDown(note.step):override, sx=down?x-NOTE_RX:x+NOTE_RX, ey=down?yy+STEM:yy-STEM; return { y:yy, down, sx, ey }; }
+function Ledger({x, step, top, colour}){ const lines=[]; if(step<=-2) lines.push(y(-2,top)); if(step>=10) lines.push(y(10,top)); return <g>{lines.map(yy=><line key={yy} x1={x-12} x2={x+12} y1={yy} y2={yy} stroke={colour} strokeWidth="1.2" />)}</g>; }
+function Accidental({value,x,yy}){ if(!value) return null; return <text x={x} y={yy+2} fill="currentColor" fontFamily="Georgia, serif" fontSize="24" fontWeight="700" textAnchor="middle" dominantBaseline="middle">{value===1?"♯":"♭"}</text>; }
+function Flag({stemX, stemEndY, down, colour}){ const d=down?`M ${stemX} ${stemEndY} C ${stemX+10} ${stemEndY-4}, ${stemX+10} ${stemEndY-12}, ${stemX+2} ${stemEndY-16}`:`M ${stemX} ${stemEndY} C ${stemX+10} ${stemEndY+4}, ${stemX+10} ${stemEndY+12}, ${stemX+2} ${stemEndY+16}`; return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />; }
+function Note({note,x,top,colour="currentColor",active=false,showFlag=true,override=null,forced=null}){
+  const info=rhythmInfo(note.rhythm), st=stemData(note,x,top,override), ey=forced===null?st.ey:forced, noteColour=active?COLOUR.blue:colour, isLine=note.step%2===0, dotOffset=isLine?-4:0;
+  return <g opacity={active?1:.98}>
+    <Ledger x={x} step={note.step} top={top} colour={noteColour}/>
+    <Accidental value={note.writtenAccidental} x={x-17} yy={st.y}/>
+    <ellipse cx={x} cy={st.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${st.y})`} fill={info.open?"white":noteColour} stroke={noteColour} strokeWidth="1.7" />
+    {info.dotted && <circle cx={x+12} cy={st.y+dotOffset} r="1.7" fill={noteColour}/>} 
+    {isLine && <line x1={x-8} x2={x+8} y1={st.y} y2={st.y} stroke={noteColour} strokeWidth="1.2"/>}
+    {info.stem && <line x1={st.sx} x2={st.sx} y1={st.y} y2={ey} stroke={noteColour} strokeWidth="1.5"/>}
+    {info.flag && showFlag && <Flag stemX={st.sx} stemEndY={ey} down={st.down} colour={noteColour}/>} 
   </g>;
 }
-
-function KeySignature({ keySignature, systemTop = SYSTEM_TOPS[0] }) {
-  if (keySignature.id === "F") return <text x={KEY_SIG_X} y={yForStep(4.2, systemTop) + 7} fontSize="24" fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">♭</text>;
-  if (keySignature.id === "G") return <text x={KEY_SIG_X} y={yForStep(7.8, systemTop) + 7} fontSize="28" fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">♯</text>;
-  return null;
-}
-
-function TimeSignature({ signature, systemTop = SYSTEM_TOPS[0] }) {
-  return <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle">
-    <text x={TIME_SIG_X} y={systemTop + 20}>{signature.top}</text>
-    <text x={TIME_SIG_X} y={systemTop + 39}>{signature.bottom}</text>
-  </g>;
-}
-
-function ChordBox({ symbol = "", chord = null, label = "", x, y, size = 30, status = null, highlight = false }) {
-  const fill = status === "correct" ? "#dcfce7" : status === "incorrect" ? "#fee2e2" : "white";
-  const stroke = status === "correct" ? GREEN : status === "incorrect" ? RED : highlight ? BLUE : "#444";
-  const textColour = status === "correct" ? GREEN : status === "incorrect" ? RED : highlight ? BLUE : "#111";
-  const topLabel = chord ? getChordShortName(chord) : label;
-
-  return <g>
-    <rect x={x} y={y} width={size} height={size} rx="0" fill={fill} stroke={stroke} strokeWidth="1.5" />
-    <rect x={x} y={y + size} width={size} height={size} rx="0" fill={fill} stroke={stroke} strokeWidth="1.5" />
-    <text x={x + size / 2} y={y + 19} textAnchor="middle" fontSize="12.1" fontWeight="900" fill={textColour}>{topLabel}</text>
-    <text x={x + size / 2} y={y + size + 19} textAnchor="middle" fontSize="12.1" fontWeight="900" fill={textColour}>{symbol}</text>
-  </g>;
-}
-
-function getBarNotePositions(barIndex, notes) {
-  const start = getBarStart(barIndex);
-  const end = start + barWidth(barIndex);
-  const startX = start + (barIndex === 0 ? 4 : barIndex < 4 ? 15 : 19);
-  const endX = barIndex === BAR_COUNT - 1 ? end - 24 : end - 4;
-  const units = notes.reduce((sum, note) => sum + rhythmInfo(note.rhythm).spacing, 0);
-  const unitWidth = Math.max(1, endX - startX) / Math.max(1, units);
-  let cursor = startX + unitWidth * 0.38;
-
-  return notes.map((note) => {
-    const x = cursor;
-    cursor += rhythmInfo(note.rhythm).spacing * unitWidth;
-    return x;
-  });
-}
-
-function getQuaverGroups(notes) {
-  const groups = [];
-  let index = 0;
-
-  while (index < notes.length) {
-    if (notes[index].rhythm !== "quaver") {
-      index += 1;
-      continue;
-    }
-
-    const start = index;
-    while (index + 1 < notes.length && notes[index + 1].rhythm === "quaver") index += 1;
-    const end = index;
-    if (end > start) groups.push({ start, end });
-    index += 1;
-  }
-
-  return groups;
-}
-
-function groupContaining(groups, noteIndex) {
-  return groups.find((group) => noteIndex >= group.start && noteIndex <= group.end) ?? null;
-}
-
-function getBeamData(notes, positions, systemTop) {
-  const averageStep = notes.reduce((sum, note) => sum + note.step, 0) / notes.length;
-  const down = averageStep > 4;
-  const first = getStemData(notes[0], positions[0], systemTop, down);
-  const last = getStemData(notes.at(-1), positions.at(-1), systemTop, down);
-  return { down, start: { x: first.stemX, y: first.stemEndY }, end: { x: last.stemX, y: last.stemEndY } };
-}
-
-function beamYAtX(x, beam) {
-  const amount = (x - beam.start.x) / (beam.end.x - beam.start.x || 1);
-  return beam.start.y + amount * (beam.end.y - beam.start.y);
-}
-
-function AnswerInput({ value, disabled, status, onChange }) {
-  const border = status === "correct" ? GREEN : status === "incorrect" ? RED : "#444";
-  const background = status === "correct" ? "#dcfce7" : status === "incorrect" ? "#fee2e2" : "white";
-
-  return <input
-    value={value}
-    disabled={disabled}
-    onChange={(event) => {
-      const filtered = event.target.value
-        .toUpperCase()
-        .replace(/[^IVA-GM#♯B]/g, "")
-        .replace(/M/g, "m")
-        .replace(/BB/g, "Bb")
-        .slice(0, 2);
-      onChange(filtered);
-    }}
-    style={{ width: "34px", height: "36px", border: `1.5px solid ${border}`, background, textAlign: "center", fontWeight: 900, fontSize: "16px", outline: "none", animation: disabled ? "none" : "pulseBorder 1.8s ease-in-out infinite" }}
-  />;
-}
-
-function Score({ question, answers, setAnswers, feedback, activeNoteId, activeBarIndex, helpOpen }) {
-  return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="w-full h-auto select-none overflow-visible">
-    <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
-
-    {SYSTEM_TOPS.map((systemTop, systemIndex) => {
-      const finalBar = systemIndex === 0 ? 3 : 7;
-      return <g key={systemIndex}>
-        {[0, 1, 2, 3, 4].map((line) => <line key={line} x1={STAFF_LEFT} x2={getBarStart(finalBar) + barWidth(finalBar)} y1={systemTop + line * LINE_GAP} y2={systemTop + line * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />)}
-        <text x={CLEF_X} y={systemTop + 30} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text>
-        {systemIndex === 0 && <KeySignature keySignature={question.key} systemTop={systemTop} />}
-        {systemIndex === 0 && <TimeSignature signature={question.timeSignature} systemTop={systemTop} />}
-      </g>;
-    })}
-
-    {question.bars.map((bar) => {
-      const start = getBarStart(bar.barIndex);
-      const end = start + barWidth(bar.barIndex);
-      const systemTop = getSystemTop(bar.barIndex);
-      const notePositions = getBarNotePositions(bar.barIndex, bar.notes);
-      const isAnswerBar = question.targetBars.includes(bar.barIndex);
-      const shouldShowChordBox = [4, 5, 6].includes(bar.barIndex);
-      const typedAnswer = answers[bar.barIndex] ?? "";
-      const isCorrect = isAnswerCorrect(typedAnswer, bar.chordSymbol, bar.chord);
-      const status = feedback && isAnswerBar ? (isCorrect ? "correct" : "incorrect") : null;
-      const boxX = bar.barIndex === 4 ? start + 5 : start + 25;
-      const boxY = systemTop - 78;
-      const chordHighlight = helpOpen && activeBarIndex === bar.barIndex && ![5, 6].includes(bar.barIndex);
-      const quaverGroups = getQuaverGroups(bar.notes);
-
+function KeySignature({keySignature,top}){ if(keySignature.id==="F") return <text x={KEY_SIG_X} y={y(4.2,top)+7} fontSize="24" fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">♭</text>; if(keySignature.id==="G") return <text x={KEY_SIG_X} y={y(7.8,top)+7} fontSize="28" fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">♯</text>; return null; }
+function TimeSignature({signature,top}){ return <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle"><text x={TIME_SIG_X} y={top+20}>{signature.top}</text><text x={TIME_SIG_X} y={top+39}>{signature.bottom}</text></g>; }
+function ChordBox({symbol="", chord=null, x, yy, size=30, highlight=false}){ const stroke=highlight?COLOUR.blue:"#444", textColour=highlight?COLOUR.blue:"#111"; return <g><rect x={x} y={yy} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><rect x={x} y={yy+size} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><text x={x+size/2} y={yy+19} textAnchor="middle" fontSize="12.1" fontWeight="900" fill={textColour}>{getChordShortName(chord)}</text><text x={x+size/2} y={yy+size+19} textAnchor="middle" fontSize="12.1" fontWeight="900" fill={textColour}>{symbol}</text></g>; }
+function AnswerInput({value,disabled,status,onChange}){ const border=status==="correct"?COLOUR.green:status==="incorrect"?COLOUR.red:"#444", bg=status==="correct"?"#dcfce7":status==="incorrect"?"#fee2e2":"white"; return <input value={value} disabled={disabled} onChange={e=>{ const filtered=e.target.value.toUpperCase().replace(/[^IVA-GM#♯B]/g,"").replace(/M/g,"m").replace(/BB/g,"Bb").slice(0,2); onChange(filtered); }} style={{width:"34px",height:"36px",border:`1.5px solid ${border}`,background:bg,textAlign:"center",fontWeight:900,fontSize:"16px",outline:"none",animation:disabled?"none":"pulseBorder 1.8s ease-in-out infinite"}}/>; }
+function getBarNotePositions(barIndex,notes){ const start=getBarStart(barIndex), end=start+barWidth(barIndex), startX=start+(barIndex===0?4:barIndex<4?15:19), endX=barIndex===BAR_COUNT-1?end-24:end-4, units=notes.reduce((s,n)=>s+rhythmInfo(n.rhythm).spacing,0), unit=Math.max(1,endX-startX)/Math.max(1,units); let c=startX+unit*.38; return notes.map(n=>{ const x=c; c+=rhythmInfo(n.rhythm).spacing*unit; return x; }); }
+function quaverGroups(notes){ const out=[]; let i=0; while(i<notes.length){ if(notes[i].rhythm!=="quaver"){i++;continue;} const s=i; while(i+1<notes.length&&notes[i+1].rhythm==="quaver") i++; const e=i; if(e>s) out.push({start:s,end:e}); i++; } return out; }
+function groupFor(groups,i){ return groups.find(g=>i>=g.start&&i<=g.end) || null; }
+function beamData(notes,xs,top){ const avg=notes.reduce((s,n)=>s+n.step,0)/notes.length, down=avg>4, a=stemData(notes[0],xs[0],top,down), b=stemData(notes[notes.length-1],xs[xs.length-1],top,down); return { down, start:{x:a.sx,y:a.ey}, end:{x:b.sx,y:b.ey} }; }
+function beamYAtX(x,beam){ const amount=(x-beam.start.x)/(beam.end.x-beam.start.x||1); return beam.start.y+amount*(beam.end.y-beam.start.y); }
+function Score({question,answers,setAnswers,feedback,activeNoteId,activeBarIndex,helpOpen}){
+  return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none overflow-visible">
+    <rect width={W} height={H} fill="transparent" />
+    {SYSTEM_TOPS.map((top,si)=>{ const finalBar=si===0?3:7; return <g key={si}>{[0,1,2,3,4].map(line=><line key={line} x1={STAFF_LEFT} x2={getBarStart(finalBar)+barWidth(finalBar)} y1={top+line*GAP} y2={top+line*GAP} stroke="currentColor" strokeWidth="1.2"/>)}<text x={CLEF_X} y={top+30} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE}</text>{si===0&&<KeySignature keySignature={question.key} top={top}/>} {si===0&&<TimeSignature signature={question.timeSignature} top={top}/>}</g>; })}
+    {question.bars.map(bar=>{
+      const start=getBarStart(bar.barIndex), end=start+barWidth(bar.barIndex), top=getSystemTop(bar.barIndex), pos=getBarNotePositions(bar.barIndex,bar.notes), isAnswer=question.targetBars.includes(bar.barIndex), showBox=[4,5,6].includes(bar.barIndex), typed=answers[bar.barIndex]||"", ok=isAnswerCorrect(typed,bar.chordSymbol,bar.chord), status=feedback&&isAnswer?(ok?"correct":"incorrect"):null, boxX=bar.barIndex===4?start+5:start+25, boxY=top-78, hi=helpOpen&&activeBarIndex===bar.barIndex&&![5,6].includes(bar.barIndex), gs=quaverGroups(bar.notes);
       return <g key={bar.barIndex}>
-        {shouldShowChordBox && (isAnswerBar ? (
-          <g>
-            <foreignObject x={boxX} y={boxY + 12} width="34" height="36">
-              <AnswerInput
-                value={typedAnswer}
-                disabled={Boolean(feedback)}
-                status={status}
-                onChange={(value) => setAnswers((current) => ({ ...current, [bar.barIndex]: value }))}
-              />
-            </foreignObject>
-            {feedback && !isCorrect && <text x={boxX + 42} y={boxY + 36} fontSize="16" fontWeight="900" fill={GREEN}>{`${getChordShortName(bar.chord)} or ${bar.chordSymbol}`}</text>}
-          </g>
-        ) : (
-          <ChordBox symbol={bar.chordSymbol} chord={bar.chord} x={boxX} y={boxY} highlight={chordHighlight} />
-        ))}
-
-        <text x={(bar.barIndex === 0 || bar.barIndex === 4) ? start - 15 : start + 5} y={systemTop - 18} fontSize="13" fontWeight="600">{bar.barIndex + 1}</text>
-
-        {bar.notes.map((note, noteIndex) => {
-          const group = groupContaining(quaverGroups, noteIndex);
-          const beam = group ? getBeamData(bar.notes.slice(group.start, group.end + 1), notePositions.slice(group.start, group.end + 1), systemTop) : null;
-          const stemX = beam ? (beam.down ? notePositions[noteIndex] - NOTE_RX : notePositions[noteIndex] + NOTE_RX) : null;
-
-          return <Note
-            key={note.id}
-            note={note}
-            x={notePositions[noteIndex]}
-            systemTop={systemTop}
-            active={activeNoteId === note.id}
-            showFlag={!beam}
-            forcedStemDown={beam ? beam.down : null}
-            forcedStemEndY={beam && stemX ? beamYAtX(stemX, beam) : null}
-          />;
-        })}
-
-        {quaverGroups.map((group, index) => {
-          const beam = getBeamData(bar.notes.slice(group.start, group.end + 1), notePositions.slice(group.start, group.end + 1), systemTop);
-          return <line key={`beam-${bar.barIndex}-${index}`} x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke="currentColor" strokeWidth="4" />;
-        })}
-
-        {bar.barIndex === BAR_COUNT - 1 ? <g>
-          <line x1={end - 5} x2={end - 5} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />
-          <line x1={end} x2={end} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="4" />
-        </g> : <line x1={end} x2={end} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />}
+        {showBox && (isAnswer ? <g><foreignObject x={boxX} y={boxY+12} width="34" height="36"><AnswerInput value={typed} disabled={Boolean(feedback)} status={status} onChange={value=>setAnswers(cur=>({...cur,[bar.barIndex]:value}))}/></foreignObject>{feedback&&!ok&&<text x={boxX+42} y={boxY+36} fontSize="16" fontWeight="900" fill={COLOUR.green}>{`${getChordShortName(bar.chord)} or ${bar.chordSymbol}`}</text>}</g> : <ChordBox symbol={bar.chordSymbol} chord={bar.chord} x={boxX} yy={boxY} highlight={hi}/>) }
+        <text x={(bar.barIndex===0||bar.barIndex===4)?start-15:start+5} y={top-18} fontSize="13" fontWeight="600">{bar.barIndex+1}</text>
+        {bar.notes.map((note,i)=>{ const g=groupFor(gs,i), beam=g?beamData(bar.notes.slice(g.start,g.end+1),pos.slice(g.start,g.end+1),top):null, sx=beam?(beam.down?pos[i]-NOTE_RX:pos[i]+NOTE_RX):null; return <Note key={note.id} note={note} x={pos[i]} top={top} active={activeNoteId===note.id} showFlag={!beam} override={beam?beam.down:null} forced={beam&&sx?beamYAtX(sx,beam):null}/>; })}
+        {gs.map((g,i)=>{ const beam=beamData(bar.notes.slice(g.start,g.end+1),pos.slice(g.start,g.end+1),top); return <line key={`beam-${bar.barIndex}-${i}`} x1={beam.start.x-1} y1={beam.start.y} x2={beam.end.x+1} y2={beam.end.y} stroke="currentColor" strokeWidth="4"/>; })}
+        {bar.barIndex===BAR_COUNT-1 ? <g><line x1={end-5} x2={end-5} y1={top} y2={top+GAP*4} stroke="currentColor" strokeWidth="1.4"/><line x1={end} x2={end} y1={top} y2={top+GAP*4} stroke="currentColor" strokeWidth="4"/></g> : <line x1={end} x2={end} y1={top} y2={top+GAP*4} stroke="currentColor" strokeWidth="1.4"/>}
       </g>;
     })}
   </svg>;
 }
-
-function StatCard({ label, value, footer = null }) {
-  return <div className="rounded-xl border bg-stone-50 p-3 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className="text-xl font-semibold leading-tight">{value}</div>{footer && <div className="mt-1 text-[10px] leading-none text-stone-500">{footer}</div>}</div>;
+function AppIcon(){ return <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50"><svg width="56" height="56" viewBox="8 8 40 40"><g fill="white" stroke="black" strokeWidth="1.1"><ellipse cx="28" cy="35.5" rx="4.8" ry="3.4" transform="rotate(-18 28 35.5)"/><ellipse cx="28" cy="28" rx="4.8" ry="3.4" transform="rotate(-18 28 28)"/><ellipse cx="28" cy="20.5" rx="4.8" ry="3.4" transform="rotate(-18 28 20.5)"/></g><g fill="none" stroke="black" strokeWidth="1.1">{[0,1,2,3,4].map(i=><line key={i} x1="-90" x2="146" y1={13+i*7.5} y2={13+i*7.5}/>)}</g></svg></div>; }
+function Toggle({active}){ return <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active?"bg-green-600":"bg-stone-400"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${active?"translate-x-5":"translate-x-0"}`}/></span>; }
+function getStreakMedal(s){ if(s>=30)return{emoji:"💎",bg:"bg-cyan-400/25",text:"text-cyan-500",sound:"platinum"}; if(s>=20)return{emoji:"🥇",bg:"bg-yellow-400/25",text:"text-yellow-500",sound:"gold"}; if(s>=15)return{emoji:"🥈",bg:"bg-slate-300/30",text:"text-slate-500",sound:"silver"}; if(s>=10)return{emoji:"🥉",bg:"bg-amber-700/20",text:"text-amber-700",sound:"bronze"}; return null; }
+function StatCard({label,value,footer,progress=null,medal=null,variant="default"}){ const isStreak=variant==="streak", safe=progress===null?null:clamp(progress,0,100), fill=safe===null||safe<=0?0:safe, fillColour=safe===null?"transparent":safe<50?"rgba(220,38,38,.38)":safe<70?"rgba(255,120,0,.42)":"rgba(22,163,74,.38)"; return <div className={isStreak?"relative overflow-visible bg-transparent p-3":`relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal?medal.bg:"bg-stone-50"}`}>{safe!==null&&<div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{height:`${fill}%`,background:fillColour}}/>}<div className="relative z-10 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className={`text-xl font-semibold leading-tight ${isStreak&&medal?medal.text:""}`}>{value}</div>{footer&&<div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}</div>{isStreak&&<div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal&&medal.emoji?{animation:"medalShine 1.4s ease-in-out infinite"}:{opacity:.16,filter:"grayscale(1) brightness(.7)"}}>{medal&&medal.emoji?medal.emoji:"🥉"}</div>}</div>; }
+function FeedbackBanner({feedback,fading=false}){ if(!feedback)return null; return <div className="relative flex w-full items-center justify-center text-center"><div className={`flex w-[300px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${feedback.correct?"text-green-600":"text-red-600"}`} style={{animation:fading?"feedbackFadeOut .28s ease-out forwards":feedback.correct?"correctFade .55s ease-out forwards":"incorrectDropShake .55s ease-out forwards"}}><span>{feedback.correct?"Correct":"Incorrect"}</span>{!feedback.correct&&<span className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-black"><svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0"><path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45"/></svg><span>Click or tap anywhere to continue</span></span>}</div></div>; }
+function HelpPanel({question,activeBarIndex,playHelpChord}){ const [page,setPage]=useState(0); const options=getChordOptions(question.key); const pages=[{title:"Instructions",body:"Name the chords played in bars 6 and 7. The chord in bar 5 is given. You can type Roman numerals or chord names.",content:null},{title:`Chords in ${question.key.name}`,body:"Melodies are often built using notes from the underlying chord. Matching the melody notes to the chord notes can help you identify the harmony.",content:<div className="mt-3 grid gap-2">{options.map(option=><div key={option.symbol} className={`min-h-[40px] rounded-xl border px-3 py-2 text-sm font-semibold ${activeBarIndex!==null && ![5,6].includes(activeBarIndex) && question.bars[activeBarIndex]?.chordSymbol===option.symbol?"border-blue-600 bg-blue-50 text-blue-700":"border-stone-200 bg-white"}`}><span className="inline-grid grid-cols-[52px_auto] items-center"><strong>{getChordShortName(option.chord)}</strong><span>{option.chord.notes.map(n=>displayChordNote(question.key,option,n)).join("-")}</span></span></div>)}</div>},{title:"How the Chords Sound",body:"",content:<div className="mt-3 grid gap-2">{["I","IV","V","VI"].map(s=><div key={s} className="flex min-h-[40px] items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-sm"><span><strong>{s}</strong> — {s==="I"?"settled":s==="IV"?"open / away from home":s==="V"?"tense": "darker minor colour in major keys"}</span><button type="button" onClick={()=>playHelpChord(s)} className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white hover:bg-stone-800">▶</button></div>)}</div>}]; const cur=pages[page]; return <div><h2 className="mb-3 text-center text-base font-semibold">Help</h2><div className="min-h-[160px] rounded-xl border border-stone-200 bg-stone-50 p-4"><h3 className="text-sm font-bold text-stone-800">{cur.title}</h3><p className="mt-2 text-sm leading-relaxed text-stone-700">{cur.body}</p>{cur.content}</div><div className="mt-3 flex items-center justify-between"><button onClick={()=>setPage(Math.max(0,page-1))} disabled={page===0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold disabled:opacity-35">←</button><div className="text-sm font-semibold text-stone-600">{page+1} / {pages.length}</div><button onClick={()=>setPage(Math.min(pages.length-1,page+1))} disabled={page===pages.length-1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold disabled:opacity-35">→</button></div></div>; }
+function MenuRows({tempo,setTempo,metronomeOn,setMetronomeOn,highlightPlayback,setHighlightPlayback,resetScore,stopAudio}){ const row="mb-2 flex h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[7px]"; return <><h3 className="mb-2 mt-1 text-sm font-bold text-stone-700">Tempo</h3><div className="mb-2.5 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]"><div className="grid grid-cols-3 gap-2">{TEMPOS.map(speed=><button key={speed.id} onClick={()=>{setTempo(speed.id);stopAudio();}} className={`rounded-lg border px-2.5 py-[8px] text-xs font-semibold ${tempo===speed.id?"border-stone-950 bg-stone-950 text-white":"border-stone-300 bg-white hover:bg-stone-100"}`}>{speed.label}</button>)}</div></div><h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Audio</h3><button onClick={()=>{setMetronomeOn(v=>!v);stopAudio();}} className={row}><span className="flex items-center gap-2 text-sm font-semibold"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="h-[18px] w-[18px] text-stone-700"><path d="M8.5 3.5h7L20 20.5H4L8.5 3.5Z"/><path d="M12.7 5.8 16 15.2l-1.7.6-3.3-9.4 1.7-.6Z" fill="white" opacity=".9"/><circle cx="12" cy="16.4" r="1.25" fill="white" opacity=".9"/></svg><span>Metronome</span></span><Toggle active={metronomeOn}/></button><button onClick={()=>setHighlightPlayback(v=>!v)} className={row}><span className="flex items-center gap-2 text-sm font-semibold"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="h-[18px] w-[18px] text-stone-700"><path d="M12 5.2c5.2 0 8.7 5.05 9.55 6.48a.63.63 0 0 1 0 .64C20.7 13.75 17.2 18.8 12 18.8S3.3 13.75 2.45 12.32a.63.63 0 0 1 0-.64C3.3 10.25 6.8 5.2 12 5.2Z"/><circle cx="12" cy="12" r="3.15" fill="white" opacity=".95"/><circle cx="12" cy="12" r="1.55"/></svg><span>Follow Playback</span></span><Toggle active={highlightPlayback}/></button><button onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button></>; }
+function ChordOptions({question}){ const options=getChordOptions(question.key); return <div className="grid w-fit grid-cols-[48px_120px] gap-x-3 text-base leading-tight">{options.map(option=><React.Fragment key={option.symbol}><div className="font-semibold">{getChordShortName(option.chord)}</div><div>Chord {option.symbol}</div></React.Fragment>)}</div>; }
+function useStyles(){ useEffect(()=>{ if(document.getElementById("golden-style"))return; const s=document.createElement("style"); s.id="golden-style"; s.innerHTML=`button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:brightness(1.08);box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}@keyframes medalShine{0%,100%{transform:scale(1) rotate(-4deg);filter:drop-shadow(0 0 0 rgba(250,204,21,0))}50%{transform:scale(1.16) rotate(4deg);filter:drop-shadow(0 0 10px rgba(250,204,21,.9))}}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}@keyframes pulseBorder{0%{outline:0 solid rgba(0,0,0,.55);border-color:#000}50%{outline:4px solid rgba(0,0,0,.12);border-color:#666}100%{outline:0 solid rgba(0,0,0,.55);border-color:#000}}`; document.head.appendChild(s); },[]); }
+function useClickOutside(refs, handlers){ useEffect(()=>{ function on(e){ refs.forEach((ref,i)=>{ if(ref.current && !ref.current.contains(e.target)) handlers[i]?.(); }); } document.addEventListener("pointerdown",on,true); return()=>document.removeEventListener("pointerdown",on,true); },[refs,handlers]); }
+function playFeedbackSound(ok){
+  const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+  const ctx=new AC(), now=ctx.currentTime+.02;
+  const freqs=ok?[523.25,659.25,783.99]:[220,185];
+  freqs.forEach((f,i)=>{ const o=ctx.createOscillator(), g=ctx.createGain(); o.type=ok?"triangle":"sawtooth"; o.frequency.setValueAtTime(f,now+i*.08); g.gain.setValueAtTime(.0001,now+i*.08); g.gain.exponentialRampToValueAtTime(ok?.08:.05,now+i*.08+.02); g.gain.exponentialRampToValueAtTime(.0001,now+i*.08+.18); o.connect(g); g.connect(ctx.destination); o.start(now+i*.08); o.stop(now+i*.08+.22); });
+  setTimeout(()=>{try{ctx.close()}catch{}},600);
 }
+function App(){
+  useStyles();
+  const [tempo,setTempo]=useState("medium");
+  const [metronomeOn,setMetronomeOn]=useState(false);
+  const [question,setQuestion]=useState(()=>makeQuestion());
+  const [questionVisible,setQuestionVisible]=useState(true);
+  const [answers,setAnswers]=useState({});
+  const [promptMessage,setPromptMessage]=useState("");
+  const [feedback,setFeedback]=useState(null);
+  const [feedbackFading,setFeedbackFading]=useState(false);
+  const [correct,setCorrect]=useState(0);
+  const [attempted,setAttempted]=useState(0);
+  const [streak,setStreak]=useState(0);
+  const [best,setBest]=useState(0);
+  const [customiseOpen,setCustomiseOpen]=useState(false);
+  const [helpOpen,setHelpOpen]=useState(false);
+  const [highlightPlayback,setHighlightPlayback]=useState(false);
+  const [playing,setPlaying]=useState(false);
+  const [playbackElapsed,setPlaybackElapsed]=useState(0);
+  const [playbackTotal,setPlaybackTotal]=useState(0);
+  const [activeNoteId,setActiveNoteId]=useState(null);
+  const [activeBarIndex,setActiveBarIndex]=useState(null);
+  const customiseRef=useRef(null), helpRef=useRef(null), audioRef=useRef(null), stopTimerRef=useRef(null), highlightTimersRef=useRef([]), playbackFrameRef=useRef(null), playbackBarRef=useRef(null);
+  useClickOutside([customiseRef,helpRef],[()=>customiseOpen&&setCustomiseOpen(false),()=>helpOpen&&setHelpOpen(false)]);
+  useEffect(()=>()=>stopAudio(),[]);
+  const acc=attempted===0?0:Math.round(correct/attempted*100), medal=getStreakMedal(streak);
+  const selectedTempo=TEMPOS.find(t=>t.id===tempo)||TEMPOS[1];
+  const beatSeconds=60/selectedTempo.bpm;
+  const barSeconds=beatSeconds*question.timeSignature.beats;
+  const questionDuration=question.bars.length*barSeconds;
+  const displayedTotal=playbackTotal||questionDuration;
+  const progressPercent=displayedTotal>0?clamp((playbackElapsed/displayedTotal)*100,0,100):0;
 
-function Feedback({ feedback }) {
-  if (!feedback) return null;
-  return <div className={`inline-flex items-center gap-2 font-semibold ${feedback.correct ? "text-green-600" : "text-red-600"}`}><span>{feedback.correct ? TICK : CROSS}</span><span>{feedback.correct ? "Correct" : "Incorrect"}</span></div>;
-}
-
-function HelpPanel({ question, activeBarIndex, playHelpChord }) {
-  const options = getChordOptions(question.key);
-
-  return <section className="mb-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-    <div className="grid items-start gap-3 md:grid-cols-2">
-      <div className="flex h-full flex-col rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="text-sm font-bold">Tip #1</h2>
-        <p className="mt-1 text-sm text-stone-700">The melody mostly uses notes from the underlying chord, with some passing notes.</p>
-        <h2 className="mt-3 text-sm font-normal">Notes found in the chords of <strong>{question.key.name}</strong> are:</h2>
-
-        <div className="mt-auto pt-5 grid gap-2">
-          {options.map((option) => (
-            <div key={option.symbol} className={`min-h-[40px] rounded-none border px-3 py-1.5 text-sm font-semibold ${activeBarIndex !== null && ![5, 6].includes(activeBarIndex) && question.bars[activeBarIndex]?.chordSymbol === option.symbol ? "border-blue-600 bg-blue-50 text-blue-700" : "border-stone-200 bg-stone-50"}`}>
-              <span className="inline-grid grid-cols-[52px_auto] items-center">
-                <strong>{getChordShortName(option.chord)}</strong>
-                <span>{option.chord.notes.map((note) => displayChordNote(question.key, option, note)).join("-")}</span>
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex h-full flex-col rounded-xl border border-stone-200 bg-white p-4">
-        <h2 className="text-sm font-bold">Tip #2</h2>
-        <p className="mt-1 text-sm text-stone-700">Different chords often create different musical feelings and levels of tension.</p>
-
-        <div className="mt-auto pt-5 grid gap-2">
-          <div className="min-h-[40px] rounded-none border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm flex items-center justify-between gap-3"><span><strong>I</strong>&nbsp;&nbsp;Sounds settled and finished.</span><button type="button" onClick={() => playHelpChord('I')} className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white hover:bg-stone-800">▶</button></div>
-          <div className="min-h-[40px] rounded-none border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm flex items-center justify-between gap-3"><span><strong>IV</strong>&nbsp;&nbsp;Sounds open and slightly away from home.</span><button type="button" onClick={() => playHelpChord('IV')} className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white hover:bg-stone-800">▶</button></div>
-          <div className="min-h-[40px] rounded-none border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm flex items-center justify-between gap-3"><span><strong>V</strong>&nbsp;&nbsp;Sounds tense and often wants to return to I.</span><button type="button" onClick={() => playHelpChord('V')} className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white hover:bg-stone-800">▶</button></div>
-          <div className="min-h-[40px] rounded-none border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm flex items-center justify-between gap-3"><span><strong>VI</strong>&nbsp;&nbsp;Usually has a darker <strong>minor</strong> colour in major keys.</span><button type="button" onClick={() => playHelpChord('VI')} className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-stone-950 text-xs font-bold text-white hover:bg-stone-800">▶</button></div>
-        </div>
-      </div>
-    </div>
-  </section>;
-}
-
-function App() {
-  useEffect(() => {
-    if (document.getElementById("pulse-input-style")) return;
-
-    const style = document.createElement("style");
-    style.id = "pulse-input-style";
-    style.innerHTML = `
-      @keyframes pulseBorder {
-        0% { outline: 0px solid rgba(0,0,0,0.55); border-color: #000000; }
-        50% { outline: 4px solid rgba(0,0,0,0.12); border-color: #666666; }
-        100% { outline: 0px solid rgba(0,0,0,0.55); border-color: #000000; }
-      }
-    `;
-
-    document.head.appendChild(style);
-  }, []);
-
-  const timerRef = useRef(null);
-  const customiseRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const audioStopTimerRef = useRef(null);
-  const highlightTimersRef = useRef([]);
-
-  const [tempo, setTempo] = useState("medium");
-  const [metronomeOn, setMetronomeOn] = useState(false);
-  const [question, setQuestion] = useState(() => makeQuestion());
-  const [answers, setAnswers] = useState({});
-  const [feedback, setFeedback] = useState(null);
-  const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [activeNoteId, setActiveNoteId] = useState(null);
-  const [activeBarIndex, setActiveBarIndex] = useState(null);
-  const [prompt, setPrompt] = useState("");
-  const [correct, setCorrect] = useState(0);
-  const [attempted, setAttempted] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-
-  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const chordOptions = useMemo(() => getChordOptions(question.key), [question]);
-
-  useEffect(() => {
-    const close = (event) => {
-      if (!customiseOpen) return;
-      if (customiseRef.current?.contains(event.target)) return;
-      setCustomiseOpen(false);
-    };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [customiseOpen]);
-
-  useEffect(() => () => stopAudioPlayback(), []);
-
-  function stopAudioPlayback() {
-    if (audioStopTimerRef.current) window.clearTimeout(audioStopTimerRef.current);
-    highlightTimersRef.current.forEach((timer) => window.clearTimeout(timer));
-    highlightTimersRef.current = [];
-
-    if (audioContextRef.current) {
-      try { if (audioContextRef.current.state !== "closed") audioContextRef.current.close(); } catch {}
-    }
-
-    audioStopTimerRef.current = null;
-    audioContextRef.current = null;
-    setIsAudioPlaying(false);
-    setActiveNoteId(null);
-    setActiveBarIndex(null);
+  function formatPlaybackTime(seconds){
+    const safe=Math.max(0,Math.floor(seconds||0));
+    return `${Math.floor(safe/60)}:${String(safe%60).padStart(2,"0")}`;
   }
 
-  function newQuestion() {
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-    stopAudioPlayback();
-    setQuestion(makeQuestion());
-    setAnswers({});
-    setFeedback(null);
-    setPrompt("");
+  function getSeekSecondsFromPointer(event){
+    const rect=playbackBarRef.current?.getBoundingClientRect();
+    if(!rect) return 0;
+    return clamp((event.clientX-rect.left)/rect.width,0,1)*displayedTotal;
   }
 
-  function resetScore() {
-    setCorrect(0);
-    setAttempted(0);
-    setStreak(0);
-    setBestStreak(0);
-    newQuestion();
+  function handleSeek(event){
+    event.preventDefault();
+    const value=getSeekSecondsFromPointer(event);
+    playQuestionAudio(value,true);
   }
 
-  function clearAnswers() {
-    if (feedback) return;
-    setAnswers({});
-    setPrompt("");
+  function stopAudio(){
+    clearTimeout(stopTimerRef.current); stopTimerRef.current=null;
+    if(playbackFrameRef.current) cancelAnimationFrame(playbackFrameRef.current);
+    playbackFrameRef.current=null;
+    highlightTimersRef.current.forEach(t=>clearTimeout(t)); highlightTimersRef.current=[];
+    if(audioRef.current){ try{ if(audioRef.current.state!=="closed") audioRef.current.close(); }catch{} }
+    audioRef.current=null; setPlaying(false); setPlaybackElapsed(0); setPlaybackTotal(0); setActiveNoteId(null); setActiveBarIndex(null);
   }
-
-  function confirmAnswer() {
-    if (feedback) return;
-    const missing = question.targetBars.some((barIndex) => !String(answers[barIndex] || "").trim());
-    if (missing) {
-      setPrompt("Type an answer in both boxes before pressing Confirm.");
-      return;
-    }
-
-    stopAudioPlayback();
-    const isCorrect = question.targetBars.every((barIndex) => isAnswerCorrect(answers[barIndex], question.bars[barIndex].chordSymbol, question.bars[barIndex].chord));
-    const nextStreak = isCorrect ? streak + 1 : 0;
-    setAttempted((value) => value + 1);
-    setCorrect((value) => value + (isCorrect ? 1 : 0));
-    setStreak(nextStreak);
-    setBestStreak((value) => Math.max(value, nextStreak));
-    setFeedback({ correct: isCorrect });
-    timerRef.current = window.setTimeout(() => newQuestion(), isCorrect ? 2500 : 5000);
+  function resetTask(q){ stopAudio(); setQuestion(q); setAnswers({}); setPromptMessage(""); setFeedback(null); setFeedbackFading(false); }
+  function newQuestion(){ setQuestionVisible(false); setTimeout(()=>{ resetTask(makeQuestion()); setQuestionVisible(true); },260); }
+  function resetScore(){ setCorrect(0); setAttempted(0); setStreak(0); setBest(0); newQuestion(); }
+  function fadeToNext(){ if(!feedback||feedback.correct||feedbackFading)return; setFeedbackFading(true); setTimeout(()=>newQuestion(),280); }
+  function score(ok){ const ns=ok?streak+1:0; playFeedbackSound(ok); setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){ setTimeout(()=>setFeedbackFading(true),1700); setTimeout(()=>newQuestion(),2000); } }
+  function clearAnswers(){ if(feedback)return; setAnswers({}); setPromptMessage(""); }
+  function confirmAnswer(){
+    if(feedback)return; stopAudio();
+    const missing=question.targetBars.some(i=>!String(answers[i]||"").trim());
+    if(missing){ setPromptMessage("Type an answer in both boxes before pressing Confirm."); return; }
+    const ok=question.targetBars.every(i=>isAnswerCorrect(answers[i],question.bars[i].chordSymbol,question.bars[i].chord));
+    score(ok);
   }
-
-  function playOscillator(audioContext, { frequency, start, duration, volume = 0.16, type = "triangle" }) {
-    if (!Number.isFinite(frequency) || !Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) return;
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(frequency, start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.035);
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume * 0.55), start + Math.max(0.05, duration * 0.86));
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + 0.04);
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    oscillator.start(start);
-    oscillator.stop(start + duration + 0.08);
-  }
-
-  function playDrumHit(audioContext, start, accented = false) {
-    const bufferSize = Math.floor(audioContext.sampleRate * 0.03);
-    const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let index = 0; index < bufferSize; index += 1) {
-      const fade = 1 - index / bufferSize;
-      data[index] = (Math.random() * 2 - 1) * 0.38 * fade;
-    }
-    const noise = audioContext.createBufferSource();
-    noise.buffer = buffer;
-    const filter = audioContext.createBiquadFilter();
-    filter.type = "highpass";
-    filter.frequency.value = accented ? 1800 : 1200;
-    const gain = audioContext.createGain();
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(accented ? 0.065 : 0.045, start + 0.002);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.03);
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(audioContext.destination);
-    noise.start(start);
-    noise.stop(start + 0.03);
-  }
-
-  function playHelpChord(symbol) {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-
-    const audioContext = new AudioContextClass();
-    const chord = question.key.chords[symbol];
-    const start = audioContext.currentTime + 0.02;
-
-    chord.notes.forEach((letter, index) => {
-      const frequency = midiToFrequency(pitchForChordLetter(question.key, chord, letter, 3 + index));
-
-      playOscillator(audioContext, {
-        frequency,
-        start,
-        duration: 1.4,
-        volume: 0.06,
-        type: "triangle"
+  function playOscillator(ctx,{frequency,start,duration,volume=.16,type="triangle"}){ if(!Number.isFinite(frequency)||!Number.isFinite(start)||!Number.isFinite(duration)||duration<=0)return; const o=ctx.createOscillator(), g=ctx.createGain(); o.type=type; o.frequency.setValueAtTime(frequency,start); g.gain.setValueAtTime(.0001,start); g.gain.exponentialRampToValueAtTime(volume,start+.035); g.gain.exponentialRampToValueAtTime(Math.max(.0002,volume*.55),start+Math.max(.05,duration*.86)); g.gain.exponentialRampToValueAtTime(.0001,start+duration+.04); o.connect(g); g.connect(ctx.destination); o.start(start); o.stop(start+duration+.08); }
+  function playDrumHit(ctx,start,accented=false){ const size=Math.floor(ctx.sampleRate*.03), buffer=ctx.createBuffer(1,size,ctx.sampleRate), data=buffer.getChannelData(0); for(let i=0;i<size;i++){ const fade=1-i/size; data[i]=(Math.random()*2-1)*.38*fade; } const noise=ctx.createBufferSource(), filter=ctx.createBiquadFilter(), g=ctx.createGain(); noise.buffer=buffer; filter.type="highpass"; filter.frequency.value=accented?1800:1200; g.gain.setValueAtTime(.0001,start); g.gain.exponentialRampToValueAtTime(accented?.065:.045,start+.002); g.gain.exponentialRampToValueAtTime(.0001,start+.03); noise.connect(filter); filter.connect(g); g.connect(ctx.destination); noise.start(start); noise.stop(start+.03); }
+  function playHelpChord(symbol){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC)return; const ctx=new AC(), chord=question.key.chords[symbol], start=ctx.currentTime+.02; chord.notes.forEach((letter,i)=>playOscillator(ctx,{frequency:midiToFrequency(pitchForChordLetter(question.key,chord,letter,3+i)),start,duration:1.4,volume:.06,type:"triangle"})); setTimeout(()=>{try{ctx.close()}catch{}},1700); }
+  function playQuestionAudio(startOffsetSeconds=0, forcePlay=false){
+    if(playing && !forcePlay){ stopAudio(); return; }
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC){setPromptMessage("Audio playback is not supported in this browser.");return;}
+    stopAudio(); const ctx=new AC(); audioRef.current=ctx; setPlaying(true); setPromptMessage("");
+    const selectedTempo=TEMPOS.find(t=>t.id===tempo)||TEMPOS[1], beatSeconds=60/selectedTempo.bpm, beatsPerBar=question.timeSignature.beats, barSeconds=beatSeconds*beatsPerBar;
+    const activeDuration=question.bars.length*barSeconds;
+    const startOffset=clamp(startOffsetSeconds||0,0,Math.max(0,activeDuration-0.05));
+    const audioStartTime=ctx.currentTime+.08;
+    setPlaybackTotal(activeDuration);
+    setPlaybackElapsed(startOffset);
+    let currentTime=audioStartTime;
+    question.bars.forEach(bar=>{
+      const relativeBarStart=bar.barIndex*barSeconds;
+      const relativeBarEnd=relativeBarStart+barSeconds;
+      if(relativeBarEnd<=startOffset){ currentTime+=barSeconds; return; }
+      const barStart=audioStartTime+Math.max(relativeBarStart,startOffset)-startOffset, chord=bar.chord;
+      highlightTimersRef.current.push(setTimeout(()=>setActiveBarIndex(bar.barIndex),Math.max(0,(barStart-ctx.currentTime)*1000)));
+      highlightTimersRef.current.push(setTimeout(()=>setActiveBarIndex(null),Math.max(0,(barStart-ctx.currentTime+(relativeBarEnd-Math.max(relativeBarStart,startOffset)))*1000)));
+      if(metronomeOn){ for(let beat=0;beat<beatsPerBar;beat++){ const beatStart=relativeBarStart+beat*beatSeconds; if(beatStart>=startOffset) playDrumHit(ctx,audioStartTime+beatStart-startOffset,beat===0); } }
+      bar.notes.forEach((note,i)=>{
+        const relativeNoteStart=relativeBarStart+bar.notes.slice(0,i).reduce((s,n)=>s+n.beats*beatSeconds,0);
+        const relativeNoteEnd=relativeNoteStart+note.beats*beatSeconds;
+        if(relativeNoteEnd<=startOffset) return;
+        const noteStart=audioStartTime+Math.max(relativeNoteStart,startOffset)-startOffset;
+        const duration=(relativeNoteEnd-Math.max(relativeNoteStart,startOffset))*.98;
+        const startMs=Math.max(0,(noteStart-ctx.currentTime)*1000);
+        highlightTimersRef.current.push(setTimeout(()=>setActiveNoteId(note.id),startMs));
+        highlightTimersRef.current.push(setTimeout(()=>setActiveNoteId(null),startMs+duration*1000));
+        const pitch=effectivePitchForMelodyNote(question,bar,i);
+        playOscillator(ctx,{frequency:midiToFrequency(pitch+12),start:noteStart,duration:duration*.82,volume:.032,type:"sine"});
+        playOscillator(ctx,{frequency:midiToFrequency(pitch+24),start:noteStart,duration:duration*.5,volume:.008,type:"sine"});
       });
-    });
-
-    window.setTimeout(() => {
-      try {
-        audioContext.close();
-      } catch {}
-    }, 1700);
-  }
-
-  function playQuestionAudio() {
-    if (isAudioPlaying) {
-      stopAudioPlayback();
-      return;
-    }
-
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) {
-      setPrompt("Audio playback is not supported in this browser.");
-      return;
-    }
-
-    stopAudioPlayback();
-
-    const audioContext = new AudioContextClass();
-    audioContextRef.current = audioContext;
-    setIsAudioPlaying(true);
-    setPrompt("");
-
-    const selectedTempo = TEMPOS.find((item) => item.id === tempo) ?? TEMPOS[1];
-    const beatSeconds = 60 / selectedTempo.bpm;
-    const beatsPerBar = question.timeSignature.beats;
-    const barSeconds = beatSeconds * beatsPerBar;
-    let currentTime = audioContext.currentTime + 0.08;
-
-    question.bars.forEach((bar) => {
-      const barStart = currentTime;
-      const chord = bar.chord;
-
-      highlightTimersRef.current.push(window.setTimeout(() => setActiveBarIndex(bar.barIndex), Math.max(0, (barStart - audioContext.currentTime) * 1000)));
-      highlightTimersRef.current.push(window.setTimeout(() => setActiveBarIndex(null), Math.max(0, (barStart - audioContext.currentTime + barSeconds) * 1000)));
-
-      if (metronomeOn) {
-        for (let beat = 0; beat < beatsPerBar; beat += 1) {
-          playDrumHit(audioContext, barStart + beat * beatSeconds, beat === 0);
-        }
-      }
-
-      bar.notes.forEach((note, noteIndex) => {
-        const noteStart = barStart + bar.notes.slice(0, noteIndex).reduce((sum, item) => sum + item.beats * beatSeconds, 0);
-        const duration = note.beats * beatSeconds * 0.98;
-        const startMs = Math.max(0, (noteStart - audioContext.currentTime) * 1000);
-
-        highlightTimersRef.current.push(window.setTimeout(() => setActiveNoteId(note.id), startMs));
-        highlightTimersRef.current.push(window.setTimeout(() => setActiveNoteId(null), startMs + duration * 1000));
-
-        const pitch = effectivePitchForMelodyNote(question, bar, noteIndex);
-        playOscillator(audioContext, {
-          frequency: midiToFrequency(pitch + 12),
-          start: noteStart,
-          duration: duration * 0.82,
-          volume: 0.032,
-          type: "sine"
-        });
-
-        playOscillator(audioContext, {
-          frequency: midiToFrequency(pitch + 24),
-          start: noteStart,
-          duration: duration * 0.5,
-          volume: 0.008,
-          type: "sine"
-        });
-      });
-
-      chord.notes.forEach((letter, index) => {
-        const frequency = midiToFrequency(pitchForChordLetter(question.key, chord, letter, 3 + index));
-        if (bar.barIndex === BAR_COUNT - 1) {
-          playOscillator(audioContext, {
-            frequency,
-            start: barStart,
-            duration: barSeconds * 0.95,
-            volume: 0.07,
-            type: "triangle"
-          });
+      chord.notes.forEach((letter,i)=>{ const frequency=midiToFrequency(pitchForChordLetter(question.key,chord,letter,3+i)); if(bar.barIndex===BAR_COUNT-1){
+          playOscillator(ctx,{frequency,start:barStart,duration:(relativeBarEnd-Math.max(relativeBarStart,startOffset))*.95,volume:.07,type:"triangle"});
         } else {
-          for (let beat = 0; beat < beatsPerBar; beat += 1) {
-            playOscillator(audioContext, {
-              frequency,
-              start: barStart + beat * beatSeconds,
-              duration: beatSeconds * 0.9,
-              volume: beat === 0 ? 0.065 : 0.052,
-              type: "triangle"
-            });
+          for(let beat=0;beat<beatsPerBar;beat++){
+            const beatStart=relativeBarStart+beat*beatSeconds;
+            if(beatStart>=startOffset) playOscillator(ctx,{frequency,start:audioStartTime+beatStart-startOffset,duration:beatSeconds*.9,volume:beat===0?.065:.052,type:"triangle"});
           }
         }
-        playOscillator(audioContext, { frequency: frequency * 0.5, start: barStart, duration: barSeconds * 0.95, volume: 0.03, type: "sine" });
-      });
-
-      currentTime += barSeconds;
+        playOscillator(ctx,{frequency:frequency*.5,start:barStart,duration:(relativeBarEnd-Math.max(relativeBarStart,startOffset))*.95,volume:.03,type:"sine"}); });
+      currentTime+=barSeconds;
     });
-
-    audioStopTimerRef.current = window.setTimeout(() => {
-      setIsAudioPlaying(false);
-      setActiveNoteId(null);
-      setActiveBarIndex(null);
-      audioContextRef.current = null;
-    }, Math.max(0, (currentTime - audioContext.currentTime) * 1000) + 150);
+    const playbackStartTime=ctx.currentTime;
+    const tick=()=>{
+      if(!audioRef.current) return;
+      const elapsed=Math.min(activeDuration,startOffset+Math.max(0,ctx.currentTime-playbackStartTime));
+      setPlaybackElapsed(elapsed);
+      if(elapsed<activeDuration) playbackFrameRef.current=requestAnimationFrame(tick);
+    };
+    playbackFrameRef.current=requestAnimationFrame(tick);
+    stopTimerRef.current=setTimeout(()=>{setPlaying(false);setPlaybackElapsed(0);setPlaybackTotal(0);setActiveNoteId(null);setActiveBarIndex(null);audioRef.current=null;try{ctx.close()}catch{}},Math.max(0,(activeDuration-startOffset)*1000)+150);
   }
 
-  return <div className="min-h-screen bg-stone-50 p-4 text-stone-950 md:p-8">
-    <div className="mx-auto max-w-6xl">
-      <header className="mb-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+  return <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2"><div className="mx-auto max-w-6xl">
+    <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-4"><AppIcon/><div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Chords</h1><p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Identify chords I, IV, V and VI in major and minor keys.</p></div></div><div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end"><StatCard label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${acc}%`} progress={acc}/><div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${medal?medal.bg:"bg-stone-50"}`}><StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${best}`} medal={medal}/><div className="relative z-0 flex min-h-[52px] min-w-[30px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700"><div>💎 <span className="text-cyan-500">30</span></div><div className="mt-1">🥇 <span className="text-yellow-500">20</span></div><div className="mt-1">🥈 <span className="text-slate-500">15</span></div><div className="mt-1">🥉 <span className="text-amber-700">10</span></div></div></div></div></div></header>
+    <main className="relative -mt-[10px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-8 pt-[10px] shadow-sm md:h-auto md:overflow-visible md:px-6 md:pb-10 md:pt-[14px]" onPointerDown={()=>{if(feedback&&!feedback.correct)fadeToNext();}}>
+      <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><div className="relative" ref={customiseRef}><button onClick={()=>setCustomiseOpen(v=>!v)} className="flex h-11 min-w-[30px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>{customiseOpen&&<div className="absolute left-0 z-[100] mt-2 max-h-[72vh] w-[min(400px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><h2 className="mb-3 text-center text-base font-semibold">Customise</h2><MenuRows tempo={tempo} setTempo={setTempo} metronomeOn={metronomeOn} setMetronomeOn={setMetronomeOn} highlightPlayback={highlightPlayback} setHighlightPlayback={setHighlightPlayback} resetScore={resetScore} stopAudio={stopAudio}/></div>}</div><div className="relative" ref={helpRef}><button onClick={()=>setHelpOpen(v=>!v)} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">💡 <span>Help</span></button>{helpOpen&&<div className="absolute left-0 top-12 z-[100] w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><HelpPanel question={question} activeBarIndex={activeBarIndex} playHelpChord={playHelpChord}/></div>}</div></div><button onClick={()=>newQuestion()} className="flex h-11 min-w-[30px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button><div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading}/></div></div>
+      <div className={`relative -top-[68px] transition-opacity duration-300 ${questionVisible?"opacity-100":"opacity-0"}`}><Score question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} activeNoteId={highlightPlayback?activeNoteId:undefined} activeBarIndex={activeBarIndex} helpOpen={helpOpen}/></div>
+      <div className="relative z-10 mt-3 flex min-h-[170px] flex-col justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[190px] md:mx-3">
+        <div className="text-stone-900"><p className="text-base font-semibold leading-tight">Name the chords played in <strong>bars 6 and 7</strong>. You may use letter names or numbers. The chord in <strong>bar 5</strong> is given.</p>{promptMessage&&<p className="mt-2 text-sm font-bold text-red-600">{promptMessage}</p>}</div>
+        <div className="relative mt-3 flex flex-wrap items-end justify-between gap-3">
+          
+
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Chords</h1>
-            <p className="mt-2 max-w-2xl text-stone-700">Identifying chords I, IV, V and VI in major and minor keys.</p>
+            <p className="mb-2 text-base font-semibold">Choose from the following:</p>
+            <ChordOptions question={question}/>
+            <p className="mt-3 text-base font-semibold">The key of the music is <strong>{question.key.name}</strong>.</p>
           </div>
-          <div className="grid min-w-[280px] grid-cols-3 gap-2"><StatCard label="Score" value={`${correct}/${attempted}`} /><StatCard label="Accuracy" value={`${accuracy}%`} /><StatCard label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} /></div>
-        </div>
-      </header>
 
-      <main className="overflow-visible rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="relative" ref={customiseRef}>
-            <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-100">⚙️ Customise</button>
-            {customiseOpen && <section className="absolute left-0 z-20 mt-2 w-[460px] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
-              <h2 className="mb-3 text-base font-semibold">Customise</h2>
-              <h3 className="mb-2 text-sm font-bold text-stone-700">Tempo</h3>
-              <div className="mb-4 grid grid-cols-3 gap-2">{TEMPOS.map((speed) => <button key={speed.id} type="button" onClick={() => { setTempo(speed.id); stopAudioPlayback(); }} className={`rounded-xl border px-3 py-3 text-sm font-bold ${tempo === speed.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>{speed.label}</button>)}</div>
-              <button type="button" onClick={() => { setMetronomeOn((value) => !value); stopAudioPlayback(); }} className="flex w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-1.5 hover:bg-stone-100"><span className="text-sm font-semibold">Metronome</span><span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${metronomeOn ? "bg-green-600" : "bg-stone-300"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${metronomeOn ? "translate-x-5" : "translate-x-0"}`} /></span></button>
-            </section>}
-          </div>
-          <div className="flex justify-end gap-2"><button type="button" onClick={() => setHelpOpen((value) => !value)} title="Help" aria-label="Help" className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 bg-white text-lg font-bold text-stone-700 hover:bg-stone-100">?</button><button type="button" onClick={resetScore} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Reset score</button></div>
-        </div>
-
-        {helpOpen && <HelpPanel question={question} activeBarIndex={activeBarIndex} playHelpChord={playHelpChord} />}
-
-        <div className="relative overflow-visible rounded-xl border border-stone-200 bg-white">
-          <Score question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} activeNoteId={helpOpen ? activeNoteId : undefined} activeBarIndex={activeBarIndex} helpOpen={helpOpen} />
-        </div>
-
-        <section className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
-          <div className="mb-3 relative pr-14">
-            <div className="space-y-4 text-stone-900">
-              <p className="text-base font-semibold leading-tight">
-                Name the chords played in <strong>bars 6 and 7</strong>. You may use letter names or numbers. The chord in <strong>bar 5</strong> is given.
-              </p>
-
-              <div>
-                <p className="mb-2 text-base font-semibold">Choose from the following:</p>
-                <div className="grid w-fit grid-cols-[48px_120px] gap-x-3 text-base leading-tight">
-                  {chordOptions.map((option) => <React.Fragment key={option.symbol}>
-                    <div className="font-semibold">{getChordShortName(option.chord)}</div>
-                    <div>Chord {option.symbol}</div>
-                  </React.Fragment>)}
+          <div className="flex w-full items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <button onClick={()=>playQuestionAudio(0)} disabled={Boolean(feedback)} className="flex h-11 w-[110px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-950 bg-stone-950 px-4 text-sm font-semibold text-white">
+                <span className="text-lg leading-none">{playing?"■":"▶"}</span>
+                <span>{playing?"Stop":"Play"}</span>
+              </button>
+              <div className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3">
+                <div ref={playbackBarRef} className="relative h-[8.8px] flex-1 cursor-pointer rounded-full bg-stone-200 touch-none" style={{touchAction:"none"}} onPointerDown={handleSeek}>
+                  <div className="absolute left-0 top-0 h-2 rounded-full bg-stone-900" style={{width:`${progressPercent}%`}} />
+                  <div className="absolute top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-stone-950 shadow-sm" style={{left:`${progressPercent}%`}} />
                 </div>
+                <div className="w-[72px] text-right text-xs font-semibold tabular-nums text-stone-600">{formatPlaybackTime(playbackElapsed)} / {formatPlaybackTime(displayedTotal)}</div>
               </div>
-
-              <p className="text-base font-semibold">Type your answers in the boxes provided. The key of the music is <strong>{question.key.name}</strong>.</p>
-              {prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}
             </div>
 
-            <button type="button" onClick={playQuestionAudio} className="absolute right-2 top-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white hover:bg-stone-800" aria-label={isAudioPlaying ? "Stop excerpt" : "Play excerpt"}>
-              <span className="text-lg leading-none">{isAudioPlaying ? "■" : "▶"}</span>
-            </button>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <button disabled={Boolean(feedback)} onClick={clearAnswers} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-black hover-bg-stone-100">Clear</button>
+              <button disabled={Boolean(feedback)} onClick={confirmAnswer} className="flex h-11 items-center justify-center rounded-xl border border-green-700 bg-green-600 px-4 text-sm font-semibold text-white hover:bg-green-700">Confirm</button>
+            </div>
           </div>
-        </section>
-
-        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <Feedback feedback={feedback} />
-          <div className="flex w-full justify-end gap-2"><button type="button" disabled={Boolean(feedback)} onClick={clearAnswers} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60">Clear</button><button type="button" disabled={Boolean(feedback)} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-5 py-2 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60">Confirm</button></div>
         </div>
-      </main>
-    </div>
-  </div>;
+      </div>
+    </main>
+  </div></div>;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-  </script>
+const root = document.getElementById("root");
+if (ReactDOM.createRoot) ReactDOM.createRoot(root).render(<App />);
+else ReactDOM.render(<App />, root);
+</script>
 </body>
 </html>
