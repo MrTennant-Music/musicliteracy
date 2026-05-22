@@ -1,9 +1,9 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Barlines</title>
+  <title>Barlines Golden App</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -13,22 +13,30 @@
   <div id="root"></div>
 
   <script type="text/babel">
-const { useMemo, useRef, useState } = React;
+const { useEffect, useMemo, useRef, useState } = React;
 
 const VIEWBOX_WIDTH = 920;
-const VIEWBOX_HEIGHT = 320;
+const VIEWBOX_HEIGHT = 280;
 const STAFF_LEFT = 24;
 const STAFF_RIGHT = 896;
-const SYSTEM_TOPS_ONE_LINE = [132];
-const SYSTEM_TOPS_TWO_LINES = [92, 232];
+const SYSTEM_TOPS_ONE_LINE = [82];
+const SYSTEM_TOPS_TWO_LINES = [42, 182];
 const LINE_GAP = 10;
 const NOTE_RX = 6.3;
 const NOTE_RY = 4.6;
 const STEM_LENGTH = 32;
 const TOTAL_BARS = 4;
 const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
-const TICK = String.fromCodePoint(0x2714);
-const CROSS = String.fromCodePoint(0x2716);
+
+const COLOUR = { green: "#16a34a", red: "#dc2626", black: "#000000" };
+
+const NOTES = [
+  { name: "C4", step: -2 }, { name: "D4", step: -1 }, { name: "E4", step: 0 },
+  { name: "F4", step: 1 }, { name: "G4", step: 2 }, { name: "A4", step: 3 },
+  { name: "B4", step: 4 }, { name: "C5", step: 5 }, { name: "D5", step: 6 },
+  { name: "E5", step: 7 }, { name: "F5", step: 8 }, { name: "G5", step: 9 },
+  { name: "A5", step: 10 },
+];
 
 const TIME_SIGNATURES = [
   { id: "2/4", top: "2", bottom: "4", unitsPerBar: 8, type: "simple", weight: 1 },
@@ -39,51 +47,49 @@ const TIME_SIGNATURES = [
   { id: "12/8", top: "12", bottom: "8", unitsPerBar: 24, type: "compound", compoundGroups: 4, weight: 0.4 },
 ];
 
-const NOTES = [
-  { name: "C4", step: -2 }, { name: "D4", step: -1 }, { name: "E4", step: 0 },
-  { name: "F4", step: 1 }, { name: "G4", step: 2 }, { name: "A4", step: 3 },
-  { name: "B4", step: 4 }, { name: "C5", step: 5 }, { name: "D5", step: 6 },
-  { name: "E5", step: 7 }, { name: "F5", step: 8 }, { name: "G5", step: 9 },
-  { name: "A5", step: 10 },
-];
-
 const RHYTHM_INFO = {
-  semibreve: { units: 16, spacing: 8, open: true, stem: false, dots: 0 },
-  minim: { units: 8, spacing: 4, open: true, stem: true, dots: 0 },
-  "dotted-minim": { units: 12, spacing: 6, open: true, stem: true, dots: 1 },
-  crotchet: { units: 4, spacing: 2.2, open: false, stem: true, dots: 0 },
-  "dotted-crotchet": { units: 6, spacing: 3, open: false, stem: true, dots: 1 },
-  quaver: { units: 2, spacing: 1.15, open: false, stem: true, dots: 0, flag: true, beams: 1 },
-  "dotted-quaver": { units: 3, spacing: 1.5, open: false, stem: true, dots: 1, flag: true, beams: 1 },
-  semiquaver: { units: 1, spacing: 0.72, open: false, stem: true, dots: 0, flag: true, beams: 2 },
-  "semibreve-rest": { units: 999, spacing: 8, rest: true },
-  "minim-rest": { units: 8, spacing: 4, rest: true },
-  "dotted-crotchet-rest": { units: 6, spacing: 3, rest: true },
-  "crotchet-rest": { units: 4, spacing: 2.2, rest: true },
-  "quaver-rest": { units: 2, spacing: 1.15, rest: true },
+  semibreve: { units: 16, beats: 4, spacing: 8, open: true, stem: false, dots: 0 },
+  "dotted-minim": { units: 12, beats: 3, spacing: 6, open: true, stem: true, dots: 1 },
+  minim: { units: 8, beats: 2, spacing: 4, open: true, stem: true, dots: 0 },
+  "dotted-crotchet": { units: 6, beats: 1.5, spacing: 3, open: false, stem: true, dots: 1 },
+  crotchet: { units: 4, beats: 1, spacing: 2.2, open: false, stem: true, dots: 0 },
+  quaver: { units: 2, beats: 0.5, spacing: 1.15, open: false, stem: true, dots: 0, flag: true, beams: 1 },
+  "dotted-quaver": { units: 3, beats: 0.75, spacing: 1.5, open: false, stem: true, dots: 1, flag: true, beams: 1 },
+  semiquaver: { units: 1, beats: 0.25, spacing: 0.72, open: false, stem: true, dots: 0, flag: true, beams: 2 },
+  "semibreve-rest": { units: 999, beats: 4, spacing: 8, rest: true },
+  "minim-rest": { units: 8, beats: 2, spacing: 4, rest: true },
+  "dotted-crotchet-rest": { units: 6, beats: 1.5, spacing: 3, rest: true },
+  "crotchet-rest": { units: 4, beats: 1, spacing: 2.2, rest: true },
+  "quaver-rest": { units: 2, beats: 0.5, spacing: 1.15, rest: true },
 };
 
-const HELP_LEGEND = [
-  { note: "semibreve", rest: "semibreve-rest", label: "Semibreve", beats: "4 beats" },
-  { note: "minim", rest: "minim-rest", label: "Minim", beats: "2 beats" },
-  { note: "dotted-crotchet", rest: "dotted-crotchet-rest", label: "Dotted crotchet", beats: "1.5 beats" },
-  { note: "crotchet", rest: "crotchet-rest", label: "Crotchet", beats: "1 beat" },
-  { note: "quaver", rest: "quaver-rest", label: "Quaver", beats: "0.5 beats" },
-  { note: "semiquaver", rest: null, label: "Semiquaver", beats: "0.25 beats" },
+const RHYTHM_OPTIONS = [
+  { id: "semibreve", label: "Semibreve" },
+  { id: "dotted-minim", label: "Dotted Minim" },
+  { id: "minim", label: "Minim" },
+  { id: "dotted-crotchet", label: "Dotted Crotchet" },
+  { id: "crotchet", label: "Crotchet" },
+  { id: "quaver", label: "Quaver" },
+  { id: "semiquaver", label: "Semiquaver" },
 ];
+
+const DEFAULT_ENABLED_RHYTHMS = RHYTHM_OPTIONS.reduce((result, item) => {
+  result[item.id] = true;
+  return result;
+}, {});
 
 const SIMPLE_FULL_BAR_PATTERNS = {
   "2/4": [
     ["minim"], ["crotchet", "crotchet"], ["quaver-group-2", "crotchet"], ["crotchet", "quaver-group-2"],
-    ["quaver-group-2", "quaver-group-2"], ["semiquaver-group-4", "crotchet"], ["crotchet", "semiquaver-group-4"],
+    ["quaver-group-2", "quaver-group-2"], ["semiquaver-group-4", "semiquaver-group-4"], ["semiquaver-group-4", "crotchet"], ["crotchet", "semiquaver-group-4"],
     ["quaver-2semiquavers", "crotchet"], ["2semiquavers-quaver", "crotchet"], ["dotted-quaver-semiquaver", "crotchet"],
     ["dotted-crotchet", "quaver"], ["quaver", "dotted-crotchet"], ["crotchet-rest", "crotchet"],
     ["crotchet", "crotchet-rest"], ["quaver-rest", "quaver", "crotchet"],
   ],
   "3/4": [
-    ["minim", "crotchet"], ["crotchet", "minim"], ["crotchet", "crotchet", "crotchet"],
+    ["dotted-minim"], ["minim", "crotchet"], ["crotchet", "minim"], ["crotchet", "crotchet", "crotchet"],
     ["quaver-group-2", "crotchet", "crotchet"], ["crotchet", "quaver-group-2", "crotchet"], ["crotchet", "crotchet", "quaver-group-2"],
-    ["semiquaver-group-4", "crotchet", "crotchet"], ["crotchet", "semiquaver-group-4", "crotchet"],
+    ["semiquaver-group-4", "semiquaver-group-4", "semiquaver-group-4"], ["semiquaver-group-4", "crotchet", "crotchet"], ["crotchet", "semiquaver-group-4", "crotchet"],
     ["dotted-crotchet", "quaver", "crotchet"], ["crotchet", "dotted-crotchet", "quaver"],
     ["crotchet-rest", "crotchet", "crotchet"], ["crotchet", "crotchet-rest", "crotchet"], ["crotchet", "crotchet", "crotchet-rest"],
   ],
@@ -91,7 +97,7 @@ const SIMPLE_FULL_BAR_PATTERNS = {
     ["semibreve"], ["minim", "minim"], ["minim", "crotchet", "crotchet"], ["crotchet", "crotchet", "minim"],
     ["crotchet", "crotchet", "crotchet", "crotchet"], ["quaver-group-2", "crotchet", "crotchet", "crotchet"],
     ["crotchet", "quaver-group-2", "crotchet", "crotchet"], ["crotchet", "crotchet", "quaver-group-2", "crotchet"],
-    ["quaver-group-2", "quaver-group-2", "minim"], ["semiquaver-group-4", "crotchet", "crotchet", "crotchet"],
+    ["quaver-group-2", "quaver-group-2", "minim"], ["semiquaver-group-4", "semiquaver-group-4", "semiquaver-group-4", "semiquaver-group-4"], ["semiquaver-group-4", "crotchet", "crotchet", "crotchet"],
     ["crotchet", "quaver-2semiquavers", "crotchet", "crotchet"], ["crotchet", "crotchet", "2semiquavers-quaver", "crotchet"],
     ["dotted-crotchet", "quaver", "minim"], ["minim", "dotted-crotchet", "quaver"], ["semibreve-rest"],
     ["minim-rest", "minim"], ["crotchet", "crotchet-rest", "minim"],
@@ -108,25 +114,46 @@ const COMPOUND_BEAT_PATTERNS = [
 
 function randomIndex(length) { return Math.floor(Math.random() * length); }
 function randomItem(items) { return items[randomIndex(items.length)]; }
-function weightedItem(items) { const pool = items.flatMap((item) => Array.from({ length: item.weight }, () => item.pattern)); return randomItem(pool); }
-function weightedSignatureChoice() {
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+function rhythmInfo(rhythm) { return RHYTHM_INFO[rhythm] || RHYTHM_INFO.crotchet; }
+function noteByIndex(index) { return NOTES[clamp(index, 0, NOTES.length - 1)]; }
+function yForStep(step, systemTop) { return systemTop + LINE_GAP * 4 - step * (LINE_GAP / 2); }
+function stemGoesDown(step) { return step > 4; }
+function weightedItem(items) {
   const pool = [];
-  TIME_SIGNATURES.forEach((signature) => {
-    const copies = Math.max(1, Math.round((signature.weight ?? 1) * 10));
+  items.forEach((item) => {
+    for (let i = 0; i < item.weight; i += 1) pool.push(item.pattern);
+  });
+  return randomItem(pool);
+}
+
+function signatureCanBeGenerated(signature, enabledRhythms, restsEnabled) {
+  if (signature.type === "simple") {
+    const patterns = SIMPLE_FULL_BAR_PATTERNS[signature.id] || [];
+    return patterns.some((pattern) => patternAllowed(pattern, enabledRhythms, restsEnabled));
+  }
+  return COMPOUND_BEAT_PATTERNS.some((item) => patternAllowed(item.pattern, enabledRhythms, restsEnabled));
+}
+
+function weightedSignatureChoice(enabledTimeTypes, enabledRhythms, restsEnabled) {
+  const available = TIME_SIGNATURES.filter((signature) => enabledTimeTypes[signature.type] && signatureCanBeGenerated(signature, enabledRhythms, restsEnabled));
+  const source = available.length ? available : TIME_SIGNATURES.filter((signature) => signatureCanBeGenerated(signature, enabledRhythms, restsEnabled));
+  const safeSource = source.length ? source : TIME_SIGNATURES.filter((signature) => enabledTimeTypes[signature.type]);
+  const pool = [];
+  safeSource.forEach((signature) => {
+    const copies = Math.max(1, Math.round((signature.weight || 1) * 10));
     for (let i = 0; i < copies; i += 1) pool.push(signature);
   });
   return randomItem(pool);
 }
-function rhythmInfo(rhythm) { return RHYTHM_INFO[rhythm] ?? RHYTHM_INFO.crotchet; }
-function noteByIndex(index) { return NOTES[Math.max(0, Math.min(NOTES.length - 1, index))]; }
-function yForStep(step, systemTop) { return systemTop + LINE_GAP * 4 - step * (LINE_GAP / 2); }
-function stemGoesDown(step) { return step > 4; }
-function nearestMelodicIndex(previousIndex, stepwise = false) {
-  if (!stepwise) return Math.max(0, Math.min(NOTES.length - 1, previousIndex + randomItem([-2, -1, 0, 0, 1, 2])));
+
+function nearestMelodicIndex(previousIndex, stepwise) {
+  if (!stepwise) return clamp(previousIndex + randomItem([-2, -1, 0, 0, 1, 2]), 0, NOTES.length - 1);
   if (previousIndex <= 0) return 1;
   if (previousIndex >= NOTES.length - 1) return NOTES.length - 2;
   return previousIndex + randomItem([-1, 1]);
 }
+
 function expandRhythmToken(token) {
   if (token === "quaver-group-2") return ["quaver", "quaver"];
   if (token === "quaver-group-3") return ["quaver", "quaver", "quaver"];
@@ -136,9 +163,45 @@ function expandRhythmToken(token) {
   if (token === "dotted-quaver-semiquaver") return ["dotted-quaver", "semiquaver"];
   return [token];
 }
-function shouldExplicitlyBeam(token) { return ["quaver-group-2", "quaver-group-3", "semiquaver-group-4", "quaver-2semiquavers", "2semiquavers-quaver", "dotted-quaver-semiquaver"].includes(token); }
 
-function addItemsFromRhythms(rhythms, previousIndex, options = {}) {
+function shouldExplicitlyBeam(token) {
+  return ["quaver-group-2", "quaver-group-3", "semiquaver-group-4", "quaver-2semiquavers", "2semiquavers-quaver", "dotted-quaver-semiquaver"].includes(token);
+}
+
+function rhythmAllowed(rhythm, enabledRhythms, restsEnabled) {
+  if (!restsEnabled && rhythmInfo(rhythm).rest) return false;
+  if (rhythm === "semibreve-rest") return !!enabledRhythms.semibreve;
+  if (rhythm === "minim-rest") return !!enabledRhythms.minim;
+  if (rhythm === "dotted-crotchet-rest") return !!enabledRhythms["dotted-crotchet"];
+  if (rhythm === "crotchet-rest") return !!enabledRhythms.crotchet;
+  if (rhythm === "quaver-rest") return !!enabledRhythms.quaver;
+  if (rhythm === "dotted-quaver") return !!enabledRhythms.quaver;
+  return !!enabledRhythms[rhythm];
+}
+
+function tokenAllowed(token, enabledRhythms, restsEnabled) {
+  return expandRhythmToken(token).every((rhythm) => rhythmAllowed(rhythm, enabledRhythms, restsEnabled));
+}
+
+function patternAllowed(pattern, enabledRhythms, restsEnabled) {
+  return pattern.every((token) => tokenAllowed(token, enabledRhythms, restsEnabled));
+}
+
+function chooseSimplePattern(timeSignature, enabledRhythms, restsEnabled) {
+  const allPatterns = SIMPLE_FULL_BAR_PATTERNS[timeSignature.id] || SIMPLE_FULL_BAR_PATTERNS["4/4"];
+  const filtered = allPatterns.filter((pattern) => patternAllowed(pattern, enabledRhythms, restsEnabled));
+  return filtered.length ? randomItem(filtered) : null;
+}
+
+function buildCompoundBar(timeSignature, enabledRhythms, restsEnabled) {
+  const allowed = COMPOUND_BEAT_PATTERNS.filter((item) => patternAllowed(item.pattern, enabledRhythms, restsEnabled));
+  if (!allowed.length) return null;
+  const groups = [];
+  for (let i = 0; i < timeSignature.compoundGroups; i += 1) groups.push(weightedItem(allowed));
+  return groups.flat();
+}
+
+function addItemsFromRhythms(rhythms, previousIndex, options) {
   const items = [];
   let noteIndex = previousIndex;
   let beamGroupCounter = 0;
@@ -165,21 +228,8 @@ function addItemsFromRhythms(rhythms, previousIndex, options = {}) {
   return { items, nextIndex: noteIndex };
 }
 
-function buildCompoundBar(timeSignature) {
-  const groups = [];
-  for (let i = 0; i < timeSignature.compoundGroups; i += 1) {
-    let choice = weightedItem(COMPOUND_BEAT_PATTERNS);
-    if (groups.length > 0) {
-      const previous = groups[groups.length - 1];
-      if (previous[previous.length - 1] === "crotchet" && choice[0] === "crotchet") choice = randomItem([["dotted-crotchet"], ["quaver", "crotchet"], ["dotted-crotchet-rest"]]);
-    }
-    groups.push(choice);
-  }
-  return groups.flat();
-}
-
-function buildQuestion() {
-  const timeSignature = weightedSignatureChoice();
+function buildQuestion(enabledTimeTypes, enabledRhythms, restsEnabled) {
+  const timeSignature = weightedSignatureChoice(enabledTimeTypes, enabledRhythms, restsEnabled);
   const systemCount = timeSignature.id === "9/8" || timeSignature.id === "12/8" ? 2 : 1;
   const barsPerSystem = systemCount === 2 ? 2 : 4;
   const systemTops = systemCount === 2 ? SYSTEM_TOPS_TWO_LINES : SYSTEM_TOPS_ONE_LINE;
@@ -188,7 +238,8 @@ function buildQuestion() {
   let previousIndex = randomIndex(NOTES.length);
   let runningUnits = 0;
   for (let barIndex = 0; barIndex < TOTAL_BARS; barIndex += 1) {
-    const pattern = timeSignature.type === "compound" ? buildCompoundBar(timeSignature) : randomItem(SIMPLE_FULL_BAR_PATTERNS[timeSignature.id]);
+    const pattern = timeSignature.type === "compound" ? buildCompoundBar(timeSignature, enabledRhythms, restsEnabled) : chooseSimplePattern(timeSignature, enabledRhythms, restsEnabled);
+    if (!pattern) return buildQuestion(enabledTimeTypes, DEFAULT_ENABLED_RHYTHMS, restsEnabled);
     const built = addItemsFromRhythms(pattern, previousIndex, { disableAutoBeam: timeSignature.type === "compound" });
     previousIndex = built.nextIndex;
     built.items.forEach((item) => {
@@ -198,14 +249,19 @@ function buildQuestion() {
     });
     if (barIndex < TOTAL_BARS - 1) correctBoundaries.push(runningUnits);
   }
-  return { timeSignature, items, correctBoundaries, systemCount, barsPerSystem, systemTops };
+  return { id: Math.random().toString(36).slice(2), timeSignature, items, correctBoundaries, systemCount, barsPerSystem, systemTops };
 }
 
 function getItemSystemIndex(question, item) {
   const barIndex = Math.min(TOTAL_BARS - 1, Math.floor((item.cumulativeUnits - 0.001) / question.timeSignature.unitsPerBar));
   return Math.floor(barIndex / question.barsPerSystem);
 }
-function systemMusicBounds(systemIndex) { const startX = systemIndex === 0 ? STAFF_LEFT + 86 : STAFF_LEFT + 70; return { startX, endX: STAFF_RIGHT - 10 }; }
+
+function systemMusicBounds(systemIndex) {
+  const startX = systemIndex === 0 ? STAFF_LEFT + 86 : STAFF_LEFT + 70;
+  return { startX, endX: STAFF_RIGHT - 10 };
+}
+
 function calculateLayout(question) {
   const systemItems = question.systemTops.map((_, systemIndex) => question.items.filter((item) => getItemSystemIndex(question, item) === systemIndex));
   const itemPositions = {};
@@ -228,91 +284,555 @@ function calculateLayout(question) {
   return { itemPositions, boundaryPositions };
 }
 
-function StaffLines({ systemTop }) { return <g>{[0,1,2,3,4].map((line) => <line key={line} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={systemTop + line * LINE_GAP} y2={systemTop + line * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />)}</g>; }
-function TrebleClef({ systemTop }) { return <text x={STAFF_LEFT + 8} y={systemTop + 28} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text>; }
-function TimeSignatureGlyph({ signature, x, y }) { return <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle" fill="currentColor"><text x={x} y={y}>{signature.top}</text><text x={x} y={y + 18}>{signature.bottom}</text></g>; }
-function LedgerLines({ x, step, systemTop, colour = "currentColor" }) { const lines = []; if (step <= -2) lines.push(yForStep(-2, systemTop)); if (step >= 10) lines.push(yForStep(10, systemTop)); return <g>{lines.map((y) => <line key={y} x1={x - 12} x2={x + 12} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}</g>; }
-function Rest({ rhythm, x, systemTop, colour = "currentColor" }) {
+function playFeedbackSound(correct, celebration, medal) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  const context = new AudioContextClass();
+  const master = context.createGain();
+  const now = context.currentTime + 0.01;
+  context.resume && context.resume();
+  master.gain.value = 0.18;
+  master.connect(context.destination);
+
+  function tone(freq, start, duration, type, volume) {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.type = type || "triangle";
+    osc.frequency.setValueAtTime(freq, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume || 0.12, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + duration + 0.05);
+  }
+
+  function trumpet(freq, start, duration, volume) {
+    tone(freq, start, duration, "sawtooth", volume || 0.1);
+    tone(freq * 1.002, start, duration * 0.96, "square", (volume || 0.1) * 0.32);
+    tone(freq * 2, start, duration * 0.75, "triangle", (volume || 0.1) * 0.16);
+  }
+
+  function medalPhrase(root, chord, start, beats) {
+    const beat = 0.6;
+    const triplet = 0.13;
+    const finalDuration = beats === 2 ? 0.72 : 1.95;
+    chord.forEach((freq) => trumpet(freq, start, beats * beat, 0.045));
+    trumpet(root, start, triplet, 0.11);
+    trumpet(root, start + triplet, triplet, 0.11);
+    trumpet(root, start + triplet * 2, triplet, 0.11);
+    trumpet(root, start + 0.42, finalDuration, 0.13);
+  }
+
+  if (!correct) {
+    tone(196, now, 0.32, "sawtooth", 0.06);
+    tone(185, now + 0.04, 0.38, "triangle", 0.05);
+    tone(174, now + 0.08, 0.45, "sine", 0.04);
+  } else if (celebration) {
+    if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now, 4);
+    if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now, 4);
+    if (medal === "gold") medalPhrase(830.61, [415.3, 523.25, 622.25], now, 4);
+    if (medal === "platinum") {
+      medalPhrase(739.99, [369.99, 466.16, 554.37], now, 2);
+      medalPhrase(830.61, [415.3, 523.25, 622.25], now + 0.82, 2);
+      medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
+    }
+  } else {
+    randomItem([[523.25, 659.25, 783.99], [587.33, 739.99, 880], [659.25, 830.61, 987.77]]).forEach((freq, index) => {
+      tone(freq, now + index * 0.045, 0.42, "triangle", index === 2 ? 0.085 : 0.07);
+      tone(freq * 2, now + index * 0.045, 0.24, "sine", 0.025);
+    });
+  }
+  window.setTimeout(() => { try { context.close(); } catch (error) {} }, medal === "platinum" ? 9000 : celebration ? 3500 : 900);
+}
+
+function StaffLines({ systemTop }) {
+  return <g>{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={systemTop + line * LINE_GAP} y2={systemTop + line * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />)}</g>;
+}
+
+function TrebleClef({ systemTop }) {
+  return <text x={STAFF_LEFT + 8} y={systemTop + 28} fontSize="88" fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text>;
+}
+
+function TimeSignatureGlyph({ signature, x, y, colour, fontSize }) {
+  const size = fontSize || 30;
+  return <g fontFamily="serif" fontWeight="900" fontSize={size} textAnchor="middle" fill={colour || "currentColor"}><text x={x} y={y}>{signature.top}</text><text x={x} y={y + size * 0.62 + 2}>{signature.bottom}</text></g>;
+}
+
+function LedgerLines({ x, step, systemTop, colour }) {
+  const lines = [];
+  if (step <= -2) lines.push(yForStep(-2, systemTop));
+  if (step >= 10) lines.push(yForStep(10, systemTop));
+  return <g>{lines.map((y) => <line key={y} x1={x - 12} x2={x + 12} y1={y} y2={y} stroke={colour || "currentColor"} strokeWidth="1.2" />)}</g>;
+}
+
+function Rest({ rhythm, x, systemTop, colour }) {
+  const ink = colour || "currentColor";
   const middleY = systemTop + LINE_GAP * 2;
-  if (rhythm === "semibreve-rest") return <g><line x1={x - 9} x2={x + 9} y1={systemTop + LINE_GAP} y2={systemTop + LINE_GAP} stroke={colour} strokeWidth="1.2" /><rect x={x - 7} y={systemTop + LINE_GAP} width="14" height="5" fill={colour} /></g>;
-  if (rhythm === "minim-rest") return <g><line x1={x - 9} x2={x + 9} y1={systemTop + LINE_GAP * 2} y2={systemTop + LINE_GAP * 2} stroke={colour} strokeWidth="1.2" /><rect x={x - 7} y={systemTop + LINE_GAP * 2 - 5} width="14" height="5" fill={colour} /></g>;
-  if (rhythm === "dotted-crotchet-rest" || rhythm === "crotchet-rest") { const d = `M ${x} ${middleY - 14} L ${x + 4} ${middleY - 9} L ${x - 2} ${middleY - 3} L ${x + 4} ${middleY + 3} L ${x - 2} ${middleY + 11}`; return <g><path d={d} fill="none" stroke={colour} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />{rhythm === "dotted-crotchet-rest" && <circle cx={x + 10} cy={middleY - 4} r="2" fill={colour} />}</g>; }
-  const topY = middleY - 6; const bottomY = middleY + 10;
-  return <g stroke={colour} strokeWidth="1.8" strokeLinecap="round" fill="none"><line x1={x - 3} y1={topY} x2={x + 2} y2={topY} /><line x1={x + 2} y1={topY} x2={x - 1} y2={bottomY} /><circle cx={x - 4} cy={topY - 1} r="1.8" fill={colour} stroke="none" /></g>;
+  if (rhythm === "semibreve-rest") return <g><line x1={x - 9} x2={x + 9} y1={systemTop + LINE_GAP} y2={systemTop + LINE_GAP} stroke={ink} strokeWidth="1.2" /><rect x={x - 7} y={systemTop + LINE_GAP} width="14" height="5" fill={ink} /></g>;
+  if (rhythm === "minim-rest") return <g><line x1={x - 9} x2={x + 9} y1={systemTop + LINE_GAP * 2} y2={systemTop + LINE_GAP * 2} stroke={ink} strokeWidth="1.2" /><rect x={x - 7} y={systemTop + LINE_GAP * 2 - 5} width="14" height="5" fill={ink} /></g>;
+  if (rhythm === "dotted-crotchet-rest" || rhythm === "crotchet-rest") {
+    const d = `M ${x} ${middleY - 14} L ${x + 4} ${middleY - 9} L ${x - 2} ${middleY - 3} L ${x + 4} ${middleY + 3} L ${x - 2} ${middleY + 11}`;
+    return <g><path d={d} fill="none" stroke={ink} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />{rhythm === "dotted-crotchet-rest" && <circle cx={x + 10} cy={middleY - 4} r="2" fill={ink} />}</g>;
+  }
+  const topY = middleY - 6;
+  const bottomY = middleY + 10;
+  return <g stroke={ink} strokeWidth="1.8" strokeLinecap="round" fill="none"><line x1={x - 3} y1={topY} x2={x + 2} y2={topY} /><line x1={x + 2} y1={topY} x2={x - 1} y2={bottomY} /><circle cx={x - 4} cy={topY - 1} r="1.8" fill={ink} stroke="none" /></g>;
 }
-function Flag({ stemX, stemEndY, stemDown, colour = "currentColor", beams = 1, secondaryOffsetY = 0 }) {
+
+function Flag({ stemX, stemEndY, stemDown, colour, beams }) {
+  const ink = colour || "currentColor";
   const primaryPath = stemDown ? `M ${stemX} ${stemEndY} C ${stemX + 12} ${stemEndY - 5}, ${stemX + 12} ${stemEndY - 14}, ${stemX + 3} ${stemEndY - 18}` : `M ${stemX} ${stemEndY} C ${stemX + 12} ${stemEndY + 5}, ${stemX + 12} ${stemEndY + 14}, ${stemX + 3} ${stemEndY + 18}`;
-  const secondaryPath = stemDown ? `M ${stemX} ${stemEndY + 6 + secondaryOffsetY} C ${stemX + 10} ${stemEndY + 1 + secondaryOffsetY}, ${stemX + 10} ${stemEndY - 7 + secondaryOffsetY}, ${stemX + 3} ${stemEndY - 11 + secondaryOffsetY}` : `M ${stemX} ${stemEndY - 6 + secondaryOffsetY} C ${stemX + 10} ${stemEndY - 1 + secondaryOffsetY}, ${stemX + 10} ${stemEndY + 7 + secondaryOffsetY}, ${stemX + 3} ${stemEndY + 11 + secondaryOffsetY}`;
-  return <g><path d={primaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />{beams === 2 && <path d={secondaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />}</g>;
+  const secondaryPath = stemDown ? `M ${stemX - 1} ${stemEndY + 18} C ${stemX + 9} ${stemEndY + 13}, ${stemX + 9} ${stemEndY + 5}, ${stemX + 2} ${stemEndY + 1}` : `M ${stemX + 2} ${stemEndY + 4} C ${stemX + 12} ${stemEndY + 9}, ${stemX + 12} ${stemEndY + 17}, ${stemX + 5} ${stemEndY + 21}`;
+  return <g><path d={primaryPath} fill="none" stroke={ink} strokeWidth="1.7" strokeLinecap="round" />{beams === 2 && <path d={secondaryPath} fill="none" stroke={ink} strokeWidth="1.7" strokeLinecap="round" />}</g>;
 }
-function getStemData(item, x, systemTop, stemDownOverride = null) { const step = item.pitch.step; const y = yForStep(step, systemTop); const stemDown = stemDownOverride ?? stemGoesDown(step); const stemX = stemDown ? x - NOTE_RX + 1 : x + NOTE_RX - 1; const stemEndY = stemDown ? y + STEM_LENGTH : y - STEM_LENGTH; return { step, y, stemDown, stemX, stemEndY }; }
-function Note({ item, x, systemTop, stemDownOverride = null, forcedStemEndY = null, showFlag = true, colour = "currentColor", secondaryFlagOffsetY = 0 }) {
-  const info = rhythmInfo(item.rhythm); const stem = getStemData(item, x, systemTop, stemDownOverride); const stemEndY = forcedStemEndY !== null ? (stem.stemDown ? forcedStemEndY + 2 : forcedStemEndY - 2) : stem.stemEndY; const dotY = Math.abs(stem.step % 2) === 1 ? stem.y : stem.y - 5;
-  return <g><LedgerLines x={x} step={stem.step} systemTop={systemTop} colour={colour} /><ellipse cx={x} cy={stem.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${stem.y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.7" />{info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={stemEndY} stroke={colour} strokeWidth="1.5" />}{info.dots === 1 && <circle cx={x + 12} cy={dotY} r="2.1" fill={colour} />}{info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={stemEndY} stemDown={stem.stemDown} colour={colour} beams={info.beams ?? 1} secondaryOffsetY={secondaryFlagOffsetY} />}</g>;
+
+function getStemData(item, x, systemTop, stemDownOverride) {
+  const step = item.pitch.step;
+  const y = yForStep(step, systemTop);
+  const stemDown = stemDownOverride === null || stemDownOverride === undefined ? stemGoesDown(step) : stemDownOverride;
+  const stemX = stemDown ? x - NOTE_RX : x + NOTE_RX;
+  const stemEndY = stemDown ? y + STEM_LENGTH : y - STEM_LENGTH;
+  return { step, y, stemDown, stemX, stemEndY };
 }
-function getBeamLineYAtX(x, start, end) { if (!start || !end || start.x === end.x) return start?.y ?? end?.y ?? 0; return start.y + ((x - start.x) / (end.x - start.x)) * (end.y - start.y); }
+
+function Note({ item, x, systemTop, stemDownOverride, forcedStemEndY, showFlag, colour }) {
+  const info = rhythmInfo(item.rhythm);
+  const ink = colour || "currentColor";
+  if (info.rest) return <Rest rhythm={item.rhythm} x={x} systemTop={systemTop} colour={ink} />;
+  const stem = getStemData(item, x, systemTop, stemDownOverride);
+  const stemEndY = forcedStemEndY === null || forcedStemEndY === undefined ? stem.stemEndY : (stem.stemDown ? forcedStemEndY + 2 : forcedStemEndY - 2);
+  const dotY = Math.abs(stem.step % 2) === 1 ? stem.y : stem.y - 5;
+  return <g><LedgerLines x={x} step={stem.step} systemTop={systemTop} colour={ink} /><ellipse cx={x} cy={stem.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${stem.y})`} fill={info.open ? "transparent" : ink} stroke={ink} strokeWidth="1.7" />{info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={stemEndY} stroke={ink} strokeWidth="1.5" />}{info.dots === 1 && <circle cx={x + 12} cy={dotY} r="2.1" fill={ink} />}{info.flag && showFlag !== false && <Flag stemX={stem.stemX} stemEndY={stemEndY} stemDown={stem.stemDown} colour={ink} beams={info.beams || 1} />}</g>;
+}
+
+function getBeamLineYAtX(x, start, end) {
+  if (!start || !end || start.x === end.x) return start ? start.y : end ? end.y : 0;
+  return start.y + ((x - start.x) / (end.x - start.x)) * (end.y - start.y);
+}
+
 function getBeamData(items, positions, systemTop) {
-  const averageStep = items.reduce((sum, item) => sum + item.pitch.step, 0) / items.length; const stemDown = averageStep > 4; const anchorStep = stemDown ? Math.max(...items.map((item) => item.pitch.step)) : Math.min(...items.map((item) => item.pitch.step)); const anchorIndex = items.findIndex((item) => item.pitch.step === anchorStep); const startStem = getStemData(items[0], positions[0], systemTop, stemDown); const endStem = getStemData(items[items.length - 1], positions[positions.length - 1], systemTop, stemDown); const anchorStem = getStemData(items[anchorIndex], positions[anchorIndex], systemTop, stemDown); const slope = Math.max(-8, Math.min(8, (items[items.length - 1].pitch.step - items[0].pitch.step) * -2)); const slopePerX = slope / Math.max(1, endStem.stemX - startStem.stemX);
+  const averageStep = items.reduce((sum, item) => sum + item.pitch.step, 0) / items.length;
+  const stemDown = averageStep > 4;
+  const anchorStep = stemDown ? Math.max(...items.map((item) => item.pitch.step)) : Math.min(...items.map((item) => item.pitch.step));
+  const anchorIndex = items.findIndex((item) => item.pitch.step === anchorStep);
+  const startStem = getStemData(items[0], positions[0], systemTop, stemDown);
+  const endStem = getStemData(items[items.length - 1], positions[positions.length - 1], systemTop, stemDown);
+  const anchorStem = getStemData(items[anchorIndex], positions[anchorIndex], systemTop, stemDown);
+  const slope = clamp((items[items.length - 1].pitch.step - items[0].pitch.step) * -2, -8, 8);
+  const slopePerX = slope / Math.max(1, endStem.stemX - startStem.stemX);
   return { stemDown, start: { x: startStem.stemX, y: anchorStem.stemEndY - slopePerX * (anchorStem.stemX - startStem.stemX) }, end: { x: endStem.stemX, y: anchorStem.stemEndY + slopePerX * (endStem.stemX - anchorStem.stemX) } };
 }
-function isBeamable(item) { return item && !item.isRest && ["quaver", "semiquaver", "dotted-quaver"].includes(item.rhythm) && item.beamGroupId !== null && item.beamGroupId !== undefined; }
-function getBeamGroups(items) { const groups = []; let index = 0; while (index < items.length) { const item = items[index]; if (!isBeamable(item)) { index += 1; continue; } const start = index; const id = item.beamGroupId; while (index < items.length && items[index].beamGroupId === id && isBeamable(items[index])) index += 1; const end = index - 1; if (end > start) groups.push({ start, end }); } return groups; }
+
+function isBeamable(item) {
+  return item && !item.isRest && ["quaver", "semiquaver", "dotted-quaver"].includes(item.rhythm) && item.beamGroupId !== null && item.beamGroupId !== undefined;
+}
+
+function getBeamGroups(items) {
+  const groups = [];
+  let index = 0;
+  while (index < items.length) {
+    const item = items[index];
+    if (!isBeamable(item)) { index += 1; continue; }
+    const start = index;
+    const id = item.beamGroupId;
+    while (index < items.length && items[index].beamGroupId === id && isBeamable(items[index])) index += 1;
+    const end = index - 1;
+    if (end > start) groups.push({ start, end });
+  }
+  return groups;
+}
+
 function Beam({ start, end, groupItems, groupPositions, stemDown }) {
-  const secondaryOffset = stemDown ? -7 : 7; const secondarySegments = []; let segmentStart = null;
-  groupItems.forEach((item, index) => { const isSemi = rhythmInfo(item.rhythm).beams === 2; const next = groupItems[index + 1]; const nextIsSemi = Boolean(next && rhythmInfo(next.rhythm).beams === 2); if (isSemi && segmentStart === null) segmentStart = index; if (segmentStart !== null && (!nextIsSemi || index === groupItems.length - 1)) { secondarySegments.push({ startIndex: segmentStart, endIndex: index, isHook: index === segmentStart }); segmentStart = null; } });
-  function stemXFor(index) { const x = groupPositions[index]; return stemDown ? x - NOTE_RX + 1 : x + NOTE_RX - 1; }
+  const secondaryOffset = stemDown ? -7 : 7;
+  const secondarySegments = [];
+  let segmentStart = null;
+  groupItems.forEach((item, index) => {
+    const isSemi = rhythmInfo(item.rhythm).beams === 2;
+    const next = groupItems[index + 1];
+    const nextIsSemi = !!(next && rhythmInfo(next.rhythm).beams === 2);
+    if (isSemi && segmentStart === null) segmentStart = index;
+    if (segmentStart !== null && (!nextIsSemi || index === groupItems.length - 1)) {
+      secondarySegments.push({ startIndex: segmentStart, endIndex: index, isHook: index === segmentStart });
+      segmentStart = null;
+    }
+  });
+  function stemXFor(index) {
+    const x = groupPositions[index];
+    return stemDown ? x - NOTE_RX + 1 : x + NOTE_RX - 1;
+  }
   return <g><line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="currentColor" strokeWidth="4" strokeLinecap="butt" />{secondarySegments.map((segment, index) => { const x1 = stemXFor(segment.startIndex); const y1 = getBeamLineYAtX(x1, start, end) + secondaryOffset; const x2 = segment.isHook ? x1 + (segment.startIndex > 0 ? -14 : 14) : stemXFor(segment.endIndex); const y2 = segment.isHook ? y1 : getBeamLineYAtX(x2, start, end) + secondaryOffset; return <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="4" strokeLinecap="butt" />; })}</g>;
 }
-function Barline({ x, systemTop, colour = "currentColor", opacity = 1, dashed = false }) { return <line x1={x} x2={x} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke={colour} strokeWidth="2" opacity={opacity} strokeDasharray={dashed ? "4 4" : undefined} />; }
-function FinalBarline({ x, systemTop }) { return <g><line x1={x - 5} x2={x - 5} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" /><line x1={x} x2={x} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="4" /></g>; }
 
-function Score({ question, placedBoundaries, hoverBoundaryId, selectedBoundaryId, setHoverBoundaryId, toggleBoundary, feedback }) {
-  const layout = useMemo(() => calculateLayout(question), [question]);
-  const beamGroups = getBeamGroups(question.items);
-  function groupForIndex(index) { return beamGroups.find((group) => index >= group.start && index <= group.end) ?? null; }
-  function boundaryById(id) { return layout.boundaryPositions.find((boundary) => boundary.id === id) ?? null; }
-  const correctSet = new Set(question.correctBoundaries.map((units) => `boundary-${units}`));
-  const placedSet = new Set(placedBoundaries);
-  return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="h-auto w-full select-none rounded-xl bg-white" aria-label="Barlines exercise"><rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
-    {question.systemTops.map((systemTop, systemIndex) => { const { endX } = systemMusicBounds(systemIndex); return <g key={systemIndex}><StaffLines systemTop={systemTop} /><TrebleClef systemTop={systemTop} />{systemIndex === 0 && <TimeSignatureGlyph signature={question.timeSignature} x={STAFF_LEFT + 54} y={systemTop + 20} />}{systemIndex === question.systemTops.length - 1 ? <FinalBarline x={endX + 8} systemTop={systemTop} /> : <line x1={endX + 8} x2={endX + 8} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />}</g>; })}
-    {question.items.map((item, index) => { const position = layout.itemPositions[item.id]; const systemTop = question.systemTops[position.systemIndex]; if (item.isRest) return <Rest key={item.id} rhythm={item.rhythm} x={position.x} systemTop={systemTop} />; const group = groupForIndex(index); if (!group) return <Note key={item.id} item={item} x={position.x} systemTop={systemTop} />; const groupItems = question.items.slice(group.start, group.end + 1); const groupPositions = groupItems.map((groupItem) => layout.itemPositions[groupItem.id].x); const beamData = getBeamData(groupItems, groupPositions, systemTop); const stem = getStemData(item, position.x, systemTop, beamData.stemDown); return <Note key={item.id} item={item} x={position.x} systemTop={systemTop} stemDownOverride={beamData.stemDown} forcedStemEndY={getBeamLineYAtX(stem.stemX, beamData.start, beamData.end)} showFlag={false} />; })}
-    {beamGroups.map((group, index) => { const groupItems = question.items.slice(group.start, group.end + 1); const firstPosition = layout.itemPositions[groupItems[0].id]; const systemTop = question.systemTops[firstPosition.systemIndex]; const groupPositions = groupItems.map((item) => layout.itemPositions[item.id].x); const beamData = getBeamData(groupItems, groupPositions, systemTop); return <Beam key={index} start={beamData.start} end={beamData.end} groupItems={groupItems} groupPositions={groupPositions} stemDown={beamData.stemDown} />; })}
-    {layout.boundaryPositions.map((boundary) => { const systemTop = question.systemTops[boundary.systemIndex]; const placed = placedSet.has(boundary.id); const hovered = hoverBoundaryId === boundary.id || selectedBoundaryId === boundary.id; const isCorrect = correctSet.has(boundary.id); const colour = feedback ? (placed && isCorrect ? "#16a34a" : placed && !isCorrect ? "#dc2626" : "#16a34a") : "#111827"; const showMissingCorrect = feedback && isCorrect && !placed; if (!placed && !hovered && !showMissingCorrect) return <rect key={boundary.id} x={boundary.x - 12} y={systemTop - 12} width="24" height={LINE_GAP * 4 + 24} fill="transparent" onMouseEnter={() => setHoverBoundaryId(boundary.id)} onMouseLeave={() => setHoverBoundaryId(null)} onClick={() => toggleBoundary(boundary.id)} />; return <g key={boundary.id}><rect x={boundary.x - 12} y={systemTop - 12} width="24" height={LINE_GAP * 4 + 24} fill="transparent" onMouseEnter={() => setHoverBoundaryId(boundary.id)} onMouseLeave={() => setHoverBoundaryId(null)} onClick={() => toggleBoundary(boundary.id)} /><Barline x={boundary.x} systemTop={systemTop} colour={colour} opacity={placed || showMissingCorrect ? 1 : 0.35} dashed={!placed} /></g>; })}
-  </svg>;
+function Barline({ x, systemTop, colour, opacity, dashed }) {
+  return <line x1={x} x2={x} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke={colour || "currentColor"} strokeWidth="2" opacity={opacity === undefined ? 1 : opacity} strokeDasharray={dashed ? "4 4" : undefined} />;
 }
 
-function StatCard({ label, value }) { return <div className="rounded-xl border bg-stone-50 p-3 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className="text-xl font-semibold">{value}</div></div>; }
-function Feedback({ feedback, correct }) { if (!feedback) return null; return <div className={`mt-4 text-center font-semibold ${correct ? "text-green-700" : "text-red-700"}`}>{correct ? `${TICK} Correct` : `${CROSS} Incorrect`}</div>; }
-function HelpPanel() { return <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950"><p className="text-center font-semibold">Check the time signature and group the notes correctly into bars.</p><p className="mt-2 text-center text-sm">Each bar must contain the correct number of beats. Place 3 barlines to create 4 correct bars.</p><div className="mt-4 grid grid-cols-2 gap-2 text-sm md:grid-cols-6">{HELP_LEGEND.map((item) => <div key={item.label} className="flex flex-col items-center justify-center rounded-lg bg-white/70 px-2 py-2 text-center"><svg viewBox="0 0 70 62" className="h-16 w-20 overflow-visible"><g transform="translate(0 14)"><Note item={{ rhythm: item.note, pitch: { name: "B4", step: 4 } }} x={22} systemTop={10} secondaryFlagOffsetY={item.note === "semiquaver" ? 14 : 0} />{item.rest && <Rest rhythm={item.rest} x={50} systemTop={10} />}</g></svg><span className="font-medium mt-1">{item.label}</span><span className="text-xs text-stone-600">{item.beats}</span></div>)}</div></div>; }
+function FinalBarline({ x, systemTop }) {
+  return <g><line x1={x - 5} x2={x - 5} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" /><line x1={x} x2={x} y1={systemTop - 0.75} y2={systemTop + LINE_GAP * 4 + 0.75} stroke="currentColor" strokeWidth="4" /></g>;
+}
 
-function Barlines() {
-  const timeoutRef = useRef(null);
-  const [question, setQuestion] = useState(() => buildQuestion());
+function Score({ question, placedBoundaries, hoverBoundaryId, setHoverBoundaryId, toggleBoundary, feedback }) {
+  const scoreHeight = question.systemTops[question.systemTops.length - 1] + LINE_GAP * 4 + 38;
+  const layout = useMemo(() => calculateLayout(question), [question]);
+  const beamGroups = getBeamGroups(question.items);
+  const correctSet = new Set(question.correctBoundaries.map((units) => `boundary-${units}`));
+  const placedSet = new Set(placedBoundaries);
+  function groupForIndex(index) { return beamGroups.find((group) => index >= group.start && index <= group.end) || null; }
+
+  return (
+    <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${scoreHeight}`} className="h-auto w-full select-none overflow-hidden" aria-label="Barlines exercise">
+      <rect x="0" y="0" width={VIEWBOX_WIDTH} height={scoreHeight} fill="white" />
+      {question.systemTops.map((systemTop, systemIndex) => {
+        const { endX } = systemMusicBounds(systemIndex);
+        return <g key={systemIndex}><StaffLines systemTop={systemTop} /><TrebleClef systemTop={systemTop} />{systemIndex === 0 && <TimeSignatureGlyph signature={question.timeSignature} x={STAFF_LEFT + 54} y={systemTop + 20} />}{systemIndex === question.systemTops.length - 1 ? <FinalBarline x={endX + 8} systemTop={systemTop} /> : <line x1={endX + 8} x2={endX + 8} y1={systemTop} y2={systemTop + LINE_GAP * 4} stroke="currentColor" strokeWidth="1.4" />}</g>;
+      })}
+      {question.items.map((item, index) => {
+        const position = layout.itemPositions[item.id];
+        const systemTop = question.systemTops[position.systemIndex];
+        if (item.isRest) return <Rest key={item.id} rhythm={item.rhythm} x={position.x} systemTop={systemTop} />;
+        const group = groupForIndex(index);
+        if (!group) return <Note key={item.id} item={item} x={position.x} systemTop={systemTop} />;
+        const groupItems = question.items.slice(group.start, group.end + 1);
+        const groupPositions = groupItems.map((groupItem) => layout.itemPositions[groupItem.id].x);
+        const beamData = getBeamData(groupItems, groupPositions, systemTop);
+        const stem = getStemData(item, position.x, systemTop, beamData.stemDown);
+        return <Note key={item.id} item={item} x={position.x} systemTop={systemTop} stemDownOverride={beamData.stemDown} forcedStemEndY={getBeamLineYAtX(stem.stemX, beamData.start, beamData.end)} showFlag={false} />;
+      })}
+      {beamGroups.map((group, index) => {
+        const groupItems = question.items.slice(group.start, group.end + 1);
+        const firstPosition = layout.itemPositions[groupItems[0].id];
+        const systemTop = question.systemTops[firstPosition.systemIndex];
+        const groupPositions = groupItems.map((item) => layout.itemPositions[item.id].x);
+        const beamData = getBeamData(groupItems, groupPositions, systemTop);
+        return <Beam key={index} start={beamData.start} end={beamData.end} groupItems={groupItems} groupPositions={groupPositions} stemDown={beamData.stemDown} />;
+      })}
+      {layout.boundaryPositions.map((boundary) => {
+        const systemTop = question.systemTops[boundary.systemIndex];
+        const placed = placedSet.has(boundary.id);
+        const hovered = hoverBoundaryId === boundary.id;
+        const isCorrect = correctSet.has(boundary.id);
+        const colour = feedback ? (placed && isCorrect ? COLOUR.green : placed && !isCorrect ? COLOUR.red : COLOUR.green) : COLOUR.black;
+        const showMissingCorrect = feedback && isCorrect && !placed;
+        if (!placed && !hovered && !showMissingCorrect) {
+          return <rect key={boundary.id} x={boundary.x - 13} y={systemTop - 18} width="26" height={LINE_GAP * 4 + 36} fill="transparent" onMouseEnter={() => setHoverBoundaryId(boundary.id)} onMouseLeave={() => setHoverBoundaryId(null)} onClick={() => toggleBoundary(boundary.id)} />;
+        }
+        return <g key={boundary.id}><rect x={boundary.x - 13} y={systemTop - 18} width="26" height={LINE_GAP * 4 + 36} fill="transparent" onMouseEnter={() => setHoverBoundaryId(boundary.id)} onMouseLeave={() => setHoverBoundaryId(null)} onClick={() => toggleBoundary(boundary.id)} /><Barline x={boundary.x} systemTop={systemTop} colour={colour} opacity={placed || showMissingCorrect ? 1 : 0.35} dashed={!placed} /></g>;
+      })}
+    </svg>
+  );
+}
+
+function getStreakMedal(streak) {
+  if (streak >= 30) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" };
+  if (streak >= 20) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" };
+  if (streak >= 15) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" };
+  if (streak >= 10) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" };
+  return null;
+}
+
+function StatCard({ label, value, footer, progress, medal, variant, confettiKey }) {
+  const safeProgress = progress == null ? null : clamp(progress, 0, 100);
+  const fillHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
+  const fillColour = safeProgress == null ? "transparent" : safeProgress < 50 ? "rgba(220, 38, 38, 0.38)" : safeProgress < 70 ? "rgba(255, 120, 0, 0.42)" : "rgba(22, 163, 74, 0.38)";
+  const isStreak = variant === "streak";
+  return (
+    <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>
+      {isStreak && confettiKey > 0 && <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">{Array.from({ length: 18 }).map((_, index) => <span key={index} className="absolute block h-1.5 w-1 rounded-sm" style={{ left: `${8 + ((index * 19) % 84)}%`, top: "-8px", backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5], animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`, animationDelay: `${(index % 6) * 0.035}s` }} />)}</div>}
+      {safeProgress !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fillHeight}%`, background: fillColour }} />}
+      <div className="relative z-10 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>{footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}</div>
+      {isStreak && <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal && medal.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>{medal && medal.emoji ? medal.emoji : "🥉"}</div>}
+    </div>
+  );
+}
+
+function FeedbackBanner({ feedback, fading }) {
+  if (!feedback) return null;
+  return <div className="relative flex w-full items-center justify-center text-center"><div className={`flex w-[300px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${feedback.correct ? "text-green-600" : "text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}><span className="translate-y-[4px]">{feedback.correct ? "Correct" : "Incorrect"}</span>{!feedback.correct && <span className="mt-2 inline-flex -translate-x-[2px] items-center gap-0 text-sm font-semibold text-black"><TapIcon /><span>Click or tap anywhere to continue</span></span>}</div></div>;
+}
+
+function TapIcon() {
+  return <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]"><path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" /></svg>;
+}
+
+function AppIcon() {
+  return <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50"><svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">{[0, 1, 2, 3, 4].map((i) => <line key={i} x1="-2" x2="58" y1={14 + i * 6} y2={14 + i * 6} stroke="black" strokeWidth="1.4" />)}<line x1="28" x2="28" y1="13" y2="38" stroke="black" strokeWidth="1.5" /></svg></div>;
+}
+
+function TimeSignatureMenuGlyph({ signatures }) {
+  return <span className="inline-flex h-[34px] w-[46px] shrink-0 items-center justify-center gap-[-12px] leading-none">{signatures.map((signature) => { const parts = signature.split("/"); return <svg key={signature} viewBox="0 0 24 34" className="h-[32px] w-[12px] text-stone-800" aria-hidden="true"><text x="12" y="14" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="19" fill="currentColor">{parts[0]}</text><text x="12" y="28" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="19" fill="currentColor">{parts[1]}</text></svg>; })}</span>;
+}
+
+function NoteLegendSymbol({ rhythm }) {
+  const fakeItem = { rhythm, pitch: { name: "B4", step: 4 } };
+  return <svg viewBox="0 0 70 70" className="h-11 w-16 overflow-visible"><g transform="translate(0, 11) scale(1.15)"><Note item={fakeItem} x={32} systemTop={8} /></g></svg>;
+}
+
+function MenuRows({ enabledTimeTypes, setEnabledTimeTypes, enabledRhythms, setEnabledRhythms, restsEnabled, setRestsEnabled, showRhythmGuide, setShowRhythmGuide, resetScore, newQuestion }) {
+  const rowClass = "mb-2 flex min-h-[44px] w-full items-center justify-between rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[6px]";
+  function ToggleSwitch({ active }) {
+    return <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active ? "bg-green-600" : "bg-stone-400"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : "translate-x-0"}`} /></span>;
+  }
+  function toggleTimeType(type) {
+    setEnabledTimeTypes((current) => {
+      const next = { ...current, [type]: !current[type] };
+      if (!next.simple && !next.compound) return current;
+      window.setTimeout(() => newQuestion(next, enabledRhythms, restsEnabled), 0);
+      return next;
+    });
+  }
+  function toggleRhythm(rhythmId) {
+    setEnabledRhythms((current) => {
+      const activeCount = Object.values(current).filter(Boolean).length;
+      if (current[rhythmId] && activeCount <= 1) return current;
+      const next = { ...current, [rhythmId]: !current[rhythmId] };
+      window.setTimeout(() => newQuestion(enabledTimeTypes, next, restsEnabled), 0);
+      return next;
+    });
+  }
+  return <><button type="button" onClick={() => setShowRhythmGuide((value) => !value)} className={rowClass}><span className="flex items-center gap-1 text-sm font-semibold"><span className="flex w-[46px] justify-center text-[30px] leading-none">♩</span><span>Show Rhythm Guide</span></span><ToggleSwitch active={showRhythmGuide} /></button><button type="button" onClick={() => toggleTimeType("simple")} className={rowClass}><span className="flex items-center gap-1 text-sm font-semibold"><span className="flex w-[46px] justify-center"><TimeSignatureMenuGlyph signatures={["2/4", "3/4", "4/4"]} /></span><span>Simple Time</span></span><ToggleSwitch active={enabledTimeTypes.simple} /></button><button type="button" onClick={() => toggleTimeType("compound")} className={rowClass}><span className="flex items-center gap-1 text-sm font-semibold"><span className="flex w-[46px] justify-center"><TimeSignatureMenuGlyph signatures={["6/8", "9/8", "12/8"]} /></span><span>Compound Time</span></span><ToggleSwitch active={enabledTimeTypes.compound} /></button>
+      <button type="button" onClick={() => {
+        setRestsEnabled((value) => {
+          const next = !value;
+          window.setTimeout(() => newQuestion(enabledTimeTypes, enabledRhythms, next), 0);
+          return next;
+        });
+      }} className={rowClass}><span className="flex items-center gap-1 text-sm font-semibold"><span className="flex w-[46px] justify-center"><svg width="24" height="26" viewBox="0 0 24 26" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 4 L16 8 L10 13 L16 18 L10 23" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg></span><span>Rests</span></span><ToggleSwitch active={restsEnabled} /></button><div className="mb-2 text-sm font-semibold text-stone-800">Rhythms</div>
+        <div className="space-y-1.5">
+          {RHYTHM_OPTIONS.map((rhythm) => (
+            <button key={rhythm.id} type="button" onClick={() => toggleRhythm(rhythm.id)} className={rowClass}>
+              <span className="flex items-center gap-1 text-sm font-semibold">
+                <span className="flex h-7 w-[46px] items-center justify-center overflow-hidden scale-[1.6]"><svg viewBox="0 0 70 70" className="h-7 w-12 overflow-visible"><g transform="translate(0, 17) scale(0.82)"><Note item={{ rhythm: rhythm.id, pitch: { name: "B4", step: 4 } }} x={32} systemTop={8} /></g></svg></span>
+                <span>{rhythm.label}</span>
+              </span>
+              <ToggleSwitch active={enabledRhythms[rhythm.id]} />
+            </button>
+          ))}
+        </div><button type="button" onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button></>;
+}
+
+function HelpPanel() {
+  const [page, setPage] = useState(0);
+  const pages = [
+    ["Instructions", "Insert the missing bar lines using the time signature as your guide. Hover and click to place a barline, or drag and drop on touchscreen devices."],
+    ["Simple Time", "In 2/4, 3/4 and 4/4, count crotchet beats."],
+    ["Compound Time", "In 6/8, 9/8 and 12/8, count quaver beats in groups of three."],
+  ];
+  const [title, body] = pages[page];
+  return <div><h2 className="mb-3 text-center text-base font-semibold">Help</h2><div className="min-h-[120px] rounded-xl border border-stone-200 bg-stone-50 p-4"><h3 className="text-sm font-bold text-stone-800">{title}</h3><p className="mt-2 text-sm leading-relaxed text-stone-700">{body}</p></div><div className="mt-3 flex items-center justify-between"><button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={page === 0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">←</button><div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div><button type="button" onClick={() => setPage((value) => Math.min(pages.length - 1, value + 1))} disabled={page === pages.length - 1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">→</button></div></div>;
+}
+
+function RhythmGuide() {
+  const legend = [
+    { rhythm: "semibreve", rest: "semibreve-rest", label: "4" },
+    { rhythm: "dotted-minim", rest: null, label: "3" },
+    { rhythm: "minim", rest: "minim-rest", label: "2" },
+    { rhythm: "dotted-crotchet", rest: "dotted-crotchet-rest", label: "1.5" },
+    { rhythm: "crotchet", rest: "crotchet-rest", label: "1" },
+    { rhythm: "quaver", rest: "quaver-rest", label: "0.5" },
+    { rhythm: "semiquaver", rest: null, label: "0.25" },
+  ];
+
+  return (
+    <div className="mb-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+      <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-7">
+        {legend.map((item) => (
+          <div key={item.rhythm} className="flex flex-col items-center justify-center rounded-lg bg-white px-2 py-2 text-center">
+            <div className="flex items-center justify-center gap-[-2px]">
+              <NoteLegendSymbol rhythm={item.rhythm} />
+              {item.rest && (
+                <svg viewBox="0 0 70 70" className="h-11 w-10 overflow-visible">
+                  <g transform="translate(0, 11)">
+                    <Rest rhythm={item.rest} x={34} systemTop={8} />
+                  </g>
+                </svg>
+              )}
+            </div>
+            <span className="font-semibold">{item.label} beats</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function useInjectedStyles() {
+  useEffect(() => {
+    if (document.getElementById("barlines-golden-style")) return;
+    const style = document.createElement("style");
+    style.id = "barlines-golden-style";
+    style.innerHTML = `
+      button { -webkit-tap-highlight-color: transparent; user-select: none; transition: transform 0.08s ease, filter 0.08s ease, background-color 0.12s ease, box-shadow 0.12s ease; cursor: pointer; }
+      button:hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+      button:active { transform: scale(0.96); filter: brightness(0.92); }
+      button:disabled { cursor: not-allowed; opacity: 0.5; }
+      button:focus-visible { outline: 2px solid rgba(22,163,74,0.35); outline-offset: 2px; }
+      @keyframes medalShine { 0%,100% { transform: scale(1) rotate(-4deg); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.16) rotate(4deg); filter: drop-shadow(0 0 10px rgba(250,204,21,.9)); } }
+      @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } }
+      @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } }
+      @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+      @keyframes feedbackFadeOut { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-10px); } }
+    `;
+    document.head.appendChild(style);
+  }, []);
+}
+
+function useClickOutside(refs, handlers) {
+  useEffect(() => {
+    function onPointerDown(event) {
+      refs.forEach((ref, index) => {
+        if (ref.current && !ref.current.contains(event.target)) handlers[index] && handlers[index]();
+      });
+    }
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [refs, handlers]);
+}
+
+function App() {
+  useInjectedStyles();
+  const [enabledTimeTypes, setEnabledTimeTypes] = useState({ simple: true, compound: true });
+  const [enabledRhythms, setEnabledRhythms] = useState(DEFAULT_ENABLED_RHYTHMS);
+  const [restsEnabled, setRestsEnabled] = useState(true);
+  const [question, setQuestion] = useState(() => buildQuestion({ simple: true, compound: true }, DEFAULT_ENABLED_RHYTHMS, true));
+  const [questionVisible, setQuestionVisible] = useState(true);
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [showRhythmGuide, setShowRhythmGuide] = useState(false);
   const [placedBoundaries, setPlacedBoundaries] = useState([]);
   const [hoverBoundaryId, setHoverBoundaryId] = useState(null);
-  const [selectedBoundaryIndex, setSelectedBoundaryIndex] = useState(null);
   const [feedback, setFeedback] = useState(null);
-  const [lastCorrect, setLastCorrect] = useState(false);
+  const [feedbackFading, setFeedbackFading] = useState(false);
   const [correct, setCorrect] = useState(0);
   const [attempted, setAttempted] = useState(0);
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
-  const [showHelp, setShowHelp] = useState(false);
-  const layout = useMemo(() => calculateLayout(question), [question]);
-  const boundaryPositions = layout.boundaryPositions;
-  const selectedBoundary = selectedBoundaryIndex === null ? null : boundaryPositions[selectedBoundaryIndex] ?? null;
+  const [confettiKey, setConfettiKey] = useState(0);
+  const customiseRef = useRef(null);
+  const helpRef = useRef(null);
+
+  useClickOutside([customiseRef, helpRef], [() => customiseOpen && setCustomiseOpen(false), () => helpOpen && setHelpOpen(false)]);
+
   const allPlaced = placedBoundaries.length === TOTAL_BARS - 1;
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  function nextQuestion() { if (timeoutRef.current) window.clearTimeout(timeoutRef.current); setQuestion(buildQuestion()); setPlacedBoundaries([]); setHoverBoundaryId(null); setSelectedBoundaryIndex(null); setFeedback(null); setLastCorrect(false); }
-  function toggleBoundary(boundaryId) { if (feedback === "correct") return; setFeedback(null); setPlacedBoundaries((current) => { if (current.includes(boundaryId)) return current.filter((id) => id !== boundaryId); if (current.length >= TOTAL_BARS - 1) return current; return [...current, boundaryId]; }); }
-  function moveSelected(direction) { setFeedback(null); setSelectedBoundaryIndex((current) => { const startIndex = current === null ? (direction < 0 ? boundaryPositions.length : -1) : current; return Math.max(0, Math.min(boundaryPositions.length - 1, startIndex + direction)); }); }
-  function placeSelectedBoundary() { if (!selectedBoundary) return; toggleBoundary(selectedBoundary.id); }
-  function confirm() { if (!allPlaced || feedback === "correct") return; const correctIds = new Set(question.correctBoundaries.map((units) => `boundary-${units}`)); const allCorrect = placedBoundaries.every((id) => correctIds.has(id)); const newStreak = allCorrect ? streak + 1 : 0; setAttempted((v) => v + 1); setCorrect((v) => v + (allCorrect ? 1 : 0)); setStreak(newStreak); setBestStreak((v) => Math.max(v, newStreak)); setLastCorrect(allCorrect); setFeedback(allCorrect ? "correct" : "incorrect"); timeoutRef.current = window.setTimeout(nextQuestion, allCorrect ? 2000 : 4000); }
-  function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); nextQuestion(); }
-  return <div className="min-h-screen bg-stone-50 p-4 text-stone-950 md:p-8"><div className="mx-auto max-w-6xl"><header className="mb-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm"><div className="flex flex-col items-center gap-4 md:flex-row md:items-center md:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Barlines</h1><p className="mt-2 text-stone-700">Insert the barlines at the correct place in the music. Be sure to check the time signature.</p></div><div className="grid min-w-[280px] grid-cols-3 gap-2"><StatCard label="Score" value={`${correct}/${attempted}`} /><StatCard label="Accuracy" value={`${accuracy}%`} /><StatCard label="Streak" value={streak} /></div></div><div className="mt-4 rounded-lg bg-stone-100 px-4 py-3 text-sm text-stone-800">Hover over the music to preview a barline and click to place it. Click on the barline again to remove it. On touchscreen, use ← → to move and “Place barline” to insert.</div></header><main className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6"><div className="mb-4 flex items-center justify-between gap-3"><div className="flex items-center gap-2 rounded-xl border bg-stone-50 p-2"><button type="button" onClick={() => moveSelected(-1)} className="rounded-lg border bg-white px-4 py-2 font-bold hover:bg-stone-100">←</button><button type="button" onClick={placeSelectedBoundary} disabled={!selectedBoundary || feedback === "correct"} className="rounded-lg bg-stone-950 px-4 py-2 font-semibold text-white hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300">Place barline</button><button type="button" onClick={() => moveSelected(1)} className="rounded-lg border bg-white px-4 py-2 font-bold hover:bg-stone-100">→</button></div><div className="flex items-center gap-2"><button type="button" title="Help" aria-label="Help" onClick={() => setShowHelp((v) => !v)} className={`h-10 w-10 rounded-full border text-lg font-bold ${showHelp ? "bg-stone-950 text-white border-stone-950" : "bg-white text-stone-950 border-stone-300 hover:bg-stone-100"}`}>?</button><button type="button" onClick={resetScore} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Reset score</button></div></div>{showHelp && <HelpPanel />}<div className="relative overflow-hidden rounded-xl border border-stone-200 bg-white"><Score question={question} placedBoundaries={placedBoundaries} hoverBoundaryId={hoverBoundaryId} selectedBoundaryId={selectedBoundary?.id ?? null} setHoverBoundaryId={setHoverBoundaryId} toggleBoundary={toggleBoundary} feedback={feedback} /></div><div className="mt-4 flex justify-center"><button type="button" onClick={confirm} disabled={!allPlaced || feedback === "correct"} className={`rounded-xl px-6 py-3 font-semibold ${allPlaced && feedback !== "correct" ? "bg-stone-950 text-white hover:bg-stone-800" : "cursor-not-allowed bg-stone-200 text-stone-500"}`}>Confirm</button></div><Feedback feedback={feedback} correct={lastCorrect} /><div className="mt-4 text-sm text-stone-600">Best streak: {bestStreak}</div></main></div></div>;
+  const streakMedal = getStreakMedal(streak);
+
+  function resetTask(nextQuestion) {
+    setQuestion(nextQuestion);
+    setPlacedBoundaries([]);
+    setHoverBoundaryId(null);
+    setFeedback(null);
+    setFeedbackFading(false);
+  }
+
+  function newQuestion(nextEnabledTimeTypes, nextEnabledRhythms, nextRestsEnabled) {
+    const timeTypes = nextEnabledTimeTypes || enabledTimeTypes;
+    const rhythms = nextEnabledRhythms || enabledRhythms;
+    const rests = nextRestsEnabled === undefined ? restsEnabled : nextRestsEnabled;
+    setQuestionVisible(false);
+    window.setTimeout(() => {
+      resetTask(buildQuestion(timeTypes, rhythms, rests));
+      setQuestionVisible(true);
+    }, 260);
+  }
+
+  function resetScore() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+    newQuestion();
+  }
+
+  function clearBarlines() {
+    if (!feedback) setPlacedBoundaries([]);
+  }
+
+  function toggleBoundary(boundaryId) {
+    if (feedback) return;
+    setPlacedBoundaries((current) => {
+      if (current.includes(boundaryId)) return current.filter((id) => id !== boundaryId);
+      if (current.length >= TOTAL_BARS - 1) return current;
+      return [...current, boundaryId];
+    });
+  }
+
+  function confirmAnswer() {
+    if (!allPlaced || feedback) return;
+    const correctIds = new Set(question.correctBoundaries.map((units) => `boundary-${units}`));
+    const isCorrect = placedBoundaries.every((id) => correctIds.has(id));
+    const nextStreak = isCorrect ? streak + 1 : 0;
+    playFeedbackSound(isCorrect, false, null);
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (isCorrect ? 1 : 0));
+    setStreak(nextStreak);
+    setBestStreak((value) => Math.max(value, nextStreak));
+    setFeedback({ correct: isCorrect });
+    if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
+      const medal = getStreakMedal(nextStreak);
+      setConfettiKey((value) => value + 1);
+      window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
+    }
+    if (isCorrect) {
+      setFeedbackFading(false);
+      window.setTimeout(() => setFeedbackFading(true), 1700);
+      window.setTimeout(() => newQuestion(), 2000);
+    }
+  }
+
+  function fadeToNextQuestion() {
+    if (!feedback || feedback.correct || feedbackFading) return;
+    setFeedbackFading(true);
+    window.setTimeout(() => newQuestion(), 280);
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4"><AppIcon /><div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Barlines</h1><p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Insert the barlines at the correct place in the music. Be sure to check the time signature.</p></div></div>
+            <div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end">
+              <StatCard variant="score" label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${accuracy}%`} progress={accuracy} />
+              <div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${streakMedal?.bg || "bg-stone-50"}`}>
+                <StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} medal={streakMedal} confettiKey={confettiKey} />
+                <div className="relative z-0 flex min-h-[52px] min-w-[64px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700">
+                  <div className="flex items-center gap-1"><span>💎</span><span className="text-cyan-500">30</span></div>
+                  <div className="mt-1">🥇 <span className="text-yellow-500">20</span></div>
+                  <div className="mt-1">🥈 <span className="text-slate-500">15</span></div>
+                  <div className="mt-1">🥉 <span className="text-amber-700">10</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="relative -mt-[10px] min-h-[360px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => { if (feedback && !feedback.correct) fadeToNextQuestion(); }}>
+          <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="relative" ref={customiseRef}><button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>{customiseOpen && <div className="absolute left-0 z-[60] mt-2 max-h-[70vh] w-[min(430px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><h2 className="mb-3 text-center text-base font-semibold">Customise</h2><MenuRows enabledTimeTypes={enabledTimeTypes} setEnabledTimeTypes={setEnabledTimeTypes} enabledRhythms={enabledRhythms} setEnabledRhythms={setEnabledRhythms} restsEnabled={restsEnabled} setRestsEnabled={setRestsEnabled} showRhythmGuide={showRhythmGuide} setShowRhythmGuide={setShowRhythmGuide} resetScore={resetScore} newQuestion={newQuestion} /></div>}</div>
+              <div className="relative" ref={helpRef}><button type="button" onClick={() => setHelpOpen((value) => !value)} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">💡 <span>Help</span></button>{helpOpen && <div className="absolute left-0 top-12 z-[60] w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><HelpPanel /></div>}</div>
+            </div>
+            <button type="button" onClick={() => newQuestion()} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading} /></div>
+          </div>
+
+          {showRhythmGuide && <div className="relative z-[15]"><RhythmGuide /></div>}
+
+          <div className={`relative -top-[18px] overflow-hidden rounded-xl transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} placedBoundaries={placedBoundaries} hoverBoundaryId={hoverBoundaryId} setHoverBoundaryId={setHoverBoundaryId} toggleBoundary={toggleBoundary} feedback={feedback} /></div>
+
+          <div className={`relative z-10 mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3 ${question.systemCount === 1 ? 'md:-mt-[0px]' : 'md:-mt-[10px]'}`}><div className="flex flex-wrap items-center justify-between gap-3 text-stone-900"><p className="text-base font-semibold leading-tight">Insert the missing bar lines.</p><div className="flex flex-wrap items-center justify-end gap-3"><button type="button" onClick={clearBarlines} disabled={!!feedback || placedBoundaries.length === 0} className="h-11 rounded-xl border border-stone-300 bg-white px-5 text-sm font-semibold text-stone-800 disabled:opacity-40">Clear</button><button type="button" onClick={confirmAnswer} disabled={!allPlaced || !!feedback} className={`h-11 rounded-xl px-6 font-semibold ${allPlaced && !feedback ? "bg-green-600 text-white hover:bg-green-700" : "cursor-not-allowed bg-green-600/35 text-white/70"}`}>Confirm</button></div></div></div>
+        </main>
+      </div>
+    </div>
+  );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<Barlines />);
+const rootElement = document.getElementById("root");
+if (ReactDOM.createRoot) ReactDOM.createRoot(rootElement).render(<App />);
+else ReactDOM.render(<App />, rootElement);
   </script>
 </body>
 </html>
