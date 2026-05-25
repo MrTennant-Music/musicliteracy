@@ -18,18 +18,18 @@ const { useEffect, useMemo, useRef, useState } = React;
 const SVG = { width: 920, height: 420 };
 
 const STAFF = {
-  left: 222,
-  right: 714,
-  trebleTop: 72,
-  bassTop: 229,
-  gap: 21,
+  left: 247,
+  right: 689,
+  trebleTop: 84,
+  bassTop: 225,
+  gap: 18.9,
 };
 
 const NOTE = {
-  x: 490,
-  rx: 13.55,
-  ry: 9.69,
-  stemLength: 69,
+  x: 468,
+  rx: 12.2,
+  ry: 8.72,
+  stemLength: 62,
 };
 
 const COLOUR = {
@@ -75,9 +75,19 @@ const LEDGER_BLOCKED = {
   D4: true,
   G5: true,
   A5: true,
+  B5: true,
+  C6: true,
+  D2: true,
+  C2: true,
 };
 
 const NOTE_DATA = [
+  { pitch: "A3", answer: "A", clef: "treble", step: -4 },
+  { pitch: "B3", answer: "B", clef: "treble", step: -3 },
+  { pitch: "D4", answer: "D", clef: "bass", step: 11 },
+  { pitch: "E4", answer: "E", clef: "bass", step: 12 },
+  { pitch: "C2", answer: "C", clef: "bass", step: -4 },
+  { pitch: "D2", answer: "D", clef: "bass", step: -3 },
   { pitch: "E2", answer: "E", clef: "bass", step: -2 },
   { pitch: "F2", answer: "F", clef: "bass", step: -1 },
   { pitch: "G2", answer: "G", clef: "bass", step: 0 },
@@ -104,6 +114,8 @@ const NOTE_DATA = [
   { pitch: "F5", answer: "F", clef: "treble", step: 8 },
   { pitch: "G5", answer: "G", clef: "treble", step: 9 },
   { pitch: "A5", answer: "A", clef: "treble", step: 10 },
+  { pitch: "B5", answer: "B", clef: "treble", step: 11 },
+  { pitch: "C6", answer: "C", clef: "treble", step: 12 },
 ];
 
 const NOTE_NAME_LABELS = {
@@ -141,6 +153,141 @@ const NOTE_NAME_LABELS = {
   },
 };
 
+const DIFFICULTY_PROFILES = {
+  N3: {
+    label: "National 3",
+    settings: { accidentals: false, ledger: false, treble: true, bass: false, advancedRange: false },
+    description: "Lines and spaces of the treble clef.",
+  },
+  N4: {
+    label: "National 4",
+    settings: { accidentals: false, ledger: true, treble: true, bass: false, advancedRange: false },
+    description: "C–A’ — range of notes from middle C to first ledger line A.",
+  },
+  N5: {
+    label: "National 5",
+    settings: { accidentals: true, ledger: true, treble: true, bass: false, advancedRange: false },
+    description: "Tones, semitones, accidentals — flats, sharps and naturals.",
+  },
+  H: {
+    label: "Higher",
+    settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: false },
+    description: "Bass clef — E–C — range of notes from E below the stave to middle C.",
+  },
+  AH: {
+    label: "Advanced Higher",
+    settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: true },
+    description: "Bass clef C–E two ledger lines below stave to two ledger lines above.",
+  },
+};
+
+const APP_ID = "note-identification";
+const LEADERBOARD_KEY = `${APP_ID}:leaderboards:v1`;
+const PLAYER_KEY = `${APP_ID}:player-name:v1`;
+const BRONZE_STREAK = 10;
+const SITE_THEME_KEY = "mlh-theme";
+const SITE_ACCESSIBILITY_KEY = "mlh-accessibility";
+
+function getSiteTheme() {
+  return localStorage.getItem(SITE_THEME_KEY) || "light";
+}
+
+function getSiteAccessibility() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SITE_ACCESSIBILITY_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+const NAME_ADJECTIVES = [
+  "Funky", "Bebop", "Groovy", "Wonky", "Disco", "Sneaky", "Bouncy", "Tiny", "Spicy", "Cosmic",
+  "Modal", "Dizzy", "Sassy", "Jazzy", "Mighty", "Feral", "Noodly", "Crunchy", "Epic", "Wobbly"
+];
+const NAME_NOUNS = [
+  "Fermata", "Bassoon", "Crotchet", "Kazoo", "Cadence", "Tuba", "Treble", "Minim", "Quaver", "Fugue",
+  "Fiddle", "Bongo", "Arpeggio", "Semitone", "Sforzando", "Piccolo", "Timpani", "Trombone", "Glissando", "Clef"
+];
+
+function getStoredLeaderboards() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredLeaderboards(data) {
+  localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(data));
+}
+
+function getStoredPlayerName() {
+  return localStorage.getItem(PLAYER_KEY) || "";
+}
+
+function saveStoredPlayerName(name) {
+  localStorage.setItem(PLAYER_KEY, name);
+}
+
+function getLeaderboardForLevel(levelKey) {
+  const all = getStoredLeaderboards();
+  return Array.isArray(all[levelKey]) ? all[levelKey] : [];
+}
+
+function sortLeaderboard(entries) {
+  return [...entries]
+    .sort((a, b) => (b.highestStreak - a.highestStreak) || (a.timestamp - b.timestamp))
+    .slice(0, 10);
+}
+
+function upsertLeaderboardEntry(levelKey, name, highestStreak) {
+  const all = getStoredLeaderboards();
+  const existing = Array.isArray(all[levelKey]) ? all[levelKey] : [];
+  const now = Date.now();
+  const found = existing.find((entry) => entry.name === name);
+
+  if (found) {
+    found.highestStreak = Math.max(found.highestStreak || 0, highestStreak);
+    found.updatedAt = now;
+  } else {
+    existing.push({ appId: APP_ID, name, levelKey, highestStreak, timestamp: now, updatedAt: now });
+  }
+
+  all[levelKey] = sortLeaderboard(existing);
+  saveStoredLeaderboards(all);
+  return all[levelKey];
+}
+
+function allLeaderboardNames() {
+  const all = getStoredLeaderboards();
+  return new Set(Object.values(all).flatMap((entries) => Array.isArray(entries) ? entries.map((entry) => entry.name) : []));
+}
+
+function generateFunnyName() {
+  const used = allLeaderboardNames();
+  for (let guard = 0; guard < 500; guard++) {
+    const name = `${randomItem(NAME_ADJECTIVES)}${randomItem(NAME_NOUNS)}${Math.floor(Math.random() * 90) + 10}`;
+    if (!used.has(name)) return name;
+  }
+  return `FermataFriend${Date.now().toString().slice(-5)}`;
+}
+
+function isRealProfile(profileKey) {
+  return Boolean(profileKey && DIFFICULTY_PROFILES[profileKey]);
+}
+
+function settingsMatchProfile(settings, profileKey) {
+  const profile = isRealProfile(profileKey) ? DIFFICULTY_PROFILES[profileKey] : null;
+  if (!profile) return false;
+  return ["accidentals", "ledger", "treble", "bass", "advancedRange"].every((key) => Boolean(settings[key]) === Boolean(profile.settings[key]));
+}
+
+function matchingProfileForSettings(settings) {
+  return Object.keys(DIFFICULTY_PROFILES).find((profileKey) => settingsMatchProfile(settings, profileKey)) || "Custom";
+}
+
 function randomItem(items) {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -174,6 +321,8 @@ function accidentalForLetter(letter, accidentalsEnabled) {
 
 function possibleQuestions(settings) {
   return NOTE_DATA.filter((note) => {
+    const advancedOnly = ["B5", "C6", "D2", "C2", "A3", "B3", "D4", "E4"].includes(note.pitch);
+    if (advancedOnly && !settings.advancedRange) return false;
     const clefEnabled = (settings.treble && note.clef === "treble") || (settings.bass && note.clef === "bass");
     if (!clefEnabled) return false;
     if (settings.ledger) return true;
@@ -276,8 +425,15 @@ function LedgerLines({ x, step, clef, colour = "currentColor", enabled = true })
   if (!enabled) return null;
   const top = clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
   const lines = [];
-  if (step <= -2) lines.push(yForStep(top, -2));
-  if (step >= 10) lines.push(yForStep(top, 10));
+  if (step <= -2) {
+    lines.push(yForStep(top, -2));
+    if (step <= -4) lines.push(yForStep(top, -4));
+  }
+
+  if (step >= 10) {
+    lines.push(yForStep(top, 10));
+    if (step >= 12) lines.push(yForStep(top, 12));
+  }
 
   return (
     <g pointerEvents="none">
@@ -293,9 +449,9 @@ function Accidental({ accidental, x, y, colour = "currentColor" }) {
   const isSharp = accidental === "♯";
   return (
     <text
-      x={isSharp ? x - 46 : x - 56}
-      y={isSharp ? y + 16 : y + 13}
-      fontSize="47"
+      x={isSharp ? x - 40 : x - 50}
+      y={isSharp ? y + 14 : y + 11}
+      fontSize="42.3"
       fontFamily="serif"
       fontWeight="900"
       fill={colour}
@@ -336,9 +492,9 @@ function Staff({ top, clef, visible }) {
       ))}
       <line x1={STAFF.right} x2={STAFF.right} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />
       <text
-        x={STAFF.left + (isTreble ? 18 : 8)}
-        y={top + (isTreble ? 58 : 48)}
-        fontSize={isTreble ? 189 : 119}
+        x={STAFF.left + (isTreble ? 18 : 14)}
+        y={top + (isTreble ? 52 : 43)}
+        fontSize={isTreble ? 171 : 107}
         fontFamily="serif"
         dominantBaseline="middle"
       >
@@ -374,15 +530,22 @@ function HelpLabels({ visible, settings }) {
   );
 }
 
-function ScoreArea({ question, settings, showHelp, feedback }) {
+function ScoreArea({ question, settings, showHelp, feedback, activeProfile }) {
   const colour = feedback?.correct === true ? COLOUR.green : feedback?.correct === false ? COLOUR.red : "currentColor";
+  const ahFocusTrebleOnly = activeProfile === "AH" && question?.clef === "treble" && ["A3", "B3"].includes(question.pitch);
+  const ahFocusBassOnly = activeProfile === "AH" && question?.clef === "bass" && ["D4", "E4"].includes(question.pitch);
+  const displaySettings = {
+    ...settings,
+    treble: ahFocusTrebleOnly ? true : ahFocusBassOnly ? false : settings.treble,
+    bass: ahFocusBassOnly ? true : ahFocusTrebleOnly ? false : settings.bass,
+  };
 
   return (
     <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-visible">
       <rect width={SVG.width} height={SVG.height} fill="white" />
-      <Staff top={STAFF.trebleTop} clef="treble" visible={settings.treble} />
-      <Staff top={STAFF.bassTop} clef="bass" visible={settings.bass} />
-      <HelpLabels visible={showHelp} settings={settings} />
+      <Staff top={STAFF.trebleTop} clef="treble" visible={displaySettings.treble} />
+      <Staff top={STAFF.bassTop} clef="bass" visible={displaySettings.bass} />
+      <HelpLabels visible={showHelp} settings={displaySettings} />
       <CrotchetNote note={question} colour={colour} ledgerEnabled={settings.ledger} />
     </svg>
   );
@@ -477,7 +640,7 @@ function TapIcon() {
 
 function ToggleRow({ label, icon, checked, onChange }) {
   return (
-    <button type="button" onClick={onChange} className="mb-2.5 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]">
+    <button type="button" onClick={onChange} className="mb-2.5 flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]">
       <span className="flex min-w-[145px] items-center gap-2 text-sm font-semibold">
         <span className="flex h-[22px] w-[28px] items-center justify-center text-lg leading-none">{icon}</span>
         <span>{label}</span>
@@ -498,7 +661,23 @@ function LedgerIcon() {
   );
 }
 
-function MenuRows({ settings, setSettings, resetScore, makeNewQuestion, showHelp, setShowHelp }) {
+function ProfileButton({ profileKey, activeProfile, onChoose }) {
+  const profile = DIFFICULTY_PROFILES[profileKey];
+  const active = activeProfile === profileKey;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onChoose(profileKey)}
+      className={`min-h-[42px] rounded-xl border px-3 py-2 text-sm font-black ${active ? "border-yellow-500 bg-yellow-300 text-yellow-950" : "border-stone-300 bg-white text-stone-800 hover:bg-yellow-50"}`}
+      title={profile.description}
+    >
+      {profile.label}
+    </button>
+  );
+}
+
+function MenuRows({ settings, setSettings, resetScore, makeNewQuestion, showHelp, setShowHelp, activeProfile, setActiveProfile, applyProfile, setStreak, setConfettiKey }) {
   function updateSetting(key) {
     setSettings((current) => {
       const next = { ...current, [key]: !current[key] };
@@ -506,6 +685,11 @@ function MenuRows({ settings, setSettings, resetScore, makeNewQuestion, showHelp
         if (key === "treble") next.bass = true;
         else next.treble = true;
       }
+
+      const matchedProfile = matchingProfileForSettings(next);
+      setActiveProfile(matchedProfile);
+      setStreak(0);
+      setConfettiKey(0);
       window.setTimeout(() => makeNewQuestion(next), 0);
       return next;
     });
@@ -553,13 +737,9 @@ function HelpPanel() {
 
 function AppIcon() {
   return (
-    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
-      <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {[18, 22, 26, 30, 34].map((y) => (
-          <line key={y} x1="4" x2="52" y1={y} y2={y} stroke="black" strokeWidth="1" opacity="0.75" />
-        ))}
-        <text x="18" y="31" fontSize="60" fontFamily="serif" fill="black" textAnchor="middle" dominantBaseline="middle">{GLYPH.trebleClef}</text>
-        <text x="39" y="31" fontSize="40" fontFamily="serif" fill="black" textAnchor="middle" dominantBaseline="middle">{GLYPH.bassClef}</text>
+    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 shadow-sm text-black">
+      <svg viewBox="0 0 15.186 40.768" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="h-9 w-9">
+        <path d="m12.049 3.5296c0.305 3.1263-2.019 5.6563-4.0772 7.7014-0.9349 0.897-0.155 0.148-0.6437 0.594-0.1022-0.479-0.2986-1.731-0.2802-2.11 0.1304-2.6939 2.3198-6.5875 4.2381-8.0236 0.309 0.5767 0.563 0.6231 0.763 1.8382zm0.651 16.142c-1.232-0.906-2.85-1.144-4.3336-0.885-0.1913-1.255-0.3827-2.51-0.574-3.764 2.3506-2.329 4.9066-5.0322 5.0406-8.5394 0.059-2.232-0.276-4.6714-1.678-6.4836-1.7004 0.12823-2.8995 2.156-3.8019 3.4165-1.4889 2.6705-1.1414 5.9169-0.57 8.7965-0.8094 0.952-1.9296 1.743-2.7274 2.734-2.3561 2.308-4.4085 5.43-4.0046 8.878 0.18332 3.334 2.5894 6.434 5.8702 7.227 1.2457 0.315 2.5639 0.346 3.8241 0.099 0.2199 2.25 1.0266 4.629 0.0925 6.813-0.7007 1.598-2.7875 3.004-4.3325 2.192-0.5994-0.316-0.1137-0.051-0.478-0.252 1.0698-0.257 1.9996-1.036 2.26-1.565 0.8378-1.464-0.3998-3.639-2.1554-3.358-2.262 0.046-3.1904 3.14-1.7356 4.685 1.3468 1.52 3.833 1.312 5.4301 0.318 1.8125-1.18 2.0395-3.544 1.8325-5.562-0.07-0.678-0.403-2.67-0.444-3.387 0.697-0.249 0.209-0.059 1.193-0.449 2.66-1.053 4.357-4.259 3.594-7.122-0.318-1.469-1.044-2.914-2.302-3.792zm0.561 5.757c0.214 1.991-1.053 4.321-3.079 4.96-0.136-0.795-0.172-1.011-0.2626-1.475-0.4822-2.46-0.744-4.987-1.116-7.481 1.6246-0.168 3.4576 0.543 4.0226 2.184 0.244 0.577 0.343 1.197 0.435 1.812zm-5.1486 5.196c-2.5441 0.141-4.9995-1.595-5.6343-4.081-0.749-2.153-0.5283-4.63 0.8207-6.504 1.1151-1.702 2.6065-3.105 4.0286-4.543 0.183 1.127 0.366 2.254 0.549 3.382-2.9906 0.782-5.0046 4.725-3.215 7.451 0.5324 0.764 1.9765 2.223 2.7655 1.634-1.102-0.683-2.0033-1.859-1.8095-3.227-0.0821-1.282 1.3699-2.911 2.6513-3.198 0.4384 2.869 0.9413 6.073 1.3797 8.943-0.5054 0.1-1.0211 0.143-1.536 0.143z" fill="currentColor" />
       </svg>
     </div>
   );
@@ -632,6 +812,24 @@ function useInjectedStyles() {
       @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } }
       @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
       @keyframes feedbackFadeOut { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-10px); } }
+      .app-large-text { font-size: 112.5%; }
+      .app-reduce-motion *, .app-reduce-motion *::before, .app-reduce-motion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+      .app-high-contrast { filter: contrast(1.15); }
+      .app-dark header,
+      .app-dark main,
+      .app-dark .bg-white { background-color: #1c1917 !important; color: #f5f5f4 !important; border-color: #44403c !important; }
+      .app-dark .bg-stone-50,
+      .app-dark .bg-stone-100 { background-color: #292524 !important; color: #f5f5f4 !important; }
+      .app-dark .text-stone-500,
+      .app-dark .text-stone-600,
+      .app-dark .text-stone-700,
+      .app-dark .text-stone-800,
+      .app-dark .text-stone-900,
+      .app-dark .text-stone-950 { color: #e7e5e4 !important; }
+      .app-dark .border-stone-200,
+      .app-dark .border-stone-300 { border-color: #57534e !important; }
+      .app-dark svg rect[fill="white"] { fill: #fafaf9 !important; }
+      .app-dark svg { color: #0c0a09; }
     `;
     document.head.appendChild(style);
   }, []);
@@ -652,10 +850,15 @@ function useClickOutside(refs, handlers) {
 function App() {
   useInjectedStyles();
 
-  const [settings, setSettings] = useState({ accidentals: false, ledger: true, treble: true, bass: true });
-  const [question, setQuestion] = useState(() => createQuestion({ accidentals: false, ledger: true, treble: true, bass: true }));
+  const [darkMode, setDarkMode] = useState(getSiteTheme() === "dark");
+  const [accessibility, setAccessibility] = useState(getSiteAccessibility);
+
+  const [activeProfile, setActiveProfile] = useState("N3");
+  const [settings, setSettings] = useState({ ...DIFFICULTY_PROFILES.N3.settings });
+  const [question, setQuestion] = useState(() => createQuestion(DIFFICULTY_PROFILES.N3.settings));
   const [questionVisible, setQuestionVisible] = useState(true);
-  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [levelOpen, setLevelOpen] = useState(false);
+  const [levelMenuMode, setLevelMenuMode] = useState("levels");
   const [helpOpen, setHelpOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -668,23 +871,44 @@ function App() {
   const [confettiKey, setConfettiKey] = useState(0);
 
   const timerRef = useRef(null);
-  const customiseRef = useRef(null);
+  const levelRef = useRef(null);
   const helpRef = useRef(null);
 
   useClickOutside(
-    [customiseRef, helpRef],
+    [levelRef, helpRef],
     [
-      () => customiseOpen && setCustomiseOpen(false),
+      () => levelOpen && setLevelOpen(false),
       () => helpOpen && setHelpOpen(false),
     ],
   );
 
   useEffect(() => {
-    return () => window.clearTimeout(timerRef.current);
+    function syncSitePreferences() {
+      setDarkMode(getSiteTheme() === "dark");
+      setAccessibility(getSiteAccessibility());
+    }
+
+    syncSitePreferences();
+    window.addEventListener("storage", syncSitePreferences);
+    window.addEventListener("mlh-theme-change", syncSitePreferences);
+    window.addEventListener("mlh-accessibility-change", syncSitePreferences);
+
+    return () => {
+      window.removeEventListener("storage", syncSitePreferences);
+      window.removeEventListener("mlh-theme-change", syncSitePreferences);
+      window.removeEventListener("mlh-accessibility-change", syncSitePreferences);
+      window.clearTimeout(timerRef.current);
+    };
   }, []);
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const streakMedal = getStreakMedal(streak);
+  const appPreferenceClasses = [
+    darkMode ? "app-dark bg-stone-950 text-stone-100" : "bg-stone-50 text-stone-950",
+    accessibility.largeText ? "app-large-text" : "",
+    accessibility.reduceMotion ? "app-reduce-motion" : "",
+    accessibility.highContrast ? "app-high-contrast" : "",
+  ].filter(Boolean).join(" ");
 
   function makeNewQuestion(nextSettings = settings) {
     window.clearTimeout(timerRef.current);
@@ -696,6 +920,17 @@ function App() {
       setFeedbackFading(false);
       setQuestionVisible(true);
     }, 260);
+  }
+
+  function applyProfile(profileKey) {
+    const profile = DIFFICULTY_PROFILES[profileKey];
+    if (!profile) return;
+    const nextSettings = { ...profile.settings };
+    setActiveProfile(profileKey);
+    setSettings(nextSettings);
+    setStreak(0);
+    setConfettiKey(0);
+    makeNewQuestion(nextSettings);
   }
 
   function resetScore() {
@@ -715,6 +950,7 @@ function App() {
 
   function scoreAnswer(answer) {
     if (!question || feedback) return;
+
     const isCorrect = answer === question.answer;
     const nextStreak = isCorrect ? streak + 1 : 0;
 
@@ -739,15 +975,13 @@ function App() {
     }
   }
 
-  const instruction = settings.accidentals
-    ? <>Identify the note shown. Choose the correct letter name, including the sharp or flat if shown.</>
-    : <>Identify the note shown by choosing the correct note name.</>;
+  const instruction = <>Identify the note.</>;
 
   return (
-    <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2">
+    <div className={`min-h-screen px-4 pb-4 pt-1 md:px-8 md:pb-8 md:pt-2 ${appPreferenceClasses}`}>
       <div className="mx-auto max-w-6xl">
         <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <AppIcon />
               <div>
@@ -779,12 +1013,70 @@ function App() {
         >
           <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <div className="relative" ref={customiseRef}>
-                <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>
-                {customiseOpen && (
-                  <div className="absolute left-0 z-20 mt-2 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
-                    <h2 className="mb-3 text-center text-base font-semibold">Customise</h2>
-                    <MenuRows settings={settings} setSettings={setSettings} resetScore={resetScore} makeNewQuestion={makeNewQuestion} showHelp={showHelp} setShowHelp={setShowHelp} />
+              <div className="relative" ref={levelRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLevelOpen((value) => !value);
+                    setLevelMenuMode("levels");
+                  }}
+                  className="flex h-11 min-w-[92px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800 tracking-normal"
+                >
+                  <span className="text-base">🎚️</span>
+                  <span>{activeProfile === "N3" ? "National 3" : activeProfile === "N4" ? "National 4" : activeProfile === "N5" ? "National 5" : activeProfile === "H" ? "Higher" : activeProfile === "AH" ? "Advanced Higher" : activeProfile === "Custom" ? "Custom" : activeProfile}</span>
+                </button>
+
+                {levelOpen && (
+                  <div className="absolute left-0 z-20 mt-2 w-[420px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg">
+                    <div className="relative mb-3 flex min-h-[34px] items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setLevelMenuMode((mode) => mode === "levels" ? "customise" : "levels")}
+                        className={`absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-xl border text-base ${levelMenuMode === "customise" ? "border-stone-500 bg-stone-200" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
+                        title="Customise"
+                      >
+                        {levelMenuMode === "customise" ? "←" : "⚙️"}
+                      </button>
+                      <div className="text-center text-base font-semibold text-stone-800">{levelMenuMode === "customise" ? "Customise" : "Level"}</div>
+                    </div>
+
+                    {levelMenuMode === "customise" ? (
+                      <MenuRows settings={settings} setSettings={setSettings} resetScore={resetScore} makeNewQuestion={makeNewQuestion} showHelp={showHelp} setShowHelp={setShowHelp} activeProfile={activeProfile} setActiveProfile={setActiveProfile} applyProfile={applyProfile} setStreak={setStreak} setConfettiKey={setConfettiKey} />
+                    ) : (
+                      <div className="space-y-2">
+                        {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
+                          const profile = DIFFICULTY_PROFILES[profileKey];
+                          const active = activeProfile === profileKey;
+
+                          return (
+                            <button
+                              key={profileKey}
+                              type="button"
+                              onClick={() => {
+                                applyProfile(profileKey);
+                                setLevelOpen(false);
+                              }}
+                              className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
+                            >
+                              <div className="flex items-center justify-between gap-3 text-stone-900">
+                                <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">
+                                  {profileKey}
+                                </div>
+                                <div className="flex flex-1 flex-col justify-center">
+                                  <div className="text-[13px] font-black">{profile.label}</div>
+                                  <div className="mt-0.5 text-[11px] leading-tight text-stone-600">{profile.description}</div>
+                                </div>
+                                {activeProfile === profileKey && (
+                                  <svg width="22" height="22" viewBox="0 -0.5 25 25" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0 text-stone-900">
+                                    <path d="M5.5 12.5L10.167 17L19.5 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -804,7 +1096,7 @@ function App() {
           </div>
 
           <div className={`relative -top-[55px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
-            <ScoreArea question={question} settings={settings} showHelp={showHelp} feedback={feedback} />
+            <ScoreArea question={question} settings={settings} showHelp={showHelp} feedback={feedback} activeProfile={activeProfile} />
           </div>
 
           <div className="relative z-10 mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:-mt-[123px] md:mx-3">
@@ -823,7 +1115,8 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+const rootElement = document.getElementById("root");
+ReactDOM.render(<App />, rootElement);
   </script>
 </body>
 </html>
