@@ -3,17 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Note Identification Golden App</title>
+  <title>Note Identification</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="app-icon-32x32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="app-icon-180x180.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192x192.png" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
-<body>
+<body class="overflow-x-hidden bg-stone-50">
   <div id="root"></div>
 
   <script type="text/babel">
-const { useEffect, useMemo, useRef, useState } = React;
+const { useEffect, useRef, useState } = React;
 
 const SVG = { width: 920, height: 420 };
 
@@ -35,9 +38,7 @@ const NOTE = {
 const COLOUR = {
   green: "#16a34a",
   red: "#dc2626",
-  preview: "#444444",
   black: "#000000",
-  blue: "#1d4ed8",
 };
 
 const GLYPH = {
@@ -181,10 +182,6 @@ const DIFFICULTY_PROFILES = {
   },
 };
 
-const APP_ID = "note-identification";
-const LEADERBOARD_KEY = `${APP_ID}:leaderboards:v1`;
-const PLAYER_KEY = `${APP_ID}:player-name:v1`;
-const BRONZE_STREAK = 10;
 const SITE_THEME_KEY = "mlh-theme";
 const SITE_ACCESSIBILITY_KEY = "mlh-accessibility";
 
@@ -201,85 +198,8 @@ function getSiteAccessibility() {
   }
 }
 
-const NAME_ADJECTIVES = [
-  "Funky", "Bebop", "Groovy", "Wonky", "Disco", "Sneaky", "Bouncy", "Tiny", "Spicy", "Cosmic",
-  "Modal", "Dizzy", "Sassy", "Jazzy", "Mighty", "Feral", "Noodly", "Crunchy", "Epic", "Wobbly"
-];
-const NAME_NOUNS = [
-  "Fermata", "Bassoon", "Crotchet", "Kazoo", "Cadence", "Tuba", "Treble", "Minim", "Quaver", "Fugue",
-  "Fiddle", "Bongo", "Arpeggio", "Semitone", "Sforzando", "Piccolo", "Timpani", "Trombone", "Glissando", "Clef"
-];
-
-function getStoredLeaderboards() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "{}");
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveStoredLeaderboards(data) {
-  localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(data));
-}
-
-function getStoredPlayerName() {
-  return localStorage.getItem(PLAYER_KEY) || "";
-}
-
-function saveStoredPlayerName(name) {
-  localStorage.setItem(PLAYER_KEY, name);
-}
-
-function getLeaderboardForLevel(levelKey) {
-  const all = getStoredLeaderboards();
-  return Array.isArray(all[levelKey]) ? all[levelKey] : [];
-}
-
-function sortLeaderboard(entries) {
-  return [...entries]
-    .sort((a, b) => (b.highestStreak - a.highestStreak) || (a.timestamp - b.timestamp))
-    .slice(0, 10);
-}
-
-function upsertLeaderboardEntry(levelKey, name, highestStreak) {
-  const all = getStoredLeaderboards();
-  const existing = Array.isArray(all[levelKey]) ? all[levelKey] : [];
-  const now = Date.now();
-  const found = existing.find((entry) => entry.name === name);
-
-  if (found) {
-    found.highestStreak = Math.max(found.highestStreak || 0, highestStreak);
-    found.updatedAt = now;
-  } else {
-    existing.push({ appId: APP_ID, name, levelKey, highestStreak, timestamp: now, updatedAt: now });
-  }
-
-  all[levelKey] = sortLeaderboard(existing);
-  saveStoredLeaderboards(all);
-  return all[levelKey];
-}
-
-function allLeaderboardNames() {
-  const all = getStoredLeaderboards();
-  return new Set(Object.values(all).flatMap((entries) => Array.isArray(entries) ? entries.map((entry) => entry.name) : []));
-}
-
-function generateFunnyName() {
-  const used = allLeaderboardNames();
-  for (let guard = 0; guard < 500; guard++) {
-    const name = `${randomItem(NAME_ADJECTIVES)}${randomItem(NAME_NOUNS)}${Math.floor(Math.random() * 90) + 10}`;
-    if (!used.has(name)) return name;
-  }
-  return `FermataFriend${Date.now().toString().slice(-5)}`;
-}
-
-function isRealProfile(profileKey) {
-  return Boolean(profileKey && DIFFICULTY_PROFILES[profileKey]);
-}
-
 function settingsMatchProfile(settings, profileKey) {
-  const profile = isRealProfile(profileKey) ? DIFFICULTY_PROFILES[profileKey] : null;
+  const profile = DIFFICULTY_PROFILES[profileKey];
   if (!profile) return false;
   return ["accidentals", "ledger", "treble", "bass", "advancedRange"].every((key) => Boolean(settings[key]) === Boolean(profile.settings[key]));
 }
@@ -395,9 +315,7 @@ function playFeedbackSound(correct, celebration = false, medal = null) {
   }
 
   if (!correct) {
-    tone(196, now, 0.32, "sawtooth", 0.06);
-    tone(185, now + 0.04, 0.38, "triangle", 0.05);
-    tone(174, now + 0.08, 0.45, "sine", 0.04);
+    tone(180, now, 0.55, "sawtooth", 0.075);
   } else if (celebration) {
     if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now);
     if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now);
@@ -408,10 +326,8 @@ function playFeedbackSound(correct, celebration = false, medal = null) {
       medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
     }
   } else {
-    randomItem([[523.25, 659.25, 783.99], [587.33, 739.99, 880], [659.25, 830.61, 987.77]]).forEach((freq, index) => {
-      tone(freq, now + index * 0.045, 0.42, "triangle", index === 2 ? 0.085 : 0.07);
-      tone(freq * 2, now + index * 0.045, 0.24, "sine", 0.025);
-    });
+    tone(740, now, 0.16, "triangle", 0.08);
+    tone(988, now + 0.12, 0.34, "triangle", 0.1);
   }
 
   window.setTimeout(() => {
@@ -438,7 +354,7 @@ function LedgerLines({ x, step, clef, colour = "currentColor", enabled = true })
   return (
     <g pointerEvents="none">
       {lines.map((y) => (
-        <line key={y} x1={x - 27} x2={x + 27} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />
+        <line key={y} x1={x - 24} x2={x + 24} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />
       ))}
     </g>
   );
@@ -447,9 +363,10 @@ function LedgerLines({ x, step, clef, colour = "currentColor", enabled = true })
 function Accidental({ accidental, x, y, colour = "currentColor" }) {
   if (!accidental) return null;
   const isSharp = accidental === "♯";
+  const ledgerOffset = y < 95 || y > 285 ? -6 : 0;
   return (
     <text
-      x={isSharp ? x - 40 : x - 50}
+      x={isSharp ? x - 40 + ledgerOffset : x - 50 + ledgerOffset}
       y={isSharp ? y + 14 : y + 11}
       fontSize="42.3"
       fontFamily="serif"
@@ -530,23 +447,31 @@ function HelpLabels({ visible, settings }) {
   );
 }
 
-function ScoreArea({ question, settings, showHelp, feedback, activeProfile }) {
+function ScoreArea({ question, settings, showHelp, feedback, activeProfile, mobileOnlyActiveClef }) {
   const colour = feedback?.correct === true ? COLOUR.green : feedback?.correct === false ? COLOUR.red : "currentColor";
   const ahFocusTrebleOnly = activeProfile === "AH" && question?.clef === "treble" && ["A3", "B3"].includes(question.pitch);
   const ahFocusBassOnly = activeProfile === "AH" && question?.clef === "bass" && ["D4", "E4"].includes(question.pitch);
-  const displaySettings = {
-    ...settings,
-    treble: ahFocusTrebleOnly ? true : ahFocusBassOnly ? false : settings.treble,
-    bass: ahFocusBassOnly ? true : ahFocusTrebleOnly ? false : settings.bass,
-  };
+  const displaySettings = mobileOnlyActiveClef
+    ? {
+        ...settings,
+        treble: question?.clef === "treble",
+        bass: question?.clef === "bass",
+      }
+    : {
+        ...settings,
+        treble: ahFocusTrebleOnly ? true : ahFocusBassOnly ? false : settings.treble,
+        bass: ahFocusBassOnly ? true : ahFocusTrebleOnly ? false : settings.bass,
+      };
 
   return (
-    <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-visible">
+    <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
       <rect width={SVG.width} height={SVG.height} fill="white" />
-      <Staff top={STAFF.trebleTop} clef="treble" visible={displaySettings.treble} />
-      <Staff top={STAFF.bassTop} clef="bass" visible={displaySettings.bass} />
-      <HelpLabels visible={showHelp} settings={displaySettings} />
-      <CrotchetNote note={question} colour={colour} ledgerEnabled={settings.ledger} />
+      <g className={`mobile-music-scale ${mobileOnlyActiveClef && question?.clef === "bass" ? "mobile-bass-focus" : ""}`}>
+        <Staff top={STAFF.trebleTop} clef="treble" visible={displaySettings.treble} />
+        <Staff top={STAFF.bassTop} clef="bass" visible={displaySettings.bass} />
+        <HelpLabels visible={showHelp} settings={displaySettings} />
+        <CrotchetNote note={question} colour={colour} ledgerEnabled={settings.ledger} />
+      </g>
     </svg>
   );
 }
@@ -572,7 +497,7 @@ function StatCard({ label, value, footer, progress = null, medal = null, variant
   const isStreak = variant === "streak";
 
   return (
-    <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>
+    <div className={isStreak ? "relative overflow-visible bg-transparent p-1.5 sm:p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-1.5 shadow-sm sm:p-3 ${medal ? medal.bg : "bg-stone-50"}`}>
       {isStreak && confettiKey > 0 && (
         <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
           {Array.from({ length: 18 }).map((_, index) => (
@@ -596,13 +521,13 @@ function StatCard({ label, value, footer, progress = null, medal = null, variant
       )}
 
       <div className="relative z-10 text-center">
-        <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
-        <div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>
-        {footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}
+        <div className="text-[10px] uppercase tracking-wide text-stone-500 sm:text-xs">{label}</div>
+        <div className={`text-lg font-semibold leading-tight sm:text-xl ${isStreak && medal ? medal.text : ""}`}>{value}</div>
+        {footer && <div className="mt-0.5 text-[11px] leading-tight text-stone-500 sm:mt-1 sm:text-[13px] sm:leading-none">{footer}</div>}
       </div>
 
       {isStreak && (
-        <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal?.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>
+        <div className="pointer-events-none absolute -right-[8px] top-[8px] z-[10] select-none text-2xl leading-none sm:-right-[12px] sm:top-[12px] sm:text-3xl" style={medal?.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>
           {medal?.emoji ?? "🥉"}
         </div>
       )}
@@ -619,7 +544,6 @@ function FeedbackBanner({ feedback, fading = false }) {
         <span className="translate-y-[4px]">{feedback.correct ? "Correct" : "Incorrect"}</span>
         {!feedback.correct && (
           <span className="mt-2 inline-flex -translate-x-[2px] items-center gap-0 text-sm font-semibold text-black">
-            <TapIcon />
             <span>Click or tap anywhere to continue</span>
           </span>
         )}
@@ -628,19 +552,11 @@ function FeedbackBanner({ feedback, fading = false }) {
   );
 }
 
-function TapIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]">
-      <path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" />
-    </svg>
-  );
-}
+
 
 function ToggleRow({ label, icon, checked, onChange }) {
   return (
-    <button type="button" onClick={onChange} className="mb-2.5 flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]">
+    <button type="button" onClick={onChange} className="mb-2.5 flex min-h-[44px] w-full whitespace-nowrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]">
       <span className="flex min-w-[145px] items-center gap-2 text-sm font-semibold">
         <span className="flex h-[22px] w-[28px] items-center justify-center text-lg leading-none">{icon}</span>
         <span>{label}</span>
@@ -660,24 +576,7 @@ function LedgerIcon() {
     </svg>
   );
 }
-
-function ProfileButton({ profileKey, activeProfile, onChoose }) {
-  const profile = DIFFICULTY_PROFILES[profileKey];
-  const active = activeProfile === profileKey;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onChoose(profileKey)}
-      className={`min-h-[42px] rounded-xl border px-3 py-2 text-sm font-black ${active ? "border-yellow-500 bg-yellow-300 text-yellow-950" : "border-stone-300 bg-white text-stone-800 hover:bg-yellow-50"}`}
-      title={profile.description}
-    >
-      {profile.label}
-    </button>
-  );
-}
-
-function MenuRows({ settings, setSettings, resetScore, makeNewQuestion, showHelp, setShowHelp, activeProfile, setActiveProfile, applyProfile, setStreak, setConfettiKey }) {
+function MenuRows({ settings, setSettings, resetScore, makeNewQuestion, showHelp, setShowHelp, setActiveProfile, setCorrect, setAttempted, setStreak, setBestStreak, setConfettiKey }) {
   function updateSetting(key) {
     setSettings((current) => {
       const next = { ...current, [key]: !current[key] };
@@ -688,8 +587,11 @@ function MenuRows({ settings, setSettings, resetScore, makeNewQuestion, showHelp
 
       const matchedProfile = matchingProfileForSettings(next);
       setActiveProfile(matchedProfile);
+      setCorrect(0);
+      setAttempted(0);
       setStreak(0);
-      setConfettiKey(0);
+    setBestStreak(0);
+    setConfettiKey(0);
       window.setTimeout(() => makeNewQuestion(next), 0);
       return next;
     });
@@ -697,39 +599,38 @@ function MenuRows({ settings, setSettings, resetScore, makeNewQuestion, showHelp
 
   return (
     <>
+      <div className="flex w-full min-w-0 flex-col sm:inline-flex sm:w-max sm:min-w-[260px]">
       <ToggleRow label="Accidentals" icon={<span className="relative left-px font-serif font-black">♯♭</span>} checked={settings.accidentals} onChange={() => updateSetting("accidentals")} />
       <ToggleRow label="Ledger Lines" icon={<LedgerIcon />} checked={settings.ledger} onChange={() => updateSetting("ledger")} />
       <ToggleRow label="Treble Clef" icon={<span className="font-serif text-3xl leading-none">𝄞</span>} checked={settings.treble} onChange={() => updateSetting("treble")} />
       <ToggleRow label="Bass Clef" icon={<span className="font-serif text-2xl leading-none">𝄢</span>} checked={settings.bass} onChange={() => updateSetting("bass")} />
       <ToggleRow label="Show Note Names" icon={<span className="text-[10px] font-black tracking-tight">abc</span>} checked={showHelp} onChange={() => setShowHelp((value) => !value)} />
       <button type="button" onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button>
+    </div>
     </>
   );
 }
 
 function HelpPanel() {
-  const [page, setPage] = useState(0);
   const pages = [
-    ["Instructions", "Look at the note on the stave and choose its correct note name from the answer buttons below."],
-    ["Accidentals", "When accidentals are switched on, the answer may include a sharp or flat. B sharp, E sharp, C flat, and F flat are not generated."],
-    ["Ledger Lines", "Switch ledger lines on to include notes above and below the stave. Switch them off for a smaller note range."],
-    ["Clefs", "Use the Customise menu to practise treble clef, bass clef, or both clefs together."],
-
+    ["📝", "Instructions", "Look at the task shown on screen, then choose the correct answer from the buttons below."],
+    ["🎚️", "Choosing a Level", "Use the Level menu to choose the course level or difficulty you want to practise. Higher levels usually add more concepts, more symbols, or a wider range of questions."],
+    ["⚙️", "Customise", "Use Customise to switch parts of the task on or off. This lets you focus on one skill at a time or build up to the full challenge when ready."],
+    ["🏅", "Streaks and Medals", "Build a streak by answering correctly in a row. Medals are awarded as your streak increases, progressing through bronze, silver, gold, and diamond."],
   ];
-
-  const [title, body] = pages[page];
 
   return (
     <div>
-      <h2 className="mb-3 text-center text-base font-semibold">Help</h2>
-      <div className="min-h-[120px] rounded-xl border border-stone-200 bg-stone-50 p-4">
-        <h3 className="text-sm font-bold text-stone-800">{title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-stone-700">{body}</p>
-      </div>
-      <div className="mt-3 flex items-center justify-between">
-        <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={page === 0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">←</button>
-        <div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div>
-        <button type="button" onClick={() => setPage((value) => Math.min(pages.length - 1, value + 1))} disabled={page === pages.length - 1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">→</button>
+      <div className="space-y-3">
+        {pages.map(([icon, title, body]) => (
+          <section key={title} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg leading-none">{icon}</span>
+              <h3 className="text-sm font-bold text-stone-900">{title}</h3>
+            </div>
+            <p className="mt-1 text-sm leading-relaxed text-stone-700">{body}</p>
+          </section>
+        ))}
       </div>
     </div>
   );
@@ -742,6 +643,127 @@ function AppIcon() {
         <path d="m12.049 3.5296c0.305 3.1263-2.019 5.6563-4.0772 7.7014-0.9349 0.897-0.155 0.148-0.6437 0.594-0.1022-0.479-0.2986-1.731-0.2802-2.11 0.1304-2.6939 2.3198-6.5875 4.2381-8.0236 0.309 0.5767 0.563 0.6231 0.763 1.8382zm0.651 16.142c-1.232-0.906-2.85-1.144-4.3336-0.885-0.1913-1.255-0.3827-2.51-0.574-3.764 2.3506-2.329 4.9066-5.0322 5.0406-8.5394 0.059-2.232-0.276-4.6714-1.678-6.4836-1.7004 0.12823-2.8995 2.156-3.8019 3.4165-1.4889 2.6705-1.1414 5.9169-0.57 8.7965-0.8094 0.952-1.9296 1.743-2.7274 2.734-2.3561 2.308-4.4085 5.43-4.0046 8.878 0.18332 3.334 2.5894 6.434 5.8702 7.227 1.2457 0.315 2.5639 0.346 3.8241 0.099 0.2199 2.25 1.0266 4.629 0.0925 6.813-0.7007 1.598-2.7875 3.004-4.3325 2.192-0.5994-0.316-0.1137-0.051-0.478-0.252 1.0698-0.257 1.9996-1.036 2.26-1.565 0.8378-1.464-0.3998-3.639-2.1554-3.358-2.262 0.046-3.1904 3.14-1.7356 4.685 1.3468 1.52 3.833 1.312 5.4301 0.318 1.8125-1.18 2.0395-3.544 1.8325-5.562-0.07-0.678-0.403-2.67-0.444-3.387 0.697-0.249 0.209-0.059 1.193-0.449 2.66-1.053 4.357-4.259 3.594-7.122-0.318-1.469-1.044-2.914-2.302-3.792zm0.561 5.757c0.214 1.991-1.053 4.321-3.079 4.96-0.136-0.795-0.172-1.011-0.2626-1.475-0.4822-2.46-0.744-4.987-1.116-7.481 1.6246-0.168 3.4576 0.543 4.0226 2.184 0.244 0.577 0.343 1.197 0.435 1.812zm-5.1486 5.196c-2.5441 0.141-4.9995-1.595-5.6343-4.081-0.749-2.153-0.5283-4.63 0.8207-6.504 1.1151-1.702 2.6065-3.105 4.0286-4.543 0.183 1.127 0.366 2.254 0.549 3.382-2.9906 0.782-5.0046 4.725-3.215 7.451 0.5324 0.764 1.9765 2.223 2.7655 1.634-1.102-0.683-2.0033-1.859-1.8095-3.227-0.0821-1.282 1.3699-2.911 2.6513-3.198 0.4384 2.869 0.9413 6.073 1.3797 8.943-0.5054 0.1-1.0211 0.143-1.536 0.143z" fill="currentColor" />
       </svg>
     </div>
+  );
+}
+
+function HubIcon({ footer = false }) {
+  return (
+    <div className={`${footer ? "h-11 w-11 drop-shadow-lg" : "h-14 w-14"} flex shrink-0 items-center justify-center`} aria-hidden="true">
+      <svg className="h-full w-full" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <rect x="26" y="26" width="460" height="460" rx="104" fill="#fff" stroke="#e5e7eb" strokeWidth="1.5"/>
+        <g stroke="#000" strokeLinecap="round">
+          <line x1="86" y1="170" x2="254" y2="170" strokeWidth="18"/>
+          <line x1="70" y1="226" x2="254" y2="226" strokeWidth="18"/>
+          <line x1="98" y1="282" x2="206" y2="282" strokeWidth="18"/>
+        </g>
+        <g fill="#000">
+          <ellipse cx="236" cy="382" rx="78" ry="58" transform="rotate(-24 236 382)"/>
+          <rect x="282" y="86" width="33" height="298" rx="16.5"/>
+          <path d="M303 86C324 132 356 152 386 178C424 213 432 266 404 329C394 351 374 347 383 328C404 287 394 248 360 219C338 200 318 188 303 158Z"/>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+function HubWordmark({ className = "" }) {
+  return (
+    <svg className={className} viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The Music Literacy Hub">
+      <text x="71" y="49" fontFamily="Arial, Helvetica, sans-serif" fontSize="42" fontWeight="900" fill="currentColor">The</text>
+      <text x="0" y="104" fontFamily="Arial, Helvetica, sans-serif" fontSize="88" fontWeight="900" fill="currentColor" letterSpacing="-4">Music Literacy</text>
+      <text x="390" y="158" fontFamily="Arial, Helvetica, sans-serif" fontSize="64" fontWeight="900" fill="currentColor" letterSpacing="-1">Hub</text>
+    </svg>
+  );
+}
+
+function AboutOverlay({ open, onClose }) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="relative w-full max-w-[560px] rounded-3xl bg-white p-7 shadow-2xl">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-xl font-bold text-blue-900 hover:bg-stone-200"
+          aria-label="Close About information"
+        >
+          ×
+        </button>
+
+        <h2 className="mb-4 pr-10 text-2xl font-black tracking-tight text-stone-950">About</h2>
+
+        <div className="space-y-4 text-[15px] leading-relaxed text-stone-600">
+          <p>
+            The Music Literacy Hub is a collection of interactive tools designed to develop and reinforce music literacy skills from <strong className="text-stone-950">National 3</strong> to <strong className="text-stone-950">Advanced Higher</strong>.
+          </p>
+
+          <p>
+            Built around <strong className="text-stone-950">Qualifications Scotland</strong> music literacy concepts, it supports classroom learning, revision and independent study.
+          </p>
+
+          <p>
+            The hub includes interactive listening and aural training activities, is fully compatible with desktop, tablet and mobile devices, and organises concepts by level and topic to support clear progression.
+          </p>
+
+          <p>
+            It was created to make music theory more visual, interactive and accessible.
+          </p>
+
+          <p>
+            This website was built using ChatGPT.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Footer() {
+  const [copied, setCopied] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const email = "gw19tennantrobert1@glow.sch.uk";
+
+  async function copyEmail() {
+    try {
+      await navigator.clipboard.writeText(email);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      window.location.href = `mailto:${email}`;
+    }
+  }
+
+  return (
+    <footer className="mt-8 border-t border-stone-200 py-6 text-sm text-stone-600">
+      <div className="grid gap-6 md:grid-cols-[1.1fr_1fr_1fr_.9fr]">
+        <div className="flex items-center gap-3 text-stone-950 max-md:justify-center max-md:text-center max-md:translate-x-[30px]">
+          <HubIcon footer />
+          <HubWordmark className="h-[46px] w-[235px] -ml-5" />
+        </div>
+
+        <div>
+          <h4 className="mb-2 text-sm font-bold text-stone-950">About</h4>
+          <p className="leading-tight">Interactive apps for developing music literacy skills. Find out more <button type="button" onClick={() => setAboutOpen(true)} className="border-0 bg-transparent p-0 font-bold text-blue-600 hover:underline">here</button>.</p>
+        </div>
+
+        <div>
+          <h4 className="mb-2 text-sm font-bold text-stone-950">Feedback</h4>
+          <p className="leading-tight">If you have any suggestions on how to improve the hub, please click <a className="font-bold text-blue-600 hover:underline" href="https://forms.cloud.microsoft/e/vW5PPdW154" target="_blank" rel="noopener noreferrer">here</a>.</p>
+        </div>
+
+        <div>
+          <h4 className="mb-2 text-sm font-bold text-stone-950">Contact</h4>
+          <p className="leading-tight">Robert Tennant<br />Teacher of Music</p>
+          <button type="button" onClick={copyEmail} className="mt-1 border-0 bg-transparent p-0 text-left font-bold text-blue-600 hover:underline">
+            {copied ? "Copied to Clipboard" : email}
+          </button>
+        </div>
+      </div>
+      <div className="mt-7 text-center text-xs text-stone-500">The Music Literacy Hub · Version 1.0 · 2026</div>
+
+      <AboutOverlay open={aboutOpen} onClose={() => setAboutOpen(false)} />
+    </footer>
   );
 }
 
@@ -759,7 +781,7 @@ function AnswerButton({ value, question, selectedAnswer, feedback, onChoose }) {
       type="button"
       disabled={Boolean(feedback)}
       onClick={() => onChoose(value)}
-      className={`flex min-h-[46px] items-center justify-center rounded-xl border px-3 text-[1.05rem] font-bold ${className}`}
+      className={`flex min-h-[48px] items-center justify-center rounded-xl border px-1 text-[1rem] font-bold sm:min-h-[46px] sm:px-3 sm:text-[1.05rem] ${className}`}
     >
       {value}
     </button>
@@ -767,26 +789,26 @@ function AnswerButton({ value, question, selectedAnswer, feedback, onChoose }) {
 }
 
 function AnswerPlaceholder() {
-  return <div className="min-h-[46px] rounded-xl border border-transparent" />;
+  return <div className="min-h-[48px] rounded-xl border border-transparent sm:min-h-[46px]" />;
 }
 
 function AnswerGrid({ settings, question, selectedAnswer, feedback, onChoose }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-2 mobile-answer-grid">
       {settings.accidentals && (
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
           {LETTERS.map((letter) => SHARPS[letter]
             ? <AnswerButton key={SHARPS[letter]} value={SHARPS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />
             : <AnswerPlaceholder key={`sharp-placeholder-${letter}`} />)}
         </div>
       )}
 
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
         {LETTERS.map((letter) => <AnswerButton key={letter} value={letter} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />)}
       </div>
 
       {settings.accidentals && (
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
           {LETTERS.map((letter) => FLATS[letter]
             ? <AnswerButton key={FLATS[letter]} value={FLATS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />
             : <AnswerPlaceholder key={`flat-placeholder-${letter}`} />)}
@@ -830,21 +852,25 @@ function useInjectedStyles() {
       .app-dark .border-stone-300 { border-color: #57534e !important; }
       .app-dark svg rect[fill="white"] { fill: #fafaf9 !important; }
       .app-dark svg { color: #0c0a09; }
+      @media (max-width: 639px) {
+        .mobile-music-scale { transform: translate(-313px, -18px) scale(1.68); }
+        .mobile-bass-focus { transform: translate(-313px, -252px) scale(1.68); }
+      }
     `;
     document.head.appendChild(style);
   }, []);
 }
 
-function useClickOutside(refs, handlers) {
+function useClickOutside(refs, handler) {
   useEffect(() => {
     function onPointerDown(event) {
-      refs.forEach((ref, index) => {
-        if (!ref.current?.contains(event.target)) handlers[index]?.();
-      });
+      const clickedInsideAnyRef = refs.some((ref) => ref.current?.contains(event.target));
+      if (!clickedInsideAnyRef) handler?.();
     }
+
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [refs, handlers]);
+  }, [refs, handler]);
 }
 
 function App() {
@@ -853,9 +879,14 @@ function App() {
   const [darkMode, setDarkMode] = useState(getSiteTheme() === "dark");
   const [accessibility, setAccessibility] = useState(getSiteAccessibility);
 
-  const [activeProfile, setActiveProfile] = useState("N3");
-  const [settings, setSettings] = useState({ ...DIFFICULTY_PROFILES.N3.settings });
-  const [question, setQuestion] = useState(() => createQuestion(DIFFICULTY_PROFILES.N3.settings));
+  const urlParams = new URLSearchParams(window.location.search);
+  const requestedLevel = urlParams.get("level");
+  const startingProfile = DIFFICULTY_PROFILES[requestedLevel] ? requestedLevel : "N3";
+  const startingSettings = { ...DIFFICULTY_PROFILES[startingProfile].settings };
+
+  const [activeProfile, setActiveProfile] = useState(startingProfile);
+  const [settings, setSettings] = useState(startingSettings);
+  const [question, setQuestion] = useState(() => createQuestion(startingSettings));
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelOpen, setLevelOpen] = useState(false);
   const [levelMenuMode, setLevelMenuMode] = useState("levels");
@@ -869,18 +900,28 @@ function App() {
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [confettiKey, setConfettiKey] = useState(0);
+  const [skipStreak, setSkipStreak] = useState(0);
+  const [mobileOnlyActiveClef, setMobileOnlyActiveClef] = useState(window.innerWidth < 640);
 
   const timerRef = useRef(null);
-  const levelRef = useRef(null);
-  const helpRef = useRef(null);
+  const desktopLevelRef = useRef(null);
+  const mobileLevelRef = useRef(null);
 
   useClickOutside(
-    [levelRef, helpRef],
-    [
-      () => levelOpen && setLevelOpen(false),
-      () => helpOpen && setHelpOpen(false),
-    ],
+    [desktopLevelRef, mobileLevelRef],
+    () => levelOpen && setLevelOpen(false),
   );
+
+  useEffect(() => {
+    function handleResize() {
+      setMobileOnlyActiveClef(window.innerWidth < 640);
+    }
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     function syncSitePreferences() {
@@ -910,8 +951,19 @@ function App() {
     accessibility.highContrast ? "app-high-contrast" : "",
   ].filter(Boolean).join(" ");
 
-  function makeNewQuestion(nextSettings = settings) {
+  function makeNewQuestion(nextSettings = settings, skipped = false) {
     window.clearTimeout(timerRef.current);
+    if (skipped) {
+      setSkipStreak((value) => {
+        const next = value + 1;
+        if (next >= 1) {
+          setStreak(0);
+        }
+        return next;
+      });
+    } else {
+      setSkipStreak(0);
+    }
     setQuestionVisible(false);
     window.setTimeout(() => {
       setQuestion((current) => createQuestion(nextSettings, current?.pitch));
@@ -928,7 +980,10 @@ function App() {
     const nextSettings = { ...profile.settings };
     setActiveProfile(profileKey);
     setSettings(nextSettings);
+    setCorrect(0);
+    setAttempted(0);
     setStreak(0);
+    setBestStreak(0);
     setConfettiKey(0);
     makeNewQuestion(nextSettings);
   }
@@ -937,7 +992,6 @@ function App() {
     setCorrect(0);
     setAttempted(0);
     setStreak(0);
-    setBestStreak(0);
     setConfettiKey(0);
     makeNewQuestion(settings);
   }
@@ -960,6 +1014,7 @@ function App() {
     setCorrect((value) => value + (isCorrect ? 1 : 0));
     setStreak(nextStreak);
     setBestStreak((value) => Math.max(value, nextStreak));
+    setSkipStreak(0);
     setFeedback({ correct: isCorrect });
     playFeedbackSound(isCorrect);
 
@@ -975,26 +1030,26 @@ function App() {
     }
   }
 
-  const instruction = <>Identify the note.</>;
+  const instruction = <>Identify the <strong>note</strong>.</>;
 
   return (
-    <div className={`min-h-screen px-4 pb-4 pt-1 md:px-8 md:pb-8 md:pt-2 ${appPreferenceClasses}`}>
+    <div className={`min-h-screen overflow-x-hidden px-3 pb-4 pt-1 sm:px-4 md:px-8 md:pb-8 md:pt-2 ${appPreferenceClasses}`}>
       <div className="mx-auto max-w-6xl">
-        <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
+        <header className="mb-3 rounded-2xl border border-stone-200 bg-white px-4 py-2 shadow-sm sm:mb-5 sm:px-5 sm:py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               <AppIcon />
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Note Identification</h1>
-                <p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Identify note names in the treble and bass clef.</p>
+                <h1 className="text-xl font-semibold tracking-tight sm:text-2xl md:text-3xl">Note Identification</h1>
+                <p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[0.78rem] leading-tight text-stone-600 sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap">Identify note names in the treble and bass clef.</p>
               </div>
             </div>
 
-            <div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end">
+            <div className="grid w-full grid-cols-2 gap-2 lg:ml-auto lg:flex lg:w-auto lg:flex-nowrap lg:justify-end">
               <StatCard variant="score" label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${accuracy}%`} progress={accuracy} />
               <div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${streakMedal?.bg ?? "bg-stone-50"}`}>
                 <StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} medal={streakMedal} confettiKey={confettiKey} />
-                <div className="relative z-0 flex min-h-[52px] min-w-[64px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700">
+                <div className="relative z-0 flex min-h-[44px] min-w-[58px] shrink-0 flex-col items-start justify-center pl-[18px] pr-[8px] py-[6px] text-[12px] leading-[1.05] text-stone-700 sm:min-h-[52px] sm:min-w-[64px] sm:px-[14px] sm:py-[10px] sm:text-[13px] sm:leading-[1.15]">
                   <div className="flex items-center gap-1"><span>💎</span><span className="text-cyan-500">30</span></div>
                   <div className="mt-1">🥇 <span className="text-yellow-500">20</span></div>
                   <div className="mt-1">🥈 <span className="text-slate-500">15</span></div>
@@ -1006,29 +1061,29 @@ function App() {
         </header>
 
         <main
-          className="relative -mt-[10px] min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
+          className="relative -mt-[6px] min-h-[645px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-4 pt-[10px] shadow-sm sm:-mt-[10px] sm:min-h-[420px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
           onPointerDown={() => {
             if (feedback && !feedback.correct) fadeToNextQuestion();
           }}
         >
-          <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="relative" ref={levelRef}>
+          <div className="relative z-20 mb-2.5 hidden items-center justify-between gap-3 sm:flex sm:flex-wrap">
+            <div className="flex min-w-0 shrink items-center gap-2 sm:w-auto">
+              <div className="relative flex-1 sm:flex-none" ref={desktopLevelRef}>
                 <button
                   type="button"
                   onClick={() => {
                     setLevelOpen((value) => !value);
                     setLevelMenuMode("levels");
                   }}
-                  className="flex h-11 min-w-[92px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800 tracking-normal"
+                  className="flex h-10 min-w-[112px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800 tracking-normal sm:h-11 sm:min-w-[92px] sm:flex-none sm:px-4"
                 >
                   <span className="text-base">🎚️</span>
                   <span>{activeProfile === "N3" ? "National 3" : activeProfile === "N4" ? "National 4" : activeProfile === "N5" ? "National 5" : activeProfile === "H" ? "Higher" : activeProfile === "AH" ? "Advanced Higher" : activeProfile === "Custom" ? "Custom" : activeProfile}</span>
                 </button>
 
                 {levelOpen && (
-                  <div className="absolute left-0 z-20 mt-2 w-[420px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg">
-                    <div className="relative mb-3 flex min-h-[34px] items-center justify-center">
+                  <div className="absolute left-0 z-20 mt-2 inline-block w-[calc(100vw-1.5rem)] max-w-max rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit">
+                    <div className="relative mb-3 flex min-h-[34px] items-center justify-center whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => setLevelMenuMode((mode) => mode === "levels" ? "customise" : "levels")}
@@ -1041,12 +1096,12 @@ function App() {
                     </div>
 
                     {levelMenuMode === "customise" ? (
-                      <MenuRows settings={settings} setSettings={setSettings} resetScore={resetScore} makeNewQuestion={makeNewQuestion} showHelp={showHelp} setShowHelp={setShowHelp} activeProfile={activeProfile} setActiveProfile={setActiveProfile} applyProfile={applyProfile} setStreak={setStreak} setConfettiKey={setConfettiKey} />
+                      <MenuRows settings={settings} setSettings={setSettings} resetScore={resetScore} makeNewQuestion={makeNewQuestion} showHelp={showHelp} setShowHelp={setShowHelp} setActiveProfile={setActiveProfile} setCorrect={setCorrect} setAttempted={setAttempted} setStreak={setStreak} setBestStreak={setBestStreak} setConfettiKey={setConfettiKey} />
                     ) : (
-                      <div className="space-y-2">
-                        {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
-                          const profile = DIFFICULTY_PROFILES[profileKey];
-                          const active = activeProfile === profileKey;
+                      <div className="flex w-full min-w-0 flex-col gap-2">
+                      {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
+                        const profile = DIFFICULTY_PROFILES[profileKey];
+                        const active = activeProfile === profileKey;
 
                           return (
                             <button
@@ -1058,14 +1113,14 @@ function App() {
                               }}
                               className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
                             >
-                              <div className="flex items-center justify-between gap-3 text-stone-900">
-                                <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">
-                                  {profileKey}
-                                </div>
-                                <div className="flex flex-1 flex-col justify-center">
-                                  <div className="text-[13px] font-black">{profile.label}</div>
-                                  <div className="mt-0.5 text-[11px] leading-tight text-stone-600">{profile.description}</div>
-                                </div>
+                              <div className="flex min-w-0 items-center justify-between gap-3 text-stone-900">
+                              <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">
+                                {profileKey}
+                              </div>
+                              <div className="flex min-w-0 flex-1 flex-col justify-center pr-2">
+                                <div className="truncate text-[13px] font-black leading-none">{profile.label}</div>
+                                <div className="mt-[2px] truncate text-[11px] leading-[1.05] text-stone-600">{profile.description}</div>
+                              </div>
                                 {activeProfile === profileKey && (
                                   <svg width="22" height="22" viewBox="0 -0.5 25 25" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0 text-stone-900">
                                     <path d="M5.5 12.5L10.167 17L19.5 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1081,25 +1136,21 @@ function App() {
                 )}
               </div>
 
-              <div className="relative" ref={helpRef}>
-                <button type="button" onClick={() => setHelpOpen((value) => !value)} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">💡 <span>Help</span></button>
-                {helpOpen && (
-                  <div className="absolute left-0 top-12 z-20 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
-                    <HelpPanel />
-                  </div>
-                )}
-              </div>
+              <button type="button" onClick={() => setHelpOpen(true)} className="flex h-10 min-w-[92px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800 sm:h-11 sm:flex-none sm:px-4">💡 <span>Help</span></button>
             </div>
 
-            <button type="button" onClick={() => makeNewQuestion(settings)} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading} /></div>
+            <button type="button" onClick={() => makeNewQuestion(settings, true)} className="flex h-10 min-w-[132px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-4"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
           </div>
 
-          <div className={`relative -top-[55px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
-            <ScoreArea question={question} settings={settings} showHelp={showHelp} feedback={feedback} activeProfile={activeProfile} />
+          <div className="pointer-events-none absolute inset-x-0 top-[-2px] z-40 flex justify-center overflow-visible sm:top-[14px] sm:translate-y-0">
+            <FeedbackBanner feedback={feedback} fading={feedbackFading} />
           </div>
 
-          <div className="relative z-10 mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:-mt-[123px] md:mx-3">
+          <div className={`relative top-[56px] mx-auto w-full transition-opacity duration-300 sm:-top-[55px] ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+            <ScoreArea question={question} settings={settings} showHelp={showHelp} feedback={feedback} activeProfile={activeProfile} mobileOnlyActiveClef={mobileOnlyActiveClef} />
+          </div>
+
+          <div className="absolute bottom-[143px] left-3 right-3 z-10 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-[-105px] sm:p-4 md:-mt-[123px] md:mx-3">
             <div className="space-y-2 text-stone-900">
               <p className="text-base font-semibold leading-tight">{instruction}</p>
               {!question && <p className="text-sm font-medium text-red-700">No available notes. Enable at least one clef.</p>}
@@ -1109,7 +1160,93 @@ function App() {
               <AnswerGrid settings={settings} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={scoreAnswer} />
             </div>
           </div>
+        
+          <div className="absolute bottom-[15px] left-3 right-3 z-20 grid grid-cols-2 gap-2 sm:hidden">
+            <div className="relative" ref={mobileLevelRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setLevelOpen((value) => !value);
+                  setLevelMenuMode("levels");
+                }}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800 tracking-normal"
+              >
+                <span className="text-base">🎚️</span>
+                <span>{activeProfile === "N3" ? "National 3" : activeProfile === "N4" ? "National 4" : activeProfile === "N5" ? "National 5" : activeProfile === "H" ? "Higher" : activeProfile === "AH" ? "Advanced Higher" : activeProfile === "Custom" ? "Custom" : activeProfile}</span>
+              </button>
+
+              {levelOpen && (
+                <div className="absolute bottom-14 left-0 z-20 block w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white p-3 shadow-lg">
+                  <div className="relative mb-3 flex min-h-[34px] items-center justify-center whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => setLevelMenuMode((mode) => mode === "levels" ? "customise" : "levels")}
+                      className={`absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-xl border text-base ${levelMenuMode === "customise" ? "border-stone-500 bg-stone-200" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
+                      title="Customise"
+                    >
+                      {levelMenuMode === "customise" ? "←" : "⚙️"}
+                    </button>
+                    <div className="text-center text-base font-semibold text-stone-800">{levelMenuMode === "customise" ? "Customise" : "Level"}</div>
+                  </div>
+
+                  {levelMenuMode === "customise" ? (
+                    <MenuRows settings={settings} setSettings={setSettings} resetScore={resetScore} makeNewQuestion={makeNewQuestion} showHelp={showHelp} setShowHelp={setShowHelp} setActiveProfile={setActiveProfile} setCorrect={setCorrect} setAttempted={setAttempted} setStreak={setStreak} setBestStreak={setBestStreak} setConfettiKey={setConfettiKey} />
+                  ) : (
+                    <div className="inline-flex min-w-full flex-col gap-2">
+                      {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
+                        const profile = DIFFICULTY_PROFILES[profileKey];
+                        const active = activeProfile === profileKey;
+
+                        return (
+                          <button
+                            key={profileKey}
+                            type="button"
+                            onClick={() => {
+                              applyProfile(profileKey);
+                              setLevelOpen(false);
+                            }}
+                            className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
+                          >
+                            <div className="flex items-center justify-between gap-3 text-stone-900">
+                              <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">
+                                {profileKey}
+                              </div>
+                              <div className="flex flex-1 flex-col justify-center pr-2 min-w-0">
+                                <div className="whitespace-nowrap text-[13px] font-black leading-none">{profile.label}</div>
+                                <div className="mt-[2px] break-words text-[11px] leading-[1.15] text-stone-600 sm:whitespace-nowrap">{profile.description}</div>
+                              </div>
+                              {activeProfile === profileKey && (
+                                <svg width="22" height="22" viewBox="0 -0.5 25 25" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0 text-stone-900">
+                                  <path d="M5.5 12.5L10.167 17L19.5 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button type="button" onClick={() => setHelpOpen(true)} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800">💡 <span>Help</span></button>
+            <button type="button" onClick={() => makeNewQuestion(settings, true)} className="col-span-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
+          </div>
         </main>
+        <Footer />
+
+        {helpOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onPointerDown={() => setHelpOpen(false)}>
+            <div className="max-h-[calc(100vh-2rem)] w-[min(430px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-2xl sm:p-5" onPointerDown={(event) => event.stopPropagation()}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-bold text-stone-900">Help</h2>
+                <button type="button" onClick={() => setHelpOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-stone-300 bg-white text-xl font-bold text-stone-800">×</button>
+              </div>
+              <HelpPanel />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
