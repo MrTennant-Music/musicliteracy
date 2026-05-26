@@ -1,6 +1,7 @@
 document.body.insertAdjacentHTML("beforeend", `
 <footer class="footer" id="resources">
   <div class="footer-grid">
+
     <div class="footer-brand">
       <img
         src="https://mrtennant-music.github.io/musicliteracy/the-music-literacy-hub-logo.svg"
@@ -42,6 +43,7 @@ document.body.insertAdjacentHTML("beforeend", `
         gw19tennantrobert1@glow.sch.uk
       </p>
     </div>
+
   </div>
 
   <div class="copyright">
