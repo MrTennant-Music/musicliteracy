@@ -21,7 +21,7 @@
     const STAFF = { left: 247, right: 689, trebleTop: 84, bassTop: 225, gap: 18.9 };
     const NOTE = { x: 468, rx: 12.2, ry: 8.72, stemLength: 62 };
     const COLOUR = { green: "#16a34a", red: "#dc2626", black: "#000000" };
-    const GLYPH = { trebleClef: String.fromCodePoint(0x1d11e), bassClef: String.fromCodePoint(0x1d122) };
+    const GLYPH = {};
     const LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
     const SHARPS = { A: "A#", B: null, C: "C#", D: "D#", E: null, F: "F#", G: "G#" };
     const FLATS = { A: "Ab", B: "Bb", C: null, D: "Db", E: "Eb", F: null, G: "Gb" };
@@ -29,14 +29,19 @@
     const ASSET = {
       appIcon: "https://mrtennant-music.github.io/musicliteracy/notenaming-icon.svg",
       footer: "https://mrtennant-music.github.io/musicliteracy/footer.js",
-      level: "levels.svg",
-      customise: "customise.svg",
-      next: "next.svg",
-      tick: "tick.svg",
-      bronze: "bronze.svg",
-      silver: "silver.svg",
-      gold: "gold.svg",
-      diamond: "diamond.svg",
+      level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
+      customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
+      next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
+      tick: "https://mrtennant-music.github.io/musicliteracy/tick.svg",
+      bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
+      silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
+      gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
+      diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
+      trebleClef: "https://mrtennant-music.github.io/musicliteracy/trebleclef.svg?v=1.1",
+      bassClef: "https://mrtennant-music.github.io/musicliteracy/bassclef.svg?v=1.1",
+      sharp: "https://mrtennant-music.github.io/musicliteracy/sharp.svg?v=1.1",
+      flat: "https://mrtennant-music.github.io/musicliteracy/flat.svg?v=1.1",
+      crotchet: "https://mrtennant-music.github.io/musicliteracy/crotchet.svg?v=1.1",
     };
 
     const LEDGER_BLOCKED = {
@@ -357,25 +362,23 @@
       );
     }
 
-    function Accidental({ accidental, x, y, colour = "currentColor" }) {
+    function Accidental({ accidental, x, y }) {
       if (!accidental) return null;
 
       const isSharp = accidental === "♯";
+      const src = isSharp ? ASSET.sharp : ASSET.flat;
       const ledgerOffset = y < 95 || y > 285 ? -6 : 0;
+
       return (
-        <text
-          x={isSharp ? x - 40 + ledgerOffset : x - 50 + ledgerOffset}
-          y={isSharp ? y + 14 : y + 11}
-          fontSize="42.3"
-          fontFamily="serif"
-          fontWeight="900"
-          fill={colour}
-          stroke={colour}
-          strokeWidth="0.6"
+        <image
+          href={src}
+          x={isSharp ? x - 43 + ledgerOffset : x - 54 + ledgerOffset}
+          y={y - 27}
+          width={isSharp ? 28 : 31}
+          height={54}
+          preserveAspectRatio="xMidYMid meet"
           pointerEvents="none"
-        >
-          {accidental}
-        </text>
+        />
       );
     }
 
@@ -385,14 +388,27 @@
       const top = note.clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
       const x = NOTE.x;
       const y = yForStep(top, note.step);
-      const stem = getStem(x, y, note.step);
+      const down = stemDown(note.step);
 
       return (
         <g pointerEvents="none">
           <LedgerLines x={x} step={note.step} clef={note.clef} colour={colour} enabled={ledgerEnabled} />
-          <Accidental accidental={note.accidental} x={x} y={y} colour={colour} />
-          <ellipse cx={x} cy={y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${y})`} fill={colour} stroke={colour} strokeWidth="2.2" />
-          <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />
+          <Accidental accidental={note.accidental} x={x} y={y} />
+          <image
+            href={ASSET.crotchet}
+            x={x - 15}
+            y={y - 70}
+            width="74"
+            height="140"
+            preserveAspectRatio="xMidYMid meet"
+            opacity="1"
+            style={{
+              transformBox: "fill-box",
+              transformOrigin: "center",
+              transform: down ? "rotate(180deg)" : "none",
+              filter: colour === COLOUR.green ? "sepia(1) saturate(5) hue-rotate(65deg)" : colour === COLOUR.red ? "sepia(1) saturate(6) hue-rotate(300deg)" : "none"
+            }}
+          />
         </g>
       );
     }
@@ -407,9 +423,15 @@
             <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
           ))}
           <line x1={STAFF.right} x2={STAFF.right} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />
-          <text x={STAFF.left + (isTreble ? 18 : 14)} y={top + (isTreble ? 52 : 43)} fontSize={isTreble ? 171 : 107} fontFamily="serif" dominantBaseline="middle">
-            {isTreble ? GLYPH.trebleClef : GLYPH.bassClef}
-          </text>
+          <image
+            href={isTreble ? ASSET.trebleClef : ASSET.bassClef}
+            x={STAFF.left + (isTreble ? 12 : 17)}
+            y={top + (isTreble ? -36 : 3)}
+            width={isTreble ? 86 : 74}
+            height={isTreble ? 155 : 80}
+            preserveAspectRatio="xMidYMid meet"
+            pointerEvents="none"
+          />
         </g>
       );
     }
@@ -435,7 +457,7 @@
 
     function ScoreArea({ question, settings, showHelp, feedback, activeProfile, mobileOnlyActiveClef }) {
       const colour = feedback?.correct === true ? COLOUR.green : feedback?.correct === false ? COLOUR.red : "currentColor";
-      const dimNotation = Boolean(feedback);
+      const dimNotation = false;
       const ahFocusTrebleOnly = activeProfile === "AH" && question?.clef === "treble" && ["A3", "B3"].includes(question.pitch);
       const ahFocusBassOnly = activeProfile === "AH" && question?.clef === "bass" && ["D4", "E4"].includes(question.pitch);
 
@@ -525,7 +547,7 @@
                   setOpenPopover(null);
                 }}
                 className="popover-button absolute left-1/2 top-full z-50 mt-2 flex min-w-[112px] -translate-x-1/2 items-center justify-center rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-lg"
-                style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" }}
+                style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
               >
                 Reset
               </button>
@@ -579,7 +601,7 @@
                 <div className="flex items-end justify-center gap-3">
                   {thresholds.map((item) => (
                     <div key={item.tier} className={`flex flex-col items-center justify-end ${item.active ? "medal-threshold-active" : ""}`}>
-                      <img src={item.icon} alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
+                      <img src={item.icon} alt="" aria-hidden="true" className="h-[22.8px] w-[22.8px] object-contain" />
                       <span className={`mt-1 text-[11px] font-semibold leading-none ${item.textClass}`}>{item.value}</span>
                     </div>
                   ))}
@@ -595,9 +617,9 @@
       if (!feedback) return null;
       return (
         <div className="relative flex w-full items-center justify-center text-center">
-          <div className={`flex min-w-[170px] flex-col items-center justify-center whitespace-nowrap rounded-2xl border bg-white/92 px-5 py-2 text-xl font-bold shadow-[0_10px_28px_rgba(0,0,0,0.14)] backdrop-blur-md translate-y-[40px] sm:translate-y-0 ${feedback.correct ? "border-green-500 text-green-600" : "border-red-500 text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}>
-            <span className="translate-y-[2px]">{feedback.correct ? "Correct" : "Incorrect"}</span>
-            {!feedback.correct && <span className="mt-2 inline-flex -translate-x-[2px] items-center gap-0 text-sm font-semibold text-black">Click or tap anywhere to continue</span>}
+          <div className={`flex min-h-[40px] sm:min-h-[44px] w-[58px] flex-col items-center justify-center rounded-xl border bg-white/92 px-2 py-1 text-sm font-semibold sm:w-auto sm:px-2.5 text-xl font-bold shadow-[0_10px_28px_rgba(0,0,0,0.14)] backdrop-blur-md translate-y-[40px] sm:translate-y-0 ${feedback.correct ? "border-green-500 text-green-600" : "border-red-500 text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}>
+            <span>{feedback.correct ? "Correct" : "Incorrect"}</span>
+            {!feedback.correct && <span className="mt-0.5 inline-flex items-center gap-0 text-sm font-semibold text-black"><span className="-mt-[2px] text-center text-[11px] font-semibold leading-tight text-black">Click or tap anywhere to continue</span></span>}
           </div>
         </div>
       );
@@ -644,10 +666,20 @@
 
       return (
         <div className="flex w-full min-w-0 flex-col sm:inline-flex sm:w-max sm:min-w-[260px]">
-          <ToggleRow label="Accidentals" icon={<span className="relative left-[3px] font-serif font-black">♯♭</span>} checked={settings.accidentals} onChange={() => updateSetting("accidentals")} />
+          <ToggleRow
+            label="Accidentals"
+            icon={
+              <span className="relative left-[2px] flex items-center justify-center gap-[1px]">
+                <img src={ASSET.sharp} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" />
+                <img src={ASSET.flat} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" />
+              </span>
+            }
+            checked={settings.accidentals}
+            onChange={() => updateSetting("accidentals")}
+          />
           <ToggleRow label="Ledger Lines" icon={<LedgerIcon />} checked={settings.ledger} onChange={() => updateSetting("ledger")} />
-          <ToggleRow label="Treble Clef" icon={<span className="font-serif text-3xl leading-none">𝄞</span>} checked={settings.treble} onChange={() => updateSetting("treble")} />
-          <ToggleRow label="Bass Clef" icon={<span className="font-serif text-2xl leading-none">𝄢</span>} checked={settings.bass} onChange={() => updateSetting("bass")} />
+          <ToggleRow label="Treble Clef" icon={<img src={ASSET.trebleClef} alt="" aria-hidden="true" className="h-[29px] w-[22px] object-contain" />} checked={settings.treble} onChange={() => updateSetting("treble")} />
+          <ToggleRow label="Bass Clef" icon={<img src={ASSET.bassClef} alt="" aria-hidden="true" className="h-[24px] w-[22px] object-contain" />} checked={settings.bass} onChange={() => updateSetting("bass")} />
           <ToggleRow label="Show Note Names" icon={<span className="text-[10px] font-black tracking-tight">abc</span>} checked={showHelp} onChange={() => setShowHelp((value) => !value)} />
         </div>
       );
@@ -976,54 +1008,30 @@
             >
               <div className="relative z-50 mb-2.5 flex items-center justify-between gap-2 overflow-visible" ref={desktopLevelRef}>
                 <div className="relative flex items-center gap-2 overflow-visible">
-                  <div className="group relative">
+                  <div className="group relative overflow-visible">
                     <button
                       type="button"
                       onClick={() => {
                         setLevelOpen((value) => !(value && levelMenuMode === "levels"));
                         setLevelMenuMode("levels");
                       }}
-                      className="flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11"
+                      className="flex h-10 w-[58px] items-center justify-center gap-1 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-1.5"
                     >
-                      <img src={ASSET.level} alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
+                      <img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain scale-[1.06]" />
+                      <>
+                        <span className="sm:hidden">{activeProfile}</span>
+                        <span className="hidden sm:inline">
+                          {DIFFICULTY_PROFILES[activeProfile]?.label || activeProfile}
+                        </span>
+                      </>
                     </button>
-                    <div className="pointer-events-none absolute left-1/2 top-full z-[60] mt-2 -translate-x-1/2 rounded-lg bg-black px-2 py-1 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">Level</div>
-                  </div>
 
-                  <div className="group relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (levelOpen && levelMenuMode === "customise") setLevelOpen(false);
-                        else {
-                          setLevelOpen(true);
-                          setLevelMenuMode("customise");
-                        }
-                      }}
-                      className="flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11"
-                    >
-                      <img src={ASSET.customise} alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
-                    </button>
-                    <div className="pointer-events-none absolute left-1/2 top-full z-[60] mt-2 -translate-x-1/2 rounded-lg bg-black px-2 py-1 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">Customise</div>
-                  </div>
+                    {levelOpen && levelMenuMode === "levels" && (
+                      <div className="absolute left-0 top-full z-50 mt-2 inline-block w-full rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit">
+                        <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
+                          <div className="text-center text-base font-semibold text-stone-800">Level</div>
+                        </div>
 
-                  {levelOpen && (
-                    <div className={`absolute top-full z-50 mt-2 inline-block rounded-2xl border border-stone-200 bg-white p-3 shadow-lg w-full sm:w-fit ${levelMenuMode === "customise" ? "left-[68px]" : "left-0"}`}>
-                      <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
-                        <div className="text-center text-base font-semibold text-stone-800">{levelMenuMode === "customise" ? "Customise" : "Level"}</div>
-                      </div>
-
-                      {levelMenuMode === "customise" ? (
-                        <MenuRows
-                          settings={settings}
-                          setSettings={setSettings}
-                          makeNewQuestion={makeNewQuestion}
-                          showHelp={showHelp}
-                          setShowHelp={setShowHelp}
-                          setActiveProfile={setActiveProfile}
-                          resetProgress={resetProgress}
-                        />
-                      ) : (
                         <div className="flex w-full min-w-0 flex-col gap-2">
                           {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
                             const profile = DIFFICULTY_PROFILES[profileKey];
@@ -1050,20 +1058,67 @@
                             );
                           })}
                         </div>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="group relative overflow-visible">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (levelOpen && levelMenuMode === "customise") setLevelOpen(false);
+                        else {
+                          setLevelOpen(true);
+                          setLevelMenuMode("customise");
+                        }
+                      }}
+                      className="flex h-10 w-[58px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5"
+                    >
+                      <img src={ASSET.customise} alt="" aria-hidden="true" className="h-[20.7px] w-[20.7px] object-contain" />
+                      <span className="hidden sm:inline">Customise</span>
+                    </button>
+
+                    {levelOpen && levelMenuMode === "customise" && (
+                      <div className="absolute left-0 top-full z-50 mt-2 inline-block w-full rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit">
+                        <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
+                          <div className="text-center text-base font-semibold text-stone-800">Customise</div>
+                        </div>
+
+                        <MenuRows
+                          settings={settings}
+                          setSettings={setSettings}
+                          makeNewQuestion={makeNewQuestion}
+                          showHelp={showHelp}
+                          setShowHelp={setShowHelp}
+                          setActiveProfile={setActiveProfile}
+                          resetProgress={resetProgress}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="group relative">
-                  <button type="button" onClick={() => makeNewQuestion(settings, true)} className="flex h-10 w-[58px] shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11">
-                    <img src={ASSET.next} alt="" aria-hidden="true" className="h-[22px] w-[22px] object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => makeNewQuestion(settings, true)}
+                    className="flex h-10 w-[58px] shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:min-w-[84px] sm:px-2"
+                  >
+                    <div className="flex translate-x-[4px] items-center justify-center gap-1">
+                      <span className="hidden sm:inline">Skip</span>
+
+                      <img
+                        src={ASSET.next}
+                        alt=""
+                        aria-hidden="true"
+                        className="h-[27.8px] w-[27.8px] object-contain"
+                      />
+                    </div>
                   </button>
-                  <div className="pointer-events-none absolute left-1/2 top-full z-[60] mt-2 -translate-x-1/2 rounded-lg bg-black px-2 py-1 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">Skip</div>
                 </div>
               </div>
 
-              <div className="pointer-events-none absolute inset-x-0 top-[62px] z-40 flex justify-center overflow-visible sm:top-[14px]">
+              <div className="pointer-events-none absolute inset-x-0 top-[14px] z-40 flex justify-center overflow-visible">
                 <FeedbackBanner feedback={feedback} fading={feedbackFading} />
               </div>
 
@@ -1092,6 +1147,6 @@
     ReactDOM.render(<App />, document.getElementById("root"));
   </script>
 
-  <script src="https://mrtennant-music.github.io/musicliteracy/footer.js"></script>
+  <script src="https://mrtennant-music.github.io/musicliteracy/footer.js?v=1.1"></script>
 </body>
 </html>
