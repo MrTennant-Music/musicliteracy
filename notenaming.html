@@ -15,1304 +15,1083 @@
   <div id="root"></div>
 
   <script type="text/babel">
-const { useEffect, useRef, useState } = React;
+    const { useEffect, useMemo, useRef, useState } = React;
 
-const SVG = { width: 920, height: 420 };
+    const SVG = { width: 920, height: 420 };
+    const STAFF = { left: 247, right: 689, trebleTop: 84, bassTop: 225, gap: 18.9 };
+    const NOTE = { x: 468, rx: 12.2, ry: 8.72, stemLength: 62 };
+    const COLOUR = { green: "#16a34a", red: "#dc2626", black: "#000000" };
+    const GLYPH = { trebleClef: String.fromCodePoint(0x1d11e), bassClef: String.fromCodePoint(0x1d122) };
+    const LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
+    const SHARPS = { A: "A#", B: null, C: "C#", D: "D#", E: null, F: "F#", G: "G#" };
+    const FLATS = { A: "Ab", B: "Bb", C: null, D: "Db", E: "Eb", F: null, G: "Gb" };
 
-const STAFF = {
-  left: 247,
-  right: 689,
-  trebleTop: 84,
-  bassTop: 225,
-  gap: 18.9,
-};
+    const ASSET = {
+      appIcon: "https://mrtennant-music.github.io/musicliteracy/notenaming-icon.svg",
+      footer: "https://mrtennant-music.github.io/musicliteracy/footer.js",
+      level: "levels.svg",
+      customise: "customise.svg",
+      next: "next.svg",
+      tick: "tick.svg",
+      bronze: "bronze.svg",
+      silver: "silver.svg",
+      gold: "gold.svg",
+      diamond: "diamond.svg",
+    };
 
-const NOTE = {
-  x: 468,
-  rx: 12.2,
-  ry: 8.72,
-  stemLength: 62,
-};
+    const LEDGER_BLOCKED = {
+      E2: true, F2: true, B3: true, C4: true, D4: true, G5: true, A5: true, B5: true, C6: true, D2: true, C2: true,
+    };
 
-const COLOUR = {
-  green: "#16a34a",
-  red: "#dc2626",
-  black: "#000000",
-};
+    const NOTE_DATA = [
+      { pitch: "A3", answer: "A", clef: "treble", step: -4 },
+      { pitch: "B3", answer: "B", clef: "treble", step: -3 },
+      { pitch: "D4", answer: "D", clef: "bass", step: 11 },
+      { pitch: "E4", answer: "E", clef: "bass", step: 12 },
+      { pitch: "C2", answer: "C", clef: "bass", step: -4 },
+      { pitch: "D2", answer: "D", clef: "bass", step: -3 },
+      { pitch: "E2", answer: "E", clef: "bass", step: -2 },
+      { pitch: "F2", answer: "F", clef: "bass", step: -1 },
+      { pitch: "G2", answer: "G", clef: "bass", step: 0 },
+      { pitch: "A2", answer: "A", clef: "bass", step: 1 },
+      { pitch: "B2", answer: "B", clef: "bass", step: 2 },
+      { pitch: "C3", answer: "C", clef: "bass", step: 3 },
+      { pitch: "D3", answer: "D", clef: "bass", step: 4 },
+      { pitch: "E3", answer: "E", clef: "bass", step: 5 },
+      { pitch: "F3", answer: "F", clef: "bass", step: 6 },
+      { pitch: "G3", answer: "G", clef: "bass", step: 7 },
+      { pitch: "A3", answer: "A", clef: "bass", step: 8 },
+      { pitch: "B3", answer: "B", clef: "bass", step: 9 },
+      { pitch: "C4", answer: "C", clef: "bass", step: 10 },
+      { pitch: "C4", answer: "C", clef: "treble", step: -2 },
+      { pitch: "D4", answer: "D", clef: "treble", step: -1 },
+      { pitch: "E4", answer: "E", clef: "treble", step: 0 },
+      { pitch: "F4", answer: "F", clef: "treble", step: 1 },
+      { pitch: "G4", answer: "G", clef: "treble", step: 2 },
+      { pitch: "A4", answer: "A", clef: "treble", step: 3 },
+      { pitch: "B4", answer: "B", clef: "treble", step: 4 },
+      { pitch: "C5", answer: "C", clef: "treble", step: 5 },
+      { pitch: "D5", answer: "D", clef: "treble", step: 6 },
+      { pitch: "E5", answer: "E", clef: "treble", step: 7 },
+      { pitch: "F5", answer: "F", clef: "treble", step: 8 },
+      { pitch: "G5", answer: "G", clef: "treble", step: 9 },
+      { pitch: "A5", answer: "A", clef: "treble", step: 10 },
+      { pitch: "B5", answer: "B", clef: "treble", step: 11 },
+      { pitch: "C6", answer: "C", clef: "treble", step: 12 },
+    ];
 
-const GLYPH = {
-  trebleClef: String.fromCodePoint(0x1d11e),
-  bassClef: String.fromCodePoint(0x1d122),
-};
+    const NOTE_NAME_LABELS = {
+      treble: {
+        top: STAFF.trebleTop,
+        lines: [{ step: 0, letter: "E" }, { step: 2, letter: "G" }, { step: 4, letter: "B" }, { step: 6, letter: "D" }, { step: 8, letter: "F" }],
+        spaces: [{ step: 1, letter: "F" }, { step: 3, letter: "A" }, { step: 5, letter: "C" }, { step: 7, letter: "E" }],
+      },
+      bass: {
+        top: STAFF.bassTop,
+        lines: [{ step: 0, letter: "G" }, { step: 2, letter: "B" }, { step: 4, letter: "D" }, { step: 6, letter: "F" }, { step: 8, letter: "A" }],
+        spaces: [{ step: 1, letter: "A" }, { step: 3, letter: "C" }, { step: 5, letter: "E" }, { step: 7, letter: "G" }],
+      },
+    };
 
-const LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
+    const DIFFICULTY_PROFILES = {
+      N3: { label: "National 3", settings: { accidentals: false, ledger: false, treble: true, bass: false, advancedRange: false }, description: "Lines and spaces of the treble clef." },
+      N4: { label: "National 4", settings: { accidentals: false, ledger: true, treble: true, bass: false, advancedRange: false }, description: "C–A’ — range of notes from middle C to first ledger line A." },
+      N5: { label: "National 5", settings: { accidentals: true, ledger: true, treble: true, bass: false, advancedRange: false }, description: "Tones, semitones, accidentals — flats, sharps and naturals." },
+      H: { label: "Higher", settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: false }, description: "Bass clef — E–C — range of notes from E below the stave to middle C." },
+      AH: { label: "Advanced Higher", settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: true }, description: "Bass clef C–E two ledger lines below stave to two ledger lines above." },
+    };
 
-const SHARPS = {
-  A: "A#",
-  B: null,
-  C: "C#",
-  D: "D#",
-  E: null,
-  F: "F#",
-  G: "G#",
-};
+    const SITE_THEME_KEY = "mlh-theme";
+    const SITE_ACCESSIBILITY_KEY = "mlh-accessibility";
 
-const FLATS = {
-  A: "Ab",
-  B: "Bb",
-  C: null,
-  D: "Db",
-  E: "Eb",
-  F: null,
-  G: "Gb",
-};
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
+    const yForStep = (top, step) => top + STAFF.gap * 4 - step * (STAFF.gap / 2);
+    const stemDown = (step) => step > 4;
 
-const LEDGER_BLOCKED = {
-  E2: true,
-  F2: true,
-  B3: true,
-  C4: true,
-  D4: true,
-  G5: true,
-  A5: true,
-  B5: true,
-  C6: true,
-  D2: true,
-  C2: true,
-};
-
-const NOTE_DATA = [
-  { pitch: "A3", answer: "A", clef: "treble", step: -4 },
-  { pitch: "B3", answer: "B", clef: "treble", step: -3 },
-  { pitch: "D4", answer: "D", clef: "bass", step: 11 },
-  { pitch: "E4", answer: "E", clef: "bass", step: 12 },
-  { pitch: "C2", answer: "C", clef: "bass", step: -4 },
-  { pitch: "D2", answer: "D", clef: "bass", step: -3 },
-  { pitch: "E2", answer: "E", clef: "bass", step: -2 },
-  { pitch: "F2", answer: "F", clef: "bass", step: -1 },
-  { pitch: "G2", answer: "G", clef: "bass", step: 0 },
-  { pitch: "A2", answer: "A", clef: "bass", step: 1 },
-  { pitch: "B2", answer: "B", clef: "bass", step: 2 },
-  { pitch: "C3", answer: "C", clef: "bass", step: 3 },
-  { pitch: "D3", answer: "D", clef: "bass", step: 4 },
-  { pitch: "E3", answer: "E", clef: "bass", step: 5 },
-  { pitch: "F3", answer: "F", clef: "bass", step: 6 },
-  { pitch: "G3", answer: "G", clef: "bass", step: 7 },
-  { pitch: "A3", answer: "A", clef: "bass", step: 8 },
-  { pitch: "B3", answer: "B", clef: "bass", step: 9 },
-  { pitch: "C4", answer: "C", clef: "bass", step: 10 },
-  { pitch: "C4", answer: "C", clef: "treble", step: -2 },
-  { pitch: "D4", answer: "D", clef: "treble", step: -1 },
-  { pitch: "E4", answer: "E", clef: "treble", step: 0 },
-  { pitch: "F4", answer: "F", clef: "treble", step: 1 },
-  { pitch: "G4", answer: "G", clef: "treble", step: 2 },
-  { pitch: "A4", answer: "A", clef: "treble", step: 3 },
-  { pitch: "B4", answer: "B", clef: "treble", step: 4 },
-  { pitch: "C5", answer: "C", clef: "treble", step: 5 },
-  { pitch: "D5", answer: "D", clef: "treble", step: 6 },
-  { pitch: "E5", answer: "E", clef: "treble", step: 7 },
-  { pitch: "F5", answer: "F", clef: "treble", step: 8 },
-  { pitch: "G5", answer: "G", clef: "treble", step: 9 },
-  { pitch: "A5", answer: "A", clef: "treble", step: 10 },
-  { pitch: "B5", answer: "B", clef: "treble", step: 11 },
-  { pitch: "C6", answer: "C", clef: "treble", step: 12 },
-];
-
-const NOTE_NAME_LABELS = {
-  treble: {
-    top: STAFF.trebleTop,
-    lines: [
-      { step: 0, letter: "E" },
-      { step: 2, letter: "G" },
-      { step: 4, letter: "B" },
-      { step: 6, letter: "D" },
-      { step: 8, letter: "F" },
-    ],
-    spaces: [
-      { step: 1, letter: "F" },
-      { step: 3, letter: "A" },
-      { step: 5, letter: "C" },
-      { step: 7, letter: "E" },
-    ],
-  },
-  bass: {
-    top: STAFF.bassTop,
-    lines: [
-      { step: 0, letter: "G" },
-      { step: 2, letter: "B" },
-      { step: 4, letter: "D" },
-      { step: 6, letter: "F" },
-      { step: 8, letter: "A" },
-    ],
-    spaces: [
-      { step: 1, letter: "A" },
-      { step: 3, letter: "C" },
-      { step: 5, letter: "E" },
-      { step: 7, letter: "G" },
-    ],
-  },
-};
-
-const DIFFICULTY_PROFILES = {
-  N3: {
-    label: "National 3",
-    settings: { accidentals: false, ledger: false, treble: true, bass: false, advancedRange: false },
-    description: "Lines and spaces of the treble clef.",
-  },
-  N4: {
-    label: "National 4",
-    settings: { accidentals: false, ledger: true, treble: true, bass: false, advancedRange: false },
-    description: "C–A’ — range of notes from middle C to first ledger line A.",
-  },
-  N5: {
-    label: "National 5",
-    settings: { accidentals: true, ledger: true, treble: true, bass: false, advancedRange: false },
-    description: "Tones, semitones, accidentals — flats, sharps and naturals.",
-  },
-  H: {
-    label: "Higher",
-    settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: false },
-    description: "Bass clef — E–C — range of notes from E below the stave to middle C.",
-  },
-  AH: {
-    label: "Advanced Higher",
-    settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: true },
-    description: "Bass clef C–E two ledger lines below stave to two ledger lines above.",
-  },
-};
-
-const SITE_THEME_KEY = "mlh-theme";
-const SITE_ACCESSIBILITY_KEY = "mlh-accessibility";
-
-function getSiteTheme() {
-  return localStorage.getItem(SITE_THEME_KEY) || "light";
-}
-
-function getSiteAccessibility() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(SITE_ACCESSIBILITY_KEY) || "{}");
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function settingsMatchProfile(settings, profileKey) {
-  const profile = DIFFICULTY_PROFILES[profileKey];
-  if (!profile) return false;
-  return ["accidentals", "ledger", "treble", "bass", "advancedRange"].every((key) => Boolean(settings[key]) === Boolean(profile.settings[key]));
-}
-
-function matchingProfileForSettings(settings) {
-  return Object.keys(DIFFICULTY_PROFILES).find((profileKey) => settingsMatchProfile(settings, profileKey)) || "Custom";
-}
-
-function randomItem(items) {
-  return items[Math.floor(Math.random() * items.length)];
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function yForStep(top, step) {
-  return top + STAFF.gap * 4 - step * (STAFF.gap / 2);
-}
-
-function stemDown(step) {
-  return step > 4;
-}
-
-function getStem(x, y, step) {
-  const down = stemDown(step);
-  const stemX = down ? x - NOTE.rx + 0.5 : x + NOTE.rx - 0.5;
-  const stemEndY = down ? y + NOTE.stemLength : y - NOTE.stemLength;
-  return { down, stemX, stemEndY };
-}
-
-function accidentalForLetter(letter, accidentalsEnabled) {
-  if (!accidentalsEnabled) return { answer: letter, accidental: null };
-  const options = [{ answer: letter, accidental: null }];
-  if (SHARPS[letter]) options.push({ answer: SHARPS[letter], accidental: "♯" });
-  if (FLATS[letter]) options.push({ answer: FLATS[letter], accidental: "♭" });
-  return randomItem(options);
-}
-
-function possibleQuestions(settings) {
-  return NOTE_DATA.filter((note) => {
-    const advancedOnly = ["B5", "C6", "D2", "C2", "A3", "B3", "D4", "E4"].includes(note.pitch);
-    if (advancedOnly && !settings.advancedRange) return false;
-    const clefEnabled = (settings.treble && note.clef === "treble") || (settings.bass && note.clef === "bass");
-    if (!clefEnabled) return false;
-    if (settings.ledger) return true;
-    return !LEDGER_BLOCKED[note.pitch];
-  });
-}
-
-function createQuestion(settings, previousPitch = null) {
-  const pool = possibleQuestions(settings);
-  if (!pool.length) return null;
-
-  let chosen = randomItem(pool);
-  let guard = 0;
-  while (pool.length > 1 && previousPitch && chosen.pitch === previousPitch && guard < 25) {
-    chosen = randomItem(pool);
-    guard += 1;
-  }
-
-  const accidental = accidentalForLetter(chosen.answer, settings.accidentals);
-  return {
-    id: Math.random().toString(36).slice(2),
-    pitch: chosen.pitch,
-    answer: accidental.answer,
-    clef: chosen.clef,
-    step: chosen.step,
-    accidental: accidental.accidental,
-  };
-}
-
-function playFeedbackSound(correct, celebration = false, medal = null) {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
-
-  const context = new AudioContextClass();
-  const master = context.createGain();
-  const now = context.currentTime + 0.01;
-  context.resume?.();
-  master.gain.value = 0.18;
-  master.connect(context.destination);
-
-  function tone(freq, start, duration, type = "triangle", volume = 0.12) {
-    const osc = context.createOscillator();
-    const gain = context.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    osc.connect(gain);
-    gain.connect(master);
-    osc.start(start);
-    osc.stop(start + duration + 0.05);
-  }
-
-  function trumpet(freq, start, duration, volume = 0.1) {
-    tone(freq, start, duration, "sawtooth", volume);
-    tone(freq * 1.002, start, duration * 0.96, "square", volume * 0.32);
-    tone(freq * 2, start, duration * 0.75, "triangle", volume * 0.16);
-  }
-
-  function medalPhrase(root, chord, start, beats = 4) {
-    const beat = 0.6;
-    const triplet = 0.13;
-    const finalDuration = beats === 2 ? 0.72 : 1.95;
-    chord.forEach((freq) => trumpet(freq, start, beats * beat, 0.045));
-    trumpet(root, start, triplet, 0.11);
-    trumpet(root, start + triplet, triplet, 0.11);
-    trumpet(root, start + triplet * 2, triplet, 0.11);
-    trumpet(root, start + 0.42, finalDuration, 0.13);
-  }
-
-  if (!correct) {
-    tone(180, now, 0.55, "sawtooth", 0.075);
-  } else if (celebration) {
-    if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now);
-    if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now);
-    if (medal === "gold") medalPhrase(830.61, [415.3, 523.25, 622.25], now);
-    if (medal === "platinum") {
-      medalPhrase(739.99, [369.99, 466.16, 554.37], now, 2);
-      medalPhrase(830.61, [415.3, 523.25, 622.25], now + 0.82, 2);
-      medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
+    function getSiteTheme() {
+      return localStorage.getItem(SITE_THEME_KEY) || "light";
     }
-  } else {
-    tone(740, now, 0.16, "triangle", 0.08);
-    tone(988, now + 0.12, 0.34, "triangle", 0.1);
-  }
 
-  window.setTimeout(() => {
-    try {
-      context.close();
-    } catch {}
-  }, medal === "platinum" ? 9000 : celebration ? 3500 : 900);
-}
-
-function LedgerLines({ x, step, clef, colour = "currentColor", enabled = true }) {
-  if (!enabled) return null;
-  const top = clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
-  const lines = [];
-  if (step <= -2) {
-    lines.push(yForStep(top, -2));
-    if (step <= -4) lines.push(yForStep(top, -4));
-  }
-
-  if (step >= 10) {
-    lines.push(yForStep(top, 10));
-    if (step >= 12) lines.push(yForStep(top, 12));
-  }
-
-  return (
-    <g pointerEvents="none">
-      {lines.map((y) => (
-        <line key={y} x1={x - 24} x2={x + 24} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />
-      ))}
-    </g>
-  );
-}
-
-function Accidental({ accidental, x, y, colour = "currentColor" }) {
-  if (!accidental) return null;
-  const isSharp = accidental === "♯";
-  const ledgerOffset = y < 95 || y > 285 ? -6 : 0;
-  return (
-    <text
-      x={isSharp ? x - 40 + ledgerOffset : x - 50 + ledgerOffset}
-      y={isSharp ? y + 14 : y + 11}
-      fontSize="42.3"
-      fontFamily="serif"
-      fontWeight="900"
-      fill={colour}
-      stroke={colour}
-      strokeWidth="0.6"
-      pointerEvents="none"
-    >
-      {accidental}
-    </text>
-  );
-}
-
-function CrotchetNote({ note, colour = "currentColor", ledgerEnabled = true }) {
-  if (!note) return null;
-  const top = note.clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
-  const x = NOTE.x;
-  const y = yForStep(top, note.step);
-  const stem = getStem(x, y, note.step);
-
-  return (
-    <g pointerEvents="none">
-      <LedgerLines x={x} step={note.step} clef={note.clef} colour={colour} enabled={ledgerEnabled} />
-      <Accidental accidental={note.accidental} x={x} y={y} colour={colour} />
-      <ellipse cx={x} cy={y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${y})`} fill={colour} stroke={colour} strokeWidth="2.2" />
-      <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />
-    </g>
-  );
-}
-
-function Staff({ top, clef, visible }) {
-  if (!visible) return null;
-  const isTreble = clef === "treble";
-
-  return (
-    <g>
-      {[0, 1, 2, 3, 4].map((line) => (
-        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
-      ))}
-      <line x1={STAFF.right} x2={STAFF.right} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />
-      <text
-        x={STAFF.left + (isTreble ? 18 : 14)}
-        y={top + (isTreble ? 52 : 43)}
-        fontSize={isTreble ? 171 : 107}
-        fontFamily="serif"
-        dominantBaseline="middle"
-      >
-        {isTreble ? GLYPH.trebleClef : GLYPH.bassClef}
-      </text>
-    </g>
-  );
-}
-
-function HelpLabels({ visible, settings }) {
-  if (!visible) return null;
-  const lineLabelX = STAFF.left - 11;
-  const spaceLabelX = STAFF.left + 7;
-  const entries = [];
-  if (settings.treble) entries.push(["treble", NOTE_NAME_LABELS.treble]);
-  if (settings.bass) entries.push(["bass", NOTE_NAME_LABELS.bass]);
-
-  return (
-    <g fontSize="14" fontFamily="system-ui, sans-serif" fontWeight="700" dominantBaseline="middle" pointerEvents="none" fill="black" textAnchor="middle">
-      {entries.flatMap(([clef, data]) => [
-        ...data.lines.map((note) => (
-          <text key={`${clef}-line-${note.step}`} x={lineLabelX} y={yForStep(data.top, note.step) + 5}>
-            {note.letter}
-          </text>
-        )),
-        ...data.spaces.map((note) => (
-          <text key={`${clef}-space-${note.step}`} x={spaceLabelX} y={yForStep(data.top, note.step) + 5}>
-            {note.letter}
-          </text>
-        )),
-      ])}
-    </g>
-  );
-}
-
-function ScoreArea({ question, settings, showHelp, feedback, activeProfile, mobileOnlyActiveClef }) {
-  const colour = feedback?.correct === true ? COLOUR.green : feedback?.correct === false ? COLOUR.red : "currentColor";
-  const ahFocusTrebleOnly = activeProfile === "AH" && question?.clef === "treble" && ["A3", "B3"].includes(question.pitch);
-  const ahFocusBassOnly = activeProfile === "AH" && question?.clef === "bass" && ["D4", "E4"].includes(question.pitch);
-  const displaySettings = mobileOnlyActiveClef
-    ? {
-        ...settings,
-        treble: question?.clef === "treble",
-        bass: question?.clef === "bass",
+    function getSiteAccessibility() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(SITE_ACCESSIBILITY_KEY) || "{}");
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        return {};
       }
-    : {
-        ...settings,
-        treble: ahFocusTrebleOnly ? true : ahFocusBassOnly ? false : settings.treble,
-        bass: ahFocusBassOnly ? true : ahFocusTrebleOnly ? false : settings.bass,
-      };
-
-  const visibleSystemCount = Number(Boolean(displaySettings.treble)) + Number(Boolean(displaySettings.bass));
-  const singleSystemOffset = !mobileOnlyActiveClef && visibleSystemCount === 1
-    ? displaySettings.treble
-      ? ((STAFF.bassTop - STAFF.trebleTop) / 2)
-      : -((STAFF.bassTop - STAFF.trebleTop) / 2)
-    : 0;
-
-  return (
-    <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
-      <rect width={SVG.width} height={SVG.height} fill="white" />
-      <g
-        className={`mobile-music-scale ${mobileOnlyActiveClef && question?.clef === "bass" ? "mobile-bass-focus" : ""}`}
-        transform={`translate(0 ${singleSystemOffset - 24})`}
-      >
-        <Staff top={STAFF.trebleTop} clef="treble" visible={displaySettings.treble} />
-        <Staff top={STAFF.bassTop} clef="bass" visible={displaySettings.bass} />
-        <HelpLabels visible={showHelp} settings={displaySettings} />
-        <CrotchetNote note={question} colour={colour} ledgerEnabled={settings.ledger} />
-      </g>
-    </svg>
-  );
-}
-
-function getStreakMedal(streak) {
-  if (streak >= 30) return { tier: "diamond", icon: "diamond.svg", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" };
-  if (streak >= 20) return { tier: "gold", icon: "gold.svg", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" };
-  if (streak >= 15) return { tier: "silver", icon: "silver.svg", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" };
-  if (streak >= 10) return { tier: "bronze", icon: "bronze.svg", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" };
-  return null;
-}
-
-function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, streakMedal, confettiKey, resetScore, autoShowMedals }) {
-  const [openPopover, setOpenPopover] = useState(null);
-  const panelRef = useRef(null);
-
-  useEffect(() => {
-    function closePopovers(event) {
-      if (!panelRef.current?.contains(event.target)) setOpenPopover(null);
     }
 
-    document.addEventListener("pointerdown", closePopovers);
-    return () => document.removeEventListener("pointerdown", closePopovers);
-  }, []);
-  const scoreFill = clamp(accuracy, 0, 100);
-  const scoreFillColour = scoreFill < 50
-    ? "rgba(220, 38, 38, 0.38)"
-    : scoreFill < 70
-      ? "rgba(255, 120, 0, 0.42)"
-      : "rgba(22, 163, 74, 0.38)";
+    function getStem(x, y, step) {
+      const down = stemDown(step);
+      return {
+        down,
+        stemX: down ? x - NOTE.rx + 0.5 : x + NOTE.rx - 0.5,
+        stemEndY: down ? y + NOTE.stemLength : y - NOTE.stemLength,
+      };
+    }
 
-  const thresholds = [
-    { tier: "bronze", value: 10, icon: "bronze.svg", textClass: "text-amber-700", active: streak >= 10 && streak < 15 },
-    { tier: "silver", value: 15, icon: "silver.svg", textClass: "text-slate-500", active: streak >= 15 && streak < 20 },
-    { tier: "gold", value: 20, icon: "gold.svg", textClass: "text-yellow-500", active: streak >= 20 && streak < 30 },
-    { tier: "diamond", value: 30, icon: "diamond.svg", textClass: "text-cyan-500", active: streak >= 30 },
-  ];
+    function settingsMatchProfile(settings, profileKey) {
+      const profile = DIFFICULTY_PROFILES[profileKey];
+      if (!profile) return false;
+      return ["accidentals", "ledger", "treble", "bass", "advancedRange"].every((key) => Boolean(settings[key]) === Boolean(profile.settings[key]));
+    }
 
-  return (
-    <div ref={panelRef} className="grid w-full grid-cols-2 gap-2 lg:w-auto lg:grid-cols-[112px_98px] sm:lg:grid-cols-[124px_108px]">
-      <section
-        role="button"
-        tabIndex="0"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => {
-            window.dispatchEvent(new CustomEvent("close-level-menu"));
-            setOpenPopover((value) => value === "score" ? null : "score");
-          }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            setOpenPopover((value) => value === "score" ? null : "score");
+    function matchingProfileForSettings(settings) {
+      return Object.keys(DIFFICULTY_PROFILES).find((profileKey) => settingsMatchProfile(settings, profileKey)) || "Custom";
+    }
+
+    function accidentalForLetter(letter, accidentalsEnabled) {
+      if (!accidentalsEnabled) return { answer: letter, accidental: null };
+
+      const options = [{ answer: letter, accidental: null }];
+      if (SHARPS[letter]) options.push({ answer: SHARPS[letter], accidental: "♯" });
+      if (FLATS[letter]) options.push({ answer: FLATS[letter], accidental: "♭" });
+      return randomItem(options);
+    }
+
+    function possibleQuestions(settings) {
+      return NOTE_DATA.filter((note) => {
+        const advancedOnly = ["B5", "C6", "D2", "C2", "A3", "B3", "D4", "E4"].includes(note.pitch);
+        const clefEnabled = (settings.treble && note.clef === "treble") || (settings.bass && note.clef === "bass");
+        if (advancedOnly && !settings.advancedRange) return false;
+        if (!clefEnabled) return false;
+        if (!settings.ledger && LEDGER_BLOCKED[note.pitch]) return false;
+        return true;
+      });
+    }
+
+    function createQuestion(settings, previousPitch = null) {
+      const pool = possibleQuestions(settings);
+      if (!pool.length) return null;
+
+      let chosen = randomItem(pool);
+      let guard = 0;
+      while (pool.length > 1 && previousPitch && chosen.pitch === previousPitch && guard < 25) {
+        chosen = randomItem(pool);
+        guard += 1;
+      }
+
+      const accidental = accidentalForLetter(chosen.answer, settings.accidentals);
+      return {
+        id: Math.random().toString(36).slice(2),
+        pitch: chosen.pitch,
+        answer: accidental.answer,
+        clef: chosen.clef,
+        step: chosen.step,
+        accidental: accidental.accidental,
+      };
+    }
+
+    function playFeedbackSound(correct, celebration = false, medal = null) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      const context = new AudioContextClass();
+      const master = context.createGain();
+      const now = context.currentTime + 0.01;
+      context.resume?.();
+      master.gain.value = 0.18;
+      master.connect(context.destination);
+
+      function tone(freq, start, duration, type = "triangle", volume = 0.12) {
+        const osc = context.createOscillator();
+        const gain = context.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(volume, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(start);
+        osc.stop(start + duration + 0.05);
+      }
+
+      function trumpet(freq, start, duration, volume = 0.1) {
+        tone(freq, start, duration, "sawtooth", volume);
+        tone(freq * 1.002, start, duration * 0.96, "square", volume * 0.32);
+        tone(freq * 2, start, duration * 0.75, "triangle", volume * 0.16);
+      }
+
+      function medalPhrase(root, chord, start, beats = 4) {
+        const beat = 0.6;
+        const triplet = 0.13;
+        const finalDuration = beats === 2 ? 0.72 : 1.95;
+        chord.forEach((freq) => trumpet(freq, start, beats * beat, 0.045));
+        trumpet(root, start, triplet, 0.11);
+        trumpet(root, start + triplet, triplet, 0.11);
+        trumpet(root, start + triplet * 2, triplet, 0.11);
+        trumpet(root, start + 0.42, finalDuration, 0.13);
+      }
+
+      if (!correct) {
+        tone(180, now, 0.55, "sawtooth", 0.075);
+      } else if (celebration) {
+        if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now);
+        if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now);
+        if (medal === "gold") medalPhrase(830.61, [415.3, 523.25, 622.25], now);
+        if (medal === "platinum") {
+          medalPhrase(739.99, [369.99, 466.16, 554.37], now, 2);
+          medalPhrase(830.61, [415.3, 523.25, 622.25], now + 0.82, 2);
+          medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
+        }
+      } else {
+        tone(740, now, 0.16, "triangle", 0.08);
+        tone(988, now + 0.12, 0.34, "triangle", 0.1);
+      }
+
+      window.setTimeout(() => {
+        try { context.close(); } catch {}
+      }, medal === "platinum" ? 9000 : celebration ? 3500 : 900);
+    }
+
+    function getStreakMedal(streak) {
+      if (streak >= 30) return { tier: "diamond", icon: ASSET.diamond, bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" };
+      if (streak >= 20) return { tier: "gold", icon: ASSET.gold, bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" };
+      if (streak >= 15) return { tier: "silver", icon: ASSET.silver, bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" };
+      if (streak >= 10) return { tier: "bronze", icon: ASSET.bronze, bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" };
+      return null;
+    }
+
+    function useClickOutside(refs, handler) {
+      useEffect(() => {
+        function onPointerDown(event) {
+          const clickedInsideAnyRef = refs.some((ref) => ref.current?.contains(event.target));
+          if (!clickedInsideAnyRef) handler?.();
+        }
+
+        document.addEventListener("pointerdown", onPointerDown, true);
+        return () => document.removeEventListener("pointerdown", onPointerDown, true);
+      }, [refs, handler]);
+    }
+
+    function useInjectedStyles() {
+      useEffect(() => {
+        if (document.getElementById("note-identification-golden-style")) return;
+
+        const style = document.createElement("style");
+        style.id = "note-identification-golden-style";
+        style.textContent = `
+          .app-icon-image { width: 100%; height: 100%; display: block; object-fit: contain; }
+          button { -webkit-tap-highlight-color: transparent; user-select: none; transition: transform .08s ease, filter .08s ease, background-color .12s ease, box-shadow .12s ease; cursor: pointer; }
+          button:hover {
+            transform: translateY(-1px) scale(1.01);
+            filter: brightness(1.08);
+            box-shadow: 0 6px 18px rgba(0,0,0,.08);
           }
-        }}
-        className={`relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${openPopover === "score" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""}`}
-      >
-        <div className="absolute inset-0 overflow-hidden rounded-xl">
-        <div className="absolute bottom-0 left-0 right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreFillColour }} />
-        </div>
-        <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
-          <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Score</div>
-          <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{correct}/{attempted}</div>
-          <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Accuracy: {accuracy}%</div>
-        </div>
-        {openPopover === "score" && (
-          <div
+
+          .popover-button,
+          .popover-button:hover,
+          .popover-button:active {
+            transform: translateX(-50%) !important;
+          }
+          button:active { transform: scale(.96); filter: brightness(.92); }
+          button:disabled { cursor: not-allowed; opacity: .82; }
+          button:focus-visible { outline: 2px solid rgba(22,163,74,.35); outline-offset: 2px; }
+
+          @keyframes medalThresholdGlow { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(250,204,21,.95)); } }
+          @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } }
+          @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } }
+          @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+          @keyframes feedbackFadeOut { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-10px); } }
+          @keyframes medalPopupIn { 0% { opacity: 0; transform: translate(-50%, -8px) scale(.82); } 60% { opacity: 1; transform: translate(-50%, 2px) scale(1.06); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+          @keyframes medalPopupOut { 0% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -6px) scale(.86); } }
+
+          .medal-threshold-active, .medal-threshold-active img { animation: medalThresholdGlow 1.35s ease-in-out infinite; font-weight: 900; }
+          .app-large-text { font-size: 112.5%; }
+          .app-reduce-motion *, .app-reduce-motion *::before, .app-reduce-motion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+          .app-high-contrast { filter: contrast(1.15); }
+
+          .app-dark header, .app-dark main, .app-dark .bg-white { background-color: #1c1917 !important; color: #f5f5f4 !important; border-color: #44403c !important; }
+          .app-dark .bg-stone-50, .app-dark .bg-stone-100 { background-color: #292524 !important; color: #f5f5f4 !important; }
+          .app-dark .text-stone-500, .app-dark .text-stone-600, .app-dark .text-stone-700, .app-dark .text-white, .app-dark .text-stone-900, .app-dark .text-black { color: #e7e5e4 !important; }
+          .app-dark .border-stone-200, .app-dark .border-stone-300 { border-color: #57534e !important; }
+          .app-dark svg rect[fill="white"] { fill: #fafaf9 !important; }
+          .app-dark svg { color: #0c0a09; }
+
+          .footer { width: min(1180px, calc(100% - 36px)); margin: 0 auto; padding: 22px 0 32px; border-top: 1px solid #e2e8f0; color: #475569; font-size: .86rem; }
+          .footer-grid { display: grid; grid-template-columns: 235px 1fr 1fr 1fr; gap: 42px; align-items: start; }
+          .footer-brand { display: flex; align-items: flex-start; }
+          .footer-wordmark { width: 220px; height: auto; display: block; }
+          .footer h4 { margin: 0 0 10px; color: #0f172a; font-size: .92rem; font-weight: 800; }
+          .footer p { margin: 0; line-height: 1.35; }
+          .footer a { color: #475569; text-decoration: none; overflow-wrap: anywhere; }
+          .footer a:hover, .footer a:focus-visible { text-decoration: underline; }
+          .footer .text-link { color: #2563eb; font-weight: 700; }
+          .copyright { margin-top: 28px; text-align: center; font-size: .8rem; }
+
+          @media (max-width: 980px) {
+            .footer-grid { grid-template-columns: 1fr; }
+            .footer-brand { justify-content: center; }
+            .footer-wordmark { transform: translateX(18px); }
+          }
+
+          @media (max-width: 639px) {
+            .mobile-music-scale { transform: translate(-313px, -18px) scale(1.68); }
+            .mobile-bass-focus { transform: translate(-313px, -252px) scale(1.68); }
+          }
+        `;
+        document.head.appendChild(style);
+      }, []);
+    }
+
+    function LedgerLines({ x, step, clef, colour = "currentColor", enabled = true }) {
+      if (!enabled) return null;
+
+      const top = clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
+      const lines = [];
+      if (step <= -2) {
+        lines.push(yForStep(top, -2));
+        if (step <= -4) lines.push(yForStep(top, -4));
+      }
+      if (step >= 10) {
+        lines.push(yForStep(top, 10));
+        if (step >= 12) lines.push(yForStep(top, 12));
+      }
+
+      return (
+        <g pointerEvents="none">
+          {lines.map((y) => <line key={y} x1={x - 24} x2={x + 24} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />)}
+        </g>
+      );
+    }
+
+    function Accidental({ accidental, x, y, colour = "currentColor" }) {
+      if (!accidental) return null;
+
+      const isSharp = accidental === "♯";
+      const ledgerOffset = y < 95 || y > 285 ? -6 : 0;
+      return (
+        <text
+          x={isSharp ? x - 40 + ledgerOffset : x - 50 + ledgerOffset}
+          y={isSharp ? y + 14 : y + 11}
+          fontSize="42.3"
+          fontFamily="serif"
+          fontWeight="900"
+          fill={colour}
+          stroke={colour}
+          strokeWidth="0.6"
+          pointerEvents="none"
+        >
+          {accidental}
+        </text>
+      );
+    }
+
+    function CrotchetNote({ note, colour = "currentColor", ledgerEnabled = true }) {
+      if (!note) return null;
+
+      const top = note.clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
+      const x = NOTE.x;
+      const y = yForStep(top, note.step);
+      const stem = getStem(x, y, note.step);
+
+      return (
+        <g pointerEvents="none">
+          <LedgerLines x={x} step={note.step} clef={note.clef} colour={colour} enabled={ledgerEnabled} />
+          <Accidental accidental={note.accidental} x={x} y={y} colour={colour} />
+          <ellipse cx={x} cy={y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${y})`} fill={colour} stroke={colour} strokeWidth="2.2" />
+          <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />
+        </g>
+      );
+    }
+
+    function Staff({ top, clef, visible }) {
+      if (!visible) return null;
+
+      const isTreble = clef === "treble";
+      return (
+        <g>
+          {[0, 1, 2, 3, 4].map((line) => (
+            <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
+          ))}
+          <line x1={STAFF.right} x2={STAFF.right} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />
+          <text x={STAFF.left + (isTreble ? 18 : 14)} y={top + (isTreble ? 52 : 43)} fontSize={isTreble ? 171 : 107} fontFamily="serif" dominantBaseline="middle">
+            {isTreble ? GLYPH.trebleClef : GLYPH.bassClef}
+          </text>
+        </g>
+      );
+    }
+
+    function HelpLabels({ visible, settings }) {
+      if (!visible) return null;
+
+      const lineLabelX = STAFF.left - 11;
+      const spaceLabelX = STAFF.left + 7;
+      const entries = [];
+      if (settings.treble) entries.push(["treble", NOTE_NAME_LABELS.treble]);
+      if (settings.bass) entries.push(["bass", NOTE_NAME_LABELS.bass]);
+
+      return (
+        <g fontSize="14" fontFamily="system-ui, sans-serif" fontWeight="700" dominantBaseline="middle" pointerEvents="none" fill="black" textAnchor="middle">
+          {entries.flatMap(([clef, data]) => [
+            ...data.lines.map((note) => <text key={`${clef}-line-${note.step}`} x={lineLabelX} y={yForStep(data.top, note.step) + 5}>{note.letter}</text>),
+            ...data.spaces.map((note) => <text key={`${clef}-space-${note.step}`} x={spaceLabelX} y={yForStep(data.top, note.step) + 5}>{note.letter}</text>),
+          ])}
+        </g>
+      );
+    }
+
+    function ScoreArea({ question, settings, showHelp, feedback, activeProfile, mobileOnlyActiveClef }) {
+      const colour = feedback?.correct === true ? COLOUR.green : feedback?.correct === false ? COLOUR.red : "currentColor";
+      const dimNotation = Boolean(feedback);
+      const ahFocusTrebleOnly = activeProfile === "AH" && question?.clef === "treble" && ["A3", "B3"].includes(question.pitch);
+      const ahFocusBassOnly = activeProfile === "AH" && question?.clef === "bass" && ["D4", "E4"].includes(question.pitch);
+
+      const displaySettings = mobileOnlyActiveClef
+        ? { ...settings, treble: question?.clef === "treble", bass: question?.clef === "bass" }
+        : {
+            ...settings,
+            treble: ahFocusTrebleOnly ? true : ahFocusBassOnly ? false : settings.treble,
+            bass: ahFocusBassOnly ? true : ahFocusTrebleOnly ? false : settings.bass,
+          };
+
+      const visibleSystemCount = Number(Boolean(displaySettings.treble)) + Number(Boolean(displaySettings.bass));
+      const singleSystemOffset = !mobileOnlyActiveClef && visibleSystemCount === 1
+        ? displaySettings.treble ? (STAFF.bassTop - STAFF.trebleTop) / 2 : -(STAFF.bassTop - STAFF.trebleTop) / 2
+        : 0;
+
+      return (
+        <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
+          <rect width={SVG.width} height={SVG.height} fill="white" />
+          <g
+            opacity={dimNotation ? 0.42 : 1}
+            className={`mobile-music-scale ${mobileOnlyActiveClef && question?.clef === "bass" ? "mobile-bass-focus" : ""}`}
+            transform={`translate(0 ${singleSystemOffset - 24})`}
+          >
+            <Staff top={STAFF.trebleTop} clef="treble" visible={displaySettings.treble} />
+            <Staff top={STAFF.bassTop} clef="bass" visible={displaySettings.bass} />
+            <HelpLabels visible={showHelp} settings={displaySettings} />
+            <CrotchetNote note={question} colour={colour} ledgerEnabled={settings.ledger} />
+          </g>
+        </svg>
+      );
+    }
+
+    function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, streakMedal, confettiKey, resetScore, autoShowMedals }) {
+      const [openPopover, setOpenPopover] = useState(null);
+      const panelRef = useRef(null);
+
+      useEffect(() => {
+        function closePopovers(event) {
+          if (!panelRef.current?.contains(event.target)) setOpenPopover(null);
+        }
+        document.addEventListener("pointerdown", closePopovers);
+        return () => document.removeEventListener("pointerdown", closePopovers);
+      }, []);
+
+      const scoreFill = clamp(accuracy, 0, 100);
+      const scoreFillColour = scoreFill < 50 ? "rgba(220, 38, 38, 0.38)" : scoreFill < 70 ? "rgba(255, 120, 0, 0.42)" : "rgba(22, 163, 74, 0.38)";
+      const thresholds = [
+        { tier: "bronze", value: 10, icon: ASSET.bronze, textClass: "text-amber-700", active: streak >= 10 && streak < 15 },
+        { tier: "silver", value: 15, icon: ASSET.silver, textClass: "text-slate-500", active: streak >= 15 && streak < 20 },
+        { tier: "gold", value: 20, icon: ASSET.gold, textClass: "text-yellow-500", active: streak >= 20 && streak < 30 },
+        { tier: "diamond", value: 30, icon: ASSET.diamond, textClass: "text-cyan-500", active: streak >= 30 },
+      ];
+
+      return (
+        <div ref={panelRef} className="grid w-full grid-cols-2 gap-2 lg:w-auto lg:grid-cols-[112px_98px] sm:lg:grid-cols-[124px_108px]">
+          <section
             role="button"
             tabIndex="0"
-            onClick={(event) => {
-              event.stopPropagation();
-              resetScore();
-              setOpenPopover(null);
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent("close-level-menu"));
+              setOpenPopover((value) => value === "score" ? null : "score");
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                event.stopPropagation();
-                resetScore();
-                setOpenPopover(null);
+                setOpenPopover((value) => value === "score" ? null : "score");
               }
             }}
-            className="absolute left-1/2 top-full z-50 mt-2 flex min-w-[112px] -translate-x-1/2 cursor-pointer items-center justify-center rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-lg"
-            style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" }}
+            className={`relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${openPopover === "score" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""}`}
           >
-            Reset
-          </div>
-        )}
-      </section>
-
-      <section
-        role="button"
-        tabIndex="0"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => {
-            window.dispatchEvent(new CustomEvent("close-level-menu"));
-            setOpenPopover((value) => value === "streak" ? null : "streak");
-          }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            setOpenPopover((value) => value === "streak" ? null : "streak");
-          }
-        }}
-        className={`relative h-[58px] overflow-visible rounded-xl border border-stone-200 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${openPopover === "streak" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""} ${streakMedal?.bg ?? "bg-stone-50"}`}
-      >
-        {confettiKey > 0 && (
-          <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
-            {Array.from({ length: 18 }).map((_, index) => (
-              <span
-                key={index}
-                className="absolute block h-1.5 w-1 rounded-sm"
-                style={{
-                  left: `${8 + ((index * 19) % 84)}%`,
-                  top: "-8px",
-                  backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5],
-                  animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`,
-                  animationDelay: `${(index % 6) * 0.035}s`,
-                }}
-              />
-            ))}
-          </div>
-        )}
-
-        <div className="relative z-10 flex h-full items-center justify-center px-3 text-center sm:px-4">
-          <div className="flex flex-col items-center justify-center pt-[1px] text-center">
-            <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
-            <div className={`mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px] ${streakMedal?.text ?? "text-black"}`}>{streak}</div>
-            <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
-          </div>
-
-          </div>
-
-        {(openPopover === "streak" || autoShowMedals) && (
-          <div className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-xl border border-black bg-black px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]" style={{ animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}>
-          <div className="flex items-end justify-center gap-3">
-            {thresholds.map((item) => (
-              <div key={item.tier} className={`flex flex-col items-center justify-end ${item.active ? "medal-threshold-active" : ""}`}>
-                <img src={item.icon} alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
-                <span className={`mt-1 text-[11px] font-semibold leading-none ${item.textClass}`}>{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function FeedbackBanner({ feedback, fading = false }) {
-  if (!feedback) return null;
-
-  return (
-    <div className="relative flex w-full items-center justify-center text-center">
-      <div className={`flex w-[300px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold translate-y-[5px] sm:translate-y-0 ${feedback.correct ? "text-green-600" : "text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}>
-        <span className="translate-y-[4px]">{feedback.correct ? "Correct" : "Incorrect"}</span>
-        {!feedback.correct && (
-          <span className="mt-2 inline-flex -translate-x-[2px] items-center gap-0 text-sm font-semibold text-black">
-            <span>Click or tap anywhere to continue</span>
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-
-
-function ToggleRow({ label, icon, checked, onChange }) {
-  return (
-    <button type="button" onClick={onChange} className="mb-2.5 flex min-h-[44px] w-full whitespace-nowrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]">
-      <span className="flex min-w-[145px] items-center gap-2 text-sm font-semibold">
-        <span className="flex h-[22px] w-[28px] items-center justify-center text-lg leading-none">{icon}</span>
-        <span>{label}</span>
-      </span>
-      <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${checked ? "bg-green-600" : "bg-stone-400"}`}>
-        <span className={`h-4 w-4 rounded-full bg-white transition ${checked ? "translate-x-5" : "translate-x-0"}`} />
-      </span>
-    </button>
-  );
-}
-
-function LedgerIcon() {
-  return (
-    <svg width="28" height="22" viewBox="0 0 38 24" aria-hidden="true">
-      <line x1="5" x2="33" y1="12" y2="12" stroke="currentColor" strokeWidth="1.6" />
-      <ellipse cx="19" cy="12" rx="7" ry="5" transform="rotate(-18 19 12)" fill="currentColor" />
-    </svg>
-  );
-}
-function MenuRows({ settings, setSettings, resetScore, makeNewQuestion, showHelp, setShowHelp, setActiveProfile, setCorrect, setAttempted, setStreak, setBestStreak, setConfettiKey }) {
-  function updateSetting(key) {
-    setSettings((current) => {
-      const next = { ...current, [key]: !current[key] };
-      if (!next.treble && !next.bass) {
-        if (key === "treble") next.bass = true;
-        else next.treble = true;
-      }
-
-      const matchedProfile = matchingProfileForSettings(next);
-      setActiveProfile(matchedProfile);
-      setCorrect(0);
-      setAttempted(0);
-      setStreak(0);
-    setBestStreak(0);
-    setConfettiKey(0);
-    setConsecutiveIncorrect(0);
-      window.setTimeout(() => makeNewQuestion(next), 0);
-      return next;
-    });
-  }
-
-  return (
-    <>
-      <div className="flex w-full min-w-0 flex-col sm:inline-flex sm:w-max sm:min-w-[260px]">
-      <ToggleRow label="Accidentals" icon={<span className="relative left-[3px] font-serif font-black">♯♭</span>} checked={settings.accidentals} onChange={() => updateSetting("accidentals")} />
-      <ToggleRow label="Ledger Lines" icon={<LedgerIcon />} checked={settings.ledger} onChange={() => updateSetting("ledger")} />
-      <ToggleRow label="Treble Clef" icon={<span className="font-serif text-3xl leading-none">𝄞</span>} checked={settings.treble} onChange={() => updateSetting("treble")} />
-      <ToggleRow label="Bass Clef" icon={<span className="font-serif text-2xl leading-none">𝄢</span>} checked={settings.bass} onChange={() => updateSetting("bass")} />
-      <ToggleRow label="Show Note Names" icon={<span className="text-[10px] font-black tracking-tight">abc</span>} checked={showHelp} onChange={() => setShowHelp((value) => !value)} />
-    </div>
-    </>
-  );
-}
-
-function HelpPanel() {
-  const pages = [
-    ["📝", "Instructions", "Look at the task shown on screen, then choose the correct answer from the buttons below."],
-    ["🎚️", "Choosing a Level", "Use the Level menu to choose the course level or difficulty you want to practise. Higher levels usually add more concepts, more symbols, or a wider range of questions."],
-    ["⚙️", "Customise", "Use Customise to switch parts of the task on or off. This lets you focus on one skill at a time or build up to the full challenge when ready."],
-    ["🏅", "Streaks and Medals", "Build a streak by answering correctly in a row. Medals are awarded as your streak increases, progressing through bronze, silver, gold, and diamond."],
-  ];
-
-  return (
-    <div>
-      <div className="space-y-3">
-        {pages.map(([icon, title, body]) => (
-          <section key={title} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
-            <div className="flex items-center gap-2">
-              <span className="text-lg leading-none">{icon}</span>
-              <h3 className="text-sm font-bold text-stone-900">{title}</h3>
+            <div className="absolute inset-0 overflow-hidden rounded-xl">
+              <div className="absolute bottom-0 left-0 right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreFillColour }} />
             </div>
-            <p className="mt-1 text-sm leading-relaxed text-stone-700">{body}</p>
-          </section>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function AppIcon() {
-  return (
-    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 shadow-sm text-black">
-      <img
-        src="https://mrtennant-music.github.io/musicliteracy/notenaming-icon.svg"
-        alt=""
-        className="app-icon-image"
-        aria-hidden="true"
-      />
-    </div>
-  );
-}
-
-function AnswerButton({ value, question, selectedAnswer, feedback, onChoose }) {
-  const isCorrectAnswer = feedback && value === question?.answer;
-  const isWrongSelected = feedback && value === selectedAnswer && value !== question?.answer;
-  const isAccidental = value.includes("#") || value.includes("b");
-
-  const defaultClass = isAccidental
-    ? "border-stone-800 bg-stone-900 text-white hover:bg-black"
-    : "border-stone-300 bg-white text-black hover:bg-stone-100";
-
-  const className = isCorrectAnswer
-    ? "border-green-600 bg-green-600 text-white"
-    : isWrongSelected
-      ? "border-red-600 bg-red-600 text-white"
-      : defaultClass;
-
-  return (
-    <button
-      type="button"
-      disabled={Boolean(feedback)}
-      onClick={() => onChoose(value)}
-      className={`flex min-h-[48px] items-center justify-center rounded-xl border px-1 text-[1rem] font-bold sm:min-h-[46px] sm:px-3 sm:text-[1.05rem] ${className}`}
-    >
-      {value}
-    </button>
-  );
-}
-
-function AnswerPlaceholder() {
-  return <div className="min-h-[48px] rounded-xl border border-transparent sm:min-h-[46px]" />;
-}
-
-function AnswerGrid({ settings, question, selectedAnswer, feedback, onChoose }) {
-  return (
-    <div className="grid gap-2 mobile-answer-grid">
-      {settings.accidentals && (
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-          {LETTERS.map((letter) => SHARPS[letter]
-            ? <AnswerButton key={SHARPS[letter]} value={SHARPS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />
-            : <AnswerPlaceholder key={`sharp-placeholder-${letter}`} />)}
-        </div>
-      )}
-
-      <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-        {LETTERS.map((letter) => <AnswerButton key={letter} value={letter} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />)}
-      </div>
-
-      {settings.accidentals && (
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-          {LETTERS.map((letter) => FLATS[letter]
-            ? <AnswerButton key={FLATS[letter]} value={FLATS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />
-            : <AnswerPlaceholder key={`flat-placeholder-${letter}`} />)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function useInjectedStyles() {
-  useEffect(() => {
-    if (document.getElementById("note-identification-golden-style")) return;
-    const style = document.createElement("style");
-    style.id = "note-identification-golden-style";
-    style.innerHTML = `
-      .app-icon-image {
-        width: 100%;
-        height: 100%;
-        display: block;
-        object-fit: contain;
-      }
-
-      button { -webkit-tap-highlight-color: transparent; user-select: none; transition: transform 0.08s ease, filter 0.08s ease, background-color 0.12s ease, box-shadow 0.12s ease; cursor: pointer; }
-      button:hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
-      button:active { transform: scale(0.96); filter: brightness(0.92); }
-      button:disabled { cursor: not-allowed; opacity: 0.82; }
-      button:focus-visible { outline: 2px solid rgba(22,163,74,0.35); outline-offset: 2px; }
-      @keyframes medalThresholdGlow {
-        0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); }
-        50% { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(250,204,21,.95)); }
-      }
-      .medal-threshold-active {
-        animation: medalThresholdGlow 1.35s ease-in-out infinite;
-        font-weight: 900;
-      }
-      .medal-threshold-active img {
-        animation: medalThresholdGlow 1.35s ease-in-out infinite;
-      }
-      @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } }
-      @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } }
-      @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
-      @keyframes feedbackFadeOut { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-10px); } }
-      @keyframes medalPopupIn { 0% { opacity: 0; transform: translate(-50%, -8px) scale(0.82); } 60% { opacity: 1; transform: translate(-50%, 2px) scale(1.06); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
-      @keyframes medalPopupOut { 0% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -6px) scale(0.86); } }
-      .app-large-text { font-size: 112.5%; }
-      .app-reduce-motion *, .app-reduce-motion *::before, .app-reduce-motion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-      .app-high-contrast { filter: contrast(1.15); }
-      .app-dark header,
-      .app-dark main,
-      .app-dark .bg-white { background-color: #1c1917 !important; color: #f5f5f4 !important; border-color: #44403c !important; }
-      .app-dark .bg-stone-50,
-      .app-dark .bg-stone-100 { background-color: #292524 !important; color: #f5f5f4 !important; }
-      .app-dark .text-stone-500,
-      .app-dark .text-stone-600,
-      .app-dark .text-stone-700,
-      .app-dark .text-white,
-      .app-dark .text-stone-900,
-      .app-dark .text-black { color: #e7e5e4 !important; }
-      .app-dark .border-stone-200,
-      .app-dark .border-stone-300 { border-color: #57534e !important; }
-      .app-dark svg rect[fill="white"] { fill: #fafaf9 !important; }
-      .app-dark svg { color: #0c0a09; }
-      .footer {
-        width: min(1180px, calc(100% - 36px));
-        margin: 0 auto;
-        padding: 22px 0 32px;
-        border-top: 1px solid #e2e8f0;
-        color: #475569;
-        font-size: .86rem;
-      }
-
-      .footer-grid {
-        display: grid;
-        grid-template-columns: 235px 1fr 1fr 1fr;
-        gap: 42px;
-        align-items: start;
-      }
-
-      .footer-brand {
-        display: flex;
-        align-items: flex-start;
-      }
-
-      .footer-wordmark {
-        width: 220px;
-        height: auto;
-        display: block;
-      }
-
-      .footer h4 {
-        margin: 0 0 10px;
-        color: #0f172a;
-        font-size: .92rem;
-        font-weight: 800;
-      }
-
-      .footer p {
-        margin: 0;
-        line-height: 1.35;
-      }
-
-      .footer a {
-        color: #475569;
-        text-decoration: none;
-        overflow-wrap: anywhere;
-      }
-
-      .footer a:hover,
-      .footer a:focus-visible {
-        text-decoration: underline;
-      }
-
-      .footer .text-link {
-        color: #2563eb;
-        font-weight: 700;
-      }
-
-      .copyright {
-        margin-top: 28px;
-        text-align: center;
-        font-size: .8rem;
-      }
-
-      @media (max-width: 980px) {
-        .footer-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .footer-brand {
-          justify-content: center;
-        }
-
-        .footer-wordmark {
-          transform: translateX(18px);
-        }
-      }
-
-      @media (max-width: 639px) {
-        .mobile-music-scale { transform: translate(-313px, -18px) scale(1.68); }
-        .mobile-bass-focus { transform: translate(-313px, -252px) scale(1.68); }
-      }
-    `;
-    document.head.appendChild(style);
-  }, []);
-}
-
-function useClickOutside(refs, handler) {
-  useEffect(() => {
-    function onPointerDown(event) {
-      const clickedInsideAnyRef = refs.some((ref) => ref.current?.contains(event.target));
-      if (!clickedInsideAnyRef) handler?.();
-    }
-
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [refs, handler]);
-}
-
-function App() {
-  useInjectedStyles();
-
-  const [darkMode, setDarkMode] = useState(getSiteTheme() === "dark");
-  const [accessibility, setAccessibility] = useState(getSiteAccessibility);
-
-  const urlParams = new URLSearchParams(window.location.search);
-  const requestedLevel = urlParams.get("level");
-  const startingProfile = DIFFICULTY_PROFILES[requestedLevel] ? requestedLevel : "N3";
-  const startingSettings = { ...DIFFICULTY_PROFILES[startingProfile].settings };
-
-  const [activeProfile, setActiveProfile] = useState(startingProfile);
-  const [settings, setSettings] = useState(startingSettings);
-  const [question, setQuestion] = useState(() => createQuestion(startingSettings));
-  const [questionVisible, setQuestionVisible] = useState(true);
-  const [levelOpen, setLevelOpen] = useState(false);
-  const [levelMenuMode, setLevelMenuMode] = useState("levels");
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
-  const [feedback, setFeedback] = useState(null);
-  const [feedbackFading, setFeedbackFading] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [consecutiveIncorrect, setConsecutiveIncorrect] = useState(0);
-  const [showGuideTooltip, setShowGuideTooltip] = useState(false);
-  const [correct, setCorrect] = useState(0);
-  const [attempted, setAttempted] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-  const [confettiKey, setConfettiKey] = useState(0);
-  const [autoShowMedals, setAutoShowMedals] = useState(false);
-  const [skipStreak, setSkipStreak] = useState(0);
-  const [mobileOnlyActiveClef, setMobileOnlyActiveClef] = useState(window.innerWidth < 640);
-
-  const timerRef = useRef(null);
-  const desktopLevelRef = useRef(null);
-  useClickOutside(
-    [desktopLevelRef],
-    () => levelOpen && setLevelOpen(false),
-  );
-
-  useEffect(() => {
-    function handleResize() {
-      setMobileOnlyActiveClef(window.innerWidth < 640);
-    }
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  useEffect(() => {
-    function closeMenus() {
-      setLevelOpen(false);
-      setConsecutiveIncorrect(0);
-    }
-
-    window.addEventListener("close-level-menu", closeMenus);
-
-    return () => window.removeEventListener("close-level-menu", closeMenus);
-  }, []);
-
-  useEffect(() => {
-    function syncSitePreferences() {
-      setDarkMode(getSiteTheme() === "dark");
-      setAccessibility(getSiteAccessibility());
-    }
-
-    syncSitePreferences();
-    window.addEventListener("storage", syncSitePreferences);
-    window.addEventListener("mlh-theme-change", syncSitePreferences);
-    window.addEventListener("mlh-accessibility-change", syncSitePreferences);
-
-    return () => {
-      window.removeEventListener("storage", syncSitePreferences);
-      window.removeEventListener("mlh-theme-change", syncSitePreferences);
-      window.removeEventListener("mlh-accessibility-change", syncSitePreferences);
-      window.clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const streakMedal = getStreakMedal(streak);
-  const appPreferenceClasses = [
-    darkMode ? "app-dark bg-stone-950 text-stone-100" : "bg-stone-50 text-black",
-    accessibility.largeText ? "app-large-text" : "",
-    accessibility.reduceMotion ? "app-reduce-motion" : "",
-    accessibility.highContrast ? "app-high-contrast" : "",
-  ].filter(Boolean).join(" ");
-
-  function makeNewQuestion(nextSettings = settings, skipped = false) {
-    window.clearTimeout(timerRef.current);
-    if (skipped) {
-      setSkipStreak((value) => {
-        const next = value + 1;
-        if (next >= 1) {
-          setStreak(0);
-        }
-        return next;
-      });
-    } else {
-      setSkipStreak(0);
-    }
-    setQuestionVisible(false);
-    window.setTimeout(() => {
-      setQuestion((current) => createQuestion(nextSettings, current?.pitch));
-      setSelectedAnswer(null);
-      setFeedback(null);
-      setFeedbackFading(false);
-      setQuestionVisible(true);
-    }, 260);
-  }
-
-  function applyProfile(profileKey) {
-    const profile = DIFFICULTY_PROFILES[profileKey];
-    if (!profile) return;
-    const nextSettings = { ...profile.settings };
-    setActiveProfile(profileKey);
-    setSettings(nextSettings);
-    setCorrect(0);
-    setAttempted(0);
-    setStreak(0);
-    setBestStreak(0);
-    setConfettiKey(0);
-    setConsecutiveIncorrect(0);
-    makeNewQuestion(nextSettings);
-  }
-
-  function resetScore() {
-    setCorrect(0);
-    setAttempted(0);
-    setStreak(0);
-    setConfettiKey(0);
-    makeNewQuestion(settings);
-  }
-
-  function fadeToNextQuestion() {
-    if (!feedback || feedback.correct || feedbackFading) return;
-    setFeedbackFading(true);
-    window.setTimeout(() => makeNewQuestion(settings), 280);
-  }
-
-  function scoreAnswer(answer) {
-    if (!question || feedback) return;
-
-    const isCorrect = answer === question.answer;
-    const nextStreak = isCorrect ? streak + 1 : 0;
-
-    window.clearTimeout(timerRef.current);
-    setSelectedAnswer(answer);
-    setAttempted((value) => value + 1);
-    setCorrect((value) => value + (isCorrect ? 1 : 0));
-    setStreak(nextStreak);
-    setBestStreak((value) => Math.max(value, nextStreak));
-    setSkipStreak(0);
-    setFeedback({ correct: isCorrect });
-    setConsecutiveIncorrect((value) => isCorrect ? 0 : value + 1);
-    playFeedbackSound(isCorrect);
-
-    if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
-      const medal = getStreakMedal(nextStreak);
-      setConfettiKey((value) => value + 1);
-      setAutoShowMedals(true);
-      window.setTimeout(() => setAutoShowMedals(false), 2000);
-      window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
-    }
-
-    if (isCorrect) {
-      timerRef.current = window.setTimeout(() => setFeedbackFading(true), 1700);
-      timerRef.current = window.setTimeout(() => makeNewQuestion(settings), 2000);
-    }
-  }
-
-  const instruction = <>Identify the <strong>note</strong>.</>;
-
-  return (
-    <div className={`overflow-x-hidden pb-10 md:pb-12 ${appPreferenceClasses}`}>
-      <header className="fixed left-0 right-0 top-0 z-[9999] w-full overflow-visible border-b border-stone-200 bg-white/95 py-2 shadow-sm backdrop-blur sm:py-3">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 overflow-visible px-3 sm:px-4 md:px-8 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="relative shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLevelOpen(false);
-                    setGuideOpen((value) => !value);
-                    setConsecutiveIncorrect(0);
-                    setShowGuideTooltip(false);
-                  }}
-                  onMouseEnter={() => setShowGuideTooltip(true)}
-                  onMouseLeave={() => setShowGuideTooltip(false)}
-                  className="rounded-2xl"
-                  aria-label="Open guide"
-                >
-                  <AppIcon />
-                </button>
-
-                {(consecutiveIncorrect >= 3 || showGuideTooltip) && !guideOpen && (
-                  <div className="absolute left-1/2 top-full z-[10000] mt-2 flex -translate-x-1/2 flex-col items-center" style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}>
-                    <div className="h-0 w-0 border-l-[8px] border-r-[8px] border-b-[10px] border-l-transparent border-r-transparent border-b-black" />
-                    <div className="w-max max-w-[72px] rounded-xl border border-black bg-black px-3 py-2 text-center text-xs font-semibold text-white shadow-lg">
-                      Help
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex h-14 flex-col justify-center">
-                <h1 className="relative top-[1px] text-xl font-semibold leading-none tracking-tight sm:text-2xl md:text-3xl">Note Identification</h1>
-                <p className="mt-0 whitespace-nowrap text-[0.64rem] leading-[1.05] text-stone-600 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap">Identify note names in the treble and bass clef.</p>
-              </div>
+            <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
+              <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Score</div>
+              <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{correct}/{attempted}</div>
+              <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Accuracy: {accuracy}%</div>
             </div>
-
-            <div className="relative z-50 flex flex-wrap items-end gap-2 overflow-visible lg:ml-auto lg:justify-end" ref={desktopLevelRef}>
+            {openPopover === "score" && (
               <button
                 type="button"
-                onClick={() => {
-                  setLevelOpen((value) => !(value && levelMenuMode === "levels"));
-                  setLevelMenuMode("levels");
+                onClick={(event) => {
+                  event.stopPropagation();
+                  resetScore();
+                  setOpenPopover(null);
                 }}
-                className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800"
+                className="popover-button absolute left-1/2 top-full z-50 mt-2 flex min-w-[112px] -translate-x-1/2 items-center justify-center rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-lg"
+                style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" }}
               >
-                <img src="levels.svg" alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
-                <span>{mobileOnlyActiveClef ? activeProfile : activeProfile === "N3" ? "National 3" : activeProfile === "N4" ? "National 4" : activeProfile === "N5" ? "National 5" : activeProfile === "H" ? "Higher" : activeProfile === "AH" ? "Advanced Higher" : activeProfile === "Custom" ? "Custom" : activeProfile}</span>
+                Reset
               </button>
+            )}
+          </section>
 
-              {levelOpen && (
-                <div className={`absolute top-full mt-2 z-50 inline-block w-[calc(100vw-1.5rem)] max-w-max rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit ${levelMenuMode === "customise" ? "left-[130px]" : "left-0"}`}>
-                  <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
-                    <div className="text-center text-base font-semibold text-stone-800">{levelMenuMode === "customise" ? "Customise" : "Level"}</div>
-                  </div>
+          <section
+            role="button"
+            tabIndex="0"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent("close-level-menu"));
+              setOpenPopover((value) => value === "streak" ? null : "streak");
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setOpenPopover((value) => value === "streak" ? null : "streak");
+              }
+            }}
+            className={`relative h-[58px] overflow-visible rounded-xl border border-stone-200 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${openPopover === "streak" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""} ${streakMedal?.bg ?? "bg-stone-50"}`}
+          >
+            {confettiKey > 0 && (
+              <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
+                {Array.from({ length: 18 }).map((_, index) => (
+                  <span
+                    key={index}
+                    className="absolute block h-1.5 w-1 rounded-sm"
+                    style={{
+                      left: `${8 + ((index * 19) % 84)}%`,
+                      top: "-8px",
+                      backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5],
+                      animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`,
+                      animationDelay: `${(index % 6) * 0.035}s`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
 
-                  {levelMenuMode === "customise" ? (
-                    <MenuRows settings={settings} setSettings={setSettings} resetScore={resetScore} makeNewQuestion={makeNewQuestion} showHelp={showHelp} setShowHelp={setShowHelp} setActiveProfile={setActiveProfile} setCorrect={setCorrect} setAttempted={setAttempted} setStreak={setStreak} setBestStreak={setBestStreak} setConfettiKey={setConfettiKey} />
-                  ) : (
-                    <div className="flex w-full min-w-0 flex-col gap-2">
-                      {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
-                        const profile = DIFFICULTY_PROFILES[profileKey];
-                        const active = activeProfile === profileKey;
+            <div className="relative z-10 flex h-full items-center justify-center px-3 text-center sm:px-4">
+              <div className="flex flex-col items-center justify-center pt-[1px] text-center">
+                <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
+                <div className={`mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px] ${streakMedal?.text ?? "text-black"}`}>{streak}</div>
+                <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
+              </div>
+            </div>
 
-                        return (
-                          <button
-                            key={profileKey}
-                            type="button"
-                            onClick={() => {
-                              applyProfile(profileKey);
-                              setLevelOpen(false);
-                            }}
-                            className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
-                          >
-                            <div className="flex min-w-0 items-center justify-between gap-3 text-stone-900">
-                              <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">{profileKey}</div>
-                              <div className="flex min-w-0 flex-1 flex-col justify-center pr-2">
-                                <div className="truncate pb-[1px] text-[13px] font-black leading-[1.2]">{profile.label}</div>
-                                <div className="mt-[2px] truncate pb-[2px] text-[11px] leading-[1.25] text-stone-600">{profile.description}</div>
-                              </div>
-                              {active && <img src="tick.svg" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 object-contain" />}
-                            </div>
-                          </button>
-                        );
-                      })}
+            {(openPopover === "streak" || autoShowMedals) && (
+              <div className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]" style={{ animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}>
+                <div className="flex items-end justify-center gap-3">
+                  {thresholds.map((item) => (
+                    <div key={item.tier} className={`flex flex-col items-center justify-end ${item.active ? "medal-threshold-active" : ""}`}>
+                      <img src={item.icon} alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
+                      <span className={`mt-1 text-[11px] font-semibold leading-none ${item.textClass}`}>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      );
+    }
+
+    function FeedbackBanner({ feedback, fading = false }) {
+      if (!feedback) return null;
+      return (
+        <div className="relative flex w-full items-center justify-center text-center">
+          <div className={`flex min-w-[170px] flex-col items-center justify-center whitespace-nowrap rounded-2xl border bg-white/92 px-5 py-2 text-xl font-bold shadow-[0_10px_28px_rgba(0,0,0,0.14)] backdrop-blur-md translate-y-[40px] sm:translate-y-0 ${feedback.correct ? "border-green-500 text-green-600" : "border-red-500 text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}>
+            <span className="translate-y-[2px]">{feedback.correct ? "Correct" : "Incorrect"}</span>
+            {!feedback.correct && <span className="mt-2 inline-flex -translate-x-[2px] items-center gap-0 text-sm font-semibold text-black">Click or tap anywhere to continue</span>}
+          </div>
+        </div>
+      );
+    }
+
+    function ToggleRow({ label, icon, checked, onChange }) {
+      return (
+        <button type="button" onClick={onChange} className="mb-2.5 flex min-h-[44px] w-full whitespace-nowrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]">
+          <span className="flex min-w-[145px] items-center gap-2 text-sm font-semibold">
+            <span className="flex h-[22px] w-[28px] items-center justify-center text-lg leading-none">{icon}</span>
+            <span>{label}</span>
+          </span>
+          <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${checked ? "bg-green-600" : "bg-stone-400"}`}>
+            <span className={`h-4 w-4 rounded-full bg-white transition ${checked ? "translate-x-5" : "translate-x-0"}`} />
+          </span>
+        </button>
+      );
+    }
+
+    function LedgerIcon() {
+      return (
+        <svg width="28" height="22" viewBox="0 0 38 24" aria-hidden="true">
+          <line x1="5" x2="33" y1="12" y2="12" stroke="currentColor" strokeWidth="1.6" />
+          <ellipse cx="19" cy="12" rx="7" ry="5" transform="rotate(-18 19 12)" fill="currentColor" />
+        </svg>
+      );
+    }
+
+    function MenuRows({ settings, setSettings, makeNewQuestion, showHelp, setShowHelp, setActiveProfile, resetProgress }) {
+      function updateSetting(key) {
+        setSettings((current) => {
+          const next = { ...current, [key]: !current[key] };
+          if (!next.treble && !next.bass) {
+            if (key === "treble") next.bass = true;
+            else next.treble = true;
+          }
+
+          setActiveProfile(matchingProfileForSettings(next));
+          resetProgress();
+          window.setTimeout(() => makeNewQuestion(next), 0);
+          return next;
+        });
+      }
+
+      return (
+        <div className="flex w-full min-w-0 flex-col sm:inline-flex sm:w-max sm:min-w-[260px]">
+          <ToggleRow label="Accidentals" icon={<span className="relative left-[3px] font-serif font-black">♯♭</span>} checked={settings.accidentals} onChange={() => updateSetting("accidentals")} />
+          <ToggleRow label="Ledger Lines" icon={<LedgerIcon />} checked={settings.ledger} onChange={() => updateSetting("ledger")} />
+          <ToggleRow label="Treble Clef" icon={<span className="font-serif text-3xl leading-none">𝄞</span>} checked={settings.treble} onChange={() => updateSetting("treble")} />
+          <ToggleRow label="Bass Clef" icon={<span className="font-serif text-2xl leading-none">𝄢</span>} checked={settings.bass} onChange={() => updateSetting("bass")} />
+          <ToggleRow label="Show Note Names" icon={<span className="text-[10px] font-black tracking-tight">abc</span>} checked={showHelp} onChange={() => setShowHelp((value) => !value)} />
+        </div>
+      );
+    }
+
+    function AppIcon() {
+      return (
+        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 text-black shadow-sm">
+          <img src={ASSET.appIcon} alt="" className="app-icon-image" aria-hidden="true" />
+        </div>
+      );
+    }
+
+    function AnswerButton({ value, question, selectedAnswer, feedback, onChoose }) {
+      const isCorrectAnswer = feedback && value === question?.answer;
+      const isWrongSelected = feedback && value === selectedAnswer && value !== question?.answer;
+      const isAccidental = value.includes("#") || value.includes("b");
+      const defaultClass = isAccidental ? "border-stone-800 bg-stone-900 text-white hover:bg-black" : "border-stone-300 bg-white text-black hover:bg-stone-100";
+      const stateClass = isCorrectAnswer ? "border-green-600 bg-green-600 text-white" : isWrongSelected ? "border-red-600 bg-red-600 text-white" : defaultClass;
+
+      return (
+        <button type="button" disabled={Boolean(feedback)} onClick={() => onChoose(value)} className={`flex min-h-[48px] items-center justify-center rounded-xl border px-1 text-[1rem] font-bold sm:min-h-[46px] sm:px-3 sm:text-[1.05rem] ${stateClass}`}>
+          {value}
+        </button>
+      );
+    }
+
+    function AnswerPlaceholder() {
+      return <div className="min-h-[48px] rounded-xl border border-transparent sm:min-h-[46px]" />;
+    }
+
+    function AnswerGrid({ settings, question, selectedAnswer, feedback, onChoose }) {
+      return (
+        <div className="grid gap-2 mobile-answer-grid">
+          {settings.accidentals && (
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+              {LETTERS.map((letter) => SHARPS[letter]
+                ? <AnswerButton key={SHARPS[letter]} value={SHARPS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />
+                : <AnswerPlaceholder key={`sharp-placeholder-${letter}`} />
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+            {LETTERS.map((letter) => <AnswerButton key={letter} value={letter} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />)}
+          </div>
+
+          {settings.accidentals && (
+            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+              {LETTERS.map((letter) => FLATS[letter]
+                ? <AnswerButton key={FLATS[letter]} value={FLATS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />
+                : <AnswerPlaceholder key={`flat-placeholder-${letter}`} />
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function HelpModal({ onClose }) {
+      const levelHelp = [
+        { title: "National 3", subtitle: "Lines and spaces of the treble clef.", body: "Look at whether the note is on a line or in a space. Use the treble clef patterns to work out the letter name: line notes are E, G, B, D, F and space notes are F, A, C, E. Choose the matching letter button." },
+        { title: "National 4", subtitle: "C–A’ — range of notes from middle C to first ledger line A.", body: "This level adds ledger-line notes around the treble stave. Find a note you know on the stave, then count up or down one step at a time: line, space, line, space. Ledger lines continue the same pattern beyond the normal five lines." },
+        { title: "National 5", subtitle: "Tones, semitones, accidentals — flats, sharps and naturals.", body: "Identify the letter name first, then check whether there is a sharp or flat beside the note. A sharp means choose the # answer, a flat means choose the b answer, and no accidental means choose the plain letter." },
+        { title: "Higher", subtitle: "Bass clef — E–C — range of notes from E below the stave to middle C.", body: "This level includes treble and bass clef. Check the clef first before answering. In bass clef, the line notes are G, B, D, F, A and the space notes are A, C, E, G. Count carefully from a note you recognise." },
+        { title: "Advanced Higher", subtitle: "Bass clef C–E two ledger lines below stave to two ledger lines above.", body: "This level uses the widest range, including extra ledger-line notes in treble and bass clef. Start by checking the clef, then count from the nearest secure note. Watch for accidentals before choosing your final answer." },
+      ];
+
+      return (
+        <div className="fixed inset-0 flex items-start justify-center overflow-hidden bg-black/50 p-4 pt-[120px] sm:pt-[140px]" style={{ zIndex: 2147483647 }} onClick={onClose}>
+          <div className="max-h-[calc(100vh-160px)] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl sm:max-h-[calc(100vh-180px)]" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-4 border-b border-stone-200 px-6 py-5">
+              <h2 className="text-2xl font-black tracking-tight text-stone-900">Help: Note Identification</h2>
+              <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-semibold text-stone-700">×</button>
+            </div>
+
+            <div className="max-h-[calc(100vh-260px)] space-y-4 overflow-y-auto px-6 py-5 text-sm leading-relaxed text-stone-700 sm:max-h-[calc(100vh-280px)]">
+              {levelHelp.map((level) => (
+                <section key={level.title} className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                  <h3 className="text-base font-black text-stone-900">{level.title}</h3>
+                  <p className="mt-1 text-sm font-bold leading-snug text-stone-700">{level.subtitle}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-stone-700">{level.body}</p>
+                </section>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      useInjectedStyles();
+
+      const startingProfile = useMemo(() => {
+        const requestedLevel = new URLSearchParams(window.location.search).get("level");
+        return DIFFICULTY_PROFILES[requestedLevel] ? requestedLevel : "N3";
+      }, []);
+
+      const startingSettings = useMemo(() => ({ ...DIFFICULTY_PROFILES[startingProfile].settings }), [startingProfile]);
+
+      const [darkMode, setDarkMode] = useState(getSiteTheme() === "dark");
+      const [accessibility, setAccessibility] = useState(getSiteAccessibility);
+      const [activeProfile, setActiveProfile] = useState(startingProfile);
+      const [settings, setSettings] = useState(startingSettings);
+      const [question, setQuestion] = useState(() => createQuestion(startingSettings));
+      const [questionVisible, setQuestionVisible] = useState(true);
+      const [levelOpen, setLevelOpen] = useState(false);
+      const [levelMenuMode, setLevelMenuMode] = useState("levels");
+      const [guideOpen, setGuideOpen] = useState(false);
+      const [showHelp, setShowHelp] = useState(false);
+      const [feedback, setFeedback] = useState(null);
+      const [feedbackFading, setFeedbackFading] = useState(false);
+      const [selectedAnswer, setSelectedAnswer] = useState(null);
+      const [consecutiveIncorrect, setConsecutiveIncorrect] = useState(0);
+      const [showGuideTooltip, setShowGuideTooltip] = useState(false);
+      const [correct, setCorrect] = useState(0);
+      const [attempted, setAttempted] = useState(0);
+      const [streak, setStreak] = useState(0);
+      const [bestStreak, setBestStreak] = useState(0);
+      const [confettiKey, setConfettiKey] = useState(0);
+      const [autoShowMedals, setAutoShowMedals] = useState(false);
+      const [skipStreak, setSkipStreak] = useState(0);
+      const [mobileOnlyActiveClef, setMobileOnlyActiveClef] = useState(window.innerWidth < 640);
+
+      const timerRef = useRef(null);
+      const desktopLevelRef = useRef(null);
+
+      useClickOutside([desktopLevelRef], () => levelOpen && setLevelOpen(false));
+
+      const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+      const streakMedal = getStreakMedal(streak);
+      const appPreferenceClasses = [
+        darkMode ? "app-dark bg-stone-950 text-stone-100" : "bg-stone-50 text-black",
+        accessibility.largeText ? "app-large-text" : "",
+        accessibility.reduceMotion ? "app-reduce-motion" : "",
+        accessibility.highContrast ? "app-high-contrast" : "",
+      ].filter(Boolean).join(" ");
+
+      function resetProgress({ includeBest = true } = {}) {
+        setCorrect(0);
+        setAttempted(0);
+        setStreak(0);
+        if (includeBest) setBestStreak(0);
+        setConfettiKey(0);
+        setConsecutiveIncorrect(0);
+      }
+
+      function makeNewQuestion(nextSettings = settings, skipped = false) {
+        window.clearTimeout(timerRef.current);
+
+        if (skipped) {
+          setSkipStreak((value) => {
+            const next = value + 1;
+            if (next >= 1) setStreak(0);
+            return next;
+          });
+        } else {
+          setSkipStreak(0);
+        }
+
+        setQuestionVisible(false);
+        window.setTimeout(() => {
+          setQuestion((current) => createQuestion(nextSettings, current?.pitch));
+          setSelectedAnswer(null);
+          setFeedback(null);
+          setFeedbackFading(false);
+          setQuestionVisible(true);
+        }, 260);
+      }
+
+      function applyProfile(profileKey) {
+        const profile = DIFFICULTY_PROFILES[profileKey];
+        if (!profile) return;
+
+        const nextSettings = { ...profile.settings };
+        setActiveProfile(profileKey);
+        setSettings(nextSettings);
+        resetProgress();
+        makeNewQuestion(nextSettings);
+      }
+
+      function resetScore() {
+        setCorrect(0);
+        setAttempted(0);
+        setStreak(0);
+        setConfettiKey(0);
+        makeNewQuestion(settings);
+      }
+
+      function fadeToNextQuestion() {
+        if (!feedback || feedback.correct || feedbackFading) return;
+        setFeedbackFading(true);
+        window.setTimeout(() => makeNewQuestion(settings), 280);
+      }
+
+      function scoreAnswer(answer) {
+        if (!question || feedback) return;
+
+        const isCorrect = answer === question.answer;
+        const nextStreak = isCorrect ? streak + 1 : 0;
+
+        window.clearTimeout(timerRef.current);
+        setSelectedAnswer(answer);
+        setAttempted((value) => value + 1);
+        setCorrect((value) => value + (isCorrect ? 1 : 0));
+        setStreak(nextStreak);
+        setBestStreak((value) => Math.max(value, nextStreak));
+        setSkipStreak(0);
+        setFeedback({ correct: isCorrect });
+        setConsecutiveIncorrect((value) => isCorrect ? 0 : value + 1);
+        playFeedbackSound(isCorrect);
+
+        if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
+          const medal = getStreakMedal(nextStreak);
+          setConfettiKey((value) => value + 1);
+          setAutoShowMedals(true);
+          window.setTimeout(() => setAutoShowMedals(false), 2000);
+          window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
+        }
+
+        if (isCorrect) {
+          window.setTimeout(() => setFeedbackFading(true), 1700);
+          timerRef.current = window.setTimeout(() => makeNewQuestion(settings), 2000);
+        }
+      }
+
+      useEffect(() => {
+        function handleResize() {
+          setMobileOnlyActiveClef(window.innerWidth < 640);
+        }
+        handleResize();
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+      }, []);
+
+      useEffect(() => {
+        function closeMenus() {
+          setLevelOpen(false);
+          setConsecutiveIncorrect(0);
+        }
+        window.addEventListener("close-level-menu", closeMenus);
+        return () => window.removeEventListener("close-level-menu", closeMenus);
+      }, []);
+
+      useEffect(() => {
+        function syncSitePreferences() {
+          setDarkMode(getSiteTheme() === "dark");
+          setAccessibility(getSiteAccessibility());
+        }
+
+        syncSitePreferences();
+        window.addEventListener("storage", syncSitePreferences);
+        window.addEventListener("mlh-theme-change", syncSitePreferences);
+        window.addEventListener("mlh-accessibility-change", syncSitePreferences);
+
+        return () => {
+          window.removeEventListener("storage", syncSitePreferences);
+          window.removeEventListener("mlh-theme-change", syncSitePreferences);
+          window.removeEventListener("mlh-accessibility-change", syncSitePreferences);
+          window.clearTimeout(timerRef.current);
+        };
+      }, []);
+
+      return (
+        <div className={`overflow-x-hidden pb-10 md:pb-12 ${appPreferenceClasses}`}>
+          <header className="fixed left-0 right-0 top-0 z-[1000] w-full overflow-visible border-b border-stone-200 bg-white/95 py-2 shadow-sm backdrop-blur sm:py-3">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 overflow-visible px-3 sm:px-4 md:px-8 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLevelOpen(false);
+                      setGuideOpen((value) => !value);
+                      setConsecutiveIncorrect(0);
+                      setShowGuideTooltip(false);
+                    }}
+                    onMouseEnter={() => setShowGuideTooltip(true)}
+                    onMouseLeave={() => setShowGuideTooltip(false)}
+                    className="rounded-2xl"
+                    aria-label="Open guide"
+                  >
+                    <AppIcon />
+                  </button>
+
+                  {(consecutiveIncorrect >= 3 || showGuideTooltip) && !guideOpen && (
+                    <div className="absolute left-1/2 top-full z-[100000] mt-2 flex -translate-x-1/2 flex-col items-center" style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}>
+                      <div className="h-0 w-0 border-l-[8px] border-r-[8px] border-b-[10px] border-l-transparent border-r-transparent border-b-black" />
+                      <div className="w-max max-w-[72px] rounded-xl border border-black bg-black px-3 py-2 text-center text-xs font-semibold text-white shadow-lg">Help</div>
                     </div>
                   )}
                 </div>
-              )}
 
-              <button
-                type="button"
-                onClick={() => {
-                  if (levelOpen && levelMenuMode === "customise") {
-                    setLevelOpen(false);
-                  } else {
-                    setLevelOpen(true);
-                    setLevelMenuMode("customise");
-                  }
-                }}
-                className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800"
-              
-              >
-                <img src="customise.svg" alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
-                
-              </button>
-
-              
-
-              <ScoreStreakPanel
-                correct={correct}
-                attempted={attempted}
-                accuracy={accuracy}
-                streak={streak}
-                bestStreak={bestStreak}
-                streakMedal={streakMedal}
-                confettiKey={confettiKey}
-                resetScore={resetScore}
-                autoShowMedals={autoShowMedals}
-              />
-
-              
-            </div>
-          </div>
-        </header>
-
-      <div className="mx-auto max-w-6xl px-3 pt-[146px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[164px] lg:pt-[104px]">
-        <main
-          className="relative z-0 min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-4 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
-          onPointerDown={() => {
-            if (consecutiveIncorrect >= 3 || showGuideTooltip) {
-              setConsecutiveIncorrect(0);
-              setShowGuideTooltip(false);
-            }
-            if (feedback && !feedback.correct) fadeToNextQuestion();
-          }}
-        >
-          <div className="relative z-20 mb-2.5 flex items-center justify-end">
-            <button type="button" onClick={() => makeNewQuestion(settings, true)} className="relative top-px flex h-10 min-w-[58px] shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white px-1.5 text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:min-w-0 sm:gap-1 sm:px-2.5"><span>Skip</span><img src="next.svg" alt="" aria-hidden="true" className="hidden h-[22px] w-[22px] object-contain sm:block" /></button>
-          </div>
-
-          <div className="pointer-events-none absolute inset-x-0 top-[14px] z-40 flex justify-center overflow-visible sm:top-[14px]">
-            <FeedbackBanner feedback={feedback} fading={feedbackFading} />
-          </div>
-
-          <div className={`relative top-[56px] mx-auto flex w-full items-center justify-center transition-opacity duration-300 sm:-top-[55px] ${questionVisible ? "opacity-100" : "opacity-0"}`}
-            style={{ minHeight: "calc(100% - 210px)" }}>
-            <ScoreArea question={question} settings={settings} showHelp={showHelp} feedback={feedback} activeProfile={activeProfile} mobileOnlyActiveClef={mobileOnlyActiveClef} />
-          </div>
-
-          <div className="absolute bottom-[24px] left-3 right-3 z-10 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-[-118px] sm:p-4 md:-mt-[136px] md:mx-3">
-            <div className="space-y-2 text-stone-900">
-              <p className="text-base font-semibold leading-tight">{instruction}</p>
-              {!question && <p className="text-sm font-medium text-red-700">No available notes. Enable at least one clef.</p>}
-            </div>
-
-            <div className="mt-4">
-              <AnswerGrid settings={settings} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={scoreAnswer} />
-            </div>
-          </div>
-        {guideOpen && (
-          <div className="fixed inset-0 z-[100000] flex items-start justify-center overflow-hidden bg-black/50 p-4 pt-[120px] sm:pt-[140px]" onClick={() => setGuideOpen(false)}>
-            <div className="max-h-[calc(100vh-160px)] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl sm:max-h-[calc(100vh-180px)]" onClick={(event) => event.stopPropagation()}>
-              <div className="flex items-center justify-between gap-4 border-b border-stone-200 px-6 py-5">
-                <h2 className="text-2xl font-black tracking-tight text-stone-900">Help: Note Identification</h2>
-                <button type="button" onClick={() => setGuideOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-semibold text-stone-700">×</button>
+                <div className="flex h-14 flex-col justify-center">
+                  <h1 className="relative top-[1px] text-xl font-semibold leading-none tracking-tight sm:text-2xl md:text-3xl">Note Identification</h1>
+                  <p className="mt-0 whitespace-nowrap text-[0.64rem] leading-[1.05] text-stone-600 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap">Identify note names in the treble and bass clef.</p>
+                </div>
               </div>
 
-              <div className="max-h-[calc(100vh-260px)] space-y-5 overflow-y-auto px-6 py-5 text-sm leading-relaxed text-stone-700 sm:max-h-[calc(100vh-280px)]">
-                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">1. Lines and spaces</h3><p>Every move up or down to the next line or space changes the note name by one letter.</p></section>
-                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">2. Treble clef</h3><p>Treble clef is commonly used for higher notes. Start by recognising the standard line and space patterns.</p></section>
-                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">3. Bass clef</h3><p>Bass clef is commonly used for lower notes. Its line and space patterns are different from treble clef.</p></section>
-                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">4. Ledger lines</h3><p>Ledger lines extend the stave above or below the normal five lines. Keep counting line-space-line-space.</p></section>
-                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">5. Accidentals</h3><p>Sharps raise a note, flats lower a note, and naturals cancel a sharp or flat.</p></section>
-                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">6. Strategy</h3><p>Find a note you know, then count up or down step by step until you reach the question note.</p></section>
+              <div className="relative z-50 flex flex-wrap items-center gap-2 overflow-visible lg:ml-auto lg:justify-end">
+                <ScoreStreakPanel
+                  correct={correct}
+                  attempted={attempted}
+                  accuracy={accuracy}
+                  streak={streak}
+                  bestStreak={bestStreak}
+                  streakMedal={streakMedal}
+                  confettiKey={confettiKey}
+                  resetScore={resetScore}
+                  autoShowMedals={autoShowMedals}
+                />
               </div>
             </div>
-          </div>
-        )}
-        </main>
-      </div>
-    </div>
-  );
-}
+          </header>
 
-const rootElement = document.getElementById("root");
-ReactDOM.render(<App />, rootElement);
+          <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[164px] lg:pt-[104px]">
+            <main
+              className="relative z-0 min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-4 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
+              onPointerDown={() => {
+                if (consecutiveIncorrect >= 3 || showGuideTooltip) {
+                  setConsecutiveIncorrect(0);
+                  setShowGuideTooltip(false);
+                }
+                if (feedback && !feedback.correct) fadeToNextQuestion();
+              }}
+            >
+              <div className="relative z-50 mb-2.5 flex items-center justify-between gap-2 overflow-visible" ref={desktopLevelRef}>
+                <div className="relative flex items-center gap-2 overflow-visible">
+                  <div className="group relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLevelOpen((value) => !(value && levelMenuMode === "levels"));
+                        setLevelMenuMode("levels");
+                      }}
+                      className="flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11"
+                    >
+                      <img src={ASSET.level} alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
+                    </button>
+                    <div className="pointer-events-none absolute left-1/2 top-full z-[60] mt-2 -translate-x-1/2 rounded-lg bg-black px-2 py-1 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">Level</div>
+                  </div>
+
+                  <div className="group relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (levelOpen && levelMenuMode === "customise") setLevelOpen(false);
+                        else {
+                          setLevelOpen(true);
+                          setLevelMenuMode("customise");
+                        }
+                      }}
+                      className="flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11"
+                    >
+                      <img src={ASSET.customise} alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
+                    </button>
+                    <div className="pointer-events-none absolute left-1/2 top-full z-[60] mt-2 -translate-x-1/2 rounded-lg bg-black px-2 py-1 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">Customise</div>
+                  </div>
+
+                  {levelOpen && (
+                    <div className={`absolute top-full z-50 mt-2 inline-block rounded-2xl border border-stone-200 bg-white p-3 shadow-lg w-full sm:w-fit ${levelMenuMode === "customise" ? "left-[68px]" : "left-0"}`}>
+                      <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
+                        <div className="text-center text-base font-semibold text-stone-800">{levelMenuMode === "customise" ? "Customise" : "Level"}</div>
+                      </div>
+
+                      {levelMenuMode === "customise" ? (
+                        <MenuRows
+                          settings={settings}
+                          setSettings={setSettings}
+                          makeNewQuestion={makeNewQuestion}
+                          showHelp={showHelp}
+                          setShowHelp={setShowHelp}
+                          setActiveProfile={setActiveProfile}
+                          resetProgress={resetProgress}
+                        />
+                      ) : (
+                        <div className="flex w-full min-w-0 flex-col gap-2">
+                          {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
+                            const profile = DIFFICULTY_PROFILES[profileKey];
+                            const active = activeProfile === profileKey;
+                            return (
+                              <button
+                                key={profileKey}
+                                type="button"
+                                onClick={() => {
+                                  applyProfile(profileKey);
+                                  setLevelOpen(false);
+                                }}
+                                className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
+                              >
+                                <div className="flex min-w-0 items-center justify-between gap-3 text-stone-900">
+                                  <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">{profileKey}</div>
+                                  <div className="flex min-w-0 flex-1 flex-col justify-center pr-2">
+                                    <div className="truncate pb-[1px] text-[13px] font-black leading-[1.2]">{profile.label}</div>
+                                    <div className="mt-[2px] truncate pb-[2px] text-[11px] leading-[1.25] text-stone-600">{profile.description}</div>
+                                  </div>
+                                  {active && <img src={ASSET.tick} alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 object-contain" />}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="group relative">
+                  <button type="button" onClick={() => makeNewQuestion(settings, true)} className="flex h-10 w-[58px] shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11">
+                    <img src={ASSET.next} alt="" aria-hidden="true" className="h-[22px] w-[22px] object-contain" />
+                  </button>
+                  <div className="pointer-events-none absolute left-1/2 top-full z-[60] mt-2 -translate-x-1/2 rounded-lg bg-black px-2 py-1 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">Skip</div>
+                </div>
+              </div>
+
+              <div className="pointer-events-none absolute inset-x-0 top-[62px] z-40 flex justify-center overflow-visible sm:top-[14px]">
+                <FeedbackBanner feedback={feedback} fading={feedbackFading} />
+              </div>
+
+              <div className={`relative top-[56px] mx-auto flex w-full items-center justify-center transition-opacity duration-300 sm:-top-[55px] ${questionVisible ? "opacity-100" : "opacity-0"}`} style={{ minHeight: "calc(100% - 210px)" }}>
+                <ScoreArea question={question} settings={settings} showHelp={showHelp} feedback={feedback} activeProfile={activeProfile} mobileOnlyActiveClef={mobileOnlyActiveClef} />
+              </div>
+
+              <div className="absolute bottom-[24px] left-3 right-3 z-10 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-[-118px] sm:p-4 md:-mt-[136px] md:mx-3">
+                <div className="space-y-2 text-stone-900">
+                  <p className="text-base font-semibold leading-tight">Identify the <strong>note</strong>.</p>
+                  {!question && <p className="text-sm font-medium text-red-700">No available notes. Enable at least one clef.</p>}
+                </div>
+
+                <div className="mt-4">
+                  <AnswerGrid settings={settings} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={scoreAnswer} />
+                </div>
+              </div>
+
+              {guideOpen && <HelpModal onClose={() => setGuideOpen(false)} />}
+            </main>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById("root"));
   </script>
+
   <script src="https://mrtennant-music.github.io/musicliteracy/footer.js"></script>
 </body>
 </html>
