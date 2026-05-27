@@ -462,10 +462,20 @@ function ScoreArea({ question, settings, showHelp, feedback, activeProfile, mobi
         bass: ahFocusBassOnly ? true : ahFocusTrebleOnly ? false : settings.bass,
       };
 
+  const visibleSystemCount = Number(Boolean(displaySettings.treble)) + Number(Boolean(displaySettings.bass));
+  const singleSystemOffset = !mobileOnlyActiveClef && visibleSystemCount === 1
+    ? displaySettings.treble
+      ? ((STAFF.bassTop - STAFF.trebleTop) / 2)
+      : -((STAFF.bassTop - STAFF.trebleTop) / 2)
+    : 0;
+
   return (
     <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
       <rect width={SVG.width} height={SVG.height} fill="white" />
-      <g className={`mobile-music-scale ${mobileOnlyActiveClef && question?.clef === "bass" ? "mobile-bass-focus" : ""}`}>
+      <g
+        className={`mobile-music-scale ${mobileOnlyActiveClef && question?.clef === "bass" ? "mobile-bass-focus" : ""}`}
+        transform={`translate(0 ${singleSystemOffset - 24})`}
+      >
         <Staff top={STAFF.trebleTop} clef="treble" visible={displaySettings.treble} />
         <Staff top={STAFF.bassTop} clef="bass" visible={displaySettings.bass} />
         <HelpLabels visible={showHelp} settings={displaySettings} />
@@ -510,12 +520,15 @@ function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, st
   ];
 
   return (
-    <div ref={panelRef} className="grid w-full grid-cols-2 gap-2 lg:w-auto lg:grid-cols-[132px_116px] sm:lg:grid-cols-[146px_128px]">
+    <div ref={panelRef} className="grid w-full grid-cols-2 gap-2 lg:w-auto lg:grid-cols-[112px_98px] sm:lg:grid-cols-[124px_108px]">
       <section
         role="button"
         tabIndex="0"
         onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => setOpenPopover((value) => value === "score" ? null : "score")}
+        onClick={() => {
+            window.dispatchEvent(new CustomEvent("close-level-menu"));
+            setOpenPopover((value) => value === "score" ? null : "score");
+          }}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
@@ -527,10 +540,10 @@ function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, st
         <div className="absolute inset-0 overflow-hidden rounded-xl">
         <div className="absolute bottom-0 left-0 right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreFillColour }} />
         </div>
-        <div className="relative z-10 flex h-full flex-col items-center justify-center text-center">
+        <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
           <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Score</div>
-          <div className="mt-[5px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{correct}/{attempted}</div>
-          <div className="mt-[5px] text-[11px] font-semibold leading-none text-stone-500 sm:text-[12px]">Accuracy: {accuracy}%</div>
+          <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{correct}/{attempted}</div>
+          <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Accuracy: {accuracy}%</div>
         </div>
         {openPopover === "score" && (
           <div
@@ -549,7 +562,8 @@ function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, st
                 setOpenPopover(null);
               }
             }}
-            className="absolute left-1/2 top-full z-50 mt-2 flex min-w-[132px] -translate-x-1/2 cursor-pointer items-center justify-center rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-lg"
+            className="absolute left-1/2 top-full z-50 mt-2 flex min-w-[112px] -translate-x-1/2 cursor-pointer items-center justify-center rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-lg"
+            style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" }}
           >
             Reset
           </div>
@@ -560,7 +574,10 @@ function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, st
         role="button"
         tabIndex="0"
         onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => setOpenPopover((value) => value === "streak" ? null : "streak")}
+        onClick={() => {
+            window.dispatchEvent(new CustomEvent("close-level-menu"));
+            setOpenPopover((value) => value === "streak" ? null : "streak");
+          }}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
@@ -587,17 +604,17 @@ function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, st
           </div>
         )}
 
-        <div className="relative z-10 grid h-full grid-cols-[1fr_auto] items-center gap-2 px-3 sm:px-4">
-          <div className="flex flex-col items-center justify-center text-center">
+        <div className="relative z-10 flex h-full items-center justify-center px-3 text-center sm:px-4">
+          <div className="flex flex-col items-center justify-center pt-[1px] text-center">
             <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
-            <div className={`mt-[5px] text-[20px] font-black leading-none tracking-tight sm:text-[22px] ${streakMedal?.text ?? "text-black"}`}>{streak}</div>
-            <div className="mt-[5px] text-[11px] font-semibold leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
+            <div className={`mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px] ${streakMedal?.text ?? "text-black"}`}>{streak}</div>
+            <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
           </div>
 
           </div>
 
         {(openPopover === "streak" || autoShowMedals) && (
-          <div className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-3 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]" style={{ animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}>
+          <div className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-xl border border-black bg-black px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]" style={{ animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}>
           <div className="flex items-end justify-center gap-3">
             {thresholds.map((item) => (
               <div key={item.tier} className={`flex flex-col items-center justify-end ${item.active ? "medal-threshold-active" : ""}`}>
@@ -670,6 +687,7 @@ function MenuRows({ settings, setSettings, resetScore, makeNewQuestion, showHelp
       setStreak(0);
     setBestStreak(0);
     setConfettiKey(0);
+    setConsecutiveIncorrect(0);
       window.setTimeout(() => makeNewQuestion(next), 0);
       return next;
     });
@@ -829,7 +847,7 @@ function useInjectedStyles() {
       .app-dark .text-stone-500,
       .app-dark .text-stone-600,
       .app-dark .text-stone-700,
-      .app-dark .text-stone-800,
+      .app-dark .text-white,
       .app-dark .text-stone-900,
       .app-dark .text-black { color: #e7e5e4 !important; }
       .app-dark .border-stone-200,
@@ -949,10 +967,13 @@ function App() {
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelOpen, setLevelOpen] = useState(false);
   const [levelMenuMode, setLevelMenuMode] = useState("levels");
+  const [guideOpen, setGuideOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [feedbackFading, setFeedbackFading] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [consecutiveIncorrect, setConsecutiveIncorrect] = useState(0);
+  const [showGuideTooltip, setShowGuideTooltip] = useState(false);
   const [correct, setCorrect] = useState(0);
   const [attempted, setAttempted] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -978,6 +999,17 @@ function App() {
     window.addEventListener("resize", handleResize);
 
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    function closeMenus() {
+      setLevelOpen(false);
+      setConsecutiveIncorrect(0);
+    }
+
+    window.addEventListener("close-level-menu", closeMenus);
+
+    return () => window.removeEventListener("close-level-menu", closeMenus);
   }, []);
 
   useEffect(() => {
@@ -1042,6 +1074,7 @@ function App() {
     setStreak(0);
     setBestStreak(0);
     setConfettiKey(0);
+    setConsecutiveIncorrect(0);
     makeNewQuestion(nextSettings);
   }
 
@@ -1073,6 +1106,7 @@ function App() {
     setBestStreak((value) => Math.max(value, nextStreak));
     setSkipStreak(0);
     setFeedback({ correct: isCorrect });
+    setConsecutiveIncorrect((value) => isCorrect ? 0 : value + 1);
     playFeedbackSound(isCorrect);
 
     if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
@@ -1092,19 +1126,114 @@ function App() {
   const instruction = <>Identify the <strong>note</strong>.</>;
 
   return (
-    <div className={`min-h-screen overflow-x-hidden px-3 pb-4 pt-1 sm:px-4 md:px-8 md:pb-8 md:pt-2 ${appPreferenceClasses}`}>
-      <div className="mx-auto max-w-6xl">
-        <header className="relative z-50 mb-3 overflow-visible rounded-2xl border border-stone-200 bg-white px-4 py-2 shadow-sm sm:mb-5 sm:px-5 sm:py-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className={`overflow-x-hidden pb-10 md:pb-12 ${appPreferenceClasses}`}>
+      <header className="fixed left-0 right-0 top-0 z-[9999] w-full overflow-visible border-b border-stone-200 bg-white/95 py-2 shadow-sm backdrop-blur sm:py-3">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 overflow-visible px-3 sm:px-4 md:px-8 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3 sm:gap-4">
-              <AppIcon />
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLevelOpen(false);
+                    setGuideOpen((value) => !value);
+                    setConsecutiveIncorrect(0);
+                    setShowGuideTooltip(false);
+                  }}
+                  onMouseEnter={() => setShowGuideTooltip(true)}
+                  onMouseLeave={() => setShowGuideTooltip(false)}
+                  className="rounded-2xl"
+                  aria-label="Open guide"
+                >
+                  <AppIcon />
+                </button>
+
+                {(consecutiveIncorrect >= 3 || showGuideTooltip) && !guideOpen && (
+                  <div className="absolute left-1/2 top-full z-[10000] mt-2 flex -translate-x-1/2 flex-col items-center" style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}>
+                    <div className="h-0 w-0 border-l-[8px] border-r-[8px] border-b-[10px] border-l-transparent border-r-transparent border-b-black" />
+                    <div className="w-max max-w-[72px] rounded-xl border border-black bg-black px-3 py-2 text-center text-xs font-semibold text-white shadow-lg">
+                      Help
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="flex h-14 flex-col justify-center">
                 <h1 className="relative top-[1px] text-xl font-semibold leading-none tracking-tight sm:text-2xl md:text-3xl">Note Identification</h1>
                 <p className="mt-0 whitespace-nowrap text-[0.64rem] leading-[1.05] text-stone-600 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap">Identify note names in the treble and bass clef.</p>
               </div>
             </div>
 
-            <div className="relative z-50 overflow-visible lg:ml-auto lg:flex lg:justify-end">
+            <div className="relative z-50 flex flex-wrap items-end gap-2 overflow-visible lg:ml-auto lg:justify-end" ref={desktopLevelRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setLevelOpen((value) => !(value && levelMenuMode === "levels"));
+                  setLevelMenuMode("levels");
+                }}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800"
+              >
+                <img src="levels.svg" alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
+                <span>{mobileOnlyActiveClef ? activeProfile : activeProfile === "N3" ? "National 3" : activeProfile === "N4" ? "National 4" : activeProfile === "N5" ? "National 5" : activeProfile === "H" ? "Higher" : activeProfile === "AH" ? "Advanced Higher" : activeProfile === "Custom" ? "Custom" : activeProfile}</span>
+              </button>
+
+              {levelOpen && (
+                <div className={`absolute top-full mt-2 z-50 inline-block w-[calc(100vw-1.5rem)] max-w-max rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit ${levelMenuMode === "customise" ? "left-[130px]" : "left-0"}`}>
+                  <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
+                    <div className="text-center text-base font-semibold text-stone-800">{levelMenuMode === "customise" ? "Customise" : "Level"}</div>
+                  </div>
+
+                  {levelMenuMode === "customise" ? (
+                    <MenuRows settings={settings} setSettings={setSettings} resetScore={resetScore} makeNewQuestion={makeNewQuestion} showHelp={showHelp} setShowHelp={setShowHelp} setActiveProfile={setActiveProfile} setCorrect={setCorrect} setAttempted={setAttempted} setStreak={setStreak} setBestStreak={setBestStreak} setConfettiKey={setConfettiKey} />
+                  ) : (
+                    <div className="flex w-full min-w-0 flex-col gap-2">
+                      {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
+                        const profile = DIFFICULTY_PROFILES[profileKey];
+                        const active = activeProfile === profileKey;
+
+                        return (
+                          <button
+                            key={profileKey}
+                            type="button"
+                            onClick={() => {
+                              applyProfile(profileKey);
+                              setLevelOpen(false);
+                            }}
+                            className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
+                          >
+                            <div className="flex min-w-0 items-center justify-between gap-3 text-stone-900">
+                              <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">{profileKey}</div>
+                              <div className="flex min-w-0 flex-1 flex-col justify-center pr-2">
+                                <div className="truncate pb-[1px] text-[13px] font-black leading-[1.2]">{profile.label}</div>
+                                <div className="mt-[2px] truncate pb-[2px] text-[11px] leading-[1.25] text-stone-600">{profile.description}</div>
+                              </div>
+                              {active && <img src="tick.svg" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 object-contain" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (levelOpen && levelMenuMode === "customise") {
+                    setLevelOpen(false);
+                  } else {
+                    setLevelOpen(true);
+                    setLevelMenuMode("customise");
+                  }
+                }}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800"
+              
+              >
+                <img src="customise.svg" alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
+                
+              </button>
+
+              
+
               <ScoreStreakPanel
                 correct={correct}
                 attempted={attempted}
@@ -1116,95 +1245,33 @@ function App() {
                 resetScore={resetScore}
                 autoShowMedals={autoShowMedals}
               />
+
+              
             </div>
           </div>
         </header>
 
+      <div className="mx-auto max-w-6xl px-3 pt-[146px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[164px] lg:pt-[104px]">
         <main
-          className="relative z-0 -mt-[6px] min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-4 pt-[10px] shadow-sm sm:-mt-[10px] sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
+          className="relative z-0 min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-4 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
           onPointerDown={() => {
+            if (consecutiveIncorrect >= 3 || showGuideTooltip) {
+              setConsecutiveIncorrect(0);
+              setShowGuideTooltip(false);
+            }
             if (feedback && !feedback.correct) fadeToNextQuestion();
           }}
         >
-          <div className="relative z-20 mb-2.5 flex items-stretch justify-between gap-2 sm:gap-3 sm:flex-wrap">
-            <div className="flex min-w-0 shrink items-center gap-2 sm:w-auto">
-              <div className="relative flex-1 sm:flex-none" ref={desktopLevelRef}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLevelOpen((value) => !value);
-                    setLevelMenuMode("levels");
-                  }}
-                  className="flex h-10 min-w-[68px] items-center justify-center gap-1 rounded-xl border border-stone-300 bg-white px-2 text-sm font-semibold text-stone-800 tracking-normal sm:h-11 sm:min-w-0 sm:flex-none sm:px-3"
-                >
-                  <img src="levels.svg" alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />
-                  <span>{mobileOnlyActiveClef ? activeProfile : activeProfile === "N3" ? "National 3" : activeProfile === "N4" ? "National 4" : activeProfile === "N5" ? "National 5" : activeProfile === "H" ? "Higher" : activeProfile === "AH" ? "Advanced Higher" : activeProfile === "Custom" ? "Custom" : activeProfile}</span>
-                </button>
-
-                {levelOpen && (
-                  <div className="absolute left-0 z-20 mt-2 inline-block w-[calc(100vw-1.5rem)] max-w-max rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit">
-                    <div className="relative mb-3 flex min-h-[34px] items-center justify-center whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => setLevelMenuMode((mode) => mode === "levels" ? "customise" : "levels")}
-                        className={`absolute left-0 top-0 flex h-9 w-9 items-center justify-center rounded-xl border text-base ${levelMenuMode === "customise" ? "border-stone-500 bg-stone-200" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
-                        title="Customise"
-                      >
-                        {levelMenuMode === "customise" ? "←" : <img src="customise.svg" alt="" aria-hidden="true" className="h-[18px] w-[18px] object-contain" />}
-                      </button>
-                      <div className="text-center text-base font-semibold text-stone-800">{levelMenuMode === "customise" ? "Customise" : "Level"}</div>
-                    </div>
-
-                    {levelMenuMode === "customise" ? (
-                      <MenuRows settings={settings} setSettings={setSettings} resetScore={resetScore} makeNewQuestion={makeNewQuestion} showHelp={showHelp} setShowHelp={setShowHelp} setActiveProfile={setActiveProfile} setCorrect={setCorrect} setAttempted={setAttempted} setStreak={setStreak} setBestStreak={setBestStreak} setConfettiKey={setConfettiKey} />
-                    ) : (
-                      <div className="flex w-full min-w-0 flex-col gap-2">
-                      {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
-                        const profile = DIFFICULTY_PROFILES[profileKey];
-                        const active = activeProfile === profileKey;
-
-                          return (
-                            <button
-                              key={profileKey}
-                              type="button"
-                              onClick={() => {
-                                applyProfile(profileKey);
-                                setLevelOpen(false);
-                              }}
-                              className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
-                            >
-                              <div className="flex min-w-0 items-center justify-between gap-3 text-stone-900">
-                              <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">
-                                {profileKey}
-                              </div>
-                              <div className="flex min-w-0 flex-1 flex-col justify-center pr-2">
-                                <div className="truncate pb-[1px] text-[13px] font-black leading-[1.2]">{profile.label}</div>
-                                <div className="mt-[2px] truncate pb-[2px] text-[11px] leading-[1.25] text-stone-600">{profile.description}</div>
-                              </div>
-                                {activeProfile === profileKey && (
-                                  <img src="tick.svg" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 object-contain" />
-                                )}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              
-            </div>
-
-            <button type="button" onClick={() => makeNewQuestion(settings, true)} className="relative top-px flex h-10 min-w-[64px] shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white px-2 text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:min-w-0 sm:gap-1.5 sm:px-3"><span>Skip</span><img src="next.svg" alt="" aria-hidden="true" className="hidden h-[22px] w-[22px] object-contain sm:block" /></button>
+          <div className="relative z-20 mb-2.5 flex items-center justify-end">
+            <button type="button" onClick={() => makeNewQuestion(settings, true)} className="relative top-px flex h-10 min-w-[58px] shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white px-1.5 text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:min-w-0 sm:gap-1 sm:px-2.5"><span>Skip</span><img src="next.svg" alt="" aria-hidden="true" className="hidden h-[22px] w-[22px] object-contain sm:block" /></button>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 top-[10px] z-40 flex justify-center overflow-visible sm:top-[14px]">
+          <div className="pointer-events-none absolute inset-x-0 top-[14px] z-40 flex justify-center overflow-visible sm:top-[14px]">
             <FeedbackBanner feedback={feedback} fading={feedbackFading} />
           </div>
 
-          <div className={`relative top-[56px] mx-auto w-full transition-opacity duration-300 sm:-top-[55px] ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+          <div className={`relative top-[56px] mx-auto flex w-full items-center justify-center transition-opacity duration-300 sm:-top-[55px] ${questionVisible ? "opacity-100" : "opacity-0"}`}
+            style={{ minHeight: "calc(100% - 210px)" }}>
             <ScoreArea question={question} settings={settings} showHelp={showHelp} feedback={feedback} activeProfile={activeProfile} mobileOnlyActiveClef={mobileOnlyActiveClef} />
           </div>
 
@@ -1218,6 +1285,25 @@ function App() {
               <AnswerGrid settings={settings} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={scoreAnswer} />
             </div>
           </div>
+        {guideOpen && (
+          <div className="fixed inset-0 z-[100000] flex items-start justify-center overflow-hidden bg-black/50 p-4 pt-[120px] sm:pt-[140px]" onClick={() => setGuideOpen(false)}>
+            <div className="max-h-[calc(100vh-160px)] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl sm:max-h-[calc(100vh-180px)]" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between gap-4 border-b border-stone-200 px-6 py-5">
+                <h2 className="text-2xl font-black tracking-tight text-stone-900">Help: Note Identification</h2>
+                <button type="button" onClick={() => setGuideOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-semibold text-stone-700">×</button>
+              </div>
+
+              <div className="max-h-[calc(100vh-260px)] space-y-5 overflow-y-auto px-6 py-5 text-sm leading-relaxed text-stone-700 sm:max-h-[calc(100vh-280px)]">
+                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">1. Lines and spaces</h3><p>Every move up or down to the next line or space changes the note name by one letter.</p></section>
+                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">2. Treble clef</h3><p>Treble clef is commonly used for higher notes. Start by recognising the standard line and space patterns.</p></section>
+                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">3. Bass clef</h3><p>Bass clef is commonly used for lower notes. Its line and space patterns are different from treble clef.</p></section>
+                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">4. Ledger lines</h3><p>Ledger lines extend the stave above or below the normal five lines. Keep counting line-space-line-space.</p></section>
+                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">5. Accidentals</h3><p>Sharps raise a note, flats lower a note, and naturals cancel a sharp or flat.</p></section>
+                <section className="rounded-2xl border border-stone-200 bg-stone-50 p-4"><h3 className="mb-1 text-base font-bold text-stone-900">6. Strategy</h3><p>Find a note you know, then count up or down step by step until you reach the question note.</p></section>
+              </div>
+            </div>
+          </div>
+        )}
         </main>
       </div>
     </div>
