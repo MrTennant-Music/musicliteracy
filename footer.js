@@ -31,8 +31,7 @@ document.body.insertAdjacentHTML("beforeend", `
           href="https://forms.cloud.microsoft/e/vW5PPdW154"
           target="_blank"
           rel="noopener noreferrer"
-        >
-          here</a>.
+        >here</a>.
       </p>
     </div>
 
@@ -79,6 +78,7 @@ document.body.insertAdjacentHTML("beforeend", `
 
 document.addEventListener("click", event => {
   const opener = event.target.closest("[data-open='aboutOverlay']");
+
   if (opener) {
     event.preventDefault();
     document.getElementById("aboutOverlay")?.classList.add("is-open");
@@ -86,6 +86,7 @@ document.addEventListener("click", event => {
   }
 
   const closeButton = event.target.closest("[data-close]");
+
   if (closeButton) {
     closeButton.closest(".overlay")?.classList.remove("is-open");
     return;
