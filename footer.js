@@ -32,8 +32,7 @@ document.body.insertAdjacentHTML("beforeend", `
           target="_blank"
           rel="noopener noreferrer"
         >
-          here
-        </a>.
+          here</a>.
       </p>
     </div>
 
