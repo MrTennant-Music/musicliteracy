@@ -294,10 +294,22 @@
           }
 
           @media (hover: none) and (pointer: coarse) {
-            button:hover {
-              transform: none;
-              filter: none;
-              box-shadow: none;
+            button,
+            button:hover,
+            button:active,
+            button:focus {
+              transform: none !important;
+              filter: none !important;
+              box-shadow: none !important;
+            }
+
+            section[role="button"],
+            section[role="button"]:hover,
+            section[role="button"]:active,
+            section[role="button"]:focus {
+              transform: none !important;
+              filter: none !important;
+              box-shadow: none !important;
             }
           }
           button:disabled { cursor: not-allowed; opacity:.82; }
@@ -488,7 +500,7 @@
             )}
 
             <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
-              <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
+              <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
               <div className={`mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px] ${medal?.text || "text-black"}`}>{streak}</div>
               <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
             </div>
@@ -834,6 +846,8 @@
     function App() {
       const { darkMode, accessibility } = useSitePreferences();
       const menuRef = useRef(null);
+      const mainRef = useRef(null);
+      const questionPanelRef = useRef(null);
       const timerRef = useRef(null);
       const fadeTimerRef = useRef(null);
 
@@ -860,6 +874,7 @@
       const [confettiKey, setConfettiKey] = useState(0);
       const [autoShowMedals, setAutoShowMedals] = useState(false);
       const [mobileOnlyActiveClef, setMobileOnlyActiveClef] = useState(window.innerWidth < 640);
+      const [questionPanelHeight, setQuestionPanelHeight] = useState(0);
 
       useClickAway(menuRef, () => setMenuOpen(false));
 
@@ -964,6 +979,25 @@
         return () => window.removeEventListener("resize", onResize);
       }, []);
 
+      useEffect(() => {
+        let frameId = null;
+
+        const updateQuestionPanelHeight = () => {
+          frameId = window.requestAnimationFrame(() => {
+            const nextHeight = questionPanelRef.current?.offsetHeight || 0;
+            setQuestionPanelHeight((currentHeight) => currentHeight === nextHeight ? currentHeight : nextHeight);
+          });
+        };
+
+        updateQuestionPanelHeight();
+        window.addEventListener("resize", updateQuestionPanelHeight);
+
+        return () => {
+          if (frameId) window.cancelAnimationFrame(frameId);
+          window.removeEventListener("resize", updateQuestionPanelHeight);
+        };
+      }, [settings.accidentals, question, mobileOnlyActiveClef]);
+
       useEffect(() => () => clearTimers(), [clearTimers]);
 
       return (
@@ -998,6 +1032,7 @@
 
           <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]">
             <main
+              ref={mainRef}
               className="relative z-0 min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-4 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
               onPointerDown={() => { if (feedback && !feedback.correct) fadeIncorrectToNextQuestion(); }}
             >
@@ -1007,10 +1042,10 @@
                     <button
                       type="button"
                       onClick={() => { setMenuMode("levels"); setMenuOpen((open) => !(open && menuMode === "levels")); }}
-                      className="flex h-10 w-[58px] items-center justify-center gap-1 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5"
+                      className={`flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5 ${activeLevel === "Custom" ? "gap-0" : "gap-1"}`}
                     >
-                      <img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain scale-[1.06]" />
-                      <span className="relative -left-[5px] sm:hidden">{activeLevel}</span>
+                      <img src={ASSET.level} alt="" aria-hidden="true" className={`h-[26px] w-[28px] object-contain scale-[1.06] ${activeLevel === "Custom" ? "translate-x-0" : ""}`} />
+                      <span className="relative -left-[5px] sm:hidden">{activeLevel === "Custom" ? "" : activeLevel}</span>
                       <span className="relative -left-[3px] hidden sm:inline">{LEVELS[activeLevel]?.label || activeLevel}</span>
                     </button>
 
@@ -1069,7 +1104,10 @@
                   </div>
                 </button>
               </div>
-<div className={`relative top-[56px] mx-auto flex w-full items-center justify-center transition-opacity duration-300 sm:top-[15px] ${questionVisible ? "opacity-100" : "opacity-0"}`} style={{ minHeight: "calc(100% - 210px)" }}>
+<div
+                className={`mx-auto flex w-full items-center justify-center transition-opacity duration-300 sm:relative sm:top-[15px] ${mobileOnlyActiveClef ? "absolute left-0 right-0" : "relative top-[56px]"} ${questionVisible ? "opacity-100" : "opacity-0"}`}
+                style={mobileOnlyActiveClef ? { top: "54px", bottom: `${questionPanelHeight + 24}px` } : { minHeight: "calc(100% - 210px)" }}
+              >
                 <ScoreArea
                   question={question}
                   settings={settings}
@@ -1080,7 +1118,7 @@
                 />
               </div>
 
-              <div className="absolute bottom-[24px] left-3 right-3 z-10 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-[-48px] sm:p-4 md:mx-3 md:-mt-[66px]">
+              <div ref={questionPanelRef} className="absolute bottom-[24px] left-3 right-3 z-10 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-[-48px] sm:p-4 md:mx-3 md:-mt-[66px]">
                 <div className="space-y-2 text-stone-900">
                   <p className="text-base font-semibold leading-tight">Identify the <strong>note</strong>.</p>
                   {!question && <p className="text-sm font-medium text-red-700">No available notes. Enable at least one clef.</p>}
