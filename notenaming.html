@@ -15,20 +15,10 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useEffect, useMemo, useRef, useState } = React;
-
-    const SVG = { width: 920, height: 420 };
-    const STAFF = { left: 247, right: 689, trebleTop: 84, bassTop: 225, gap: 18.9 };
-    const NOTE = { x: 468, rx: 12.2, ry: 8.72, stemLength: 62 };
-    const COLOUR = { green: "#16a34a", red: "#dc2626", black: "#000000" };
-    const GLYPH = {};
-    const LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
-    const SHARPS = { A: "A#", B: null, C: "C#", D: "D#", E: null, F: "F#", G: "G#" };
-    const FLATS = { A: "Ab", B: "Bb", C: null, D: "Db", E: "Eb", F: null, G: "Gb" };
+    const { useCallback, useEffect, useMemo, useRef, useState } = React;
 
     const ASSET = {
       appIcon: "https://mrtennant-music.github.io/musicliteracy/notenaming-icon.svg",
-      footer: "https://mrtennant-music.github.io/musicliteracy/footer.js",
       level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
       customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
       next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
@@ -44,30 +34,48 @@
       crotchet: "https://mrtennant-music.github.io/musicliteracy/crotchet.svg?v=1.1",
     };
 
-    const LEDGER_BLOCKED = {
-      E2: true, F2: true, B3: true, C4: true, D4: true, G5: true, A5: true, B5: true, C6: true, D2: true, C2: true,
+    const SVG = { width: 920, height: 420 };
+    const STAFF = { left: 247, right: 689, trebleTop: 84, bassTop: 225, gap: 18.9 };
+    const NOTE = { x: 468, rx: 12.2, stemLength: 62 };
+    const LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
+    const COLOUR = { black: "#000000", green: "#16a34a", red: "#dc2626" };
+    const SITE_THEME_KEY = "mlh-theme";
+    const SITE_ACCESSIBILITY_KEY = "mlh-accessibility";
+
+    const SHARPS = { A: "A#", B: null, C: "C#", D: "D#", E: null, F: "F#", G: "G#" };
+    const FLATS = { A: "Ab", B: "Bb", C: null, D: "Db", E: "Eb", F: null, G: "Gb" };
+
+    const LEVELS = {
+      N3: {
+        label: "National 3",
+        description: "Lines and spaces of the treble clef.",
+        settings: { accidentals: false, ledger: false, treble: true, bass: false, advancedRange: false },
+      },
+      N4: {
+        label: "National 4",
+        description: "C–A’ — range of notes from middle C to first ledger line A.",
+        settings: { accidentals: false, ledger: true, treble: true, bass: false, advancedRange: false },
+      },
+      N5: {
+        label: "National 5",
+        description: "Tones, semitones, accidentals — flats, sharps and naturals.",
+        settings: { accidentals: true, ledger: true, treble: true, bass: false, advancedRange: false },
+      },
+      H: {
+        label: "Higher",
+        description: "Bass clef — E–C — range of notes from E below the stave to middle C.",
+        settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: false },
+      },
+      AH: {
+        label: "Advanced Higher",
+        description: "Bass clef C–E two ledger lines below stave to two ledger lines above.",
+        settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: true },
+      },
     };
 
     const NOTE_DATA = [
       { pitch: "A3", answer: "A", clef: "treble", step: -4 },
       { pitch: "B3", answer: "B", clef: "treble", step: -3 },
-      { pitch: "D4", answer: "D", clef: "bass", step: 11 },
-      { pitch: "E4", answer: "E", clef: "bass", step: 12 },
-      { pitch: "C2", answer: "C", clef: "bass", step: -4 },
-      { pitch: "D2", answer: "D", clef: "bass", step: -3 },
-      { pitch: "E2", answer: "E", clef: "bass", step: -2 },
-      { pitch: "F2", answer: "F", clef: "bass", step: -1 },
-      { pitch: "G2", answer: "G", clef: "bass", step: 0 },
-      { pitch: "A2", answer: "A", clef: "bass", step: 1 },
-      { pitch: "B2", answer: "B", clef: "bass", step: 2 },
-      { pitch: "C3", answer: "C", clef: "bass", step: 3 },
-      { pitch: "D3", answer: "D", clef: "bass", step: 4 },
-      { pitch: "E3", answer: "E", clef: "bass", step: 5 },
-      { pitch: "F3", answer: "F", clef: "bass", step: 6 },
-      { pitch: "G3", answer: "G", clef: "bass", step: 7 },
-      { pitch: "A3", answer: "A", clef: "bass", step: 8 },
-      { pitch: "B3", answer: "B", clef: "bass", step: 9 },
-      { pitch: "C4", answer: "C", clef: "bass", step: 10 },
       { pitch: "C4", answer: "C", clef: "treble", step: -2 },
       { pitch: "D4", answer: "D", clef: "treble", step: -1 },
       { pitch: "E4", answer: "E", clef: "treble", step: 0 },
@@ -83,107 +91,105 @@
       { pitch: "A5", answer: "A", clef: "treble", step: 10 },
       { pitch: "B5", answer: "B", clef: "treble", step: 11 },
       { pitch: "C6", answer: "C", clef: "treble", step: 12 },
+
+      { pitch: "C2", answer: "C", clef: "bass", step: -4 },
+      { pitch: "D2", answer: "D", clef: "bass", step: -3 },
+      { pitch: "E2", answer: "E", clef: "bass", step: -2 },
+      { pitch: "F2", answer: "F", clef: "bass", step: -1 },
+      { pitch: "G2", answer: "G", clef: "bass", step: 0 },
+      { pitch: "A2", answer: "A", clef: "bass", step: 1 },
+      { pitch: "B2", answer: "B", clef: "bass", step: 2 },
+      { pitch: "C3", answer: "C", clef: "bass", step: 3 },
+      { pitch: "D3", answer: "D", clef: "bass", step: 4 },
+      { pitch: "E3", answer: "E", clef: "bass", step: 5 },
+      { pitch: "F3", answer: "F", clef: "bass", step: 6 },
+      { pitch: "G3", answer: "G", clef: "bass", step: 7 },
+      { pitch: "A3", answer: "A", clef: "bass", step: 8 },
+      { pitch: "B3", answer: "B", clef: "bass", step: 9 },
+      { pitch: "C4", answer: "C", clef: "bass", step: 10 },
+      { pitch: "D4", answer: "D", clef: "bass", step: 11 },
+      { pitch: "E4", answer: "E", clef: "bass", step: 12 },
     ];
 
-    const NOTE_NAME_LABELS = {
+    const BLOCKED_WITHOUT_LEDGER = new Set(["C2", "D2", "E2", "F2", "B3", "C4", "D4", "G5", "A5", "B5", "C6"]);
+    const ADVANCED_ONLY = new Set(["A3-treble", "B3-treble", "B5-treble", "C6-treble", "C2-bass", "D2-bass", "D4-bass", "E4-bass"]);
+
+    const NOTE_LABELS = {
       treble: {
         top: STAFF.trebleTop,
-        lines: [{ step: 0, letter: "E" }, { step: 2, letter: "G" }, { step: 4, letter: "B" }, { step: 6, letter: "D" }, { step: 8, letter: "F" }],
-        spaces: [{ step: 1, letter: "F" }, { step: 3, letter: "A" }, { step: 5, letter: "C" }, { step: 7, letter: "E" }],
+        lines: [[0, "E"], [2, "G"], [4, "B"], [6, "D"], [8, "F"]],
+        spaces: [[1, "F"], [3, "A"], [5, "C"], [7, "E"]],
       },
       bass: {
         top: STAFF.bassTop,
-        lines: [{ step: 0, letter: "G" }, { step: 2, letter: "B" }, { step: 4, letter: "D" }, { step: 6, letter: "F" }, { step: 8, letter: "A" }],
-        spaces: [{ step: 1, letter: "A" }, { step: 3, letter: "C" }, { step: 5, letter: "E" }, { step: 7, letter: "G" }],
+        lines: [[0, "G"], [2, "B"], [4, "D"], [6, "F"], [8, "A"]],
+        spaces: [[1, "A"], [3, "C"], [5, "E"], [7, "G"]],
       },
     };
-
-    const DIFFICULTY_PROFILES = {
-      N3: { label: "National 3", settings: { accidentals: false, ledger: false, treble: true, bass: false, advancedRange: false }, description: "Lines and spaces of the treble clef." },
-      N4: { label: "National 4", settings: { accidentals: false, ledger: true, treble: true, bass: false, advancedRange: false }, description: "C–A’ — range of notes from middle C to first ledger line A." },
-      N5: { label: "National 5", settings: { accidentals: true, ledger: true, treble: true, bass: false, advancedRange: false }, description: "Tones, semitones, accidentals — flats, sharps and naturals." },
-      H: { label: "Higher", settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: false }, description: "Bass clef — E–C — range of notes from E below the stave to middle C." },
-      AH: { label: "Advanced Higher", settings: { accidentals: true, ledger: true, treble: true, bass: true, advancedRange: true }, description: "Bass clef C–E two ledger lines below stave to two ledger lines above." },
-    };
-
-    const SITE_THEME_KEY = "mlh-theme";
-    const SITE_ACCESSIBILITY_KEY = "mlh-accessibility";
 
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
     const yForStep = (top, step) => top + STAFF.gap * 4 - step * (STAFF.gap / 2);
     const stemDown = (step) => step > 4;
 
-    function getSiteTheme() {
+    function readSiteTheme() {
       return localStorage.getItem(SITE_THEME_KEY) || "light";
     }
 
-    function getSiteAccessibility() {
+    function readSiteAccessibility() {
       try {
-        const parsed = JSON.parse(localStorage.getItem(SITE_ACCESSIBILITY_KEY) || "{}");
-        return parsed && typeof parsed === "object" ? parsed : {};
+        const value = JSON.parse(localStorage.getItem(SITE_ACCESSIBILITY_KEY) || "{}");
+        return value && typeof value === "object" ? value : {};
       } catch {
         return {};
       }
     }
 
-    function getStem(x, y, step) {
-      const down = stemDown(step);
-      return {
-        down,
-        stemX: down ? x - NOTE.rx + 0.5 : x + NOTE.rx - 0.5,
-        stemEndY: down ? y + NOTE.stemLength : y - NOTE.stemLength,
-      };
+    function settingsMatchLevel(settings, levelKey) {
+      return Object.entries(LEVELS[levelKey].settings).every(([key, value]) => Boolean(settings[key]) === Boolean(value));
     }
 
-    function settingsMatchProfile(settings, profileKey) {
-      const profile = DIFFICULTY_PROFILES[profileKey];
-      if (!profile) return false;
-      return ["accidentals", "ledger", "treble", "bass", "advancedRange"].every((key) => Boolean(settings[key]) === Boolean(profile.settings[key]));
-    }
-
-    function matchingProfileForSettings(settings) {
-      return Object.keys(DIFFICULTY_PROFILES).find((profileKey) => settingsMatchProfile(settings, profileKey)) || "Custom";
-    }
-
-    function accidentalForLetter(letter, accidentalsEnabled) {
-      if (!accidentalsEnabled) return { answer: letter, accidental: null };
-
-      const options = [{ answer: letter, accidental: null }];
-      if (SHARPS[letter]) options.push({ answer: SHARPS[letter], accidental: "♯" });
-      if (FLATS[letter]) options.push({ answer: FLATS[letter], accidental: "♭" });
-      return randomItem(options);
+    function levelForSettings(settings) {
+      return Object.keys(LEVELS).find((key) => settingsMatchLevel(settings, key)) || "Custom";
     }
 
     function possibleQuestions(settings) {
       return NOTE_DATA.filter((note) => {
-        const advancedOnly = ["B5", "C6", "D2", "C2", "A3", "B3", "D4", "E4"].includes(note.pitch);
-        const clefEnabled = (settings.treble && note.clef === "treble") || (settings.bass && note.clef === "bass");
-        if (advancedOnly && !settings.advancedRange) return false;
-        if (!clefEnabled) return false;
-        if (!settings.ledger && LEDGER_BLOCKED[note.pitch]) return false;
+        if (note.clef === "treble" && !settings.treble) return false;
+        if (note.clef === "bass" && !settings.bass) return false;
+        if (!settings.ledger && BLOCKED_WITHOUT_LEDGER.has(note.pitch)) return false;
+        if (!settings.advancedRange && ADVANCED_ONLY.has(`${note.pitch}-${note.clef}`)) return false;
         return true;
       });
     }
 
-    function createQuestion(settings, previousPitch = null) {
+    function accidentalChoice(letter, enabled) {
+      if (!enabled) return { answer: letter, accidental: null };
+      const choices = [{ answer: letter, accidental: null }];
+      if (SHARPS[letter]) choices.push({ answer: SHARPS[letter], accidental: "sharp" });
+      if (FLATS[letter]) choices.push({ answer: FLATS[letter], accidental: "flat" });
+      return randomItem(choices);
+    }
+
+    function buildQuestion(settings, previousId = null) {
       const pool = possibleQuestions(settings);
       if (!pool.length) return null;
 
-      let chosen = randomItem(pool);
-      let guard = 0;
-      while (pool.length > 1 && previousPitch && chosen.pitch === previousPitch && guard < 25) {
-        chosen = randomItem(pool);
-        guard += 1;
+      let base = randomItem(pool);
+      let attempts = 0;
+      while (pool.length > 1 && previousId === `${base.pitch}-${base.clef}` && attempts < 25) {
+        base = randomItem(pool);
+        attempts += 1;
       }
 
-      const accidental = accidentalForLetter(chosen.answer, settings.accidentals);
+      const accidental = accidentalChoice(base.answer, settings.accidentals);
       return {
         id: Math.random().toString(36).slice(2),
-        pitch: chosen.pitch,
+        baseId: `${base.pitch}-${base.clef}`,
+        pitch: base.pitch,
+        clef: base.clef,
+        step: base.step,
         answer: accidental.answer,
-        clef: chosen.clef,
-        step: chosen.step,
         accidental: accidental.accidental,
       };
     }
@@ -195,9 +201,9 @@
       const context = new AudioContextClass();
       const master = context.createGain();
       const now = context.currentTime + 0.01;
-      context.resume?.();
       master.gain.value = 0.18;
       master.connect(context.destination);
+      context.resume?.();
 
       function tone(freq, start, duration, type = "triangle", volume = 0.12) {
         const osc = context.createOscillator();
@@ -259,58 +265,40 @@
       return null;
     }
 
-    function useClickOutside(refs, handler) {
+    function AppStyles() {
       useEffect(() => {
-        function onPointerDown(event) {
-          const clickedInsideAnyRef = refs.some((ref) => ref.current?.contains(event.target));
-          if (!clickedInsideAnyRef) handler?.();
-        }
-
-        document.addEventListener("pointerdown", onPointerDown, true);
-        return () => document.removeEventListener("pointerdown", onPointerDown, true);
-      }, [refs, handler]);
-    }
-
-    function useInjectedStyles() {
-      useEffect(() => {
-        if (document.getElementById("note-identification-golden-style")) return;
-
+        if (document.getElementById("note-identification-clean-styles")) return;
         const style = document.createElement("style");
-        style.id = "note-identification-golden-style";
+        style.id = "note-identification-clean-styles";
         style.textContent = `
-          .app-icon-image { width: 100%; height: 100%; display: block; object-fit: contain; }
-          button { -webkit-tap-highlight-color: transparent; user-select: none; transition: transform .08s ease, filter .08s ease, background-color .12s ease, box-shadow .12s ease; cursor: pointer; }
-          button:hover {
-            transform: translateY(-1px) scale(1.01);
-            filter: brightness(1.08);
-            box-shadow: 0 6px 18px rgba(0,0,0,.08);
+          button {
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            cursor: pointer;
+            transition: transform .08s ease, filter .08s ease, background-color .12s ease, box-shadow .12s ease;
           }
-
-          .popover-button,
-          .popover-button:hover,
-          .popover-button:active {
-            transform: translateX(-50%) !important;
-          }
+          button:hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
           button:active { transform: scale(.96); filter: brightness(.92); }
           button:disabled { cursor: not-allowed; opacity: .82; }
           button:focus-visible { outline: 2px solid rgba(22,163,74,.35); outline-offset: 2px; }
+          .fixed-popover-button, .fixed-popover-button:hover, .fixed-popover-button:active { transform: translateX(-50%) !important; }
 
-          @keyframes medalThresholdGlow { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(250,204,21,.95)); } }
           @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } }
-          @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } }
           @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+          @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } }
           @keyframes feedbackFadeOut { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-10px); } }
           @keyframes medalPopupIn { 0% { opacity: 0; transform: translate(-50%, -8px) scale(.82); } 60% { opacity: 1; transform: translate(-50%, 2px) scale(1.06); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
           @keyframes medalPopupOut { 0% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -6px) scale(.86); } }
-
+          @keyframes medalThresholdGlow { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(250,204,21,.95)); } }
           .medal-threshold-active, .medal-threshold-active img { animation: medalThresholdGlow 1.35s ease-in-out infinite; font-weight: 900; }
+
           .app-large-text { font-size: 112.5%; }
           .app-reduce-motion *, .app-reduce-motion *::before, .app-reduce-motion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
           .app-high-contrast { filter: contrast(1.15); }
 
           .app-dark header, .app-dark main, .app-dark .bg-white { background-color: #1c1917 !important; color: #f5f5f4 !important; border-color: #44403c !important; }
           .app-dark .bg-stone-50, .app-dark .bg-stone-100 { background-color: #292524 !important; color: #f5f5f4 !important; }
-          .app-dark .text-stone-500, .app-dark .text-stone-600, .app-dark .text-stone-700, .app-dark .text-white, .app-dark .text-stone-900, .app-dark .text-black { color: #e7e5e4 !important; }
+          .app-dark .text-stone-500, .app-dark .text-stone-600, .app-dark .text-stone-700, .app-dark .text-stone-800, .app-dark .text-stone-900, .app-dark .text-black { color: #e7e5e4 !important; }
           .app-dark .border-stone-200, .app-dark .border-stone-300 { border-color: #57534e !important; }
           .app-dark svg rect[fill="white"] { fill: #fafaf9 !important; }
           .app-dark svg { color: #0c0a09; }
@@ -339,214 +327,86 @@
         `;
         document.head.appendChild(style);
       }, []);
+      return null;
     }
 
-    function LedgerLines({ x, step, clef, colour = "currentColor", enabled = true }) {
-      if (!enabled) return null;
-
-      const top = clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
-      const lines = [];
-      if (step <= -2) {
-        lines.push(yForStep(top, -2));
-        if (step <= -4) lines.push(yForStep(top, -4));
-      }
-      if (step >= 10) {
-        lines.push(yForStep(top, 10));
-        if (step >= 12) lines.push(yForStep(top, 12));
-      }
-
-      return (
-        <g pointerEvents="none">
-          {lines.map((y) => <line key={y} x1={x - 24} x2={x + 24} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />)}
-        </g>
-      );
-    }
-
-    function Accidental({ accidental, x, y }) {
-      if (!accidental) return null;
-
-      const isSharp = accidental === "♯";
-      const src = isSharp ? ASSET.sharp : ASSET.flat;
-      const ledgerOffset = y < 95 || y > 285 ? -6 : 0;
-
-      return (
-        <image
-          href={src}
-          x={isSharp ? x - 43 + ledgerOffset : x - 54 + ledgerOffset}
-          y={y - 27}
-          width={isSharp ? 28 : 31}
-          height={54}
-          preserveAspectRatio="xMidYMid meet"
-          pointerEvents="none"
-        />
-      );
-    }
-
-    function CrotchetNote({ note, colour = "currentColor", ledgerEnabled = true }) {
-      if (!note) return null;
-
-      const top = note.clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
-      const x = NOTE.x;
-      const y = yForStep(top, note.step);
-      const down = stemDown(note.step);
-
-      return (
-        <g pointerEvents="none">
-          <LedgerLines x={x} step={note.step} clef={note.clef} colour={colour} enabled={ledgerEnabled} />
-          <Accidental accidental={note.accidental} x={x} y={y} />
-          <image
-            href={ASSET.crotchet}
-            x={x - 15}
-            y={y - 70}
-            width="74"
-            height="140"
-            preserveAspectRatio="xMidYMid meet"
-            opacity="1"
-            style={{
-              transformBox: "fill-box",
-              transformOrigin: "center",
-              transform: down ? "rotate(180deg)" : "none",
-              filter: colour === COLOUR.green ? "sepia(1) saturate(5) hue-rotate(65deg)" : colour === COLOUR.red ? "sepia(1) saturate(6) hue-rotate(300deg)" : "none"
-            }}
-          />
-        </g>
-      );
-    }
-
-    function Staff({ top, clef, visible }) {
-      if (!visible) return null;
-
-      const isTreble = clef === "treble";
-      return (
-        <g>
-          {[0, 1, 2, 3, 4].map((line) => (
-            <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
-          ))}
-          <line x1={STAFF.right} x2={STAFF.right} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />
-          <image
-            href={isTreble ? ASSET.trebleClef : ASSET.bassClef}
-            x={STAFF.left + (isTreble ? 12 : 17)}
-            y={top + (isTreble ? -36 : 3)}
-            width={isTreble ? 86 : 74}
-            height={isTreble ? 155 : 80}
-            preserveAspectRatio="xMidYMid meet"
-            pointerEvents="none"
-          />
-        </g>
-      );
-    }
-
-    function HelpLabels({ visible, settings }) {
-      if (!visible) return null;
-
-      const lineLabelX = STAFF.left - 11;
-      const spaceLabelX = STAFF.left + 7;
-      const entries = [];
-      if (settings.treble) entries.push(["treble", NOTE_NAME_LABELS.treble]);
-      if (settings.bass) entries.push(["bass", NOTE_NAME_LABELS.bass]);
-
-      return (
-        <g fontSize="14" fontFamily="system-ui, sans-serif" fontWeight="700" dominantBaseline="middle" pointerEvents="none" fill="black" textAnchor="middle">
-          {entries.flatMap(([clef, data]) => [
-            ...data.lines.map((note) => <text key={`${clef}-line-${note.step}`} x={lineLabelX} y={yForStep(data.top, note.step) + 5}>{note.letter}</text>),
-            ...data.spaces.map((note) => <text key={`${clef}-space-${note.step}`} x={spaceLabelX} y={yForStep(data.top, note.step) + 5}>{note.letter}</text>),
-          ])}
-        </g>
-      );
-    }
-
-    function ScoreArea({ question, settings, showHelp, feedback, activeProfile, mobileOnlyActiveClef }) {
-      const colour = feedback?.correct === true ? COLOUR.green : feedback?.correct === false ? COLOUR.red : "currentColor";
-      const dimNotation = false;
-      const ahFocusTrebleOnly = activeProfile === "AH" && question?.clef === "treble" && ["A3", "B3"].includes(question.pitch);
-      const ahFocusBassOnly = activeProfile === "AH" && question?.clef === "bass" && ["D4", "E4"].includes(question.pitch);
-
-      const displaySettings = mobileOnlyActiveClef
-        ? { ...settings, treble: question?.clef === "treble", bass: question?.clef === "bass" }
-        : {
-            ...settings,
-            treble: ahFocusTrebleOnly ? true : ahFocusBassOnly ? false : settings.treble,
-            bass: ahFocusBassOnly ? true : ahFocusTrebleOnly ? false : settings.bass,
-          };
-
-      const visibleSystemCount = Number(Boolean(displaySettings.treble)) + Number(Boolean(displaySettings.bass));
-      const singleSystemOffset = !mobileOnlyActiveClef && visibleSystemCount === 1
-        ? displaySettings.treble ? (STAFF.bassTop - STAFF.trebleTop) / 2 : -(STAFF.bassTop - STAFF.trebleTop) / 2
-        : 0;
-
-      return (
-        <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
-          <rect width={SVG.width} height={SVG.height} fill="white" />
-          <g
-            opacity={dimNotation ? 0.42 : 1}
-            className={`mobile-music-scale ${mobileOnlyActiveClef && question?.clef === "bass" ? "mobile-bass-focus" : ""}`}
-            transform={`translate(0 ${singleSystemOffset - 24})`}
-          >
-            <Staff top={STAFF.trebleTop} clef="treble" visible={displaySettings.treble} />
-            <Staff top={STAFF.bassTop} clef="bass" visible={displaySettings.bass} />
-            <HelpLabels visible={showHelp} settings={displaySettings} />
-            <CrotchetNote note={question} colour={colour} ledgerEnabled={settings.ledger} />
-          </g>
-        </svg>
-      );
-    }
-
-    function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, streakMedal, confettiKey, resetScore, autoShowMedals }) {
-      const [openPopover, setOpenPopover] = useState(null);
-      const panelRef = useRef(null);
+    function useSitePreferences() {
+      const [darkMode, setDarkMode] = useState(readSiteTheme() === "dark");
+      const [accessibility, setAccessibility] = useState(readSiteAccessibility);
 
       useEffect(() => {
-        function closePopovers(event) {
-          if (!panelRef.current?.contains(event.target)) setOpenPopover(null);
-        }
-        document.addEventListener("pointerdown", closePopovers);
-        return () => document.removeEventListener("pointerdown", closePopovers);
+        const sync = () => {
+          setDarkMode(readSiteTheme() === "dark");
+          setAccessibility(readSiteAccessibility());
+        };
+        sync();
+        window.addEventListener("storage", sync);
+        window.addEventListener("mlh-theme-change", sync);
+        window.addEventListener("mlh-accessibility-change", sync);
+        return () => {
+          window.removeEventListener("storage", sync);
+          window.removeEventListener("mlh-theme-change", sync);
+          window.removeEventListener("mlh-accessibility-change", sync);
+        };
       }, []);
 
+      return { darkMode, accessibility };
+    }
+
+    function useClickAway(ref, handler) {
+      useEffect(() => {
+        const onPointerDown = (event) => {
+          if (!ref.current?.contains(event.target)) handler?.();
+        };
+        document.addEventListener("pointerdown", onPointerDown, true);
+        return () => document.removeEventListener("pointerdown", onPointerDown, true);
+      }, [ref, handler]);
+    }
+
+    function AppIcon() {
+      return (
+        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 text-black shadow-sm">
+          <img src={ASSET.appIcon} alt="" aria-hidden="true" className="block h-full w-full object-contain" />
+        </div>
+      );
+    }
+
+    function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, medal, confettiKey, resetScore, autoShowMedals }) {
+      const [popover, setPopover] = useState(null);
+      const ref = useRef(null);
+      useClickAway(ref, () => setPopover(null));
+
       const scoreFill = clamp(accuracy, 0, 100);
-      const scoreFillColour = scoreFill < 50 ? "rgba(220, 38, 38, 0.38)" : scoreFill < 70 ? "rgba(255, 120, 0, 0.42)" : "rgba(22, 163, 74, 0.38)";
+      const scoreColour = scoreFill < 50 ? "rgba(220,38,38,.38)" : scoreFill < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)";
       const thresholds = [
-        { tier: "bronze", value: 10, icon: ASSET.bronze, textClass: "text-amber-700", active: streak >= 10 && streak < 15 },
-        { tier: "silver", value: 15, icon: ASSET.silver, textClass: "text-slate-500", active: streak >= 15 && streak < 20 },
-        { tier: "gold", value: 20, icon: ASSET.gold, textClass: "text-yellow-500", active: streak >= 20 && streak < 30 },
-        { tier: "diamond", value: 30, icon: ASSET.diamond, textClass: "text-cyan-500", active: streak >= 30 },
+        { tier: "bronze", value: 10, icon: ASSET.bronze, className: "text-amber-700", active: streak >= 10 && streak < 15 },
+        { tier: "silver", value: 15, icon: ASSET.silver, className: "text-slate-500", active: streak >= 15 && streak < 20 },
+        { tier: "gold", value: 20, icon: ASSET.gold, className: "text-yellow-500", active: streak >= 20 && streak < 30 },
+        { tier: "diamond", value: 30, icon: ASSET.diamond, className: "text-cyan-500", active: streak >= 30 },
       ];
 
       return (
-        <div ref={panelRef} className="grid w-full grid-cols-2 gap-2 lg:w-auto lg:grid-cols-[112px_98px] sm:lg:grid-cols-[124px_108px]">
+        <div ref={ref} className="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-[112px_98px] lg:grid-cols-[124px_108px]">
           <section
             role="button"
             tabIndex="0"
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent("close-level-menu"));
-              setOpenPopover((value) => value === "score" ? null : "score");
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                setOpenPopover((value) => value === "score" ? null : "score");
-              }
-            }}
-            className={`relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${openPopover === "score" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""}`}
+            onClick={() => setPopover((value) => value === "score" ? null : "score")}
+            className={`relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${popover === "score" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""}`}
           >
             <div className="absolute inset-0 overflow-hidden rounded-xl">
-              <div className="absolute bottom-0 left-0 right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreFillColour }} />
+              <div className="absolute bottom-0 -left-[2px] right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreColour }} />
             </div>
             <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
-              <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Score</div>
+              <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Score</div>
               <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{correct}/{attempted}</div>
               <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Accuracy: {accuracy}%</div>
             </div>
-            {openPopover === "score" && (
+            {popover === "score" && (
               <button
                 type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  resetScore();
-                  setOpenPopover(null);
-                }}
-                className="popover-button absolute left-1/2 top-full z-50 mt-2 flex min-w-[112px] -translate-x-1/2 items-center justify-center rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-lg"
+                onClick={(event) => { event.stopPropagation(); resetScore(); setPopover(null); }}
+                className="fixed-popover-button absolute left-1/2 top-full z-50 mt-2 flex min-w-[112px] items-center justify-center rounded-xl border border-red-600 bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-lg"
                 style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
               >
                 Reset
@@ -558,17 +418,8 @@
             role="button"
             tabIndex="0"
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent("close-level-menu"));
-              setOpenPopover((value) => value === "streak" ? null : "streak");
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                setOpenPopover((value) => value === "streak" ? null : "streak");
-              }
-            }}
-            className={`relative h-[58px] overflow-visible rounded-xl border border-stone-200 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${openPopover === "streak" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""} ${streakMedal?.bg ?? "bg-stone-50"}`}
+            onClick={() => setPopover((value) => value === "streak" ? null : "streak")}
+            className={`relative h-[58px] overflow-visible rounded-xl border border-stone-200 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${medal?.bg || "bg-stone-50"} ${popover === "streak" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""}`}
           >
             {confettiKey > 0 && (
               <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
@@ -588,21 +439,22 @@
               </div>
             )}
 
-            <div className="relative z-10 flex h-full items-center justify-center px-3 text-center sm:px-4">
-              <div className="flex flex-col items-center justify-center pt-[1px] text-center">
-                <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
-                <div className={`mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px] ${streakMedal?.text ?? "text-black"}`}>{streak}</div>
-                <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
-              </div>
+            <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
+              <div className="text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
+              <div className={`mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px] ${medal?.text || "text-black"}`}>{streak}</div>
+              <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
             </div>
 
-            {(openPopover === "streak" || autoShowMedals) && (
-              <div className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]" style={{ animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}>
+            {(popover === "streak" || autoShowMedals) && (
+              <div
+                className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]"
+                style={{ animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
+              >
                 <div className="flex items-end justify-center gap-3">
                   {thresholds.map((item) => (
                     <div key={item.tier} className={`flex flex-col items-center justify-end ${item.active ? "medal-threshold-active" : ""}`}>
                       <img src={item.icon} alt="" aria-hidden="true" className="h-[22.8px] w-[22.8px] object-contain" />
-                      <span className={`mt-1 text-[11px] font-semibold leading-none ${item.textClass}`}>{item.value}</span>
+                      <span className={`mt-1 text-[11px] font-semibold leading-none ${item.className}`}>{item.value}</span>
                     </div>
                   ))}
                 </div>
@@ -613,13 +465,169 @@
       );
     }
 
-    function FeedbackBanner({ feedback, fading = false }) {
+    function Staff({ clef, top, visible }) {
+      if (!visible) return null;
+      const isTreble = clef === "treble";
+      return (
+        <g>
+          {[0, 1, 2, 3, 4].map((line) => (
+            <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="url(#staffLineFade)" strokeWidth="1.5" />
+          ))}
+          <image
+            href={isTreble ? ASSET.trebleClef : ASSET.bassClef}
+            x={STAFF.left + 12}
+            y={top + (isTreble ? -37 : -2)}
+            width={isTreble ? 86 : 65.5}
+            height={isTreble ? 155 : 70}
+            preserveAspectRatio="xMidYMid meet"
+            pointerEvents="none"
+          />
+        </g>
+      );
+    }
+
+    function LedgerLines({ note, colour, enabled }) {
+      if (!note || !enabled) return null;
+      const top = note.clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
+      const lines = [];
+      if (note.step <= -2) lines.push(-2);
+      if (note.step <= -4) lines.push(-4);
+      if (note.step >= 10) lines.push(10);
+      if (note.step >= 12) lines.push(12);
+
+      return (
+        <g pointerEvents="none">
+          {lines.map((step) => {
+            const y = yForStep(top, step);
+            return <line key={step} x1={NOTE.x - 24} x2={NOTE.x + 24} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />;
+          })}
+        </g>
+      );
+    }
+
+    function Accidental({ note, colour }) {
+      if (!note?.accidental) return null;
+      const top = note.clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
+      const y = yForStep(top, note.step);
+      const isSharp = note.accidental === "sharp";
+      const ledgerOffset = y < 95 || y > 285 ? -6 : 0;
+      const filter = colour === COLOUR.green
+        ? "sepia(1) saturate(5) hue-rotate(65deg)"
+        : colour === COLOUR.red
+          ? "sepia(1) saturate(6) hue-rotate(300deg)"
+          : "none";
+
+      return (
+        <image
+          href={isSharp ? ASSET.sharp : ASSET.flat}
+          x={isSharp ? NOTE.x - 41 + ledgerOffset : NOTE.x - 38 + ledgerOffset}
+          y={isSharp ? y - 27 : y - 35}
+          width="28"
+          height={isSharp ? 54 : 49}
+          preserveAspectRatio="xMidYMid meet"
+          pointerEvents="none"
+          style={{ filter }}
+        />
+      );
+    }
+
+    function Crotchet({ note, colour, ledgerEnabled }) {
+      if (!note) return null;
+      const top = note.clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
+      const y = yForStep(top, note.step);
+      const down = stemDown(note.step);
+      const filter = colour === COLOUR.green
+        ? "sepia(1) saturate(5) hue-rotate(65deg)"
+        : colour === COLOUR.red
+          ? "sepia(1) saturate(6) hue-rotate(300deg)"
+          : "none";
+
+      return (
+        <g pointerEvents="none">
+          <LedgerLines note={note} colour={colour} enabled={ledgerEnabled} />
+          <Accidental note={note} colour={colour} />
+          <image
+            href={ASSET.crotchet}
+            x={NOTE.x - 19}
+            y={y - 62}
+            width="38.5"
+            height="72"
+            preserveAspectRatio="xMidYMid meet"
+            style={{
+              transformBox: "fill-box",
+              transformOrigin: "center",
+              transform: down ? "translateY(52px) rotate(180deg)" : "none",
+              filter,
+            }}
+          />
+        </g>
+      );
+    }
+
+    function HelpLabels({ visible, settings }) {
+      if (!visible) return null;
+      const items = [];
+      if (settings.treble) items.push(["treble", NOTE_LABELS.treble]);
+      if (settings.bass) items.push(["bass", NOTE_LABELS.bass]);
+
+      return (
+        <g fontSize="14" fontFamily="system-ui, sans-serif" fontWeight="700" dominantBaseline="middle" pointerEvents="none" fill="black" textAnchor="middle">
+          {items.flatMap(([clef, data]) => [
+            ...data.lines.map(([step, letter]) => <text key={`${clef}-line-${step}`} x={STAFF.left - 11} y={yForStep(data.top, step) + 5}>{letter}</text>),
+            ...data.spaces.map(([step, letter]) => <text key={`${clef}-space-${step}`} x={STAFF.left + 7} y={yForStep(data.top, step) + 5}>{letter}</text>),
+          ])}
+        </g>
+      );
+    }
+
+    function ScoreArea({ question, settings, showNoteNames, feedback, activeLevel, mobileOnlyActiveClef }) {
+      const colour = feedback?.correct === true ? COLOUR.green : feedback?.correct === false ? COLOUR.red : "currentColor";
+      const ahTrebleFocus = activeLevel === "AH" && question?.clef === "treble" && ["A3", "B3"].includes(question.pitch);
+      const ahBassFocus = activeLevel === "AH" && question?.clef === "bass" && ["D4", "E4"].includes(question.pitch);
+      const displaySettings = mobileOnlyActiveClef
+        ? { ...settings, treble: question?.clef === "treble", bass: question?.clef === "bass" }
+        : {
+            ...settings,
+            treble: ahTrebleFocus ? true : ahBassFocus ? false : settings.treble,
+            bass: ahBassFocus ? true : ahTrebleFocus ? false : settings.bass,
+          };
+      const visibleSystems = Number(displaySettings.treble) + Number(displaySettings.bass);
+      const centreOffset = !mobileOnlyActiveClef && visibleSystems === 1
+        ? displaySettings.treble ? (STAFF.bassTop - STAFF.trebleTop) / 2 : -(STAFF.bassTop - STAFF.trebleTop) / 2
+        : 0;
+
+      return (
+        <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
+          <defs>
+            <linearGradient id="staffLineFade" x1="247" y1="0" x2="689" y2="0" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="currentColor" stopOpacity="1" />
+              <stop offset="84%" stopColor="currentColor" stopOpacity="1" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <rect width={SVG.width} height={SVG.height} fill="white" />
+          <g
+            className={`mobile-music-scale ${mobileOnlyActiveClef && question?.clef === "bass" ? "mobile-bass-focus" : ""}`}
+            transform={`translate(0 ${centreOffset - 24})`}
+          >
+            <Staff clef="treble" top={STAFF.trebleTop} visible={displaySettings.treble} />
+            <Staff clef="bass" top={STAFF.bassTop} visible={displaySettings.bass} />
+            <HelpLabels visible={showNoteNames} settings={displaySettings} />
+            <Crotchet note={question} colour={colour} ledgerEnabled={settings.ledger} />
+          </g>
+        </svg>
+      );
+    }
+
+    function FeedbackBanner({ feedback, fading }) {
       if (!feedback) return null;
       return (
         <div className="relative flex w-full items-center justify-center text-center">
-          <div className={`flex min-h-[40px] sm:min-h-[44px] w-[58px] flex-col items-center justify-center rounded-xl border bg-white/92 px-2 py-1 text-sm font-semibold sm:w-auto sm:px-2.5 text-xl font-bold shadow-[0_10px_28px_rgba(0,0,0,0.14)] backdrop-blur-md translate-y-[40px] sm:translate-y-0 ${feedback.correct ? "border-green-500 text-green-600" : "border-red-500 text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}>
-            <span>{feedback.correct ? "Correct" : "Incorrect"}</span>
-            {!feedback.correct && <span className="mt-0.5 inline-flex items-center gap-0 text-sm font-semibold text-black"><span className="-mt-[2px] text-center text-[11px] font-semibold leading-tight text-black">Click or tap anywhere to continue</span></span>}
+          <div
+            className={`flex h-10 min-w-[58px] max-w-[calc(100vw-96px)] flex-col items-center justify-center rounded-xl border bg-white/92 px-3 py-0 text-[10px] font-semibold backdrop-blur-md translate-y-[60px] sm:min-h-[44px] sm:w-auto sm:translate-y-0 sm:px-2.5 sm:py-1 sm:text-xl sm:font-bold ${feedback.correct ? "border-green-500 text-green-600" : "border-red-500 text-red-600"}`}
+            style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}
+          >
+            <span className="leading-none text-[18px] font-black sm:text-xl">{feedback.correct ? "Correct" : "Incorrect"}</span>
           </div>
         </div>
       );
@@ -648,18 +656,12 @@
       );
     }
 
-    function MenuRows({ settings, setSettings, makeNewQuestion, showHelp, setShowHelp, setActiveProfile, resetProgress }) {
-      function updateSetting(key) {
+    function CustomiseMenu({ settings, setSettings, showNoteNames, setShowNoteNames, onSettingsChanged }) {
+      function toggle(key) {
         setSettings((current) => {
           const next = { ...current, [key]: !current[key] };
-          if (!next.treble && !next.bass) {
-            if (key === "treble") next.bass = true;
-            else next.treble = true;
-          }
-
-          setActiveProfile(matchingProfileForSettings(next));
-          resetProgress();
-          window.setTimeout(() => makeNewQuestion(next), 0);
+          if (!next.treble && !next.bass) next[key === "treble" ? "bass" : "treble"] = true;
+          onSettingsChanged(next);
           return next;
         });
       }
@@ -668,325 +670,241 @@
         <div className="flex w-full min-w-0 flex-col sm:inline-flex sm:w-max sm:min-w-[260px]">
           <ToggleRow
             label="Accidentals"
-            icon={
-              <span className="relative left-[2px] flex items-center justify-center gap-[1px]">
-                <img src={ASSET.sharp} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" />
-                <img src={ASSET.flat} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" />
-              </span>
-            }
+            icon={<span className="flex items-center justify-center gap-[1px]"><img src={ASSET.sharp} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" /><img src={ASSET.flat} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" /></span>}
             checked={settings.accidentals}
-            onChange={() => updateSetting("accidentals")}
+            onChange={() => toggle("accidentals")}
           />
-          <ToggleRow label="Ledger Lines" icon={<LedgerIcon />} checked={settings.ledger} onChange={() => updateSetting("ledger")} />
-          <ToggleRow label="Treble Clef" icon={<img src={ASSET.trebleClef} alt="" aria-hidden="true" className="h-[29px] w-[22px] object-contain" />} checked={settings.treble} onChange={() => updateSetting("treble")} />
-          <ToggleRow label="Bass Clef" icon={<img src={ASSET.bassClef} alt="" aria-hidden="true" className="h-[24px] w-[22px] object-contain" />} checked={settings.bass} onChange={() => updateSetting("bass")} />
-          <ToggleRow label="Show Note Names" icon={<span className="text-[10px] font-black tracking-tight">abc</span>} checked={showHelp} onChange={() => setShowHelp((value) => !value)} />
+          <ToggleRow label="Ledger Lines" icon={<LedgerIcon />} checked={settings.ledger} onChange={() => toggle("ledger")} />
+          <ToggleRow label="Treble Clef" icon={<img src={ASSET.trebleClef} alt="" aria-hidden="true" className="h-[29px] w-[22px] object-contain" />} checked={settings.treble} onChange={() => toggle("treble")} />
+          <ToggleRow label="Bass Clef" icon={<img src={ASSET.bassClef} alt="" aria-hidden="true" className="h-[24px] w-[22px] object-contain" />} checked={settings.bass} onChange={() => toggle("bass")} />
+          <ToggleRow label="Show Note Names" icon={<span className="relative -left-[4px] text-[12px] font-black tracking-tight">ABC</span>} checked={showNoteNames} onChange={() => setShowNoteNames((value) => !value)} />
         </div>
       );
     }
 
-    function AppIcon() {
+    function LevelMenu({ activeLevel, applyLevel }) {
       return (
-        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 text-black shadow-sm">
-          <img src={ASSET.appIcon} alt="" className="app-icon-image" aria-hidden="true" />
+        <div className="flex w-full min-w-0 flex-col gap-2">
+          {Object.entries(LEVELS).map(([key, level]) => {
+            const active = activeLevel === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => applyLevel(key)}
+                className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
+              >
+                <div className="flex min-w-0 items-center justify-between gap-3 text-stone-900">
+                  <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">{key}</div>
+                  <div className="flex min-w-0 flex-1 flex-col justify-center pr-2">
+                    <div className="truncate pb-[1px] text-[13px] font-black leading-[1.2]">{level.label}</div>
+                    <div className="mt-[2px] truncate pb-[2px] text-[11px] leading-[1.25] text-stone-600">{level.description}</div>
+                  </div>
+                  {active && <img src={ASSET.tick} alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 object-contain" />}
+                </div>
+              </button>
+            );
+          })}
         </div>
       );
     }
 
     function AnswerButton({ value, question, selectedAnswer, feedback, onChoose }) {
-      const isCorrectAnswer = feedback && value === question?.answer;
-      const isWrongSelected = feedback && value === selectedAnswer && value !== question?.answer;
-      const isAccidental = value.includes("#") || value.includes("b");
-      const defaultClass = isAccidental ? "border-stone-800 bg-stone-900 text-white hover:bg-black" : "border-stone-300 bg-white text-black hover:bg-stone-100";
-      const stateClass = isCorrectAnswer ? "border-green-600 bg-green-600 text-white" : isWrongSelected ? "border-red-600 bg-red-600 text-white" : defaultClass;
+      const correctAnswer = feedback && value === question?.answer;
+      const wrongSelected = feedback && value === selectedAnswer && value !== question?.answer;
+      const accidental = value.includes("#") || value.includes("b");
+      const defaultClass = accidental ? "border-stone-800 bg-stone-900 text-white hover:bg-black" : "border-stone-300 bg-white text-black hover:bg-stone-100";
+      const stateClass = correctAnswer ? "border-green-600 bg-green-600 text-white" : wrongSelected ? "border-red-600 bg-red-600 text-white" : defaultClass;
 
       return (
         <button type="button" disabled={Boolean(feedback)} onClick={() => onChoose(value)} className={`flex min-h-[48px] items-center justify-center rounded-xl border px-1 text-[1rem] font-bold sm:min-h-[46px] sm:px-3 sm:text-[1.05rem] ${stateClass}`}>
-          {value}
+          {value.includes("#") ? (
+            <span className="flex items-center justify-center gap-[1px]"><span>{value.replace("#", "")}</span><img src={ASSET.sharp} alt="" aria-hidden="true" className="h-[15px] w-[8px] object-contain brightness-0 invert" /></span>
+          ) : value.includes("b") ? (
+            <span className="flex items-center justify-center gap-[1px]"><span>{value.replace("b", "")}</span><img src={ASSET.flat} alt="" aria-hidden="true" className="h-[15px] w-[8px] object-contain brightness-0 invert" /></span>
+          ) : value}
         </button>
       );
     }
 
-    function AnswerPlaceholder() {
-      return <div className="min-h-[48px] rounded-xl border border-transparent sm:min-h-[46px]" />;
-    }
-
-    function AnswerGrid({ settings, question, selectedAnswer, feedback, onChoose }) {
+    function AnswerGrid({ accidentals, question, selectedAnswer, feedback, onChoose }) {
+      const placeholder = (key) => <div key={key} className="min-h-[48px] rounded-xl border border-transparent sm:min-h-[46px]" />;
       return (
-        <div className="grid gap-2 mobile-answer-grid">
-          {settings.accidentals && (
+        <div className="grid gap-2">
+          {accidentals && (
             <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-              {LETTERS.map((letter) => SHARPS[letter]
-                ? <AnswerButton key={SHARPS[letter]} value={SHARPS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />
-                : <AnswerPlaceholder key={`sharp-placeholder-${letter}`} />
-              )}
+              {LETTERS.map((letter) => SHARPS[letter] ? <AnswerButton key={SHARPS[letter]} value={SHARPS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} /> : placeholder(`sharp-${letter}`))}
             </div>
           )}
-
           <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
             {LETTERS.map((letter) => <AnswerButton key={letter} value={letter} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />)}
           </div>
-
-          {settings.accidentals && (
+          {accidentals && (
             <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-              {LETTERS.map((letter) => FLATS[letter]
-                ? <AnswerButton key={FLATS[letter]} value={FLATS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} />
-                : <AnswerPlaceholder key={`flat-placeholder-${letter}`} />
-              )}
+              {LETTERS.map((letter) => FLATS[letter] ? <AnswerButton key={FLATS[letter]} value={FLATS[letter]} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={onChoose} /> : placeholder(`flat-${letter}`))}
             </div>
           )}
-        </div>
-      );
-    }
-
-    function HelpModal({ onClose }) {
-      const levelHelp = [
-        { title: "National 3", subtitle: "Lines and spaces of the treble clef.", body: "Look at whether the note is on a line or in a space. Use the treble clef patterns to work out the letter name: line notes are E, G, B, D, F and space notes are F, A, C, E. Choose the matching letter button." },
-        { title: "National 4", subtitle: "C–A’ — range of notes from middle C to first ledger line A.", body: "This level adds ledger-line notes around the treble stave. Find a note you know on the stave, then count up or down one step at a time: line, space, line, space. Ledger lines continue the same pattern beyond the normal five lines." },
-        { title: "National 5", subtitle: "Tones, semitones, accidentals — flats, sharps and naturals.", body: "Identify the letter name first, then check whether there is a sharp or flat beside the note. A sharp means choose the # answer, a flat means choose the b answer, and no accidental means choose the plain letter." },
-        { title: "Higher", subtitle: "Bass clef — E–C — range of notes from E below the stave to middle C.", body: "This level includes treble and bass clef. Check the clef first before answering. In bass clef, the line notes are G, B, D, F, A and the space notes are A, C, E, G. Count carefully from a note you recognise." },
-        { title: "Advanced Higher", subtitle: "Bass clef C–E two ledger lines below stave to two ledger lines above.", body: "This level uses the widest range, including extra ledger-line notes in treble and bass clef. Start by checking the clef, then count from the nearest secure note. Watch for accidentals before choosing your final answer." },
-      ];
-
-      return (
-        <div className="fixed inset-0 flex items-start justify-center overflow-hidden bg-black/50 p-4 pt-[120px] sm:pt-[140px]" style={{ zIndex: 2147483647 }} onClick={onClose}>
-          <div className="max-h-[calc(100vh-160px)] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl sm:max-h-[calc(100vh-180px)]" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between gap-4 border-b border-stone-200 px-6 py-5">
-              <h2 className="text-2xl font-black tracking-tight text-stone-900">Help: Note Identification</h2>
-              <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-semibold text-stone-700">×</button>
-            </div>
-
-            <div className="max-h-[calc(100vh-260px)] space-y-4 overflow-y-auto px-6 py-5 text-sm leading-relaxed text-stone-700 sm:max-h-[calc(100vh-280px)]">
-              {levelHelp.map((level) => (
-                <section key={level.title} className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                  <h3 className="text-base font-black text-stone-900">{level.title}</h3>
-                  <p className="mt-1 text-sm font-bold leading-snug text-stone-700">{level.subtitle}</p>
-                  <p className="mt-2 text-sm leading-relaxed text-stone-700">{level.body}</p>
-                </section>
-              ))}
-            </div>
-          </div>
         </div>
       );
     }
 
     function App() {
-      useInjectedStyles();
+      const { darkMode, accessibility } = useSitePreferences();
+      const menuRef = useRef(null);
+      const timerRef = useRef(null);
+      const fadeTimerRef = useRef(null);
 
-      const startingProfile = useMemo(() => {
-        const requestedLevel = new URLSearchParams(window.location.search).get("level");
-        return DIFFICULTY_PROFILES[requestedLevel] ? requestedLevel : "N3";
+      const initialLevel = useMemo(() => {
+        const requested = new URLSearchParams(window.location.search).get("level");
+        return LEVELS[requested] ? requested : "N3";
       }, []);
 
-      const startingSettings = useMemo(() => ({ ...DIFFICULTY_PROFILES[startingProfile].settings }), [startingProfile]);
-
-      const [darkMode, setDarkMode] = useState(getSiteTheme() === "dark");
-      const [accessibility, setAccessibility] = useState(getSiteAccessibility);
-      const [activeProfile, setActiveProfile] = useState(startingProfile);
-      const [settings, setSettings] = useState(startingSettings);
-      const [question, setQuestion] = useState(() => createQuestion(startingSettings));
+      const initialSettings = useMemo(() => ({ ...LEVELS[initialLevel].settings }), [initialLevel]);
+      const [activeLevel, setActiveLevel] = useState(initialLevel);
+      const [settings, setSettings] = useState(initialSettings);
+      const [question, setQuestion] = useState(() => buildQuestion(initialSettings));
       const [questionVisible, setQuestionVisible] = useState(true);
-      const [levelOpen, setLevelOpen] = useState(false);
-      const [levelMenuMode, setLevelMenuMode] = useState("levels");
-      const [guideOpen, setGuideOpen] = useState(false);
-      const [showHelp, setShowHelp] = useState(false);
+      const [menuOpen, setMenuOpen] = useState(false);
+      const [menuMode, setMenuMode] = useState("levels");
+      const [showNoteNames, setShowNoteNames] = useState(false);
       const [feedback, setFeedback] = useState(null);
       const [feedbackFading, setFeedbackFading] = useState(false);
       const [selectedAnswer, setSelectedAnswer] = useState(null);
-      const [consecutiveIncorrect, setConsecutiveIncorrect] = useState(0);
-      const [showGuideTooltip, setShowGuideTooltip] = useState(false);
       const [correct, setCorrect] = useState(0);
       const [attempted, setAttempted] = useState(0);
       const [streak, setStreak] = useState(0);
       const [bestStreak, setBestStreak] = useState(0);
       const [confettiKey, setConfettiKey] = useState(0);
       const [autoShowMedals, setAutoShowMedals] = useState(false);
-      const [skipStreak, setSkipStreak] = useState(0);
       const [mobileOnlyActiveClef, setMobileOnlyActiveClef] = useState(window.innerWidth < 640);
 
-      const timerRef = useRef(null);
-      const desktopLevelRef = useRef(null);
-
-      useClickOutside([desktopLevelRef], () => levelOpen && setLevelOpen(false));
+      useClickAway(menuRef, () => setMenuOpen(false));
 
       const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-      const streakMedal = getStreakMedal(streak);
-      const appPreferenceClasses = [
+      const medal = getStreakMedal(streak);
+      const appClasses = [
         darkMode ? "app-dark bg-stone-950 text-stone-100" : "bg-stone-50 text-black",
         accessibility.largeText ? "app-large-text" : "",
         accessibility.reduceMotion ? "app-reduce-motion" : "",
         accessibility.highContrast ? "app-high-contrast" : "",
       ].filter(Boolean).join(" ");
 
-      function resetProgress({ includeBest = true } = {}) {
+      const clearTimers = useCallback(() => {
+        window.clearTimeout(timerRef.current);
+        window.clearTimeout(fadeTimerRef.current);
+      }, []);
+
+      const resetScoreOnly = useCallback(() => {
         setCorrect(0);
         setAttempted(0);
         setStreak(0);
-        if (includeBest) setBestStreak(0);
         setConfettiKey(0);
-        setConsecutiveIncorrect(0);
-      }
+      }, []);
 
-      function makeNewQuestion(nextSettings = settings, skipped = false) {
-        window.clearTimeout(timerRef.current);
+      const resetAllProgress = useCallback(() => {
+        resetScoreOnly();
+        setBestStreak(0);
+      }, [resetScoreOnly]);
 
-        if (skipped) {
-          setSkipStreak((value) => {
-            const next = value + 1;
-            if (next >= 1) setStreak(0);
-            return next;
-          });
-        } else {
-          setSkipStreak(0);
-        }
-
+      const makeNewQuestion = useCallback((nextSettings = settings, skipped = false) => {
+        clearTimers();
+        if (skipped) setStreak(0);
         setQuestionVisible(false);
         window.setTimeout(() => {
-          setQuestion((current) => createQuestion(nextSettings, current?.pitch));
+          setQuestion((current) => buildQuestion(nextSettings, current?.baseId));
           setSelectedAnswer(null);
           setFeedback(null);
           setFeedbackFading(false);
           setQuestionVisible(true);
         }, 260);
-      }
+      }, [clearTimers, settings]);
 
-      function applyProfile(profileKey) {
-        const profile = DIFFICULTY_PROFILES[profileKey];
-        if (!profile) return;
-
-        const nextSettings = { ...profile.settings };
-        setActiveProfile(profileKey);
+      const applyLevel = useCallback((levelKey) => {
+        const nextSettings = { ...LEVELS[levelKey].settings };
+        setActiveLevel(levelKey);
         setSettings(nextSettings);
-        resetProgress();
+        resetAllProgress();
         makeNewQuestion(nextSettings);
-      }
+        setMenuOpen(false);
+      }, [makeNewQuestion, resetAllProgress]);
 
-      function resetScore() {
-        setCorrect(0);
-        setAttempted(0);
-        setStreak(0);
-        setConfettiKey(0);
+      const handleSettingsChanged = useCallback((nextSettings) => {
+        setActiveLevel(levelForSettings(nextSettings));
+        resetAllProgress();
+        makeNewQuestion(nextSettings);
+      }, [makeNewQuestion, resetAllProgress]);
+
+      const resetScore = useCallback(() => {
+        resetScoreOnly();
         makeNewQuestion(settings);
-      }
+      }, [makeNewQuestion, resetScoreOnly, settings]);
 
-      function fadeToNextQuestion() {
+      const fadeIncorrectToNextQuestion = useCallback(() => {
         if (!feedback || feedback.correct || feedbackFading) return;
         setFeedbackFading(true);
-        window.setTimeout(() => makeNewQuestion(settings), 280);
-      }
+        fadeTimerRef.current = window.setTimeout(() => makeNewQuestion(settings), 280);
+      }, [feedback, feedbackFading, makeNewQuestion, settings]);
 
-      function scoreAnswer(answer) {
+      const scoreAnswer = useCallback((answer) => {
         if (!question || feedback) return;
 
+        clearTimers();
         const isCorrect = answer === question.answer;
         const nextStreak = isCorrect ? streak + 1 : 0;
 
-        window.clearTimeout(timerRef.current);
         setSelectedAnswer(answer);
         setAttempted((value) => value + 1);
         setCorrect((value) => value + (isCorrect ? 1 : 0));
         setStreak(nextStreak);
         setBestStreak((value) => Math.max(value, nextStreak));
-        setSkipStreak(0);
         setFeedback({ correct: isCorrect });
-        setConsecutiveIncorrect((value) => isCorrect ? 0 : value + 1);
         playFeedbackSound(isCorrect);
 
         if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
-          const medal = getStreakMedal(nextStreak);
+          const nextMedal = getStreakMedal(nextStreak);
           setConfettiKey((value) => value + 1);
           setAutoShowMedals(true);
           window.setTimeout(() => setAutoShowMedals(false), 2000);
-          window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
+          window.setTimeout(() => playFeedbackSound(true, true, nextMedal.sound), 180);
         }
 
         if (isCorrect) {
-          window.setTimeout(() => setFeedbackFading(true), 1700);
+          fadeTimerRef.current = window.setTimeout(() => setFeedbackFading(true), 1700);
           timerRef.current = window.setTimeout(() => makeNewQuestion(settings), 2000);
         }
-      }
+      }, [clearTimers, feedback, makeNewQuestion, question, settings, streak]);
 
       useEffect(() => {
-        function handleResize() {
-          setMobileOnlyActiveClef(window.innerWidth < 640);
-        }
-        handleResize();
-        window.addEventListener("resize", handleResize);
-        return () => window.removeEventListener("resize", handleResize);
+        const onResize = () => setMobileOnlyActiveClef(window.innerWidth < 640);
+        onResize();
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
       }, []);
 
-      useEffect(() => {
-        function closeMenus() {
-          setLevelOpen(false);
-          setConsecutiveIncorrect(0);
-        }
-        window.addEventListener("close-level-menu", closeMenus);
-        return () => window.removeEventListener("close-level-menu", closeMenus);
-      }, []);
-
-      useEffect(() => {
-        function syncSitePreferences() {
-          setDarkMode(getSiteTheme() === "dark");
-          setAccessibility(getSiteAccessibility());
-        }
-
-        syncSitePreferences();
-        window.addEventListener("storage", syncSitePreferences);
-        window.addEventListener("mlh-theme-change", syncSitePreferences);
-        window.addEventListener("mlh-accessibility-change", syncSitePreferences);
-
-        return () => {
-          window.removeEventListener("storage", syncSitePreferences);
-          window.removeEventListener("mlh-theme-change", syncSitePreferences);
-          window.removeEventListener("mlh-accessibility-change", syncSitePreferences);
-          window.clearTimeout(timerRef.current);
-        };
-      }, []);
+      useEffect(() => () => clearTimers(), [clearTimers]);
 
       return (
-        <div className={`overflow-x-hidden pb-10 md:pb-12 ${appPreferenceClasses}`}>
+        <div className={`overflow-x-hidden pb-10 md:pb-12 ${appClasses}`}>
+          <AppStyles />
+
           <header className="fixed left-0 right-0 top-0 z-[1000] w-full overflow-visible border-b border-stone-200 bg-white/95 py-2 shadow-sm backdrop-blur sm:py-3">
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 overflow-visible px-3 sm:px-4 md:px-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 overflow-visible px-3 sm:px-4 md:flex-row md:items-center md:justify-between md:px-8">
               <div className="flex items-center gap-3 sm:gap-4">
-                <div className="relative shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLevelOpen(false);
-                      setGuideOpen((value) => !value);
-                      setConsecutiveIncorrect(0);
-                      setShowGuideTooltip(false);
-                    }}
-                    onMouseEnter={() => setShowGuideTooltip(true)}
-                    onMouseLeave={() => setShowGuideTooltip(false)}
-                    className="rounded-2xl"
-                    aria-label="Open guide"
-                  >
-                    <AppIcon />
-                  </button>
-
-                  {(consecutiveIncorrect >= 3 || showGuideTooltip) && !guideOpen && (
-                    <div className="absolute left-1/2 top-full z-[100000] mt-2 flex -translate-x-1/2 flex-col items-center" style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}>
-                      <div className="h-0 w-0 border-l-[8px] border-r-[8px] border-b-[10px] border-l-transparent border-r-transparent border-b-black" />
-                      <div className="w-max max-w-[72px] rounded-xl border border-black bg-black px-3 py-2 text-center text-xs font-semibold text-white shadow-lg">Help</div>
-                    </div>
-                  )}
-                </div>
-
+                <AppIcon />
                 <div className="flex h-14 flex-col justify-center">
-                  <h1 className="relative top-[1px] text-xl font-semibold leading-none tracking-tight sm:text-2xl md:text-3xl">Note Identification</h1>
-                  <p className="mt-0 whitespace-nowrap text-[0.64rem] leading-[1.05] text-stone-600 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap">Identify note names in the treble and bass clef.</p>
+                  <h1 className="relative top-[1px] text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl">Note Identification</h1>
+                  <p className="mt-0 whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap">Identify note names in the treble and bass clef.</p>
                 </div>
               </div>
 
-              <div className="relative z-50 flex flex-wrap items-center gap-2 overflow-visible lg:ml-auto lg:justify-end">
+              <div className="relative z-50 flex flex-wrap items-center gap-2 overflow-visible md:ml-auto md:justify-end">
                 <ScoreStreakPanel
                   correct={correct}
                   attempted={attempted}
                   accuracy={accuracy}
                   streak={streak}
                   bestStreak={bestStreak}
-                  streakMedal={streakMedal}
+                  medal={medal}
                   confettiKey={confettiKey}
                   resetScore={resetScore}
                   autoShowMedals={autoShowMedals}
@@ -995,82 +913,40 @@
             </div>
           </header>
 
-          <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[164px] lg:pt-[104px]">
+          <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]">
             <main
               className="relative z-0 min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-4 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
-              onPointerDown={() => {
-                if (consecutiveIncorrect >= 3 || showGuideTooltip) {
-                  setConsecutiveIncorrect(0);
-                  setShowGuideTooltip(false);
-                }
-                if (feedback && !feedback.correct) fadeToNextQuestion();
-              }}
+              onPointerDown={() => { if (feedback && !feedback.correct) fadeIncorrectToNextQuestion(); }}
             >
-              <div className="relative z-50 mb-2.5 flex items-center justify-between gap-2 overflow-visible" ref={desktopLevelRef}>
-                <div className="relative flex items-center gap-2 overflow-visible">
-                  <div className="group relative overflow-visible">
+              <div className="relative z-50 mb-2.5 flex items-center justify-between gap-2 overflow-visible">
+                <div className="relative flex flex-1 items-center gap-2 overflow-visible sm:flex-none" ref={menuRef}>
+                  <div className="relative overflow-visible">
                     <button
                       type="button"
-                      onClick={() => {
-                        setLevelOpen((value) => !(value && levelMenuMode === "levels"));
-                        setLevelMenuMode("levels");
-                      }}
-                      className="flex h-10 w-[58px] items-center justify-center gap-1 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-1.5"
+                      onClick={() => { setMenuMode("levels"); setMenuOpen((open) => !(open && menuMode === "levels")); }}
+                      className="flex h-10 w-[58px] items-center justify-center gap-1 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5"
                     >
-                      <img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain scale-[1.06]" />
-                      <>
-                        <span className="sm:hidden">{activeProfile}</span>
-                        <span className="hidden sm:inline">
-                          {DIFFICULTY_PROFILES[activeProfile]?.label || activeProfile}
-                        </span>
-                      </>
+                      <img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain scale-[1.06]" />
+                      <span className="relative -left-[5px] sm:hidden">{activeLevel}</span>
+                      <span className="relative -left-[3px] hidden sm:inline">{LEVELS[activeLevel]?.label || activeLevel}</span>
                     </button>
 
-                    {levelOpen && levelMenuMode === "levels" && (
-                      <div className="absolute left-0 top-full z-50 mt-2 inline-block w-full rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit">
+                    {menuOpen && menuMode === "levels" && (
+                      <div className="absolute left-0 top-full z-50 mt-2 inline-block w-[calc(100vw-48px)] max-w-[360px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit sm:max-w-none">
                         <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
                           <div className="text-center text-base font-semibold text-stone-800">Level</div>
                         </div>
-
-                        <div className="flex w-full min-w-0 flex-col gap-2">
-                          {Object.keys(DIFFICULTY_PROFILES).map((profileKey) => {
-                            const profile = DIFFICULTY_PROFILES[profileKey];
-                            const active = activeProfile === profileKey;
-                            return (
-                              <button
-                                key={profileKey}
-                                type="button"
-                                onClick={() => {
-                                  applyProfile(profileKey);
-                                  setLevelOpen(false);
-                                }}
-                                className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
-                              >
-                                <div className="flex min-w-0 items-center justify-between gap-3 text-stone-900">
-                                  <div className="flex min-h-[36px] min-w-[42px] items-center justify-center text-[1.28rem] font-black leading-none tracking-tight text-stone-800">{profileKey}</div>
-                                  <div className="flex min-w-0 flex-1 flex-col justify-center pr-2">
-                                    <div className="truncate pb-[1px] text-[13px] font-black leading-[1.2]">{profile.label}</div>
-                                    <div className="mt-[2px] truncate pb-[2px] text-[11px] leading-[1.25] text-stone-600">{profile.description}</div>
-                                  </div>
-                                  {active && <img src={ASSET.tick} alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 object-contain" />}
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
+                        <LevelMenu activeLevel={activeLevel} applyLevel={applyLevel} />
                       </div>
                     )}
                   </div>
 
-                  <div className="group relative overflow-visible">
+                  <div className="relative overflow-visible">
                     <button
                       type="button"
                       onClick={() => {
-                        if (levelOpen && levelMenuMode === "customise") setLevelOpen(false);
-                        else {
-                          setLevelOpen(true);
-                          setLevelMenuMode("customise");
-                        }
+                        if (menuOpen && menuMode === "customise") setMenuOpen(false);
+                        else { setMenuMode("customise"); setMenuOpen(true); }
                       }}
                       className="flex h-10 w-[58px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5"
                     >
@@ -1078,66 +954,74 @@
                       <span className="hidden sm:inline">Customise</span>
                     </button>
 
-                    {levelOpen && levelMenuMode === "customise" && (
-                      <div className="absolute left-0 top-full z-50 mt-2 inline-block w-full rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit">
+                    {menuOpen && menuMode === "customise" && (
+                      <div className="absolute -left-[66px] top-full z-50 mt-2 inline-block w-[calc(100vw-48px)] max-w-[360px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:left-0 sm:w-fit sm:max-w-none">
                         <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
                           <div className="text-center text-base font-semibold text-stone-800">Customise</div>
                         </div>
-
-                        <MenuRows
+                        <CustomiseMenu
                           settings={settings}
                           setSettings={setSettings}
-                          makeNewQuestion={makeNewQuestion}
-                          showHelp={showHelp}
-                          setShowHelp={setShowHelp}
-                          setActiveProfile={setActiveProfile}
-                          resetProgress={resetProgress}
+                          showNoteNames={showNoteNames}
+                          setShowNoteNames={setShowNoteNames}
+                          onSettingsChanged={handleSettingsChanged}
                         />
                       </div>
                     )}
                   </div>
-                </div>
 
-                <div className="group relative">
-                  <button
-                    type="button"
-                    onClick={() => makeNewQuestion(settings, true)}
-                    className="flex h-10 w-[58px] shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:min-w-[84px] sm:px-2"
-                  >
-                    <div className="flex translate-x-[4px] items-center justify-center gap-1">
-                      <span className="hidden sm:inline">Skip</span>
-
-                      <img
-                        src={ASSET.next}
-                        alt=""
-                        aria-hidden="true"
-                        className="h-[27.8px] w-[27.8px] object-contain"
-                      />
+                  {feedback && (
+                    <div className="flex h-10 flex-1 items-center justify-center sm:hidden">
+                      <FeedbackBanner feedback={feedback} fading={feedbackFading} />
                     </div>
-                  </button>
+                  )}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => makeNewQuestion(settings, true)}
+                  className="flex h-10 w-[58px] shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5"
+                >
+                  <div className="flex w-full items-center justify-center sm:relative sm:left-[4px] sm:w-auto sm:gap-1">
+                    <span className="hidden sm:inline">Skip</span>
+                    <img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />
+                  </div>
+                </button>
               </div>
 
-              <div className="pointer-events-none absolute inset-x-0 top-[14px] z-40 flex justify-center overflow-visible">
-                <FeedbackBanner feedback={feedback} fading={feedbackFading} />
-              </div>
+              {feedback && (
+                <div className="pointer-events-none absolute left-1/2 top-[36px] -translate-y-1/2 z-[80] hidden -translate-x-1/2 sm:block">
+                  <FeedbackBanner feedback={feedback} fading={feedbackFading} />
+                </div>
+              )}
 
               <div className={`relative top-[56px] mx-auto flex w-full items-center justify-center transition-opacity duration-300 sm:-top-[55px] ${questionVisible ? "opacity-100" : "opacity-0"}`} style={{ minHeight: "calc(100% - 210px)" }}>
-                <ScoreArea question={question} settings={settings} showHelp={showHelp} feedback={feedback} activeProfile={activeProfile} mobileOnlyActiveClef={mobileOnlyActiveClef} />
+                <ScoreArea
+                  question={question}
+                  settings={settings}
+                  showNoteNames={showNoteNames}
+                  feedback={feedback}
+                  activeLevel={activeLevel}
+                  mobileOnlyActiveClef={mobileOnlyActiveClef}
+                />
               </div>
 
-              <div className="absolute bottom-[24px] left-3 right-3 z-10 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-[-118px] sm:p-4 md:-mt-[136px] md:mx-3">
+              <div className="absolute bottom-[24px] left-3 right-3 z-10 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-[-118px] sm:p-4 md:mx-3 md:-mt-[136px]">
                 <div className="space-y-2 text-stone-900">
                   <p className="text-base font-semibold leading-tight">Identify the <strong>note</strong>.</p>
                   {!question && <p className="text-sm font-medium text-red-700">No available notes. Enable at least one clef.</p>}
                 </div>
 
                 <div className="mt-4">
-                  <AnswerGrid settings={settings} question={question} selectedAnswer={selectedAnswer} feedback={feedback} onChoose={scoreAnswer} />
+                  <AnswerGrid
+                    accidentals={settings.accidentals}
+                    question={question}
+                    selectedAnswer={selectedAnswer}
+                    feedback={feedback}
+                    onChoose={scoreAnswer}
+                  />
                 </div>
               </div>
-
-              {guideOpen && <HelpModal onClose={() => setGuideOpen(false)} />}
             </main>
           </div>
         </div>
