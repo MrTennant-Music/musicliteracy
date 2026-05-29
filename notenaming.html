@@ -35,6 +35,10 @@
     };
 
     const SVG = { width: 920, height: 420 };
+    const MOBILE_SVG_VIEWBOX = {
+      treble: { x: 220, y: 37, width: 520, height: 240 },
+      bass: { x: 220, y: 178, width: 520, height: 240 },
+    };
     const STAFF = { left: 247, right: 689, trebleTop: 84, bassTop: 225, gap: 18.9 };
     const NOTE = { x: 468, rx: 12.2, stemLength: 62 };
     const LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
@@ -140,6 +144,13 @@
       },
     };
 
+    const SCORE_TILE_CLASS = "relative h-[58px] rounded-xl border border-stone-200 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px]";
+    const SCORE_TILE_ACTIVE_CLASS = "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg";
+    const TOOLBAR_BUTTON_CLASS = "flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5";
+    const MENU_PANEL_CLASS = "absolute top-full z-50 mt-2 inline-block w-[calc(100vw-48px)] max-w-[360px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit sm:max-w-none";
+    const MENU_TITLE_CLASS = "relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8";
+    const POPOVER_ANIMATION_IN = "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)";
+
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
     const yForStep = (top, step) => top + STAFF.gap * 4 - step * (STAFF.gap / 2);
@@ -164,6 +175,12 @@
 
     function levelForSettings(settings) {
       return Object.keys(LEVELS).find((key) => settingsMatchLevel(settings, key)) || "Custom";
+    }
+
+    function handleButtonKeyDown(event, onActivate) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      onActivate();
     }
 
     function possibleQuestions(settings) {
@@ -284,6 +301,7 @@
         const style = document.createElement("style");
         style.id = "note-identification-clean-styles";
         style.textContent = `
+          /* Buttons */
           button {
             -webkit-tap-highlight-color: transparent;
             user-select: none;
@@ -334,25 +352,123 @@
               box-shadow: none !important;
             }
           }
-          button:disabled { cursor: not-allowed; opacity:.82; }
-          button:focus-visible { outline: 2px solid rgba(22,163,74,.35); outline-offset: 2px; }.fixed-popover-button,.fixed-popover-button:hover,.fixed-popover-button:active { transform: translateX(-50%) !important; }
+          button:disabled {
+            cursor: not-allowed;
+            opacity: .82;
+          }
 
+          button:focus-visible {
+            outline: 2px solid rgba(22,163,74,.35);
+            outline-offset: 2px;
+          }
+
+          .fixed-popover-button,
+          .fixed-popover-button:hover,
+          .fixed-popover-button:active {
+            transform: translateX(-50%) !important;
+          }
+
+          /* Motion */
           @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } }
           @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
           @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } }
           @keyframes feedbackFadeOut { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-10px); } }
           @keyframes medalPopupIn { 0% { opacity: 0; transform: translate(-50%, -8px) scale(.82); } 60% { opacity: 1; transform: translate(-50%, 2px) scale(1.06); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
           @keyframes medalPopupOut { 0% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -6px) scale(.86); } }
-          @keyframes medalThresholdGlow { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(250,204,21,.95)); } }.medal-threshold-active,.medal-threshold-active img { animation: medalThresholdGlow 1.35s ease-in-out infinite; font-weight: 900; }.app-large-text { font-size: 112.5%; }.app-reduce-motion *,.app-reduce-motion *::before,.app-reduce-motion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }.app-high-contrast { filter: contrast(1.15); }.app-dark header,.app-dark main,.app-dark.bg-white { background-color: #1c1917 !important; color: #f5f5f4 !important; border-color: #44403c !important; }.app-dark.bg-stone-50,.app-dark.bg-stone-100 { background-color: #292524 !important; color: #f5f5f4 !important; }.app-dark.text-stone-500,.app-dark.text-stone-600,.app-dark.text-stone-700,.app-dark.text-stone-800,.app-dark.text-stone-900,.app-dark.text-black { color: #e7e5e4 !important; }.app-dark.border-stone-200,.app-dark.border-stone-300 { border-color: #57534e !important; }.app-dark svg rect[fill="white"] { fill: #fafaf9 !important; }.app-dark svg { color: #0c0a09; }.footer { width: min(1180px, calc(100% - 36px)); margin: 0 auto; padding: 22px 0 32px; border-top: 1px solid #e2e8f0; color: #475569; font-size: .86rem; }.footer-grid { display: grid; grid-template-columns: 235px 1fr 1fr 1fr; gap: 42px; align-items: start; }.footer-brand { display: flex; align-items: flex-start; }.footer-wordmark { width: 220px; height: auto; display: block; }.footer h4 { margin: 0 0 10px; color: #0f172a; font-size: .92rem; font-weight: 800; }.footer p { margin: 0; line-height: 1.35; }.footer a { color: #475569; text-decoration: none; overflow-wrap: anywhere; }.footer a:hover,.footer a:focus-visible { text-decoration: underline; }
+          @keyframes medalThresholdGlow { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(250,204,21,.95)); } }
+
+          .medal-threshold-active,
+          .medal-threshold-active img {
+            animation: medalThresholdGlow 1.35s ease-in-out infinite;
+            font-weight: 900;
+          }
+
+          /* Accessibility and theme */
+          .app-large-text { font-size: 112.5%; }
+          .app-high-contrast { filter: contrast(1.15); }
+          .app-reduce-motion *,
+          .app-reduce-motion *::before,
+          .app-reduce-motion *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+          }
+
+          .app-dark header,
+          .app-dark main,
+          .app-dark.bg-white {
+            background-color: #1c1917 !important;
+            color: #f5f5f4 !important;
+            border-color: #44403c !important;
+          }
+
+          .app-dark.bg-stone-50,
+          .app-dark.bg-stone-100 {
+            background-color: #292524 !important;
+            color: #f5f5f4 !important;
+          }
+
+          .app-dark.text-stone-500,
+          .app-dark.text-stone-600,
+          .app-dark.text-stone-700,
+          .app-dark.text-stone-800,
+          .app-dark.text-stone-900,
+          .app-dark.text-black {
+            color: #e7e5e4 !important;
+          }
+
+          .app-dark.border-stone-200,
+          .app-dark.border-stone-300 {
+            border-color: #57534e !important;
+          }
+
+          .app-dark svg rect[fill="white"] { fill: #fafaf9 !important; }
+          .app-dark svg { color: #0c0a09; }
+
+          /* Shared footer */
+          .footer {
+            width: min(1180px, calc(100% - 36px));
+            margin: 0 auto;
+            padding: 22px 0 32px;
+            border-top: 1px solid #e2e8f0;
+            color: #475569;
+            font-size: .86rem;
+          }
+
+          .footer-grid {
+            display: grid;
+            grid-template-columns: 235px 1fr 1fr 1fr;
+            gap: 42px;
+            align-items: start;
+          }
+
+          .footer-brand { display: flex; align-items: flex-start; }
+          .footer-wordmark { width: 220px; height: auto; display: block; }
+          .footer h4 { margin: 0 0 10px; color: #0f172a; font-size: .92rem; font-weight: 800; }
+          .footer p { margin: 0; line-height: 1.35; }
+          .footer a { color: #475569; text-decoration: none; overflow-wrap: anywhere; }
+          .footer a:hover,
+          .footer a:focus-visible { text-decoration: underline; }
           .footer .text-link,
           .footer .text-link:visited,
           .footer .text-link:hover,
           .footer .text-link:focus-visible {
             color: #2563eb !important;
             font-weight: 700;
-          }.footer.text-link { color: #2563eb; font-weight: 700; }.copyright { margin-top: 28px; text-align: center; font-size: .8rem; }.modal,.modal h2,.modal p,.modal li,.modal button {
+          }
+          .footer.text-link { color: #2563eb; font-weight: 700; }
+          .copyright { margin-top: 28px; text-align: center; font-size: .8rem; }
+
+          /* Modal */
+          .modal,
+          .modal h2,
+          .modal p,
+          .modal li,
+          .modal button {
             font-family: Arial, Helvetica, sans-serif;
-          }.overlay {
+          }
+
+          .overlay {
             position: fixed;
             inset: 0;
             z-index: 1000;
@@ -362,9 +478,13 @@
             padding: 24px;
             background: rgba(15,23,42,.72);
             backdrop-filter: blur(6px);
-          }.overlay.is-open {
+          }
+
+          .overlay.is-open {
             display: flex;
-          }.modal {
+          }
+
+          .modal {
             color: #0f172a;
             position: relative;
             width: min(100%, 560px);
@@ -374,7 +494,9 @@
             background: #fff;
             border-radius: 24px;
             box-shadow: 0 24px 60px rgba(0,0,0,.25);
-          }.close-btn {
+          }
+
+          .close-btn {
             position: absolute;
             top: 14px;
             right: 14px;
@@ -386,25 +508,47 @@
             color: #1e40af;
             font-size: 1.3rem;
             font-weight: 700;
-          }.modal h2,.modal h3,.modal h4 {
+          }
+
+          .modal h2,
+          .modal h3,
+          .modal h4 {
             color: #0f172a;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             font-weight: 800;
             font-size: 24px;
             line-height: 1.15;
             margin-bottom: 16px;
-          }.modal p,.modal li {
+          }
+
+          .modal p,
+          .modal li {
             margin-bottom: 14px;
             line-height: 1.65;
-          }.modal p {
+          }
+
+          .modal p {
             color: #475569;
             line-height: 1.55;
           }
 
-          @media (max-width: 980px) {.footer-grid { grid-template-columns: 1fr; }.footer-brand { justify-content: center; }.footer-wordmark { transform: translateX(18px); }
+          @media (max-width: 980px) {
+            .footer-grid { grid-template-columns: 1fr; }
+            .footer-brand { justify-content: center; }
+            .footer-wordmark { transform: translateX(18px); }
           }
 
-          @media (max-width: 639px) {.mobile-music-scale { transform: translate(-313px, -18px) scale(1.68); }.mobile-bass-focus { transform: translate(-313px, -252px) scale(1.68); }
+          @media (max-width: 639px) {
+            .score-reset-button,
+            .score-reset-button:hover,
+            .score-reset-button:focus,
+            .score-reset-button:active {
+              left: -1px !important;
+              right: -1px !important;
+              width: auto !important;
+              min-width: 0 !important;
+              transform: none !important;
+            }
           }
 
           .phone-landscape-lock {
@@ -496,14 +640,18 @@
         { tier: "diamond", value: 30, icon: ASSET.diamond, className: "text-cyan-500", active: streak >= 30 },
       ];
 
+      const togglePopover = (name) => setPopover((value) => value === name ? null : name);
+      const popoverOutAnimation = "medalPopupOut .24s ease-in 1.76s forwards";
+
       return (
         <div ref={ref} className="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-[112px_98px] lg:grid-cols-[124px_108px]">
           <section
             role="button"
             tabIndex="0"
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => setPopover((value) => value === "score" ? null : "score")}
-            className={`relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${popover === "score" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""}`}
+            onClick={() => togglePopover("score")}
+            onKeyDown={(event) => handleButtonKeyDown(event, () => togglePopover("score"))}
+            className={`${SCORE_TILE_CLASS} bg-stone-50 ${popover === "score" ? SCORE_TILE_ACTIVE_CLASS : ""}`}
           >
             <div className="absolute inset-0 overflow-hidden rounded-xl">
               <div className="absolute bottom-0 -left-[2px] right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreColour }} />
@@ -517,8 +665,8 @@
               <button
                 type="button"
                 onClick={(event) => { event.stopPropagation(); resetScore(); setPopover(null); }}
-                className="fixed-popover-button absolute left-1/2 top-full z-50 mt-2 flex min-w-[112px] items-center justify-center rounded-xl border border-[#dc2626] bg-[#dc2626] px-3 py-2 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(0,0,0,0.28)]"
-                style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
+                className="fixed-popover-button score-reset-button absolute left-1/2 top-full z-50 mt-2 flex min-w-[112px] w-full items-center justify-center rounded-xl border border-[#dc2626] bg-[#dc2626] px-3 py-2 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(0,0,0,0.28)] sm:w-auto"
+                style={{ animation: POPOVER_ANIMATION_IN }}
               >
                 Reset
               </button>
@@ -529,8 +677,9 @@
             role="button"
             tabIndex="0"
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => setPopover((value) => value === "streak" ? null : "streak")}
-            className={`relative h-[58px] overflow-visible rounded-xl border border-stone-200 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px] ${medal?.bg || "bg-stone-50"} ${popover === "streak" ? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg" : ""}`}
+            onClick={() => togglePopover("streak")}
+            onKeyDown={(event) => handleButtonKeyDown(event, () => togglePopover("streak"))}
+            className={`${SCORE_TILE_CLASS} overflow-visible ${medal?.bg || "bg-stone-50"} ${popover === "streak" ? SCORE_TILE_ACTIVE_CLASS : ""}`}
           >
             {confettiKey > 0 && (
               <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
@@ -559,7 +708,7 @@
             {(popover === "streak" || autoShowMedals) && (
               <div
                 className="fixed-popover-button absolute left-1/2 top-full z-50 mt-2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]"
-                style={{ animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
+                style={{ animation: autoShowMedals ? `${POPOVER_ANIMATION_IN}, ${popoverOutAnimation}` : POPOVER_ANIMATION_IN }}
               >
                 <div className="flex items-end justify-center gap-3">
                   {thresholds.map((item) => (
@@ -698,9 +847,12 @@
       const centreOffset = !mobileOnlyActiveClef && visibleSystems === 1
         ? displaySettings.treble ? (STAFF.bassTop - STAFF.trebleTop) / 2 : -(STAFF.bassTop - STAFF.trebleTop) / 2
         : 0;
+      const viewBox = mobileOnlyActiveClef
+        ? MOBILE_SVG_VIEWBOX[question?.clef === "bass" ? "bass" : "treble"]
+        : { x: 0, y: 0, width: SVG.width, height: SVG.height };
 
       return (
-        <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
+        <svg viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
           <defs>
             <linearGradient id="staffLineFade" x1="247" y1="0" x2="689" y2="0" gradientUnits="userSpaceOnUse">
               <stop offset="0%" stopColor="currentColor" stopOpacity="1" />
@@ -716,8 +868,7 @@
           </defs>
           <rect width={SVG.width} height={SVG.height} fill="white" />
           <g
-            className={`mobile-music-scale ${mobileOnlyActiveClef && question?.clef === "bass" ? "mobile-bass-focus" : ""}`}
-            transform={`translate(0 ${centreOffset - 24})`}
+            transform={`translate(0 ${mobileOnlyActiveClef ? 0 : centreOffset - 24})`}
           >
             <Staff clef="treble" top={STAFF.trebleTop} visible={displaySettings.treble} />
             <Staff clef="bass" top={STAFF.bassTop} visible={displaySettings.bass} />
@@ -1144,7 +1295,7 @@
                     <button
                       type="button"
                       onClick={() => { setMenuMode("levels"); setMenuOpen((open) => !(open && menuMode === "levels")); }}
-                      className={`flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5 ${activeLevel === "Custom" ? "gap-0" : "gap-1"}`}
+                      className={`${TOOLBAR_BUTTON_CLASS} ${activeLevel === "Custom" ? "gap-0" : "gap-1"}`}
                     >
                       <img src={ASSET.level} alt="" aria-hidden="true" className={`h-[26px] w-[28px] object-contain scale-[1.06] ${activeLevel === "Custom" ? "translate-x-0" : ""}`} />
                       <span className="relative -left-[5px] sm:hidden">{activeLevel === "Custom" ? "" : activeLevel}</span>
@@ -1152,8 +1303,8 @@
                     </button>
 
                     {menuOpen && menuMode === "levels" && (
-                      <div className="absolute left-0 top-full z-50 mt-2 inline-block w-[calc(100vw-48px)] max-w-[360px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit sm:max-w-none">
-                        <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
+                      <div className={`${MENU_PANEL_CLASS} left-0`}>
+                        <div className={MENU_TITLE_CLASS}>
                           <div className="text-center text-base font-semibold text-stone-800">Level</div>
                         </div>
                         <LevelMenu activeLevel={activeLevel} applyLevel={applyLevel} />
@@ -1168,15 +1319,15 @@
                         if (menuOpen && menuMode === "customise") setMenuOpen(false);
                         else { setMenuMode("customise"); setMenuOpen(true); }
                       }}
-                      className="flex h-10 w-[58px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5"
+                      className={`${TOOLBAR_BUTTON_CLASS} gap-2`}
                     >
                       <img src={ASSET.customise} alt="" aria-hidden="true" className="h-[20.7px] w-[20.7px] object-contain" />
                       <span className="hidden sm:inline">Customise</span>
                     </button>
 
                     {menuOpen && menuMode === "customise" && (
-                      <div className="absolute -left-[66px] top-full z-50 mt-2 inline-block w-[calc(100vw-48px)] max-w-[360px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:left-0 sm:w-fit sm:max-w-none">
-                        <div className="relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8">
+                      <div className={`${MENU_PANEL_CLASS} -left-[66px] sm:left-0`}>
+                        <div className={MENU_TITLE_CLASS}>
                           <div className="text-center text-base font-semibold text-stone-800">Customise</div>
                         </div>
                         <CustomiseMenu
@@ -1198,7 +1349,7 @@
                 <button
                   type="button"
                   onClick={() => makeNewQuestion(settings, true)}
-                  className="flex h-10 w-[58px] shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5"
+                  className={`${TOOLBAR_BUTTON_CLASS} shrink-0`}
                 >
                   <div className="flex w-full items-center justify-center sm:relative sm:left-[4px] sm:w-auto sm:gap-1">
                     <span className="hidden sm:inline">Skip</span>
@@ -1206,7 +1357,7 @@
                   </div>
                 </button>
               </div>
-<div
+              <div
                 className={`mx-auto flex w-full items-center justify-center transition-opacity duration-300 sm:relative sm:top-[0px] ${mobileOnlyActiveClef ? "absolute left-0 right-0" : "relative top-[56px]"} ${questionVisible ? "opacity-100" : "opacity-0"}`}
                 style={mobileOnlyActiveClef ? { top: "54px", bottom: `${questionPanelHeight + 12}px` } : { minHeight: "calc(100% - 210px)" }}
               >
