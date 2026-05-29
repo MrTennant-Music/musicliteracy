@@ -4,18 +4,43 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Key Signatures</title>
+  <link rel="icon" type="image/svg+xml" href="https://mrtennant-music.github.io/musicliteracy/key-signatures-icon.svg" />
+  <link rel="apple-touch-icon" href="https://mrtennant-music.github.io/musicliteracy/key-signatures-icon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
-<body>
+<body class="overflow-x-hidden bg-stone-50">
   <div id="root"></div>
 
   <script type="text/babel">
 const { useEffect, useMemo, useRef, useState } = React;
 
+const ASSET = {
+  appIcon: "https://mrtennant-music.github.io/musicliteracy/key-signatures-icon.svg",
+  level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
+  customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
+  next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
+  tick: "https://mrtennant-music.github.io/musicliteracy/tick.svg",
+  bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
+  silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
+  gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
+  diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
+  trebleClef: "https://mrtennant-music.github.io/musicliteracy/trebleclef.svg?v=1.1",
+  sharp: "https://mrtennant-music.github.io/musicliteracy/sharp.svg?v=1.1",
+  flat: "https://mrtennant-music.github.io/musicliteracy/flat.svg?v=1.1",
+  crotchet: "https://mrtennant-music.github.io/musicliteracy/crotchet.svg?v=1.1",
+  quaver: "https://mrtennant-music.github.io/musicliteracy/quaver.svg?v=1.1",
+  quaverDown: "https://mrtennant-music.github.io/musicliteracy/quaverdown.svg?v=1.1",
+  minim: "https://mrtennant-music.github.io/musicliteracy/minim.svg?v=1.1",
+  semibreve: "https://mrtennant-music.github.io/musicliteracy/semibreve.svg?v=1.1",
+  dottedCrotchet: "https://mrtennant-music.github.io/musicliteracy/dottedcrotchet.svg?v=1.1",
+  time44: "https://mrtennant-music.github.io/musicliteracy/44.svg?v=1.1",
+};
+
 const SVG = { width: 1280, height: 560 };
+const MOBILE_SVG_VIEWBOX = { x: 36, y: 116, width: 1188, height: 210 };
 
 const STAFF = {
   left: 80,
@@ -36,19 +61,45 @@ const NOTE = {
 
 const BAR_COUNT = 3;
 const BUILD_KEY_CHANCE = 0.5;
-const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
 
 const COLOUR = {
+  black: "#000000",
   green: "#16a34a",
   red: "#dc2626",
 };
 
-const KEYS = [
-  { id: "c-major", label: "C major", signature: "none", help: "C major has no sharps or flats." },
-  { id: "a-minor", label: "A minor", signature: "none", help: "A minor has no sharps or flats. It can include a raised G sharp in the music." },
-  { id: "g-major", label: "G major", signature: "sharp", help: "G major has one sharp: F sharp." },
-  { id: "f-major", label: "F major", signature: "flat", help: "F major has one flat: B flat." },
-];
+const rgbaFromHex = (hex, alpha) => {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+const SITE_THEME_KEY = "mlh-theme";
+const SITE_ACCESSIBILITY_KEY = "mlh-accessibility";
+const LEVELS = {
+  N5: {
+    label: "National 5",
+    description: "Scales and key signatures — C major, G major, F major, A minor.",
+    keyIds: ["c-major", "a-minor", "g-major", "f-major"],
+  },
+  AH: {
+    label: "Advanced Higher",
+    description: "Scales and key signatures — D major, B flat major, E minor and D minor.",
+    keyIds: ["d-major", "bb-major", "e-minor", "d-minor"],
+  },
+};
+
+const KEY_LIBRARY = {
+  "c-major": { id: "c-major", label: "C major", signature: [] },
+  "a-minor": { id: "a-minor", label: "A minor", signature: [] },
+  "g-major": { id: "g-major", label: "G major", signature: [{ type: "sharp", step: 8 }] },
+  "f-major": { id: "f-major", label: "F major", signature: [{ type: "flat", step: 4 }] },
+  "d-major": { id: "d-major", label: "D major", signature: [{ type: "sharp", step: 8 }, { type: "sharp", step: 5 }] },
+  "bb-major": { id: "bb-major", label: "B flat major", signature: [{ type: "flat", step: 4 }, { type: "flat", step: 7 }] },
+  "e-minor": { id: "e-minor", label: "E minor", signature: [{ type: "sharp", step: 8 }] },
+  "d-minor": { id: "d-minor", label: "D minor", signature: [{ type: "flat", step: 4 }] },
+};
 
 const NOTE_STEPS = {
   C4: -2,
@@ -71,6 +122,10 @@ const KEY_POOLS = {
   "a-minor": ["G4", "G#4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "G#5", "A5"],
   "g-major": ["G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5"],
   "f-major": ["F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5"],
+  "d-major": ["D4", "E4", "F5", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5"],
+  "bb-major": ["D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5"],
+  "e-minor": ["D4", "E4", "F5", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5", "A5"],
+  "d-minor": ["D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5", "G5"],
 };
 
 const TONIC_START = {
@@ -78,6 +133,10 @@ const TONIC_START = {
   "a-minor": "A4",
   "g-major": "G4",
   "f-major": "F4",
+  "d-major": "D4",
+  "bb-major": "B4",
+  "e-minor": "E4",
+  "d-minor": "D4",
 };
 
 const RHYTHMS = {
@@ -104,6 +163,13 @@ const STANDARD_BAR_PATTERNS = [
 ];
 
 const FINAL_BAR_PATTERNS = [...STANDARD_BAR_PATTERNS, ["semibreve"]];
+
+const SCORE_TILE_CLASS = "relative h-[58px] rounded-xl border border-stone-200 shadow-sm outline-none transition hover:-translate-y-0.5 hover:scale-[1.01] hover:brightness-105 hover:shadow-lg active:scale-[0.98] sm:h-[64px]";
+const SCORE_TILE_ACTIVE_CLASS = "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg";
+const TOOLBAR_BUTTON_CLASS = "flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5";
+const MENU_PANEL_CLASS = "absolute top-full z-50 mt-2 inline-block w-[calc(100vw-48px)] max-w-[360px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit sm:max-w-none";
+const MENU_TITLE_CLASS = "relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8";
+const POPOVER_ANIMATION_IN = "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -137,24 +203,47 @@ function stemDown(step) {
   return step > 4;
 }
 
-function accidentalGlyph(type) {
-  if (type === "sharp") return "♯";
-  if (type === "flat") return "♭";
+function accidentalAsset(type) {
+  if (type === "sharp") return ASSET.sharp;
+  if (type === "flat") return ASSET.flat;
   return null;
 }
 
-function accidentalX(type, offset = 0) {
-  return type === "flat" ? STAFF.keyX - 5 + offset : STAFF.keyX + offset;
+function accidentalX(type, index = 0) {
+  const spacing = type === "flat" ? 30 : 32;
+  return (type === "flat" ? STAFF.keyX - 5 : STAFF.keyX) + index * spacing;
 }
 
 function accidentalY(type, step) {
-  return type === "sharp" ? yForStep(step) + 15 : yForStep(step) + 12;
+  return type === "sharp" ? yForStep(step) - 27 : yForStep(step) - 35;
 }
 
-function expectedBuildAccidental(keyId) {
-  if (keyId === "g-major") return { type: "sharp", step: 8 };
-  if (keyId === "f-major") return { type: "flat", step: 4 };
-  return null;
+function accidentalDimensions(type) {
+  return type === "sharp"
+    ? { width: 28, height: 54 }
+    : { width: 28, height: 49 };
+}
+
+function expectedBuildAccidentals(keyId) {
+  return KEY_LIBRARY[keyId]?.signature || [];
+}
+
+function keySignatureMatches(placed, expected) {
+  if (placed.length !== expected.length) return false;
+  return expected.every((item, index) => placed[index]?.type === item.type && placed[index]?.step === item.step);
+}
+
+function readSiteTheme() {
+  return localStorage.getItem(SITE_THEME_KEY) || "light";
+}
+
+function readSiteAccessibility() {
+  try {
+    const value = JSON.parse(localStorage.getItem(SITE_ACCESSIBILITY_KEY) || "{}");
+    return value && typeof value === "object" ? value : {};
+  } catch {
+    return {};
+  }
 }
 
 function nearestPoolIndex(pool, previousNote) {
@@ -182,14 +271,20 @@ function makeBarRhythms(barIndex) {
   return randomItem(barIndex === BAR_COUNT - 1 ? FINAL_BAR_PATTERNS : STANDARD_BAR_PATTERNS);
 }
 
-function chooseQuestionKey(type) {
-  if (type !== "build-key") return randomItem(KEYS);
-  const noAccidentalKeys = KEYS.filter((key) => key.id === "c-major" || key.id === "a-minor");
-  const accidentalKeys = KEYS.filter((key) => key.id === "g-major" || key.id === "f-major");
+function keysForLevel(levelKey) {
+  return (LEVELS[levelKey]?.keyIds || LEVELS.N5.keyIds).map((id) => KEY_LIBRARY[id]);
+}
+
+function chooseQuestionKey(type, levelKey = "N5") {
+  const keys = keysForLevel(levelKey);
+  if (type !== "build-key") return randomItem(keys);
+  const noAccidentalKeys = keys.filter((key) => key.signature.length === 0);
+  const accidentalKeys = keys.filter((key) => key.signature.length > 0);
+  if (!noAccidentalKeys.length) return randomItem(accidentalKeys);
   return Math.random() < 0.1 ? randomItem(noAccidentalKeys) : randomItem(accidentalKeys);
 }
 
-function createQuestion(options = { identify: true, build: true }) {
+function createQuestion(options = { identify: true, build: true, level: "N5" }) {
   const allowIdentify = options.identify !== false;
   const allowBuild = options.build !== false;
   const type = allowIdentify && allowBuild
@@ -197,7 +292,7 @@ function createQuestion(options = { identify: true, build: true }) {
     : allowBuild
       ? "build-key"
       : "identify-key";
-  const key = chooseQuestionKey(type);
+  const key = chooseQuestionKey(type, options.level);
   const pool = KEY_POOLS[key.id];
   const bars = [];
   let previous = TONIC_START[key.id];
@@ -351,9 +446,7 @@ function playFeedbackSound(correct, celebration = false, medal = null) {
   }
 
   if (!correct) {
-    tone(196, now, 0.32, "sawtooth", 0.06);
-    tone(185, now + 0.04, 0.38, "triangle", 0.05);
-    tone(174, now + 0.08, 0.45, "sine", 0.04);
+    tone(180, now, 0.55, "sawtooth", 0.075);
   } else if (celebration) {
     if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now);
     if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now);
@@ -364,10 +457,8 @@ function playFeedbackSound(correct, celebration = false, medal = null) {
       medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
     }
   } else {
-    randomItem([[523.25, 659.25, 783.99], [587.33, 739.99, 880], [659.25, 830.61, 987.77]]).forEach((freq, index) => {
-      tone(freq, now + index * 0.045, 0.42, "triangle", index === 2 ? 0.085 : 0.07);
-      tone(freq * 2, now + index * 0.045, 0.24, "sine", 0.025);
-    });
+    tone(740, now, 0.16, "triangle", 0.08);
+    tone(988, now + 0.12, 0.34, "triangle", 0.1);
   }
 
   window.setTimeout(() => {
@@ -388,11 +479,98 @@ function useInjectedStyles() {
       button:active { transform: scale(0.96); filter: brightness(0.92); }
       button:disabled { cursor: not-allowed; opacity: 0.5; }
       button:focus-visible { outline: 2px solid rgba(22,163,74,0.35); outline-offset: 2px; }
+      .fixed-popover-button,.fixed-popover-button:hover,.fixed-popover-button:active { transform: translateX(-50%) !important; }
       @keyframes medalShine { 0%,100% { transform: scale(1) rotate(-4deg); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.16) rotate(4deg); filter: drop-shadow(0 0 10px rgba(250,204,21,.9)); } }
       @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } }
       @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } }
       @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
       @keyframes feedbackFadeOut { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-10px); } }
+      @keyframes medalPopupIn { 0% { opacity: 0; transform: translate(-50%, -8px) scale(.82); } 60% { opacity: 1; transform: translate(-50%, 2px) scale(1.06); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+      @keyframes medalPopupOut { 0% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -6px) scale(.86); } }
+      @keyframes medalThresholdGlow { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.1); filter: drop-shadow(0 0 10px rgba(250,204,21,.95)); } }
+      .medal-threshold-active,.medal-threshold-active img { animation: medalThresholdGlow 1.35s ease-in-out infinite; font-weight: 900; }
+      .app-large-text { font-size: 112.5%; }
+      .app-high-contrast { filter: contrast(1.15); }
+      .app-reduce-motion *,.app-reduce-motion *::before,.app-reduce-motion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+      .app-dark header,.app-dark main,.app-dark.bg-white { background-color: #1c1917 !important; color: #f5f5f4 !important; border-color: #44403c !important; }
+      .app-dark.bg-stone-50,.app-dark.bg-stone-100 { background-color: #292524 !important; color: #f5f5f4 !important; }
+      .app-dark.text-stone-500,.app-dark.text-stone-600,.app-dark.text-stone-700,.app-dark.text-stone-800,.app-dark.text-stone-900,.app-dark.text-black { color: #e7e5e4 !important; }
+      .app-dark.border-stone-200,.app-dark.border-stone-300 { border-color: #57534e !important; }
+      .app-dark svg rect[fill="white"] { fill: #fafaf9 !important; }
+      .app-dark svg { color: #0c0a09; }
+      .footer { width: min(1180px, calc(100% - 36px)); margin: 0 auto; padding: 22px 0 32px; border-top: 1px solid #e2e8f0; color: #475569; font-size: .86rem; }
+      .footer-grid { display: grid; grid-template-columns: 235px 1fr 1fr 1fr; gap: 42px; align-items: start; }
+      .footer-brand { display: flex; align-items: flex-start; }
+      .footer-wordmark { width: 220px; height: auto; display: block; }
+      .footer h4 { margin: 0 0 10px; color: #0f172a; font-size: .92rem; font-weight: 800; }
+      .footer p { margin: 0; line-height: 1.35; }
+      .footer a { color: #475569; text-decoration: none; overflow-wrap: anywhere; }
+      .footer a:hover,.footer a:focus-visible { text-decoration: underline; }
+      .footer .text-link,.footer .text-link:visited,.footer .text-link:hover,.footer .text-link:focus-visible { color: #2563eb !important; font-weight: 700; }
+      .copyright { margin-top: 28px; text-align: center; font-size: .8rem; }
+      .modal,.modal h2,.modal p,.modal li,.modal button { font-family: Arial, Helvetica, sans-serif; }
+      .overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(15,23,42,.72);
+        backdrop-filter: blur(6px);
+      }
+      .overlay.is-open { display: flex; }
+      .modal {
+        color: #0f172a;
+        position: relative;
+        width: min(100%, 560px);
+        max-height: 90vh;
+        overflow: auto;
+        padding: 28px;
+        background: #fff;
+        border-radius: 24px;
+        box-shadow: 0 24px 60px rgba(0,0,0,.25);
+      }
+      .close-btn {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        width: 38px;
+        height: 38px;
+        border: 0;
+        border-radius: 50%;
+        background: #eff6ff;
+        color: #1e40af;
+        font-size: 1.3rem;
+        font-weight: 700;
+      }
+      .modal h2,.modal h3,.modal h4 {
+        color: #0f172a;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-weight: 800;
+        font-size: 24px;
+        line-height: 1.15;
+        margin-bottom: 16px;
+      }
+      .modal p,.modal li {
+        margin-bottom: 14px;
+        line-height: 1.65;
+      }
+      .modal p {
+        color: #475569;
+        line-height: 1.55;
+      }
+      @media (max-width: 980px) { .footer-grid { grid-template-columns: 1fr; } .footer-brand { justify-content: center; } .footer-wordmark { transform: translateX(18px); } }
+      @media (max-width: 639px) {
+        .score-reset-button,.score-reset-button:hover,.score-reset-button:focus,.score-reset-button:active {
+          left: -1px !important;
+          right: -1px !important;
+          width: auto !important;
+          min-width: 0 !important;
+          transform: none !important;
+        }
+      }
     `;
     document.head.appendChild(style);
   }, []);
@@ -423,33 +601,42 @@ function Staff() {
         return <line key={bar} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />;
       })}
       <line x1={STAFF.right} x2={STAFF.right} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="2.2" />
-      <text x={STAFF.clefX} y={STAFF.top + 62} fontSize="190" fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text>
-      <g fontFamily="serif" fontWeight="900" fontSize="66" textAnchor="middle">
-        <text x={STAFF.timeX} y={STAFF.top + 45}>4</text>
-        <text x={STAFF.timeX} y={STAFF.top + 87}>4</text>
-      </g>
+      <image href={ASSET.trebleClef} x={STAFF.clefX - 29} y={STAFF.top - 47} width="104" height="184" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
+      <image href={ASSET.time44} x={STAFF.timeX - 43.5} y={STAFF.top - 14.3} width="76.56" height="116.16" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
     </g>
   );
 }
 
 function KeySignature({ signature }) {
-  if (signature === "sharp") {
-    return <text x={STAFF.keyX} y={yForStep(8) + 15} fontSize="51" fontFamily="serif" fontWeight="900">♯</text>;
-  }
-  if (signature === "flat") {
-    return <text x={STAFF.keyX - 5} y={yForStep(4) + 11} fontSize="51" fontFamily="serif" fontWeight="900">♭</text>;
-  }
-  return null;
+  if (!signature?.length) return null;
+  return (
+    <g pointerEvents="none">
+      {signature.map((item, index) => {
+        const size = accidentalDimensions(item.type);
+        return (
+          <image
+            key={`${item.type}-${item.step}-${index}`}
+            href={accidentalAsset(item.type)}
+            x={accidentalX(item.type, index)}
+            y={accidentalY(item.type, item.step)}
+            width={size.width}
+            height={size.height}
+            preserveAspectRatio="xMidYMid meet"
+            pointerEvents="none"
+          />
+        );
+      })}
+    </g>
+  );
 }
 
-function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental, hoverStep, setHoverStep, onPlaceAccidental, feedback }) {
+function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidentals, hoverStep, setHoverStep, onPlaceAccidental, feedback }) {
   const [draggingAccidental, setDraggingAccidental] = useState(null);
-  const activeGlyph = accidentalGlyph(selectedAccidental);
-  const placedGlyph = accidentalGlyph(placedAccidental?.type);
-  const expected = expectedBuildAccidental(question.key.id);
-  const expectedGlyph = accidentalGlyph(expected?.type);
+  const activeAsset = accidentalAsset(selectedAccidental);
+  const expected = expectedBuildAccidentals(question.key.id);
   const showingFeedback = Boolean(feedback);
-  const shouldShowExpected = showingFeedback && expected && !feedback.correct;
+  const shouldShowExpected = showingFeedback && expected.length > 0 && !feedback.correct;
+  const nextIndex = placedAccidentals.length;
 
   function pointerToSvg(event) {
     const svg = event.currentTarget.ownerSVGElement ?? event.currentTarget;
@@ -511,28 +698,54 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
 
   return (
     <g>
-      {activeGlyph && hoverStep !== null && !placedAccidental && !showingFeedback && !draggingAccidental && (
-        <text x={accidentalX(selectedAccidental)} y={accidentalY(selectedAccidental, hoverStep)} fontSize="58" fontFamily="serif" fontWeight="900" opacity="0.45" pointerEvents="none">
-          {activeGlyph}
-        </text>
+      {activeAsset && hoverStep !== null && !showingFeedback && !draggingAccidental && (
+        <image
+          href={activeAsset}
+          x={accidentalX(selectedAccidental, nextIndex)}
+          y={accidentalY(selectedAccidental, hoverStep)}
+          {...accidentalDimensions(selectedAccidental)}
+          opacity="0.45"
+          pointerEvents="none"
+        />
       )}
 
-      {draggingAccidental && activeGlyph && (
-        <text x={accidentalX(draggingAccidental.type)} y={accidentalY(draggingAccidental.type, draggingAccidental.step)} fontSize="58" fontFamily="serif" fontWeight="900" fill="currentColor" opacity="0.82" pointerEvents="none">
-          {activeGlyph}
-        </text>
+      {draggingAccidental && activeAsset && (
+        <image
+          href={activeAsset}
+          x={accidentalX(draggingAccidental.type, nextIndex)}
+          y={accidentalY(draggingAccidental.type, draggingAccidental.step)}
+          {...accidentalDimensions(draggingAccidental.type)}
+          opacity="0.82"
+          pointerEvents="none"
+        />
       )}
 
-      {placedGlyph && (
-        <text x={accidentalX(placedAccidental.type)} y={accidentalY(placedAccidental.type, placedAccidental.step)} fontSize="51" fontFamily="serif" fontWeight="900" fill={showingFeedback ? (feedback.correct ? COLOUR.green : COLOUR.red) : "currentColor"} pointerEvents="none">
-          {placedGlyph}
-        </text>
-      )}
+      {placedAccidentals.map((item, index) => (
+        <image
+          key={`${item.type}-${item.step}-${index}`}
+          href={accidentalAsset(item.type)}
+          x={accidentalX(item.type, index)}
+          y={accidentalY(item.type, item.step)}
+          {...accidentalDimensions(item.type)}
+          opacity={showingFeedback && !feedback.correct ? 0.35 : 1}
+          pointerEvents="none"
+        />
+      ))}
 
       {shouldShowExpected && (
-        <text x={accidentalX(expected.type, 32)} y={accidentalY(expected.type, expected.step)} fontSize="51" fontFamily="serif" fontWeight="900" fill={COLOUR.green} pointerEvents="none">
-          {expectedGlyph}
-        </text>
+        <g>
+          {expected.map((item, index) => (
+            <image
+              key={`expected-${item.type}-${item.step}-${index}`}
+              href={accidentalAsset(item.type)}
+              x={accidentalX(item.type, index)}
+              y={accidentalY(item.type, item.step)}
+              {...accidentalDimensions(item.type)}
+              opacity="1"
+              pointerEvents="none"
+            />
+          ))}
+        </g>
       )}
 
       <rect
@@ -557,23 +770,55 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
 }
 
 function RhythmNote({ x, y, step, rhythm, pitch, accidental = false, showFlag = true, forcedDown = null, forcedStemEndY = null }) {
-  const open = rhythm === "minim" || rhythm === "semibreve";
-  const hasStem = rhythm !== "semibreve";
   const stem = getStem(x, y, step, forcedDown, forcedStemEndY);
-  const dotY = Math.abs(step % 2) === 1 ? y - 3 : y - 7;
-  const flagPath = stem.down
-    ? `M ${stem.stemX} ${stem.stemEndY} C ${stem.stemX + 21} ${stem.stemEndY - 8}, ${stem.stemX + 20} ${stem.stemEndY - 24}, ${stem.stemX + 5} ${stem.stemEndY - 31}`
-    : `M ${stem.stemX} ${stem.stemEndY} C ${stem.stemX + 21} ${stem.stemEndY + 8}, ${stem.stemX + 20} ${stem.stemEndY + 24}, ${stem.stemX + 5} ${stem.stemEndY + 31}`;
+  const isBeamedQuaver = rhythm === "quaver" && !showFlag;
+  const asset = rhythm === "semibreve"
+    ? ASSET.semibreve
+    : isBeamedQuaver
+    ? null
+    : rhythm === "minim"
+    ? ASSET.minim
+    : rhythm === "dotted-crotchet"
+      ? ASSET.dottedCrotchet
+      : rhythm === "quaver"
+        ? stem.down ? ASSET.quaverDown : ASSET.quaver
+        : ASSET.crotchet;
+  const size = rhythm === "semibreve"
+    ? { width: 38.5, height: 28, xOffset: -19, yOffset: -14, downShift: 0 }
+    : rhythm === "quaver" && showFlag
+    ? stem.down
+      ? { width: 50, height: 86, xOffset: -29, yOffset: -15, downShift: 0 }
+      : { width: 50, height: 86, xOffset: -20, yOffset: -71, downShift: 0 }
+    : rhythm === "dotted-crotchet"
+      ? { width: 60.5, height: 79.2, xOffset: -20.9, yOffset: -68.2, downShift: 57.2 }
+      : { width: 42.35, height: 79.2, xOffset: -20.9, yOffset: -68.2, downShift: 57.2 };
 
   return (
     <g pointerEvents="none">
       {accidental && (
-        <text x={pitch && pitch.includes("G#") ? x - 38 : x - 36} y={pitch && pitch.includes("G#") ? y + 14 : y + 12} fontSize="44" fontFamily="serif" fontWeight="900">♯</text>
+        <image href={ASSET.sharp} x={pitch && pitch.includes("G#") ? x - 38 : x - 36} y={y - 27} width="28" height="54" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
       )}
-      <ellipse cx={x} cy={y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${y})`} fill={open ? "transparent" : "currentColor"} stroke="currentColor" strokeWidth="2" />
-      {hasStem && <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke="currentColor" strokeWidth="1.8" />}
-      {rhythm === "dotted-crotchet" && <circle cx={x + 23} cy={dotY} r="3.6" fill="currentColor" />}
-      {rhythm === "quaver" && showFlag && <path d={flagPath} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />}
+      {isBeamedQuaver ? (
+        <>
+          <ellipse cx={x} cy={y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${y})`} fill="currentColor" stroke="currentColor" strokeWidth="2" />
+          <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke="currentColor" strokeWidth="1.8" />
+        </>
+      ) : (
+        <image
+          href={asset}
+          x={x + size.xOffset}
+          y={y + size.yOffset}
+          width={size.width}
+          height={size.height}
+          preserveAspectRatio="xMidYMid meet"
+          pointerEvents="none"
+          style={{
+            transformBox: "fill-box",
+            transformOrigin: "center",
+            transform: stem.down && rhythm !== "quaver" ? `translateY(${size.downShift}px) rotate(180deg)` : "none",
+          }}
+        />
+      )}
     </g>
   );
 }
@@ -626,13 +871,14 @@ function Passage({ bars }) {
   );
 }
 
-function MusicScore({ question, selectedAccidental, placedAccidental, hoverStep, setHoverStep, onPlaceAccidental, feedback }) {
+function MusicScore({ question, selectedAccidental, placedAccidentals, hoverStep, setHoverStep, onPlaceAccidental, feedback, mobileOnlyActiveClef }) {
+  const viewBox = mobileOnlyActiveClef ? MOBILE_SVG_VIEWBOX : { x: 0, y: 0, width: SVG.width, height: SVG.height };
   return (
-    <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-visible">
+    <svg viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
       <rect width={SVG.width} height={360} fill="white" />
       <Staff />
       {question.type === "build-key" ? (
-        <BuildKeySignatureLayer question={question} selectedAccidental={selectedAccidental} placedAccidental={placedAccidental} hoverStep={hoverStep} setHoverStep={setHoverStep} onPlaceAccidental={onPlaceAccidental} feedback={feedback} />
+        <BuildKeySignatureLayer question={question} selectedAccidental={selectedAccidental} placedAccidentals={placedAccidentals} hoverStep={hoverStep} setHoverStep={setHoverStep} onPlaceAccidental={onPlaceAccidental} feedback={feedback} />
       ) : (
         <KeySignature signature={question.key.signature} />
       )}
@@ -642,104 +888,178 @@ function MusicScore({ question, selectedAccidental, placedAccidental, hoverStep,
 }
 
 function getStreakMedal(streak) {
-  if (streak >= 30) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" };
-  if (streak >= 20) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" };
-  if (streak >= 15) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" };
-  if (streak >= 10) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" };
+  if (streak >= 30) return { tier: "diamond", icon: ASSET.diamond, bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" };
+  if (streak >= 20) return { tier: "gold", icon: ASSET.gold, bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" };
+  if (streak >= 15) return { tier: "silver", icon: ASSET.silver, bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" };
+  if (streak >= 10) return { tier: "bronze", icon: ASSET.bronze, bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" };
   return null;
-}
-
-function StatCard({ label, value, footer, progress = null, medal = null, variant = "default", confettiKey = 0 }) {
-  const safeProgress = progress == null ? null : clamp(progress, 0, 100);
-  const fillHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
-  const fillColour = safeProgress == null ? "transparent" : safeProgress < 50 ? "rgba(220, 38, 38, 0.38)" : safeProgress < 70 ? "rgba(255, 120, 0, 0.42)" : "rgba(22, 163, 74, 0.38)";
-  const isStreak = variant === "streak";
-
-  return (
-    <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>
-      {isStreak && confettiKey > 0 && (
-        <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
-          {Array.from({ length: 18 }).map((_, index) => (
-            <span
-              key={index}
-              className="absolute block h-1.5 w-1 rounded-sm"
-              style={{
-                left: `${8 + ((index * 19) % 84)}%`,
-                top: "-8px",
-                backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5],
-                animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`,
-                animationDelay: `${(index % 6) * 0.035}s`,
-              }}
-            />
-          ))}
-        </div>
-      )}
-      {safeProgress !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fillHeight}%`, background: fillColour }} />}
-      <div className="relative z-10 text-center">
-        <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
-        <div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>
-        {footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}
-      </div>
-      {isStreak && <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal?.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>{medal?.emoji ?? "🥉"}</div>}
-    </div>
-  );
 }
 
 function FeedbackBanner({ feedback, fading = false }) {
   if (!feedback) return null;
   return (
     <div className="relative flex w-full items-center justify-center text-center">
-      <div className={`flex w-[300px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${feedback.correct ? "text-green-600" : "text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}>
-        <span className="translate-y-[4px]">{feedback.correct ? "Correct" : "Incorrect"}</span>
-        {!feedback.correct && <span className="mt-2 inline-flex -translate-x-[2px] items-center gap-0 text-sm font-semibold text-black"><TapIcon /><span>Click or tap anywhere to continue</span></span>}
+      <div
+        className={`flex h-10 min-w-[58px] max-w-[calc(100vw-96px)] flex-col items-center justify-center rounded-xl border px-3 py-0 text-[10px] font-semibold backdrop-blur-md translate-y-[60px] sm:min-h-[44px] sm:w-auto sm:translate-y-0 sm:px-2.5 sm:py-1 sm:text-xl sm:font-bold ${feedback.correct ? "border-[#16a34a] bg-[#16a34a] text-white" : "border-[#dc2626] bg-[#dc2626] text-white"}`}
+        style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}
+      >
+        <span className="leading-none text-[18px] font-black sm:text-xl">{feedback.correct ? "Correct" : "Incorrect"}</span>
       </div>
     </div>
   );
 }
 
-function TapIcon() {
+function KeyName({ label }) {
+  if (label !== "B flat major") return <>{label}</>;
   return (
-    <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]">
-      <path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" />
-    </svg>
-  );
-}
-
-function HelpPanel() {
-  const [page, setPage] = useState(0);
-  const pages = [
-    ["Instructions", "Name the key from the music, or create the requested key signature by selecting a sharp or flat and placing it in the correct position on the stave. "],    ["C major", "C major has no sharps or flats in the key signature."],
-    ["A minor", "A minor has no sharps or flats in the key signature, but the music can include raised G sharps as accidentals."],
-    ["G major", "G major has one sharp: F sharp. The sharp is placed on the top line of the treble stave."],
-    ["F major", "F major has one flat: B flat. The flat is placed on the middle line of the treble stave."],
-  ];
-  const [title, body] = pages[page];
-
-  return (
-    <div>
-      <h2 className="mb-3 text-center text-base font-semibold">Help</h2>
-      <div className="min-h-[118px] rounded-xl border border-stone-200 bg-stone-50 p-4">
-        <h3 className="text-sm font-bold text-stone-800">{title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-stone-700">{body}</p>
-      </div>
-      <div className="mt-3 flex items-center justify-between">
-        <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={page === 0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">←</button>
-        <div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div>
-        <button type="button" onClick={() => setPage((value) => Math.min(pages.length - 1, value + 1))} disabled={page === pages.length - 1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">→</button>
-      </div>
-    </div>
+    <span className="inline-flex items-baseline gap-[2px]">
+      <span>B</span>
+      <img src={ASSET.flat} alt="flat" className="relative top-[3px] inline-block h-[1.05em] w-[0.56em] object-contain" />
+      <span>major</span>
+    </span>
   );
 }
 
 function AppIcon() {
   return (
-    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
-      <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <text x="18" y="31" fontSize="60" fontFamily="serif" fill="black" textAnchor="middle" dominantBaseline="middle">{TREBLE_CLEF}</text>
-        <text x="39" y="31" fontSize="40" fontFamily="serif" fill="black" textAnchor="middle" dominantBaseline="middle">♯</text>
-      </svg>
+    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 text-black shadow-sm">
+      <img src={ASSET.appIcon} alt="" aria-hidden="true" className="block h-full w-full object-contain" />
+    </div>
+  );
+}
+
+function useClickAway(ref, handler) {
+  useEffect(() => {
+    const onPointerDown = (event) => {
+      if (!ref.current?.contains(event.target)) handler?.();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [ref, handler]);
+}
+
+function useSitePreferences() {
+  const [darkMode, setDarkMode] = useState(readSiteTheme() === "dark");
+  const [accessibility, setAccessibility] = useState(readSiteAccessibility);
+
+  useEffect(() => {
+    const sync = () => {
+      setDarkMode(readSiteTheme() === "dark");
+      setAccessibility(readSiteAccessibility());
+    };
+    sync();
+    window.addEventListener("storage", sync);
+    window.addEventListener("mlh-theme-change", sync);
+    window.addEventListener("mlh-accessibility-change", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("mlh-theme-change", sync);
+      window.removeEventListener("mlh-accessibility-change", sync);
+    };
+  }, []);
+
+  return { darkMode, accessibility };
+}
+
+function handleButtonKeyDown(event, onActivate) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  onActivate();
+}
+
+function ScoreStreakPanel({ correct, attempted, accuracy, streak, bestStreak, medal, confettiKey, resetScore, autoShowMedals }) {
+  const [popover, setPopover] = useState(null);
+  const ref = useRef(null);
+  useClickAway(ref, () => setPopover(null));
+
+  const scoreFill = clamp(accuracy, 0, 100);
+  const scoreColour = scoreFill < 50 ? rgbaFromHex(COLOUR.red, .38) : scoreFill < 70 ? "rgba(255,120,0,.42)" : rgbaFromHex(COLOUR.green, .38);
+  const thresholds = [
+    { tier: "bronze", value: 10, icon: ASSET.bronze, className: "text-amber-700", active: streak >= 10 && streak < 15 },
+    { tier: "silver", value: 15, icon: ASSET.silver, className: "text-slate-500", active: streak >= 15 && streak < 20 },
+    { tier: "gold", value: 20, icon: ASSET.gold, className: "text-yellow-500", active: streak >= 20 && streak < 30 },
+    { tier: "diamond", value: 30, icon: ASSET.diamond, className: "text-cyan-500", active: streak >= 30 },
+  ];
+  const togglePopover = (name) => setPopover((value) => value === name ? null : name);
+
+  return (
+    <div ref={ref} className="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-[112px_98px] lg:grid-cols-[124px_108px]">
+      <section
+        role="button"
+        tabIndex="0"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => togglePopover("score")}
+        onKeyDown={(event) => handleButtonKeyDown(event, () => togglePopover("score"))}
+        className={`${SCORE_TILE_CLASS} bg-stone-50 ${popover === "score" ? SCORE_TILE_ACTIVE_CLASS : ""}`}
+      >
+        <div className="absolute inset-0 overflow-hidden rounded-xl">
+          <div className="absolute bottom-0 -left-[2px] right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreColour }} />
+        </div>
+        <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
+          <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Score</div>
+          <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{correct}/{attempted}</div>
+          <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Accuracy: {accuracy}%</div>
+        </div>
+        {popover === "score" && (
+          <button
+            type="button"
+            onClick={(event) => { event.stopPropagation(); resetScore(); setPopover(null); }}
+            className="fixed-popover-button score-reset-button absolute left-1/2 top-full z-50 mt-2 flex min-w-[112px] w-full items-center justify-center rounded-xl border border-[#dc2626] bg-[#dc2626] px-3 py-2 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(0,0,0,0.28)] sm:w-auto"
+            style={{ animation: POPOVER_ANIMATION_IN }}
+          >
+            Reset
+          </button>
+        )}
+      </section>
+
+      <section
+        role="button"
+        tabIndex="0"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => togglePopover("streak")}
+        onKeyDown={(event) => handleButtonKeyDown(event, () => togglePopover("streak"))}
+        className={`${SCORE_TILE_CLASS} overflow-visible ${medal?.bg || "bg-stone-50"} ${popover === "streak" ? SCORE_TILE_ACTIVE_CLASS : ""}`}
+      >
+        {confettiKey > 0 && (
+          <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
+            {Array.from({ length: 18 }).map((_, index) => (
+              <span
+                key={index}
+                className="absolute block h-1.5 w-1 rounded-sm"
+                style={{
+                  left: `${8 + ((index * 19) % 84)}%`,
+                  top: "-8px",
+                  backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5],
+                  animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`,
+                  animationDelay: `${(index % 6) * 0.035}s`,
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
+          <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
+          <div className={`mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px] ${medal?.text || "text-black"}`}>{streak}</div>
+          <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
+        </div>
+
+        {(popover === "streak" || autoShowMedals) && (
+          <div
+            className="fixed-popover-button absolute left-1/2 top-full z-50 mt-2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]"
+            style={{ animation: autoShowMedals ? `${POPOVER_ANIMATION_IN}, medalPopupOut .24s ease-in 1.76s forwards` : POPOVER_ANIMATION_IN }}
+          >
+            <div className="flex items-end justify-center gap-3">
+              {thresholds.map((item) => (
+                <div key={item.tier} className={`flex flex-col items-center justify-end ${item.active ? "medal-threshold-active" : ""}`}>
+                  <img src={item.icon} alt="" aria-hidden="true" className="h-[22.8px] w-[22.8px] object-contain" />
+                  <span className={`mt-1 text-[11px] font-semibold leading-none ${item.className}`}>{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -750,52 +1070,89 @@ function ToggleRow({ glyph, label, enabled, disabled = false, onToggle }) {
       type="button"
       disabled={disabled}
       onClick={onToggle}
-      className="mb-2.5 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px] text-left hover:bg-stone-100 disabled:opacity-50"
+      className="mb-2.5 flex min-h-[44px] w-full whitespace-nowrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px] disabled:opacity-50"
     >
-      <span className="flex items-center gap-2 text-sm font-semibold text-stone-800">
-        <span className="flex h-7 w-7 items-center justify-center text-lg leading-none">{glyph}</span>
+      <span className="flex min-w-[174px] items-center gap-2 text-sm font-semibold text-stone-800">
+        <span className="flex h-[22px] w-[28px] shrink-0 items-center justify-center text-lg leading-none">{glyph}</span>
         <span>{label}</span>
       </span>
-      <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${enabled ? "bg-green-600" : "bg-stone-400"}`}>
+      <span className={`flex h-6 w-11 shrink-0 items-center rounded-full p-1 transition ${enabled ? "bg-black" : "bg-stone-400"}`}>
         <span className={`h-4 w-4 rounded-full bg-white transition ${enabled ? "translate-x-5" : "translate-x-0"}`} />
       </span>
     </button>
   );
 }
 
-function MenuRows({ resetScore, enableKeyNaming, setEnableKeyNaming, enableKeyBuilding, setEnableKeyBuilding }) {
+function MenuRows({ enableKeyNaming, setEnableKeyNaming, enableKeyBuilding, setEnableKeyBuilding }) {
   return (
     <>
       <ToggleRow
-        glyph={<span className="font-serif text-[36px] leading-none">{TREBLE_CLEF}</span>}
-        label="Identify Key Signature"
+        glyph={<img src={ASSET.trebleClef} alt="" aria-hidden="true" className="h-[29.9px] w-[25.3px] object-contain" />}
+        label="Identify"
         enabled={enableKeyNaming}
         disabled={enableKeyNaming && !enableKeyBuilding}
         onToggle={() => setEnableKeyNaming((value) => !value)}
       />
       <ToggleRow
-        glyph={<span className="font-serif text-[28px] font-black leading-none">♯</span>}
-        label="Create Key Signature"
+        glyph={<span className="flex items-center justify-center gap-[1px]"><img src={ASSET.sharp} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" /><img src={ASSET.flat} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" /></span>}
+        label="Create"
         enabled={enableKeyBuilding}
         disabled={enableKeyBuilding && !enableKeyNaming}
         onToggle={() => setEnableKeyBuilding((value) => !value)}
       />
-      <button type="button" onClick={resetScore} className="mt-2 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button>
     </>
+  );
+}
+
+function LevelMenu({ activeLevel, applyLevel }) {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-2">
+      {Object.entries(LEVELS).map(([key, level]) => {
+        const active = activeLevel === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => applyLevel(key)}
+            className={`w-full rounded-xl border px-3 py-2 text-left transition ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}
+          >
+            <div className="flex min-w-0 items-center justify-between gap-3 text-stone-900">
+              <div className="flex min-h-[36px] min-w-[42px] items-center justify-center">
+                <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white text-[1.22rem] font-black leading-none tracking-tight text-stone-800 shadow-sm scale-[1.08]">
+                  {key}
+                </span>
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col justify-center pr-2">
+                <div className="truncate pb-[1px] text-[13px] font-black leading-[1.2]">{level.label}</div>
+                <div className="mt-[2px] truncate pb-[2px] text-[11px] leading-[1.25] text-stone-600">{level.description}</div>
+              </div>
+              {active && <img src={ASSET.tick} alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 object-contain" />}
+            </div>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
 function App() {
   useInjectedStyles();
+  const { darkMode, accessibility } = useSitePreferences();
 
-  const [question, setQuestion] = useState(() => createQuestion());
+  const initialLevel = useMemo(() => {
+    const requested = new URLSearchParams(window.location.search).get("level");
+    return LEVELS[requested] ? requested : "N5";
+  }, []);
+
+  const [activeLevel, setActiveLevel] = useState(initialLevel);
+  const [question, setQuestion] = useState(() => createQuestion({ level: initialLevel }));
   const [questionVisible, setQuestionVisible] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuMode, setMenuMode] = useState("levels");
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [selectedAccidental, setSelectedAccidental] = useState(null);
-  const [placedAccidental, setPlacedAccidental] = useState(null);
+  const [placedAccidentals, setPlacedAccidentals] = useState([]);
   const [hoverStep, setHoverStep] = useState(null);
-  const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [feedbackFading, setFeedbackFading] = useState(false);
   const [correct, setCorrect] = useState(0);
@@ -803,34 +1160,45 @@ function App() {
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [confettiKey, setConfettiKey] = useState(0);
+  const [autoShowMedals, setAutoShowMedals] = useState(false);
   const [enableKeyNaming, setEnableKeyNaming] = useState(true);
   const [enableKeyBuilding, setEnableKeyBuilding] = useState(true);
+  const [mobileOnlyActiveClef, setMobileOnlyActiveClef] = useState(window.innerWidth < 640);
 
-  const customiseRef = useRef(null);
-  const helpRef = useRef(null);
+  const menuRef = useRef(null);
   const nextTimer = useRef(null);
+  const fadeTimerRef = useRef(null);
+
+  useClickAway(menuRef, () => setMenuOpen(false));
+
+  useEffect(() => () => {
+    window.clearTimeout(nextTimer.current);
+    window.clearTimeout(fadeTimerRef.current);
+  }, []);
 
   useEffect(() => {
-    function closeMenus(event) {
-      if (customiseOpen && !customiseRef.current?.contains(event.target)) setCustomiseOpen(false);
-      if (helpOpen && !helpRef.current?.contains(event.target)) setHelpOpen(false);
-    }
-    document.addEventListener("pointerdown", closeMenus, true);
-    return () => document.removeEventListener("pointerdown", closeMenus, true);
-  }, [customiseOpen, helpOpen]);
-
-  useEffect(() => () => window.clearTimeout(nextTimer.current), []);
+    const onResize = () => setMobileOnlyActiveClef(window.innerWidth < 640);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const locked = Boolean(feedback);
   const isBuildKeyQuestion = question.type === "build-key";
-  const expectedAccidental = expectedBuildAccidental(question.key.id);
+  const expectedAccidentals = expectedBuildAccidentals(question.key.id);
   const streakMedal = getStreakMedal(streak);
-  const showNoAccidentalAnswer = isBuildKeyQuestion && feedback && !feedback.correct && expectedAccidental === null;
+  const showNoAccidentalAnswer = isBuildKeyQuestion && feedback && !feedback.correct && expectedAccidentals.length === 0;
+  const appClasses = [
+    darkMode ? "app-dark bg-stone-950 text-stone-100" : "bg-stone-50 text-black",
+    accessibility.largeText ? "app-large-text" : "",
+    accessibility.reduceMotion ? "app-reduce-motion" : "",
+    accessibility.highContrast ? "app-high-contrast" : "",
+  ].filter(Boolean).join(" ");
   const instruction = isBuildKeyQuestion ? (
-    <span>Create the key signature of <strong>{question.key.label}</strong>.</span>
+    <span>Create the key signature of <strong><KeyName label={question.key.label} /></strong>.</span>
   ) : (
-    <span>Name the key of this excerpt.</span>
+    <span>Name the <strong>key</strong> of this excerpt.</span>
   );
 
   function clearNextTimer() {
@@ -838,22 +1206,34 @@ function App() {
       window.clearTimeout(nextTimer.current);
       nextTimer.current = null;
     }
+    window.clearTimeout(fadeTimerRef.current);
   }
 
-  function newQuestion() {
+  function newQuestion(nextLevel = activeLevel, skipped = false) {
     clearNextTimer();
+    if (skipped) setStreak(0);
     setQuestionVisible(false);
     window.setTimeout(() => {
-      setQuestion(createQuestion({ identify: enableKeyNaming, build: enableKeyBuilding }));
+      setQuestion(createQuestion({ identify: enableKeyNaming, build: enableKeyBuilding, level: nextLevel }));
       setSelectedAnswer(null);
       setSelectedAccidental(null);
-      setPlacedAccidental(null);
+      setPlacedAccidentals([]);
       setHoverStep(null);
       setFeedback(null);
       setFeedbackFading(false);
-      setHelpOpen(false);
       setQuestionVisible(true);
     }, 220);
+  }
+
+  function applyLevel(levelKey) {
+    setActiveLevel(levelKey);
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+    setMenuOpen(false);
+    newQuestion(levelKey);
   }
 
   function resetScore() {
@@ -879,17 +1259,18 @@ function App() {
     setStreak(nextStreak);
     setBestStreak((value) => Math.max(value, nextStreak));
     setFeedback({ correct: isCorrect });
-    setHelpOpen(false);
 
     if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
       const medal = getStreakMedal(nextStreak);
       setConfettiKey((value) => value + 1);
+      setAutoShowMedals(true);
+      window.setTimeout(() => setAutoShowMedals(false), 2000);
       window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
     }
 
     if (isCorrect) {
       setFeedbackFading(false);
-      nextTimer.current = window.setTimeout(() => setFeedbackFading(true), 1700);
+      fadeTimerRef.current = window.setTimeout(() => setFeedbackFading(true), 1700);
       nextTimer.current = window.setTimeout(() => newQuestion(), 2000);
     }
   }
@@ -902,19 +1283,20 @@ function App() {
 
   function placeBuildAccidental(step) {
     if (locked || !selectedAccidental) return;
-    setPlacedAccidental({ type: selectedAccidental, step });
+    setPlacedAccidentals((current) => {
+      if (current.length >= Math.max(expectedAccidentals.length, 1)) return current;
+      return [...current, { type: selectedAccidental, step }];
+    });
   }
 
   function clearBuildAccidental() {
     if (locked) return;
-    setPlacedAccidental(null);
+    setPlacedAccidentals([]);
   }
 
   function submitBuildAnswer() {
     if (locked) return;
-    const isCorrect = expectedAccidental === null
-      ? placedAccidental === null
-      : placedAccidental?.type === expectedAccidental.type && placedAccidental?.step === expectedAccidental.step;
+    const isCorrect = keySignatureMatches(placedAccidentals, expectedAccidentals);
     updateScore(isCorrect);
   }
 
@@ -927,48 +1309,82 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <AppIcon />
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Key Signatures</h1>
-                <p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Scales and key signatures — C major, G major, F major, A minor.</p>
-              </div>
-            </div>
-
-            <div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end">
-              <StatCard variant="score" label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${accuracy}%`} progress={accuracy} />
-              <div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${streakMedal?.bg ?? "bg-stone-50"}`}>
-                <StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} medal={streakMedal} confettiKey={confettiKey} />
-                <div className="relative z-0 flex min-h-[52px] min-w-[64px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700">
-                  <div className="flex items-center gap-1"><span>💎</span><span className="text-cyan-500">30</span></div>
-                  <div className="mt-1">🥇 <span className="text-yellow-500">20</span></div>
-                  <div className="mt-1">🥈 <span className="text-slate-500">15</span></div>
-                  <div className="mt-1">🥉 <span className="text-amber-700">10</span></div>
-                </div>
-              </div>
+    <div className={`overflow-x-hidden pb-10 md:pb-12 ${appClasses}`}>
+      <header className="fixed left-0 right-0 top-0 z-[1000] w-full overflow-visible border-b border-stone-200 bg-white/95 py-2 shadow-sm backdrop-blur sm:py-3">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 overflow-visible px-3 sm:px-4 md:flex-row md:items-center md:justify-between md:px-8">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <AppIcon />
+            <div className="flex h-14 flex-col justify-center">
+              <h1 className="relative top-[1px] text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl">Key Signatures</h1>
+              <p className="mt-0 whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap">Identify key signatures.</p>
             </div>
           </div>
-        </header>
 
+          <div className="relative z-50 flex flex-wrap items-center gap-2 overflow-visible md:ml-auto md:justify-end">
+            <ScoreStreakPanel
+              correct={correct}
+              attempted={attempted}
+              accuracy={accuracy}
+              streak={streak}
+              bestStreak={bestStreak}
+              medal={streakMedal}
+              confettiKey={confettiKey}
+              resetScore={resetScore}
+              autoShowMedals={autoShowMedals}
+            />
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]">
         <main
-          className="relative -mt-[10px] overflow-hidden rounded-2xl border border-stone-200 bg-white px-4 pb-[18px] pt-[10px] shadow-sm md:h-auto md:overflow-hidden md:px-6 md:pb-[18px] md:pt-[14px]"
+          className="relative z-0 min-h-[520px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-0 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
           onPointerDown={() => {
             if (feedback && !feedback.correct) fadeToNextQuestion();
           }}
         >
-          <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="relative" ref={customiseRef}>
-                <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>
-                {customiseOpen && (
-                  <div className="absolute left-0 z-20 mt-2 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
-                    <h2 className="mb-3 text-center text-base font-semibold">Customise</h2>
+          <div className="relative z-50 mb-2.5 grid grid-cols-[auto_1fr_auto] items-center gap-2 overflow-visible">
+            <div className="relative flex items-center gap-2 overflow-visible" ref={menuRef}>
+              <div className="relative overflow-visible">
+                <button
+                  type="button"
+                  onClick={() => { setMenuMode("levels"); setMenuOpen((open) => !(open && menuMode === "levels")); }}
+                  className={`${TOOLBAR_BUTTON_CLASS} gap-1`}
+                >
+                  <img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain scale-[1.06]" />
+                  <span className="relative -left-[5px] sm:hidden">{activeLevel}</span>
+                  <span className="relative -left-[3px] hidden sm:inline">{LEVELS[activeLevel].label}</span>
+                </button>
+
+                {menuOpen && menuMode === "levels" && (
+                  <div className={`${MENU_PANEL_CLASS} left-0`}>
+                    <div className={MENU_TITLE_CLASS}>
+                      <div className="text-center text-base font-semibold text-stone-800">Level</div>
+                    </div>
+                    <LevelMenu activeLevel={activeLevel} applyLevel={applyLevel} />
+                  </div>
+                )}
+              </div>
+
+              <div className="relative overflow-visible">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (menuOpen && menuMode === "customise") setMenuOpen(false);
+                    else { setMenuMode("customise"); setMenuOpen(true); }
+                  }}
+                  className={`${TOOLBAR_BUTTON_CLASS} gap-2`}
+                >
+                  <img src={ASSET.customise} alt="" aria-hidden="true" className="h-[20.7px] w-[20.7px] object-contain" />
+                  <span className="hidden sm:inline">Customise</span>
+                </button>
+
+                {menuOpen && menuMode === "customise" && (
+                  <div className={`${MENU_PANEL_CLASS} -left-[66px] sm:left-0`}>
+                    <div className={MENU_TITLE_CLASS}>
+                      <div className="text-center text-base font-semibold text-stone-800">Customise</div>
+                    </div>
                     <MenuRows
-                      resetScore={resetScore}
                       enableKeyNaming={enableKeyNaming}
                       setEnableKeyNaming={setEnableKeyNaming}
                       enableKeyBuilding={enableKeyBuilding}
@@ -977,58 +1393,62 @@ function App() {
                   </div>
                 )}
               </div>
-
-              <div className="relative" ref={helpRef}>
-                <button type="button" onClick={() => setHelpOpen((value) => !value)} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">💡 <span>Help</span></button>
-                {helpOpen && (
-                  <div className="absolute left-0 top-12 z-20 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
-                    <HelpPanel />
-                  </div>
-                )}
-              </div>
             </div>
 
-            <button type="button" onClick={() => newQuestion()} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading} /></div>
+            <div className="flex h-10 items-center justify-center">
+              {feedback && <FeedbackBanner feedback={feedback} fading={feedbackFading} />}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => newQuestion(activeLevel, true)}
+              className={`${TOOLBAR_BUTTON_CLASS} shrink-0`}
+            >
+              <div className="flex w-full items-center justify-center sm:relative sm:left-[4px] sm:w-auto sm:gap-1">
+                <span className="hidden sm:inline">Skip</span>
+                <img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />
+              </div>
+            </button>
           </div>
 
-          <div className={`relative -top-[60px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+          <div className={`mx-auto flex w-full items-center justify-center transition-opacity duration-300 sm:relative sm:top-[0px] ${mobileOnlyActiveClef ? "relative -top-[4px]" : "relative top-[24px]"} ${questionVisible ? "opacity-100" : "opacity-0"}`}>
             <MusicScore
               question={question}
               selectedAccidental={selectedAccidental}
-              placedAccidental={placedAccidental}
+              placedAccidentals={placedAccidentals}
               hoverStep={hoverStep}
               setHoverStep={setHoverStep}
               onPlaceAccidental={placeBuildAccidental}
               feedback={feedback}
+              mobileOnlyActiveClef={mobileOnlyActiveClef}
             />
           </div>
 
-          <div className="relative z-10 mt-10 min-h-[118px] overflow-visible rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:mt-[-213px] md:mx-3">
-            <div className="space-y-3 text-stone-900">
+          <div className="relative z-10 mt-[-8px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:mt-[-63px] sm:p-4 md:mx-3 md:-mt-[81px]">
+            <div className="space-y-2 text-stone-900">
               <p className="text-base font-semibold leading-tight">{instruction}</p>
-              {showNoAccidentalAnswer && <div className="mt-2 text-center text-base font-bold text-green-600">Correct answer: no sharps or flats</div>}
+              {showNoAccidentalAnswer && <p className="text-sm font-bold text-[#16a34a]">Correct answer: no sharps or flats.</p>}
             </div>
 
             {isBuildKeyQuestion ? (
               <div className="mt-4 flex flex-wrap items-end gap-2">
                 <div className="flex items-end gap-2">
-                  <button type="button" disabled={locked} onClick={() => setSelectedAccidental("sharp")} className={`relative flex h-[64px] w-[64px] shrink-0 items-center justify-center overflow-hidden rounded-xl border text-3xl font-normal leading-none transition ${selectedAccidental === "sharp" ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>
-                    <span className="pointer-events-none absolute left-1/2 top-1/2 block -translate-x-1/2 -translate-y-1/2 scale-[1.58] font-light leading-none">♯</span>
+                  <button type="button" disabled={locked} onClick={() => setSelectedAccidental("sharp")} className={`relative flex h-[56px] w-[56px] shrink-0 items-center justify-center overflow-hidden rounded-xl border transition ${selectedAccidental === "sharp" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white hover:bg-stone-100"}`}>
+                    <img src={ASSET.sharp} alt="" aria-hidden="true" className={`h-[36px] w-[19px] object-contain ${selectedAccidental === "sharp" ? "brightness-0 invert" : ""}`} />
                   </button>
-                  <button type="button" disabled={locked} onClick={() => setSelectedAccidental("flat")} className={`relative flex h-[64px] w-[64px] shrink-0 items-center justify-center overflow-hidden rounded-xl border text-3xl font-normal leading-none transition ${selectedAccidental === "flat" ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>
-                    <span className="pointer-events-none absolute left-1/2 top-1/2 block -translate-x-1/2 -translate-y-1/2 scale-[1.58] font-light leading-none">♭</span>
+                  <button type="button" disabled={locked} onClick={() => setSelectedAccidental("flat")} className={`relative flex h-[56px] w-[56px] shrink-0 items-center justify-center overflow-hidden rounded-xl border transition ${selectedAccidental === "flat" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white hover:bg-stone-100"}`}>
+                    <img src={ASSET.flat} alt="" aria-hidden="true" className={`h-[36px] w-[19px] object-contain ${selectedAccidental === "flat" ? "brightness-0 invert" : ""}`} />
                   </button>
                 </div>
 
                 <div className="ml-auto flex items-end gap-2 pt-0">
-                  <button type="button" disabled={locked || !placedAccidental} onClick={clearBuildAccidental} className="rounded-xl border border-stone-300 bg-white px-5 py-3 text-sm font-bold transition hover:bg-stone-100">Clear</button>
-                  <button type="button" disabled={locked} onClick={submitBuildAnswer} className="rounded-xl border border-green-600 bg-green-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-green-700">Confirm</button>
+                  <button type="button" disabled={locked || placedAccidentals.length === 0} onClick={clearBuildAccidental} className="rounded-xl border border-stone-300 bg-white px-5 py-3 text-sm font-bold transition hover:bg-stone-100">Clear</button>
+                  <button type="button" disabled={locked} onClick={submitBuildAnswer} className="rounded-xl border border-black bg-black px-5 py-3 text-sm font-bold text-white transition hover:bg-stone-800">Confirm</button>
                 </div>
               </div>
             ) : (
               <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
-                {KEYS.map((key) => (
+                {keysForLevel(activeLevel).map((key) => (
                   <button key={key.id} type="button" disabled={locked} onClick={() => answerQuestion(key.id)} className={answerButtonClass(key.id)}>{key.label}</button>
                 ))}
               </div>
@@ -1041,7 +1461,8 @@ function App() {
 }
 
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.render(<App />, document.getElementById("root"));
   </script>
+  <script src="https://mrtennant-music.github.io/musicliteracy/footer.js"></script>
 </body>
 </html>
