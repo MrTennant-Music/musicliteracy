@@ -35,7 +35,7 @@ const ASSET = {
 
 const SVG = { width: 1280, height: 560 };
 const MOBILE_SVG_VIEWBOX = { x: 36, y: 116, width: 1188, height: 210 };
-const MOBILE_BUILD_VIEWBOX = { x: 0, y: 88, width: 480, height: 248 };
+const MOBILE_BUILD_VIEWBOX = { x: 24, y: 86, width: 300, height: 248 };
 
 const STAFF = {
   left: 80,
@@ -252,52 +252,6 @@ function renderAccidentalImage(item, index, extraProps = {}) {
       pointerEvents="none"
       {...extraProps}
     />
-  );
-}
-
-function TouchPlacementMagnifier({ preview }) {
-  const bubbleRadius = 64;
-  const bubbleX = clamp(preview.x, bubbleRadius + 8, SVG.width - bubbleRadius - 8);
-  const bubbleY = clamp(preview.y - 132, bubbleRadius + 8, 238);
-  const focusX = accidentalX(preview.type, preview.index) + accidentalDimensions(preview.type).width / 2;
-  const focusY = yForStep(preview.step);
-  const scale = 1.8;
-  const lineWidth = 118;
-
-  return (
-    <g pointerEvents="none">
-      <defs>
-        <filter id="magnifierShadow" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="8" stdDeviation="8" floodColor="rgba(0,0,0,0.18)" />
-        </filter>
-      </defs>
-      <line
-        x1={preview.x}
-        y1={preview.y - 16}
-        x2={bubbleX}
-        y2={bubbleY + bubbleRadius - 10}
-        stroke="#d6d3d1"
-        strokeWidth="7"
-        strokeLinecap="round"
-        opacity="0.95"
-      />
-      <circle cx={bubbleX} cy={bubbleY} r={bubbleRadius + 6} fill="rgba(255,255,255,0.9)" opacity="0.9" />
-      <circle cx={bubbleX} cy={bubbleY} r={bubbleRadius} fill="white" stroke="#d6d3d1" strokeWidth="2.5" filter="url(#magnifierShadow)" />
-      <circle cx={bubbleX - 18} cy={bubbleY - 18} r="18" fill="rgba(255,255,255,0.45)" />
-      {[0, 1, 2, 3, 4].map((line) => {
-        const y = bubbleY + (STAFF.top + line * STAFF.gap - focusY) * scale;
-        return <line key={line} x1={bubbleX - lineWidth / 2} x2={bubbleX + lineWidth / 2} y1={y} y2={y} stroke="currentColor" strokeWidth="1.8" opacity="0.95" />;
-      })}
-      <image
-        href={accidentalAsset(preview.type)}
-        x={bubbleX + (accidentalX(preview.type, preview.index) - focusX) * scale - (accidentalDimensions(preview.type).width * scale) / 2 + accidentalDimensions(preview.type).width / 2}
-        y={bubbleY + (accidentalY(preview.type, preview.step) + accidentalDimensions(preview.type).height / 2 - focusY) * scale - (accidentalDimensions(preview.type).height * scale) / 2}
-        width={accidentalDimensions(preview.type).width * scale}
-        height={accidentalDimensions(preview.type).height * scale}
-        preserveAspectRatio="xMidYMid meet"
-        opacity="0.96"
-      />
-    </g>
   );
 }
 
@@ -637,6 +591,9 @@ function useInjectedStyles() {
       button:active { transform: scale(0.96); filter: brightness(0.92); }
       button:disabled { cursor: not-allowed; opacity: 0.5; }
       button:focus-visible { outline: 2px solid rgba(22,163,74,0.35); outline-offset: 2px; }
+      @media (hover: none) and (pointer: coarse) {
+        button:hover { transform: none !important; filter: none !important; box-shadow: none !important; }
+      }
       .fixed-popover-button,.fixed-popover-button:hover,.fixed-popover-button:active { transform: translateX(-50%) !important; }
       @keyframes medalShine { 0%,100% { transform: scale(1) rotate(-4deg); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.16) rotate(4deg); filter: drop-shadow(0 0 10px rgba(250,204,21,.9)); } }
       @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } }
@@ -778,7 +735,7 @@ function LedgerLines({ x, step }) {
   );
 }
 
-function Staff({ fadeAtX = STAFF.right, visibleBars = [1, 2] }) {
+function Staff({ fadeAtX = STAFF.right, visibleBars = [1, 2], showTimeSignature = true }) {
   return (
     <g>
       <defs>
@@ -796,7 +753,7 @@ function Staff({ fadeAtX = STAFF.right, visibleBars = [1, 2] }) {
         return <line key={bar} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />;
       })}
       <image href={ASSET.trebleClef} x={STAFF.clefX - 29} y={STAFF.top - 46} width="104" height="184" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
-      <image href={ASSET.time44} x={STAFF.timeX - 47.41} y={STAFF.top - 17.25} width="84.41" height="128.07" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
+      {showTimeSignature && <image href={ASSET.time44} x={STAFF.timeX - 47.41} y={STAFF.top - 17.25} width="84.41" height="128.07" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />}
     </g>
   );
 }
@@ -945,9 +902,8 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
           {renderAccidentalImage(
             { type: touchPreview.type, step: touchPreview.step },
             touchPreview.index,
-            { opacity: "0.55" }
+            { opacity: "0.82" }
           )}
-          <TouchPlacementMagnifier preview={touchPreview} />
         </g>
       )}
 
@@ -1150,7 +1106,7 @@ function MusicScore({ question, selectedAccidental, placedAccidentals, hoverStep
   return (
     <svg viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
       <rect width={SVG.width} height={360} fill="white" />
-      <Staff fadeAtX={isMobileBuildFocus ? STAFF.timeX + 150 : STAFF.right} visibleBars={isMobileBuildFocus ? [1] : [1, 2]} />
+      <Staff fadeAtX={isMobileBuildFocus ? STAFF.keyX + 108 : STAFF.right} visibleBars={isMobileBuildFocus ? [1] : [1, 2]} showTimeSignature={!isMobileBuildFocus} />
       {question.type === "build-key" ? (
         <BuildKeySignatureLayer question={question} selectedAccidental={selectedAccidental} placedAccidentals={placedAccidentals} hoverStep={hoverStep} setHoverStep={setHoverStep} onPlaceAccidental={onPlaceAccidental} feedback={feedback} maxAccidentals={question.maxBuildAccidentals || 1} enableTouchPreview={isMobileBuildFocus} />
       ) : (
