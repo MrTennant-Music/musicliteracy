@@ -1435,10 +1435,13 @@ function App() {
   const [enableKeyNaming, setEnableKeyNaming] = useState(true);
   const [enableKeyBuilding, setEnableKeyBuilding] = useState(true);
   const [mobileOnlyActiveClef, setMobileOnlyActiveClef] = useState(window.innerWidth < 640);
+  const [typedInputFocused, setTypedInputFocused] = useState(false);
 
   const menuRef = useRef(null);
   const nextTimer = useRef(null);
   const fadeTimerRef = useRef(null);
+  const keyboardScrollRestoreRef = useRef(0);
+  const keyboardWasOpenRef = useRef(false);
 
   useClickAway(menuRef, () => setMenuOpen(false));
 
@@ -1453,6 +1456,32 @@ function App() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    if (!typedInputFocused || window.innerWidth >= 640 || !window.visualViewport) return;
+
+    const viewport = window.visualViewport;
+    const resetKeyboardOffset = () => {
+      window.setTimeout(() => {
+        window.scrollTo({ top: keyboardScrollRestoreRef.current, behavior: "smooth" });
+      }, 80);
+    };
+
+    const handleViewportResize = () => {
+      const keyboardVisible = viewport.height < window.innerHeight - 120;
+      if (keyboardVisible) {
+        keyboardWasOpenRef.current = true;
+        return;
+      }
+      if (keyboardWasOpenRef.current) {
+        keyboardWasOpenRef.current = false;
+        resetKeyboardOffset();
+      }
+    };
+
+    viewport.addEventListener("resize", handleViewportResize);
+    return () => viewport.removeEventListener("resize", handleViewportResize);
+  }, [typedInputFocused]);
 
   useEffect(() => {
     function updatePhoneLandscapeLock() {
@@ -1802,6 +1831,17 @@ function App() {
                     value={typedAnswer}
                     disabled={locked}
                     onChange={(event) => setTypedAnswer(autoCapitalizeTypedAnswer(event.target.value))}
+                    onFocus={() => {
+                      keyboardScrollRestoreRef.current = window.scrollY;
+                      keyboardWasOpenRef.current = false;
+                      setTypedInputFocused(true);
+                    }}
+                    onBlur={() => {
+                      setTypedInputFocused(false);
+                      window.setTimeout(() => {
+                        window.scrollTo({ top: keyboardScrollRestoreRef.current, behavior: "smooth" });
+                      }, 80);
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === " ") {
                         window.setTimeout(() => {
