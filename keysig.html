@@ -255,6 +255,34 @@ function renderAccidentalImage(item, index, extraProps = {}) {
   );
 }
 
+function TouchPlacementMagnifier({ preview }) {
+  const bubbleX = clamp(preview.x, 114, SVG.width - 114);
+  const bubbleY = clamp(preview.y - 98, 96, 250);
+  const focusX = accidentalX(preview.type, preview.index) + accidentalDimensions(preview.type).width / 2;
+  const focusY = yForStep(preview.step);
+  const scale = 1.8;
+  const lineWidth = 118;
+
+  return (
+    <g pointerEvents="none">
+      <circle cx={bubbleX} cy={bubbleY} r="64" fill="white" stroke="#d6d3d1" strokeWidth="2.5" />
+      {[0, 1, 2, 3, 4].map((line) => {
+        const y = bubbleY + (STAFF.top + line * STAFF.gap - focusY) * scale;
+        return <line key={line} x1={bubbleX - lineWidth / 2} x2={bubbleX + lineWidth / 2} y1={y} y2={y} stroke="currentColor" strokeWidth="1.8" opacity="0.95" />;
+      })}
+      <image
+        href={accidentalAsset(preview.type)}
+        x={bubbleX + (accidentalX(preview.type, preview.index) - focusX) * scale - (accidentalDimensions(preview.type).width * scale) / 2 + accidentalDimensions(preview.type).width / 2}
+        y={bubbleY + (accidentalY(preview.type, preview.step) + accidentalDimensions(preview.type).height / 2 - focusY) * scale - (accidentalDimensions(preview.type).height * scale) / 2}
+        width={accidentalDimensions(preview.type).width * scale}
+        height={accidentalDimensions(preview.type).height * scale}
+        preserveAspectRatio="xMidYMid meet"
+        opacity="0.96"
+      />
+    </g>
+  );
+}
+
 function expectedBuildAccidentals(keyId) {
   return KEY_LIBRARY[keyId]?.signature || [];
 }
@@ -895,27 +923,12 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
 
       {touchPreview?.active && activeAsset && (
         <g pointerEvents="none">
-          <line
-            x1={STAFF.keyX - 58}
-            x2={STAFF.keyX + 68}
-            y1={yForStep(touchPreview.step)}
-            y2={yForStep(touchPreview.step)}
-            stroke="currentColor"
-            strokeWidth="1.6"
-            opacity="0.45"
-            strokeDasharray="5 4"
-          />
-          <g transform={`translate(${touchPreview.x} ${touchPreview.y - 20}) scale(1.55) translate(${-touchPreview.x} ${-(touchPreview.y - 20)})`}>
-            <image
-              href={activeAsset}
-              x={touchPreview.x - accidentalDimensions(touchPreview.type).width / 2}
-              y={touchPreview.y - 20 - accidentalDimensions(touchPreview.type).height / 2}
-              {...accidentalDimensions(touchPreview.type)}
-              opacity="0.92"
-              preserveAspectRatio="xMidYMid meet"
-              pointerEvents="none"
-            />
-          </g>
+          {renderAccidentalImage(
+            { type: touchPreview.type, step: touchPreview.step },
+            touchPreview.index,
+            { opacity: "0.55" }
+          )}
+          <TouchPlacementMagnifier preview={touchPreview} />
         </g>
       )}
 
