@@ -75,7 +75,6 @@ const rgbaFromHex = (hex, alpha) => {
   const b = parseInt(clean.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${alpha})`;
 };
-const SITE_THEME_KEY = "mlh-theme";
 const SITE_ACCESSIBILITY_KEY = "mlh-accessibility";
 const LEVELS = {
   N5: {
@@ -224,6 +223,21 @@ function accidentalDimensions(type) {
     : { width: 28, height: 49 };
 }
 
+function renderAccidentalImage(item, index, extraProps = {}) {
+  return (
+    <image
+      key={`${item.type}-${item.step}-${index}`}
+      href={accidentalAsset(item.type)}
+      x={accidentalX(item.type, index)}
+      y={accidentalY(item.type, item.step)}
+      {...accidentalDimensions(item.type)}
+      preserveAspectRatio="xMidYMid meet"
+      pointerEvents="none"
+      {...extraProps}
+    />
+  );
+}
+
 function expectedBuildAccidentals(keyId) {
   return KEY_LIBRARY[keyId]?.signature || [];
 }
@@ -231,10 +245,6 @@ function expectedBuildAccidentals(keyId) {
 function keySignatureMatches(placed, expected) {
   if (placed.length !== expected.length) return false;
   return expected.every((item, index) => placed[index]?.type === item.type && placed[index]?.step === item.step);
-}
-
-function readSiteTheme() {
-  return localStorage.getItem(SITE_THEME_KEY) || "light";
 }
 
 function readSiteAccessibility() {
@@ -492,12 +502,6 @@ function useInjectedStyles() {
       .app-large-text { font-size: 112.5%; }
       .app-high-contrast { filter: contrast(1.15); }
       .app-reduce-motion *,.app-reduce-motion *::before,.app-reduce-motion *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-      .app-dark header,.app-dark main,.app-dark.bg-white { background-color: #1c1917 !important; color: #f5f5f4 !important; border-color: #44403c !important; }
-      .app-dark.bg-stone-50,.app-dark.bg-stone-100 { background-color: #292524 !important; color: #f5f5f4 !important; }
-      .app-dark.text-stone-500,.app-dark.text-stone-600,.app-dark.text-stone-700,.app-dark.text-stone-800,.app-dark.text-stone-900,.app-dark.text-black { color: #e7e5e4 !important; }
-      .app-dark.border-stone-200,.app-dark.border-stone-300 { border-color: #57534e !important; }
-      .app-dark svg rect[fill="white"] { fill: #fafaf9 !important; }
-      .app-dark svg { color: #0c0a09; }
       .footer { width: min(1180px, calc(100% - 36px)); margin: 0 auto; padding: 22px 0 32px; border-top: 1px solid #e2e8f0; color: #475569; font-size: .86rem; }
       .footer-grid { display: grid; grid-template-columns: 235px 1fr 1fr 1fr; gap: 42px; align-items: start; }
       .footer-brand { display: flex; align-items: flex-start; }
@@ -602,7 +606,7 @@ function Staff() {
       })}
       <line x1={STAFF.right} x2={STAFF.right} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="2.2" />
       <image href={ASSET.trebleClef} x={STAFF.clefX - 29} y={STAFF.top - 47} width="104" height="184" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
-      <image href={ASSET.time44} x={STAFF.timeX - 43.5} y={STAFF.top - 14.3} width="76.56" height="116.16" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
+      <image href={ASSET.time44} x={STAFF.timeX - 47.41} y={STAFF.top - 17.25} width="84.41" height="128.07" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
     </g>
   );
 }
@@ -611,21 +615,7 @@ function KeySignature({ signature }) {
   if (!signature?.length) return null;
   return (
     <g pointerEvents="none">
-      {signature.map((item, index) => {
-        const size = accidentalDimensions(item.type);
-        return (
-          <image
-            key={`${item.type}-${item.step}-${index}`}
-            href={accidentalAsset(item.type)}
-            x={accidentalX(item.type, index)}
-            y={accidentalY(item.type, item.step)}
-            width={size.width}
-            height={size.height}
-            preserveAspectRatio="xMidYMid meet"
-            pointerEvents="none"
-          />
-        );
-      })}
+      {signature.map((item, index) => renderAccidentalImage(item, index))}
     </g>
   );
 }
@@ -699,52 +689,18 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
   return (
     <g>
       {activeAsset && hoverStep !== null && !showingFeedback && !draggingAccidental && (
-        <image
-          href={activeAsset}
-          x={accidentalX(selectedAccidental, nextIndex)}
-          y={accidentalY(selectedAccidental, hoverStep)}
-          {...accidentalDimensions(selectedAccidental)}
-          opacity="0.45"
-          pointerEvents="none"
-        />
+        renderAccidentalImage({ type: selectedAccidental, step: hoverStep }, nextIndex, { opacity: "0.45" })
       )}
 
       {draggingAccidental && activeAsset && (
-        <image
-          href={activeAsset}
-          x={accidentalX(draggingAccidental.type, nextIndex)}
-          y={accidentalY(draggingAccidental.type, draggingAccidental.step)}
-          {...accidentalDimensions(draggingAccidental.type)}
-          opacity="0.82"
-          pointerEvents="none"
-        />
+        renderAccidentalImage(draggingAccidental, nextIndex, { opacity: "0.82" })
       )}
 
-      {placedAccidentals.map((item, index) => (
-        <image
-          key={`${item.type}-${item.step}-${index}`}
-          href={accidentalAsset(item.type)}
-          x={accidentalX(item.type, index)}
-          y={accidentalY(item.type, item.step)}
-          {...accidentalDimensions(item.type)}
-          opacity={showingFeedback && !feedback.correct ? 0.35 : 1}
-          pointerEvents="none"
-        />
-      ))}
+      {placedAccidentals.map((item, index) => renderAccidentalImage(item, index, { opacity: showingFeedback && !feedback.correct ? 0.35 : 1 }))}
 
       {shouldShowExpected && (
         <g>
-          {expected.map((item, index) => (
-            <image
-              key={`expected-${item.type}-${item.step}-${index}`}
-              href={accidentalAsset(item.type)}
-              x={accidentalX(item.type, index)}
-              y={accidentalY(item.type, item.step)}
-              {...accidentalDimensions(item.type)}
-              opacity="1"
-              pointerEvents="none"
-            />
-          ))}
+          {expected.map((item, index) => renderAccidentalImage(item, index, { key: `expected-${item.type}-${item.step}-${index}`, opacity: "1" }))}
         </g>
       )}
 
@@ -772,6 +728,7 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
 function RhythmNote({ x, y, step, rhythm, pitch, accidental = false, showFlag = true, forcedDown = null, forcedStemEndY = null }) {
   const stem = getStem(x, y, step, forcedDown, forcedStemEndY);
   const isBeamedQuaver = rhythm === "quaver" && !showFlag;
+  const isPlainCrotchet = rhythm === "crotchet";
   const asset = rhythm === "semibreve"
     ? ASSET.semibreve
     : isBeamedQuaver
@@ -799,6 +756,11 @@ function RhythmNote({ x, y, step, rhythm, pitch, accidental = false, showFlag = 
         <image href={ASSET.sharp} x={pitch && pitch.includes("G#") ? x - 38 : x - 36} y={y - 27} width="28" height="54" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
       )}
       {isBeamedQuaver ? (
+        <>
+          <ellipse cx={x} cy={y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${y})`} fill="currentColor" stroke="currentColor" strokeWidth="2" />
+          <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke="currentColor" strokeWidth="1.8" />
+        </>
+      ) : isPlainCrotchet ? (
         <>
           <ellipse cx={x} cy={y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${y})`} fill="currentColor" stroke="currentColor" strokeWidth="2" />
           <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke="currentColor" strokeWidth="1.8" />
@@ -939,26 +901,22 @@ function useClickAway(ref, handler) {
 }
 
 function useSitePreferences() {
-  const [darkMode, setDarkMode] = useState(readSiteTheme() === "dark");
   const [accessibility, setAccessibility] = useState(readSiteAccessibility);
 
   useEffect(() => {
     const sync = () => {
-      setDarkMode(readSiteTheme() === "dark");
       setAccessibility(readSiteAccessibility());
     };
     sync();
     window.addEventListener("storage", sync);
-    window.addEventListener("mlh-theme-change", sync);
     window.addEventListener("mlh-accessibility-change", sync);
     return () => {
       window.removeEventListener("storage", sync);
-      window.removeEventListener("mlh-theme-change", sync);
       window.removeEventListener("mlh-accessibility-change", sync);
     };
   }, []);
 
-  return { darkMode, accessibility };
+  return { accessibility };
 }
 
 function handleButtonKeyDown(event, onActivate) {
@@ -1137,7 +1095,7 @@ function LevelMenu({ activeLevel, applyLevel }) {
 
 function App() {
   useInjectedStyles();
-  const { darkMode, accessibility } = useSitePreferences();
+  const { accessibility } = useSitePreferences();
 
   const initialLevel = useMemo(() => {
     const requested = new URLSearchParams(window.location.search).get("level");
@@ -1190,7 +1148,7 @@ function App() {
   const streakMedal = getStreakMedal(streak);
   const showNoAccidentalAnswer = isBuildKeyQuestion && feedback && !feedback.correct && expectedAccidentals.length === 0;
   const appClasses = [
-    darkMode ? "app-dark bg-stone-950 text-stone-100" : "bg-stone-50 text-black",
+    "bg-stone-50 text-black",
     accessibility.largeText ? "app-large-text" : "",
     accessibility.reduceMotion ? "app-reduce-motion" : "",
     accessibility.highContrast ? "app-high-contrast" : "",
@@ -1209,39 +1167,43 @@ function App() {
     window.clearTimeout(fadeTimerRef.current);
   }
 
+  function resetQuestionState() {
+    setSelectedAnswer(null);
+    setSelectedAccidental(null);
+    setPlacedAccidentals([]);
+    setHoverStep(null);
+    setFeedback(null);
+    setFeedbackFading(false);
+  }
+
+  function resetProgressState() {
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+  }
+
   function newQuestion(nextLevel = activeLevel, skipped = false) {
     clearNextTimer();
     if (skipped) setStreak(0);
     setQuestionVisible(false);
     window.setTimeout(() => {
       setQuestion(createQuestion({ identify: enableKeyNaming, build: enableKeyBuilding, level: nextLevel }));
-      setSelectedAnswer(null);
-      setSelectedAccidental(null);
-      setPlacedAccidentals([]);
-      setHoverStep(null);
-      setFeedback(null);
-      setFeedbackFading(false);
+      resetQuestionState();
       setQuestionVisible(true);
     }, 220);
   }
 
   function applyLevel(levelKey) {
     setActiveLevel(levelKey);
-    setCorrect(0);
-    setAttempted(0);
-    setStreak(0);
-    setBestStreak(0);
-    setConfettiKey(0);
+    resetProgressState();
     setMenuOpen(false);
     newQuestion(levelKey);
   }
 
   function resetScore() {
-    setCorrect(0);
-    setAttempted(0);
-    setStreak(0);
-    setBestStreak(0);
-    setConfettiKey(0);
+    resetProgressState();
     newQuestion();
   }
 
