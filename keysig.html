@@ -35,7 +35,7 @@ const ASSET = {
 
 const SVG = { width: 1280, height: 560 };
 const MOBILE_SVG_VIEWBOX = { x: 36, y: 116, width: 1188, height: 210 };
-const MOBILE_BUILD_VIEWBOX = { x: 78, y: 104, width: 600, height: 210 };
+const MOBILE_BUILD_VIEWBOX = { x: 0, y: 88, width: 480, height: 248 };
 
 const STAFF = {
   left: 80,
@@ -764,7 +764,7 @@ function KeySignature({ signature }) {
   );
 }
 
-function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidentals, hoverStep, setHoverStep, onPlaceAccidental, feedback, maxAccidentals }) {
+function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidentals, hoverStep, setHoverStep, onPlaceAccidental, feedback, maxAccidentals, enableTouchPreview = false }) {
   const [draggingAccidental, setDraggingAccidental] = useState(null);
   const [touchPreview, setTouchPreview] = useState(null);
   const [hoverIndex, setHoverIndex] = useState(null);
@@ -786,7 +786,7 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
   function accidentalFromPointer(event) {
     if (!selectedAccidental || showingFeedback) return null;
     const pointer = pointerToSvg(event);
-    const touchOffset = event.pointerType === "touch" ? 44 : 0;
+    const touchOffset = enableTouchPreview && event.pointerType === "touch" ? 44 : 0;
     const effectiveY = pointer.y - touchOffset;
     const rawStep = Math.round((STAFF.top + STAFF.gap * 4 - effectiveY) / (STAFF.gap / 2));
     const slotCenters = Array.from({ length: maxAccidentals }, (_, index) => accidentalX(selectedAccidental, index) + accidentalDimensions(selectedAccidental).width / 2);
@@ -799,7 +799,7 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
 
   function handlePointerMove(event) {
     if (showingFeedback) return;
-    if (event.pointerType === "touch" && touchPreview?.active) {
+    if (enableTouchPreview && event.pointerType === "touch" && touchPreview?.active) {
       event.preventDefault();
       const pointer = pointerToSvg(event);
       const next = accidentalFromPointer(event);
@@ -840,7 +840,7 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
     if (!next) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    if (event.pointerType === "touch") {
+    if (enableTouchPreview && event.pointerType === "touch") {
       const pointer = pointerToSvg(event);
       setTouchPreview({
         active: true,
@@ -865,7 +865,7 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
     if (showingFeedback) return;
     event.preventDefault();
     event.currentTarget.releasePointerCapture?.(event.pointerId);
-    const finalAccidental = touchPreview?.active
+    const finalAccidental = enableTouchPreview && touchPreview?.active
       ? { type: touchPreview.type, step: touchPreview.step, index: touchPreview.index }
       : accidentalFromPointer(event) ?? draggingAccidental;
     if (!finalAccidental) return;
@@ -905,11 +905,11 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
             opacity="0.45"
             strokeDasharray="5 4"
           />
-          <g transform={`translate(${touchPreview.x} ${accidentalY(touchPreview.type, touchPreview.step) + accidentalDimensions(touchPreview.type).height / 2}) scale(1.55) translate(${-touchPreview.x} ${-(accidentalY(touchPreview.type, touchPreview.step) + accidentalDimensions(touchPreview.type).height / 2)})`}>
+          <g transform={`translate(${touchPreview.x} ${touchPreview.y - 20}) scale(1.55) translate(${-touchPreview.x} ${-(touchPreview.y - 20)})`}>
             <image
               href={activeAsset}
               x={touchPreview.x - accidentalDimensions(touchPreview.type).width / 2}
-              y={accidentalY(touchPreview.type, touchPreview.step)}
+              y={touchPreview.y - 20 - accidentalDimensions(touchPreview.type).height / 2}
               {...accidentalDimensions(touchPreview.type)}
               opacity="0.92"
               preserveAspectRatio="xMidYMid meet"
@@ -1065,7 +1065,8 @@ function Passage({ bars, visibleBarCount = BAR_COUNT }) {
           const showAccidental = Boolean(alteredLetter) && !alteredLettersInBar.has(alteredLetter);
           if (alteredLetter) alteredLettersInBar.add(alteredLetter);
           const group = findGroup(groups, noteIndex);
-          const renderX = positions[noteIndex] + (showAccidental ? 12 : 0);
+          const exemptSharpShift = note.rhythm === "quaver" && bar[noteIndex - 1]?.rhythm === "dotted-crotchet";
+          const renderX = positions[noteIndex] + (showAccidental && !exemptSharpShift ? 12 : 0);
           return { alteredLetter, showAccidental, group, renderX };
         });
 
@@ -1113,18 +1114,17 @@ function Passage({ bars, visibleBarCount = BAR_COUNT }) {
 
 function MusicScore({ question, selectedAccidental, placedAccidentals, hoverStep, setHoverStep, onPlaceAccidental, feedback, mobileOnlyActiveClef }) {
   const isMobileBuildFocus = mobileOnlyActiveClef && question.type === "build-key";
-  const firstBarFadeX = STAFF.musicStartX + ((STAFF.right - STAFF.musicStartX) / BAR_COUNT) - 5;
   const viewBox = isMobileBuildFocus ? MOBILE_BUILD_VIEWBOX : mobileOnlyActiveClef ? MOBILE_SVG_VIEWBOX : { x: 0, y: 0, width: SVG.width, height: SVG.height };
   return (
     <svg viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`} className="h-auto w-full select-none overflow-hidden sm:overflow-visible">
       <rect width={SVG.width} height={360} fill="white" />
-      <Staff fadeAtX={isMobileBuildFocus ? firstBarFadeX + 36 : STAFF.right} visibleBars={isMobileBuildFocus ? [1] : [1, 2]} />
+      <Staff fadeAtX={isMobileBuildFocus ? STAFF.timeX + 150 : STAFF.right} visibleBars={isMobileBuildFocus ? [1] : [1, 2]} />
       {question.type === "build-key" ? (
-        <BuildKeySignatureLayer question={question} selectedAccidental={selectedAccidental} placedAccidentals={placedAccidentals} hoverStep={hoverStep} setHoverStep={setHoverStep} onPlaceAccidental={onPlaceAccidental} feedback={feedback} maxAccidentals={question.maxBuildAccidentals || 1} />
+        <BuildKeySignatureLayer question={question} selectedAccidental={selectedAccidental} placedAccidentals={placedAccidentals} hoverStep={hoverStep} setHoverStep={setHoverStep} onPlaceAccidental={onPlaceAccidental} feedback={feedback} maxAccidentals={question.maxBuildAccidentals || 1} enableTouchPreview={isMobileBuildFocus} />
       ) : (
         <KeySignature signature={question.key.signature} />
       )}
-      <Passage bars={question.bars} visibleBarCount={isMobileBuildFocus ? 1 : BAR_COUNT} />
+      {!isMobileBuildFocus && <Passage bars={question.bars} visibleBarCount={BAR_COUNT} />}
     </svg>
   );
 }
