@@ -773,7 +773,6 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
   const showingFeedback = Boolean(feedback);
   const shouldShowExpected = showingFeedback && expected.length > 0 && !feedback.correct;
   const previewIndex = !placedAccidentals[0] ? 0 : Math.min(placedAccidentals.length, Math.max(0, maxAccidentals - 1));
-  const holdTimerRef = useRef(null);
 
   function pointerToSvg(event) {
     const svg = event.currentTarget.ownerSVGElement ?? event.currentTarget;
@@ -843,20 +842,18 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
     event.currentTarget.setPointerCapture?.(event.pointerId);
     if (event.pointerType === "touch") {
       const pointer = pointerToSvg(event);
-      holdTimerRef.current = window.setTimeout(() => {
-        setTouchPreview({
-          active: true,
-          x: pointer.x,
-          y: pointer.y,
-          step: next.step,
-          type: next.type,
-          index: next.index,
-          dragged: false,
-        });
-        setDraggingAccidental(next);
-        setHoverStep(next.step);
-        setHoverIndex(next.index);
-      }, 180);
+      setTouchPreview({
+        active: true,
+        x: pointer.x,
+        y: pointer.y,
+        step: next.step,
+        type: next.type,
+        index: next.index,
+        dragged: false,
+      });
+      setDraggingAccidental(next);
+      setHoverStep(next.step);
+      setHoverIndex(next.index);
       return;
     }
     setDraggingAccidental(next);
@@ -865,10 +862,6 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
   }
 
   function handlePointerUp(event) {
-    if (holdTimerRef.current) {
-      window.clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
     if (showingFeedback) return;
     event.preventDefault();
     event.currentTarget.releasePointerCapture?.(event.pointerId);
@@ -884,10 +877,6 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
   }
 
   function cancelPointer() {
-    if (holdTimerRef.current) {
-      window.clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
     setDraggingAccidental(null);
     setTouchPreview(null);
     setHoverStep(null);
@@ -896,11 +885,11 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
 
   return (
     <g>
-      {activeAsset && hoverStep !== null && !showingFeedback && !draggingAccidental && (
+      {activeAsset && hoverStep !== null && !showingFeedback && !draggingAccidental && !touchPreview?.active && (
         renderAccidentalImage({ type: selectedAccidental, step: hoverStep }, hoverIndex ?? previewIndex, { opacity: "0.45" })
       )}
 
-      {draggingAccidental && activeAsset && (
+      {draggingAccidental && activeAsset && !touchPreview?.active && (
         renderAccidentalImage(draggingAccidental, draggingAccidental.index, { opacity: "0.82" })
       )}
 
@@ -934,7 +923,9 @@ function BuildKeySignatureLayer({ question, selectedAccidental, placedAccidental
         item,
         index,
         showingFeedback
-          ? { opacity: 1, style: accidentalFeedbackStyle(feedback.correct) }
+          ? feedback.correct
+            ? { opacity: 1, style: accidentalFeedbackStyle(true) }
+            : { opacity: 0.4, style: accidentalFeedbackStyle(false) }
           : { opacity: 1 }
       ))}
 
@@ -1626,7 +1617,7 @@ function App() {
   }
 
   function answerButtonClass(keyId) {
-    const base = "rounded-xl border px-4 py-3 text-[1.05rem] font-bold transition";
+    const base = "rounded-xl border px-4 py-3 text-[1.05rem] font-bold transition disabled:opacity-100";
     if (!feedback) return `${base} ${selectedAnswer === keyId ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`;
     if (keyId === question.key.id) return `${base} border-green-600 bg-green-600 text-white`;
     if (keyId === selectedAnswer && keyId !== question.key.id) return `${base} border-red-600 bg-red-600 text-white`;
