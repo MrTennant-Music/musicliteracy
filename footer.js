@@ -5,8 +5,10 @@ if (!document.querySelector('link[href$="hub-ui.css"]')) {
   document.head.appendChild(hubStyle);
 }
 
+const footerShellClass = window.MLH?.shell?.footerShellClass || "bg-white";
+
 document.body.insertAdjacentHTML("beforeend", `
-<footer class="footer" id="resources">
+<footer class="footer ${footerShellClass}" id="resources">
   <div class="footer-grid">
 
     <div class="footer-brand">

@@ -7,7 +7,6 @@
   const MENU_TITLE_CLASS = "hub-menu-title";
   const TOOLBAR_BUTTON_CLASS = "flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5";
   const CUSTOMISE_MENU_PANEL_CLASS = "hub-menu-panel hub-menu-panel-customise";
-  const RESET_ROW_CLASS = "hub-reset-score-row";
 
   function useClickAway(ref, handler) {
     useEffect(() => {
@@ -128,8 +127,8 @@
       e(
         "span",
         { className: `hub-toggle-label ${labelWidthClass}` },
-        e("span", { className: "hub-toggle-glyph" }, glyph),
-        e("span", null, label),
+        e("span", { className: "hub-toggle-glyph flex items-center justify-center" }, glyph),
+        e("span", { className: "leading-none" }, label),
       ),
       e(
         "span",
@@ -137,10 +136,6 @@
         e("span", { className: "hub-toggle-thumb" }),
       ),
     );
-  }
-
-  function ResetScoreRow({ onClick, label = "Reset score" }) {
-    return e("button", { type: "button", onClick, className: RESET_ROW_CLASS }, label);
   }
 
   function LevelMenu({ activeLevel, onSelect, levels }) {
@@ -159,10 +154,10 @@
           },
           e(
             "div",
-            { className: "flex min-w-0 items-center justify-between gap-3 text-stone-900 sm:items-start" },
+            { className: "flex min-h-[46px] min-w-0 items-center justify-between gap-3 text-stone-900" },
             e(
               "div",
-              { className: "flex min-h-[36px] min-w-[42px] items-center justify-center" },
+              { className: "flex min-h-[46px] min-w-[42px] items-center justify-center" },
               e(
                 "span",
                 { className: "flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white text-[1.22rem] font-black leading-none tracking-tight text-stone-800 shadow-sm scale-[1.08]" },
@@ -171,11 +166,11 @@
             ),
             e(
               "div",
-              { className: "flex min-w-0 flex-1 flex-col justify-center pr-2" },
+              { className: "flex min-h-[46px] min-w-0 flex-1 flex-col justify-center pr-2" },
               e("div", { className: "pb-[1px] text-[13px] font-black leading-[1.2] sm:whitespace-normal" }, level.label),
               e("div", { className: "mt-[2px] pb-[2px] text-[11px] leading-[1.25] text-stone-600 sm:whitespace-normal" }, level.description),
             ),
-            active ? e("img", { src: "https://mrtennant-music.github.io/musicliteracy/tick.svg", alt: "", "aria-hidden": "true", className: "h-[22px] w-[22px] shrink-0 object-contain" }) : null,
+            active ? e("img", { src: "https://mrtennant-music.github.io/musicliteracy/tick.svg", alt: "", "aria-hidden": "true", className: "h-[22px] w-[22px] shrink-0 self-center object-contain" }) : null,
           ),
         );
       }),
@@ -186,7 +181,6 @@
   MLH.MenuTitleClass = MENU_TITLE_CLASS;
   MLH.CustomiseMenuPanelClass = CUSTOMISE_MENU_PANEL_CLASS;
   MLH.ToolbarButtonClass = TOOLBAR_BUTTON_CLASS;
-  MLH.ResetScoreRowClass = RESET_ROW_CLASS;
   MLH.useClickAway = useClickAway;
   MLH.useClickOutside = useClickOutside;
   MLH.MenuPanel = MenuPanel;
@@ -196,6 +190,5 @@
   MLH.HelpButton = HelpButton;
   MLH.SkipButton = SkipButton;
   MLH.MenuToggleRow = MenuToggleRow;
-  MLH.ResetScoreRow = ResetScoreRow;
   MLH.LevelMenu = LevelMenu;
 })();

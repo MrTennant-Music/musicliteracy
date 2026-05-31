@@ -15,21 +15,44 @@
   <script src="./hub-shell.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="./hub-menu.js?v=1.5"></script>
+  <style>
+    @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+    .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
+  </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
 const { useMemo, useRef, useState } = React;
+const SHELL = window.MLH?.shell || {};
 
 const ASSET = {
   appIcon: "https://mrtennant-music.github.io/musicliteracy/intervals-icon.svg",
+  level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
   customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
   next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
+  sharp: "https://mrtennant-music.github.io/musicliteracy/sharp.svg?v=1.1",
+  flat: "https://mrtennant-music.github.io/musicliteracy/flat.svg?v=1.1",
   bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
   silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
   gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
   diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
+};
+
+const LEVELS = {
+  N5: {
+    label: "National 5",
+    description: "Tones, semitones, accidentals — flats, sharps and naturals · Leaps",
+  },
+  H: {
+    label: "Higher",
+    description: "Naming diatonic intervals: 2nd, 3rd, 4th, 5th, 6th, 7th, octave · Writing diatonic intervals above a given note in treble clef",
+  },
+  AH: {
+    label: "Advanced Higher",
+    description: "Tritone · Augmented 4th · Diminished 5th",
+  },
 };
 
 const SVG = { width: 920, height: 420 };
@@ -55,8 +78,9 @@ const COLOUR = {
 };
 
 const GLYPH = {
-  trebleClef: String.fromCodePoint(0x1d11e),
+  trebleClef: "\uE050",
   bassClef: String.fromCodePoint(0x1d122),
+  noteheadBlack: "\uE0A4",
 };
 
 const NOTES = [
@@ -83,6 +107,45 @@ const INTERVALS = [
   { size: 6, label: "6th" },
   { size: 7, label: "7th" },
   { size: 8, label: "Octave" },
+];
+
+const LEVEL_INTERVALS = {
+  N5: [2, 8],
+  H: [2, 3, 4, 5, 6, 7, 8],
+  AH: [2, 3, 4, 5, 6, 7, 8, "tritone", "augmented-4th", "diminished-5th"],
+};
+
+const CHROMATIC_INTERVALS = [
+  {
+    id: "tritone",
+    label: "Tritone",
+    startIndex: 5,
+    endIndex: 8,
+    direction: "higher",
+    targetAccidental: "sharp",
+    keySignature: [],
+    answerOptions: ["Tritone", "Augmented 4th", "Diminished 5th"],
+  },
+  {
+    id: "augmented-4th",
+    label: "Augmented 4th",
+    startIndex: 5,
+    endIndex: 8,
+    direction: "higher",
+    targetAccidental: "sharp",
+    keySignature: [],
+    answerOptions: ["Tritone", "Augmented 4th", "Diminished 5th"],
+  },
+  {
+    id: "diminished-5th",
+    label: "Diminished 5th",
+    startIndex: 5,
+    endIndex: 9,
+    direction: "higher",
+    targetAccidental: null,
+    keySignature: [{ type: "flat", step: 7 }],
+    answerOptions: ["Tritone", "Augmented 4th", "Diminished 5th"],
+  },
 ];
 
 const NOTE_NAME_LABELS = {
@@ -120,8 +183,31 @@ function noteByIndex(index) {
   return NOTES[clamp(index, 0, NOTES.length - 1)];
 }
 
+function normalizeText(value) {
+  return String(value || "").toLowerCase().replace(/[-\s]/g, "");
+}
+
+function chromaticAnswerMatches(raw, label) {
+  const compact = normalizeText(raw);
+  return compact === "tritone" || compact === normalizeText(label);
+}
+
 function intervalLabel(size) {
+  if (typeof size === "string") return CHROMATIC_INTERVALS.find((interval) => interval.id === size)?.label ?? size;
   return INTERVALS.find((interval) => interval.size === size)?.label ?? `${size}th`;
+}
+
+function intervalsForLevel(level) {
+  const allowed = LEVEL_INTERVALS[level] || LEVEL_INTERVALS.N5;
+  return allowed
+    .filter((item) => typeof item === "number")
+    .map((size) => INTERVALS.find((interval) => interval.size === size))
+    .filter(Boolean);
+}
+
+function answerOptionsForQuestion(question, level) {
+  if (question.answerOptions) return question.answerOptions.map((label) => ({ id: label, label }));
+  return intervalsForLevel(level).map((interval) => ({ id: interval.size, label: interval.label }));
 }
 
 function yForStep(top, step) {
@@ -142,13 +228,31 @@ function stemDown(step) {
 
 function getStem(x, y, step, forcedDown = null) {
   const down = forcedDown ?? stemDown(step);
-  const stemX = down ? x - NOTE.rx + 0.5 : x + NOTE.rx - 0.5;
+  const stemX = down ? x - NOTE.rx + 2.5 : x + NOTE.rx - 2.5;
   const stemEndY = down ? y + NOTE.stemLength : y - NOTE.stemLength;
   return { down, stemX, stemEndY };
 }
 
-function makeIdentifyQuestion() {
-  const interval = randomItem(INTERVALS);
+function makeIdentifyQuestion(level = "N5") {
+  if (level === "AH" && Math.random() < 0.4) {
+    const interval = randomItem(CHROMATIC_INTERVALS);
+    return {
+      id: Math.random().toString(36).slice(2),
+      type: "identify",
+      chromatic: true,
+      typedMode: true,
+      startIndex: interval.startIndex,
+      endIndex: interval.endIndex,
+      intervalSize: interval.id,
+      answer: interval.label,
+      direction: interval.direction,
+      targetAccidental: interval.targetAccidental,
+      keySignature: interval.keySignature,
+      answerOptions: interval.answerOptions,
+    };
+  }
+
+  const interval = randomItem(intervalsForLevel(level));
   const distance = interval.size - 1;
   const direction = Math.random() < 0.5 ? "higher" : "lower";
   const possibleStarts = NOTES.map((_, index) => index).filter((index) => direction === "higher" ? index + distance < NOTES.length : index - distance >= 0);
@@ -158,6 +262,7 @@ function makeIdentifyQuestion() {
   return {
     id: Math.random().toString(36).slice(2),
     type: "identify",
+    typedMode: false,
     startIndex,
     endIndex,
     intervalSize: interval.size,
@@ -165,10 +270,10 @@ function makeIdentifyQuestion() {
   };
 }
 
-function makeCreateQuestion() {
+function makeCreateQuestion(level = "N5") {
   const validQuestions = [];
 
-  INTERVALS.forEach((interval) => {
+  intervalsForLevel(level).forEach((interval) => {
     const distance = interval.size - 1;
     NOTES.forEach((_, startIndex) => {
       if (startIndex + distance < NOTES.length) {
@@ -183,8 +288,8 @@ function makeCreateQuestion() {
   return { id: Math.random().toString(36).slice(2), ...randomItem(validQuestions) };
 }
 
-function createQuestion(mode = "identify") {
-  return mode === "create" ? makeCreateQuestion() : makeIdentifyQuestion();
+function createQuestion(mode = "identify", level = "N5") {
+  return mode === "create" ? makeCreateQuestion(level) : makeIdentifyQuestion(level);
 }
 
 function pickQuestionMode(enabledModes) {
@@ -217,16 +322,7 @@ function RhythmNote({ x, y, step, colour = "currentColor", opacity = 1, preview 
 
   return (
     <g opacity={opacity} pointerEvents="none" transform={scale !== 1 ? `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})` : undefined}>
-      <ellipse
-        cx={x}
-        cy={y}
-        rx={NOTE.rx}
-        ry={NOTE.ry}
-        transform={`rotate(-18 ${x} ${y})`}
-        fill={colour}
-        stroke={colour}
-        strokeWidth={preview ? 2 : 2.2}
-      />
+      <text className="music-symbol" x={x} y={y} fontSize="82" textAnchor="middle" fill={colour}>{GLYPH.noteheadBlack}</text>
       <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />
     </g>
   );
@@ -235,11 +331,46 @@ function RhythmNote({ x, y, step, colour = "currentColor", opacity = 1, preview 
 function Staff() {
   return (
     <g>
+      <defs>
+        <linearGradient id="intervalStaffFade" x1={STAFF.left} y1="0" x2={STAFF.right} y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#000" stopOpacity="1" />
+          <stop offset="86%" stopColor="#000" stopOpacity="1" />
+          <stop offset="100%" stopColor="#000" stopOpacity="0" />
+        </linearGradient>
+      </defs>
       {[0, 1, 2, 3, 4].map((line) => (
-        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={STAFF.trebleTop + line * STAFF.gap} y2={STAFF.trebleTop + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
+        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={STAFF.trebleTop + line * STAFF.gap} y2={STAFF.trebleTop + line * STAFF.gap} stroke="url(#intervalStaffFade)" strokeWidth="1.5" />
       ))}
-      <line x1={STAFF.right} x2={STAFF.right} y1={STAFF.trebleTop} y2={STAFF.trebleTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />
-      <text x={STAFF.left + 18} y={STAFF.trebleTop + 58} fontSize="189" fontFamily="serif" dominantBaseline="middle">{GLYPH.trebleClef}</text>
+      <text className="music-symbol" x={STAFF.left + 45} y={STAFF.trebleTop + 64} fontSize="83.232" textAnchor="middle" fill="currentColor">{GLYPH.trebleClef}</text>
+    </g>
+  );
+}
+
+function accidentalSize(type) {
+  return type === "sharp" ? { width: 28, height: 54 } : { width: 28, height: 49 };
+}
+
+function accidentalY(type, step) {
+  return yForStep(STAFF.trebleTop, step) + (type === "sharp" ? -27 : -35);
+}
+
+function KeySignature({ signature = [] }) {
+  return (
+    <g pointerEvents="none">
+      {signature.map((item, index) => {
+        const size = accidentalSize(item.type);
+        const x = STAFF.left + 92 + index * 30;
+        return (
+          <image
+            key={`${item.type}-${item.step}-${index}`}
+            href={item.type === "sharp" ? ASSET.sharp : ASSET.flat}
+            x={x}
+            y={accidentalY(item.type, item.step)}
+            {...size}
+            preserveAspectRatio="xMidYMid meet"
+          />
+        );
+      })}
     </g>
   );
 }
@@ -263,13 +394,14 @@ function HelpLabels({ visible }) {
 }
 
 function IntervalHelpNumbers({ question, startX, secondX }) {
+  if (question.chromatic) return null;
   const endIndex = question.type === "identify" ? question.endIndex : question.targetIndex;
   const noteCount = Math.abs(endIndex - question.startIndex) + 1;
   const direction = endIndex >= question.startIndex ? 1 : -1;
   const totalDistance = Math.max(1, Math.abs(endIndex - question.startIndex));
 
   return (
-    <g fontSize="22" fontWeight="600" fill="#16a34a" opacity="0.6" pointerEvents="none">
+    <g fontSize="22" fontWeight="500" fill="black" opacity="0.72" pointerEvents="none">
       {Array.from({ length: noteCount }, (_, countIndex) => {
         const noteIndex = question.startIndex + countIndex * direction;
         const note = noteByIndex(noteIndex);
@@ -280,11 +412,12 @@ function IntervalHelpNumbers({ question, startX, secondX }) {
   );
 }
 
-function Note({ x, note, colour = "currentColor", opacity = 1, preview = false, scale = 1 }) {
+function Note({ x, note, colour = "currentColor", opacity = 1, preview = false, scale = 1, accidental = null }) {
   const y = yForStep(STAFF.trebleTop, note.step);
   return (
     <g>
       <LedgerLines x={x} step={note.step} colour={colour} />
+      {accidental && <image href={accidental === "sharp" ? ASSET.sharp : ASSET.flat} x={x - 42} y={accidentalY(accidental, note.step)} {...accidentalSize(accidental)} preserveAspectRatio="xMidYMid meet" pointerEvents="none" />}
       <RhythmNote x={x} y={y} step={note.step} colour={colour} opacity={opacity} preview={preview} scale={scale} />
     </g>
   );
@@ -299,8 +432,9 @@ function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedba
   const workingIndex = selectedIndex ?? hoverIndex;
   const workingNote = mode === "create" && workingIndex != null ? noteByIndex(workingIndex) : null;
   const selectedNote = mode === "create" && selectedIndex != null ? noteByIndex(selectedIndex) : null;
-  const identifyCorrect = feedback && mode === "identify" && selectedAnswer === question.intervalSize;
-  const identifyIncorrect = feedback && mode === "identify" && selectedAnswer !== question.intervalSize;
+  const correctIdentifyAnswer = question.answer ?? question.intervalSize;
+  const identifyCorrect = feedback && mode === "identify" && selectedAnswer === correctIdentifyAnswer;
+  const identifyIncorrect = feedback && mode === "identify" && selectedAnswer !== correctIdentifyAnswer;
   const createCorrect = feedback && mode === "create" && selectedIndex === question.targetIndex;
   const createIncorrect = feedback && mode === "create" && selectedIndex !== question.targetIndex;
 
@@ -308,12 +442,13 @@ function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedba
     <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-visible">
       <rect width={SVG.width} height={SVG.height} fill="white" />
       <Staff />
+      <KeySignature signature={question.keySignature} />
 
       <Note x={startX} note={startNote} />
 
       {mode === "identify" && (
         <>
-          <Note x={secondX} note={targetNote} colour={identifyCorrect ? COLOUR.green : identifyIncorrect ? COLOUR.red : "currentColor"} />
+          <Note x={secondX} note={targetNote} accidental={question.targetAccidental} colour={identifyCorrect ? COLOUR.green : identifyIncorrect ? COLOUR.red : "currentColor"} />
           {showHelp && <IntervalHelpNumbers question={question} startX={startX} secondX={secondX} />}
         </>
       )}
@@ -389,34 +524,7 @@ function ScorePanel({ correct, attempted, accuracy, streak, bestStreak, confetti
   );
 }
 
-function HelpPanel() {
-  const [page, setPage] = useState(0);
-  const pages = [
-    ["Instructions", "Questions are randomly generated between Identify Interval and Create Interval depending on which modes are enabled in Customise."],
-    ["Identify Interval", "Choose the correct interval name shown between the two notes. Correct answers highlight green. Incorrect answers highlight red."],
-    ["Create Interval", "Place the second note to create the interval requested. The note updates live while hovering or dragging."],
-    ["Show Step Counter", "Enable Show Step Counter in the Customise menu to display interval counting numbers directly on the stave."],
-    ["Counting Intervals", "Always start counting from the original note. Count the starting note as 1, then count each line and space until you reach the second note."],
-    ["Direction", "If the task says higher, place the note above the starting note. If it says lower, place it below."],
-  ];
-  const [title, body] = pages[page];
-
-  return (
-    <div>
-      <div className="min-h-[120px] rounded-xl border border-stone-200 bg-stone-50 p-4">
-        <h3 className="text-sm font-bold text-stone-800">{title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-stone-700">{body}</p>
-      </div>
-      <div className="mt-3 flex items-center justify-between">
-        <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={page === 0} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">←</button>
-        <div className="text-sm font-semibold text-stone-600">{page + 1} / {pages.length}</div>
-        <button type="button" onClick={() => setPage((value) => Math.min(pages.length - 1, value + 1))} disabled={page === pages.length - 1} className="flex h-9 w-[46px] items-center justify-center rounded-xl border border-stone-300 bg-white text-lg font-bold text-stone-800 disabled:opacity-35">→</button>
-      </div>
-    </div>
-  );
-}
-
-function MenuRows({ enabledModes, setEnabledModes, newQuestion, showHelp, setShowHelp, resetScore }) {
+function MenuRows({ enabledModes, setEnabledModes, newQuestion, showHelp, setShowHelp }) {
   function toggleMode(modeId) {
     setEnabledModes((current) => {
       const next = { ...current, [modeId]: !current[modeId] };
@@ -456,17 +564,18 @@ function MenuRows({ enabledModes, setEnabledModes, newQuestion, showHelp, setSho
         checked={showHelp}
         onChange={() => setShowHelp((value) => !value)}
       />
-      <window.MLH.ResetScoreRow onClick={resetScore} />
     </>
   );
 }
 
-function IntervalOptions({ selectedAnswer, disabled, onSelect, feedback, correctAnswer }) {
+function IntervalOptions({ selectedAnswer, disabled, onSelect, feedback, question, level }) {
+  const options = answerOptionsForQuestion(question, level);
+  const correctAnswer = question.answer ?? question.intervalSize;
   return (
     <div className="flex flex-wrap gap-2">
-      {INTERVALS.map((interval) => {
-        const isSelected = selectedAnswer === interval.size;
-        const isCorrect = correctAnswer === interval.size;
+      {options.map((option) => {
+        const isSelected = selectedAnswer === option.id;
+        const isCorrect = correctAnswer === option.id;
         let buttonClass = "border-stone-300 bg-white text-stone-900";
 
         if (feedback) {
@@ -483,13 +592,13 @@ function IntervalOptions({ selectedAnswer, disabled, onSelect, feedback, correct
 
         return (
           <button
-            key={interval.size}
+            key={option.id}
             type="button"
             disabled={disabled}
-            onClick={() => onSelect(interval.size)}
+            onClick={() => onSelect(option.id)}
             className={`flex h-[48px] min-w-[68px] items-center justify-center rounded-xl border px-3 text-sm font-bold transition ${buttonClass}`}
           >
-            {interval.label}
+            {option.label}
           </button>
         );
       })}
@@ -498,17 +607,24 @@ function IntervalOptions({ selectedAnswer, disabled, onSelect, feedback, correct
 }
 
 function App() {
-  const initialQuestionMode = useMemo(() => pickQuestionMode({ identify: true, create: true }), []);
+  const initialLevel = useMemo(() => {
+    const requested = new URLSearchParams(window.location.search).get("level");
+    return LEVELS[requested] ? requested : "N5";
+  }, []);
+  const initialQuestionMode = useMemo(() => initialLevel === "N5" ? "identify" : pickQuestionMode({ identify: true, create: true }), [initialLevel]);
+  const [activeLevel, setActiveLevel] = useState(initialLevel);
   const [enabledModes, setEnabledModes] = useState({ identify: true, create: true });
   const [mode, setMode] = useState(initialQuestionMode);
-  const [question, setQuestion] = useState(() => createQuestion(initialQuestionMode));
+  const [question, setQuestion] = useState(() => createQuestion(initialQuestionMode, initialLevel));
   const [questionVisible, setQuestionVisible] = useState(true);
   const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
+  const [levelOpen, setLevelOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [hoverIndex, setHoverIndex] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [typedAnswer, setTypedAnswer] = useState("");
+  const [typedResult, setTypedResult] = useState(null);
   const [touchPreview, setTouchPreview] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [feedbackFading, setFeedbackFading] = useState(false);
@@ -520,19 +636,19 @@ function App() {
   const [confettiKey, setConfettiKey] = useState(0);
 
   const customiseRef = useRef(null);
-  const helpRef = useRef(null);
+  const levelRef = useRef(null);
 
   React.useEffect(() => window.MLH?.installPhoneLandscapeLock?.(), []);
 
   window.MLH.useClickOutside(
-    [customiseRef, helpRef],
-    [() => customiseOpen && setCustomiseOpen(false), () => helpOpen && setHelpOpen(false)],
+    [customiseRef, levelRef],
+    [() => customiseOpen && setCustomiseOpen(false), () => levelOpen && setLevelOpen(false)],
   );
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const canConfirm = mode === "create" ? selectedIndex != null && !feedback : false;
   const instruction = mode === "identify"
-    ? <>Describe the interval formed by the two notes shown.</>
+    ? <>Name the <strong>interval</strong>.</>
     : <>Create an interval <strong>{intervalLabel(question.intervalSize).toLowerCase()}</strong> <strong>{question.direction}</strong> than the note given.</>;
 
   function resetTask(nextQuestion = question) {
@@ -540,18 +656,20 @@ function App() {
     setHoverIndex(null);
     setSelectedIndex(null);
     setSelectedAnswer(null);
+    setTypedAnswer("");
+    setTypedResult(null);
     setTouchPreview(null);
     setFeedback(null);
     setFeedbackFading(false);
     setPrompt("");
   }
 
-  function newQuestion(nextEnabledModes = enabledModes) {
+  function newQuestion(nextEnabledModes = enabledModes, nextLevel = activeLevel) {
     setQuestionVisible(false);
     window.setTimeout(() => {
-      const nextMode = pickQuestionMode(nextEnabledModes);
+      const nextMode = nextLevel === "N5" ? "identify" : pickQuestionMode(nextEnabledModes);
       setMode(nextMode);
-      resetTask(createQuestion(nextMode));
+      resetTask(createQuestion(nextMode, nextLevel));
       setQuestionVisible(true);
     }, 260);
   }
@@ -562,13 +680,34 @@ function App() {
     setStreak(0);
     setBestStreak(0);
     setConfettiKey(0);
+    setTypedAnswer("");
+    setTypedResult(null);
     newQuestion(enabledModes);
+  }
+
+  function applyLevel(levelKey) {
+    setActiveLevel(levelKey);
+    setLevelOpen(false);
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+    setTypedAnswer("");
+    setTypedResult(null);
+    setQuestionVisible(false);
+    window.setTimeout(() => {
+      const nextMode = levelKey === "N5" ? "identify" : pickQuestionMode(enabledModes);
+      setMode(nextMode);
+      resetTask(createQuestion(nextMode, levelKey));
+      setQuestionVisible(true);
+    }, 260);
   }
 
   function fadeToNextQuestion() {
     if (!feedback || feedback.correct || feedbackFading) return;
     setFeedbackFading(true);
-    window.setTimeout(() => newQuestion(mode), 280);
+    window.setTimeout(() => newQuestion(enabledModes, activeLevel), 280);
   }
 
   function scoreAnswer(isCorrect) {
@@ -589,14 +728,21 @@ function App() {
     if (isCorrect) {
       setFeedbackFading(false);
       window.setTimeout(() => setFeedbackFading(true), 1700);
-      window.setTimeout(() => newQuestion(mode), 2000);
+      window.setTimeout(() => newQuestion(enabledModes, activeLevel), 2000);
     }
   }
 
   function selectInterval(intervalSize) {
     if (feedback || mode !== "identify") return;
     setSelectedAnswer(intervalSize);
-    scoreAnswer(intervalSize === question.intervalSize);
+    scoreAnswer(intervalSize === (question.answer ?? question.intervalSize));
+  }
+
+  function submitTypedAnswer() {
+    if (feedback || mode !== "identify" || !question.typedMode) return;
+    const correct = chromaticAnswerMatches(typedAnswer, question.answer);
+    setTypedResult(correct ? null : question.answer);
+    scoreAnswer(correct);
   }
 
   function confirmAnswer() {
@@ -680,35 +826,49 @@ function App() {
   }
 
   return (
-    <div className="overflow-x-hidden bg-stone-50 pb-10 text-stone-950 md:pb-12">
+    <div className={SHELL.pageShellClass}>
       <window.MLH.AppHeader icon={ASSET.appIcon} title="Intervals" subtitle="Identify and create intervals.">
         <ScorePanel correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} confettiKey={confettiKey} resetScore={resetScore} />
       </window.MLH.AppHeader>
 
-      <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]">
-        <main className="relative -mt-[10px] min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => { if (feedback && !feedback.correct) fadeToNextQuestion(); }}>
+      <div className={SHELL.pageContentClass}>
+        <main className={SHELL.mainShellClass} onPointerDown={() => { if (feedback && !feedback.correct) fadeToNextQuestion(); }}>
           <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <div className="relative" ref={customiseRef}>
-                <window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[21px] w-[21px]" />} onClick={() => setCustomiseOpen((value) => !value)} />
-                {customiseOpen && (
-                  <window.MLH.MenuPanel title="Customise" position="left-0" variant="customise">
-                    <MenuRows enabledModes={enabledModes} setEnabledModes={setEnabledModes} newQuestion={newQuestion} showHelp={showHelp} setShowHelp={setShowHelp} resetScore={resetScore} />
+              <div className="relative" ref={levelRef}>
+                <window.MLH.LevelButton
+                  icon={<img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain scale-[1.06]" />}
+                  activeLabel={LEVELS[activeLevel]?.label || activeLevel}
+                  activeLevel={activeLevel}
+                  onClick={() => {
+                    setCustomiseOpen(false);
+                    setLevelOpen((value) => !value);
+                  }}
+                />
+                {levelOpen && (
+                  <window.MLH.MenuPanel title="Level" position="left-0">
+                    <window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS} />
                   </window.MLH.MenuPanel>
                 )}
               </div>
 
-              <div className="relative" ref={helpRef}>
-                <window.MLH.HelpButton icon={<span className="inline-flex h-[21px] w-[21px] items-center justify-center text-[12px] font-black leading-none text-stone-700">abc</span>} onClick={() => setHelpOpen((value) => !value)} />
-                {helpOpen && (
-                  <window.MLH.MenuPanel title="Help" position="left-0" variant="customise">
-                    <HelpPanel />
+              <div className="relative" ref={customiseRef}>
+                <window.MLH.CustomiseButton
+                  icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[21px] w-[21px]" />}
+                  onClick={() => {
+                    setLevelOpen(false);
+                    setCustomiseOpen((value) => !value);
+                  }}
+                />
+                {customiseOpen && (
+                  <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise">
+                    <MenuRows enabledModes={enabledModes} setEnabledModes={setEnabledModes} newQuestion={(nextModes) => newQuestion(nextModes, activeLevel)} showHelp={showHelp} setShowHelp={setShowHelp} />
                   </window.MLH.MenuPanel>
                 )}
               </div>
             </div>
 
-            <window.MLH.SkipButton onClick={() => newQuestion(mode)} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
+            <window.MLH.SkipButton onClick={() => newQuestion(enabledModes, activeLevel)} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
             <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><window.MLH.FeedbackBadge feedback={feedback} fading={feedbackFading} animationPrefix="note" /></div>
           </div>
 
@@ -738,10 +898,31 @@ function App() {
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pb-[0px]">
-              {mode === "identify" && <IntervalOptions selectedAnswer={selectedAnswer} disabled={Boolean(feedback)} onSelect={selectInterval} feedback={feedback} correctAnswer={question.intervalSize} />}
+              {mode === "identify" && !question.typedMode && <IntervalOptions selectedAnswer={selectedAnswer} disabled={Boolean(feedback)} onSelect={selectInterval} feedback={feedback} question={question} level={activeLevel} />}
+
+              {mode === "identify" && question.typedMode && (
+                <div className="flex w-full flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    value={typedAnswer}
+                    onChange={(event) => setTypedAnswer(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        submitTypedAnswer();
+                      }
+                    }}
+                    placeholder="Type your answer"
+                    className="h-[48px] w-full max-w-[220px] rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-900 outline-none placeholder:text-stone-400 focus:border-black sm:max-w-[260px]"
+                    disabled={Boolean(feedback)}
+                  />
+                  <button type="button" onClick={submitTypedAnswer} disabled={Boolean(feedback) || !typedAnswer.trim()} className="rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>
+                  {typedResult && <span className="text-sm font-semibold text-green-600">{typedResult}</span>}
+                </div>
+              )}
 
               <div className="absolute bottom-4 right-4 flex shrink-0 justify-end gap-2">
-                {mode === "create" && <button type="button" disabled={!canConfirm} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>}
+                {mode === "create" && <button type="button" disabled={!canConfirm} onClick={confirmAnswer} className="rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>}
               </div>
             </div>
           </div>
