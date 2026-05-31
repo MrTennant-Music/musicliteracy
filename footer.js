@@ -1,4 +1,13 @@
-if (!document.querySelector('link[href$="hub-ui.css"]')) {
+const hasHubUiStylesheet = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+  .some(link => {
+    try {
+      return new URL(link.href, window.location.href).pathname.endsWith("/hub-ui.css");
+    } catch {
+      return link.getAttribute("href")?.split("?")[0].endsWith("hub-ui.css");
+    }
+  });
+
+if (!hasHubUiStylesheet) {
   const hubStyle = document.createElement("link");
   hubStyle.rel = "stylesheet";
   hubStyle.href = "https://mrtennant-music.github.io/musicliteracy/hub-ui.css";
