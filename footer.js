@@ -76,6 +76,15 @@ document.body.insertAdjacentHTML("beforeend", `
 </div>
 `);
 
+const footerStyle = document.createElement("style");
+footerStyle.textContent = `
+  .footer .text-link:hover,
+  .footer .text-link:focus-visible {
+    text-decoration: underline !important;
+  }
+`;
+document.head.appendChild(footerStyle);
+
 document.addEventListener("click", event => {
   const opener = event.target.closest("[data-open='aboutOverlay']");
 
