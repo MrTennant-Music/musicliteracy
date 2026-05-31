@@ -56,13 +56,18 @@
       onClick,
       className: `${TOOLBAR_BUTTON_CLASS} ${className}`.trim(),
     };
+    const children = [iconClassName ? e("span", { key: "icon", className: iconClassName }, icon) : icon];
+    if (mobileLabel) {
+      children.push(e("span", { key: "mobile-label", className: `relative -left-[5px] sm:hidden ${textClassName}`.trim() }, mobileLabel));
+    }
+    if (label) {
+      children.push(e("span", { key: "desktop-label", className: `hidden sm:inline ${textClassName}`.trim() }, label));
+    }
     if (dataMenuTrigger) props["data-menu-trigger"] = true;
     return e(
       "button",
       props,
-      iconClassName ? e("span", { className: iconClassName }, icon) : icon,
-      e("span", { className: `relative -left-[5px] sm:hidden ${textClassName}`.trim() }, mobileLabel),
-      e("span", { className: `hidden sm:inline ${textClassName}`.trim() }, label),
+      children,
     );
   }
 
