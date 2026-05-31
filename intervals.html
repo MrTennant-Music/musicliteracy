@@ -428,18 +428,18 @@ function RhythmNote({ x, y, step, colour = "currentColor", opacity = 1, preview 
   );
 }
 
-function Staff() {
+function Staff({ gradientId = "intervalStaffFade" }) {
   return (
     <g>
       <defs>
-        <linearGradient id="intervalStaffFade" x1={STAFF.left} y1="0" x2={STAFF.right} y2="0" gradientUnits="userSpaceOnUse">
+        <linearGradient id={gradientId} x1={STAFF.left} y1="0" x2={STAFF.right} y2="0" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="#000" stopOpacity="1" />
           <stop offset="86%" stopColor="#000" stopOpacity="1" />
           <stop offset="100%" stopColor="#000" stopOpacity="0" />
         </linearGradient>
       </defs>
       {[0, 1, 2, 3, 4].map((line) => (
-        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={STAFF.trebleTop + line * STAFF.gap} y2={STAFF.trebleTop + line * STAFF.gap} stroke="url(#intervalStaffFade)" strokeWidth="1.5" />
+        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={STAFF.trebleTop + line * STAFF.gap} y2={STAFF.trebleTop + line * STAFF.gap} stroke={`url(#${gradientId})`} strokeWidth="1.5" />
       ))}
       <text className="music-symbol" x={STAFF.left + 45} y={STAFF.trebleTop + 63} fontSize="83.232" textAnchor="middle" fill="currentColor">{GLYPH.trebleClef}</text>
     </g>
@@ -523,7 +523,7 @@ function Note({ x, note, colour = "currentColor", opacity = 1, preview = false, 
   );
 }
 
-function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedback, selectedAnswer, touchPreview, activeLevel, onPointerMove, onPointerDown, onPointerUp, onPointerCancel }) {
+function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedback, selectedAnswer, touchPreview, activeLevel, mobileZoom = false, onPointerMove, onPointerDown, onPointerUp, onPointerCancel }) {
   const startX = mode === "identify" ? 392 : 382;
   const secondX = mode === "identify" ? 536 : 536;
   const startNote = noteByIndex(question.startIndex);
@@ -538,10 +538,12 @@ function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedba
   const createCorrect = feedback && mode === "create" && selectedIndex === question.targetIndex;
   const createIncorrect = feedback && mode === "create" && selectedIndex !== question.targetIndex;
 
+  const viewBox = mobileZoom ? { x: 195, y: 112, width: SVG.width / 1.806, height: SVG.height / 1.806 } : { x: 0, y: 0, width: SVG.width, height: SVG.height };
+
   return (
-    <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-visible">
+    <svg viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`} className="h-auto w-full select-none overflow-visible">
       <rect width={SVG.width} height={SVG.height} fill="white" />
-      <Staff />
+      <Staff gradientId={mobileZoom ? "intervalStaffFadeMobile" : "intervalStaffFadeDesktop"} />
       <KeySignature signature={question.keySignature} />
 
       <Note x={startX} note={startNote} />
@@ -1025,38 +1027,58 @@ function App() {
             </p>
           )}
 
-              <div className={`relative -top-[55px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
-            <ScoreArea
-              question={question}
-              mode={mode}
-              showHelp={showHelp}
-              hoverIndex={hoverIndex}
-              selectedIndex={selectedIndex}
-              selectedAnswer={selectedAnswer}
-              feedback={feedback}
-              touchPreview={touchPreview}
-              activeLevel={activeLevel}
-              onPointerMove={handlePointerMove}
-              onPointerDown={handlePointerDown}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerCancel}
-            />
+          <div className={`absolute inset-x-3 top-[92px] flex items-center justify-center overflow-hidden transition-opacity duration-300 sm:relative sm:inset-auto sm:-top-[55px] sm:block sm:overflow-visible ${mode === "identify" && question.typedMode ? "bottom-[206px]" : "bottom-[136px]"} ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+            <div className="w-full sm:hidden">
+              <ScoreArea
+                question={question}
+                mode={mode}
+                showHelp={showHelp}
+                hoverIndex={hoverIndex}
+                selectedIndex={selectedIndex}
+                selectedAnswer={selectedAnswer}
+                feedback={feedback}
+                touchPreview={touchPreview}
+                activeLevel={activeLevel}
+                mobileZoom
+                onPointerMove={handlePointerMove}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
+              />
+            </div>
+            <div className="hidden w-full sm:block">
+              <ScoreArea
+                question={question}
+                mode={mode}
+                showHelp={showHelp}
+                hoverIndex={hoverIndex}
+                selectedIndex={selectedIndex}
+                selectedAnswer={selectedAnswer}
+                feedback={feedback}
+                touchPreview={touchPreview}
+                activeLevel={activeLevel}
+                onPointerMove={handlePointerMove}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
+              />
+            </div>
           </div>
 
 
 
-          <div className={`absolute bottom-[12px] left-3 right-3 z-10 flex h-[112px] flex-col overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-3 sm:p-4 md:-mt-[168px] md:mx-3`}>
+          <div className={`absolute bottom-[12px] left-3 right-3 z-10 flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-3 sm:p-4 md:-mt-[168px] md:mx-3 ${mode === "identify" && question.typedMode ? "min-h-0" : "min-h-[112px]"}`}>
             <div className="space-y-3 text-stone-900">
               <p className="text-base font-semibold leading-tight">{instruction}</p>
               {prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}
             </div>
 
-            <div className="mt-auto w-full">
+            <div className={mode === "identify" && question.typedMode ? "w-full" : "mt-auto w-full"}>
               {mode === "identify" && !question.typedMode && <IntervalOptions selectedAnswer={selectedAnswer} disabled={Boolean(feedback)} onSelect={selectInterval} feedback={feedback} question={question} level={activeLevel} />}
 
               {mode === "identify" && question.typedMode && (
-                <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="flex min-w-0 w-full flex-col gap-2 sm:w-1/2 sm:flex-row sm:items-center">
+                <div className="flex w-full flex-col gap-3">
+                  <div className="relative top-[6px] flex min-w-0 w-full flex-col gap-2 sm:top-0 sm:flex-row sm:items-center">
                     <input
                       type="text"
                       value={typedAnswer}
@@ -1073,7 +1095,9 @@ function App() {
                     />
                     {typedResult && <div className="shrink-0 whitespace-nowrap text-[1.05rem] font-semibold text-green-600 sm:ml-3">{typedResult}</div>}
                   </div>
-                  <button type="button" onClick={submitTypedAnswer} disabled={Boolean(feedback) || !typedAnswer.trim()} className="rounded-xl border border-black bg-black px-5 py-3 text-sm font-bold text-white disabled:opacity-50 sm:ml-auto">Confirm</button>
+                  <div className="flex w-full justify-end pt-1">
+                    <button type="button" onClick={submitTypedAnswer} disabled={Boolean(feedback) || !typedAnswer.trim()} className="w-full rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60 sm:w-auto">Confirm</button>
+                  </div>
                 </div>
               )}
 
