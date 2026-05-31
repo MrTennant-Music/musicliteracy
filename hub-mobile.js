@@ -40,5 +40,30 @@
     };
   };
 
+  MLH.useKeyboardReset = function useKeyboardReset() {
+    const scrollY = React.useRef(0);
+    const bodyTop = React.useRef("");
+
+    return {
+      onFocus(event) {
+        if (!MLH.isTouchDevice()) return;
+        scrollY.current = window.scrollY;
+        bodyTop.current = document.body.style.top || "";
+        document.body.style.position = "fixed";
+        document.body.style.width = "100%";
+        document.body.style.top = `-${scrollY.current}px`;
+        event?.currentTarget?.focus?.({ preventScroll: true });
+      },
+      onBlur() {
+        if (!MLH.isTouchDevice()) return;
+        const nextY = scrollY.current;
+        document.body.style.position = "";
+        document.body.style.width = "";
+        document.body.style.top = bodyTop.current;
+        window.scrollTo({ top: nextY, behavior: "auto" });
+      },
+    };
+  };
+
   window.MLH = MLH;
 })();
