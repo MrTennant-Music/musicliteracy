@@ -272,12 +272,13 @@ function useStyles() {
     style.innerHTML = `
       @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
       button { -webkit-tap-highlight-color: transparent; user-select: none; transition: transform .08s ease, filter .08s ease, background-color .12s ease, box-shadow .12s ease; cursor: pointer; }
-      button:hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
       button:active { transform: scale(.96); filter: brightness(.92); }
       button:disabled { cursor: not-allowed; opacity: .5; }
       button:focus-visible { outline: 2px solid rgba(22,163,74,.35); outline-offset: 2px; }
+      @media (hover: hover) and (pointer: fine) {
+        button:hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+      }
       @media (hover: none) and (pointer: coarse) {
-        button:hover { transform: none !important; filter: none !important; box-shadow: none !important; background-color: inherit !important; color: inherit !important; }
         button:active { transform: scale(.96) !important; filter: brightness(.92) !important; }
         .hover\\:bg-stone-100:hover { background-color: inherit !important; }
       }
@@ -397,12 +398,24 @@ function useLandscapeLock() {
 
 function useKeyboardReset() {
   const scrollY = useRef(0);
+  const bodyTop = useRef("");
   return {
-    onFocus() {
+    onFocus(event) {
+      if (window.innerWidth >= 640) return;
       scrollY.current = window.scrollY;
+      bodyTop.current = document.body.style.top || "";
+      document.body.style.position = "fixed";
+      document.body.style.width = "100%";
+      document.body.style.top = `-${scrollY.current}px`;
+      event?.currentTarget?.focus?.({ preventScroll: true });
     },
     onBlur() {
-      window.setTimeout(() => window.scrollTo({ top: scrollY.current, behavior: "smooth" }), 80);
+      if (window.innerWidth >= 640) return;
+      const nextY = scrollY.current;
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.top = bodyTop.current;
+      window.scrollTo({ top: nextY, behavior: "auto" });
     },
   };
 }
@@ -916,6 +929,10 @@ function App() {
 
   const isBuild = session.question.type === "build-key";
   const showNoAccidentals = isBuild && session.feedback && !session.feedback.correct && session.expected.length === 0;
+  const skipCorrectFeedback = () => {
+    if (!session.feedback || !session.feedback.correct || session.feedbackFading) return;
+    session.nextQuestion();
+  };
   const instruction = isBuild
     ? <span>Create the key signature of <strong><KeyName label={session.question.key.label} /></strong>.</span>
     : <span>Name the <strong>key</strong> of this excerpt.</span>;
@@ -944,7 +961,13 @@ function App() {
       </header>
 
       <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]">
-        <main className="relative flex min-h-[520px] flex-col overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-3 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 sm:pb-0 md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => session.feedback && !session.feedback.correct && session.fadeWrong()}>
+        <main className="relative flex min-h-[520px] flex-col overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-3 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 sm:pb-0 md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => {
+          if (session.feedback && session.feedback.correct) {
+            skipCorrectFeedback();
+            return;
+          }
+          if (session.feedback && !session.feedback.correct) session.fadeWrong();
+        }}>
           <div
             className="relative z-50 mb-2.5 grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2"
             ref={menuRef}
