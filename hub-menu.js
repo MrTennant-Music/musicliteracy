@@ -102,10 +102,15 @@
     });
   }
 
-  function SkipButton({ onClick, icon }) {
+  function runSkipQuestion({ resetStreak, nextQuestion } = {}) {
+    resetStreak?.();
+    nextQuestion?.();
+  }
+
+  function SkipButton({ onClick, icon, resetStreak }) {
     return e(
       "button",
-      { type: "button", onClick, className: `${TOOLBAR_BUTTON_CLASS} shrink-0` },
+      { type: "button", onClick: () => runSkipQuestion({ resetStreak, nextQuestion: onClick }), className: `${TOOLBAR_BUTTON_CLASS} shrink-0` },
       e(
         "span",
         { className: "flex w-full items-center justify-center sm:relative sm:left-[4px] sm:w-auto sm:gap-1" },
@@ -189,6 +194,7 @@
   MLH.CustomiseButton = CustomiseButton;
   MLH.HelpButton = HelpButton;
   MLH.SkipButton = SkipButton;
+  MLH.runSkipQuestion = runSkipQuestion;
   MLH.MenuToggleRow = MenuToggleRow;
   MLH.LevelMenu = LevelMenu;
 })();

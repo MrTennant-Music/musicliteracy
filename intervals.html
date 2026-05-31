@@ -26,6 +26,7 @@
   <script type="text/babel">
 const { useMemo, useRef, useState } = React;
 const SHELL = window.MLH?.shell || {};
+const isTouchDevice = window.MLH?.isTouchDevice?.() || ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
 
 const ASSET = {
   appIcon: "https://mrtennant-music.github.io/musicliteracy/intervals-icon.svg",
@@ -115,38 +116,26 @@ const LEVEL_INTERVALS = {
   AH: [2, 3, 4, 5, 6, 7, 8, "tritone", "augmented-4th", "diminished-5th"],
 };
 
+const KEY_SIGNATURES = {
+  C: { label: "C major", accidentals: [] },
+  G: { label: "G major", accidentals: [{ type: "sharp", step: 8, letter: "F" }] },
+  F: { label: "F major", accidentals: [{ type: "flat", step: 4, letter: "B" }] },
+  D: { label: "D major", accidentals: [{ type: "sharp", step: 8, letter: "F" }, { type: "sharp", step: 5, letter: "C" }] },
+  Bb: { label: "B flat major", accidentals: [{ type: "flat", step: 4, letter: "B" }, { type: "flat", step: 7, letter: "E" }] },
+};
+
 const CHROMATIC_INTERVALS = [
-  {
-    id: "tritone",
-    label: "Tritone",
-    startIndex: 5,
-    endIndex: 8,
-    direction: "higher",
-    targetAccidental: "sharp",
-    keySignature: [],
-    answerOptions: ["Tritone", "Augmented 4th", "Diminished 5th"],
-  },
-  {
-    id: "augmented-4th",
-    label: "Augmented 4th",
-    startIndex: 5,
-    endIndex: 8,
-    direction: "higher",
-    targetAccidental: "sharp",
-    keySignature: [],
-    answerOptions: ["Tritone", "Augmented 4th", "Diminished 5th"],
-  },
-  {
-    id: "diminished-5th",
-    label: "Diminished 5th",
-    startIndex: 5,
-    endIndex: 9,
-    direction: "higher",
-    targetAccidental: null,
-    keySignature: [{ type: "flat", step: 7 }],
-    answerOptions: ["Tritone", "Augmented 4th", "Diminished 5th"],
-  },
+  { id: "tritone-f-b", startIndex: 3, endIndex: 6, key: "C" },
+  { id: "augmented-4th-c-fsharp", startIndex: 0, endIndex: 3, key: "C", targetAccidental: "sharp" },
+  { id: "augmented-4th-g-csharp", startIndex: 4, endIndex: 7, key: "D" },
+  { id: "diminished-5th-b-f", startIndex: 6, endIndex: 10, key: "C" },
+  { id: "diminished-5th-e-bflat", startIndex: 2, endIndex: 6, key: "F" },
+  { id: "diminished-5th-a-eflat", startIndex: 5, endIndex: 9, key: "Bb" },
 ];
+
+const CHROMATIC_INTERVAL_WEIGHTS = CHROMATIC_INTERVALS.flatMap((interval) =>
+  interval.id.startsWith("tritone") ? [interval, interval, null] : [interval, interval]
+);
 
 const NOTE_NAME_LABELS = {
   treble: {
@@ -183,13 +172,112 @@ function noteByIndex(index) {
   return NOTES[clamp(index, 0, NOTES.length - 1)];
 }
 
+const NATURAL_SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+
+function accidentalOffset(type) {
+  if (type === "sharp") return 1;
+  if (type === "flat") return -1;
+  return 0;
+}
+
+function keySignatureAccidental(note, keySignature = []) {
+  return keySignature.find((item) => item.letter === note.letter)?.type || null;
+}
+
+function writtenPitch(note, keySignature = [], explicitAccidental = null) {
+  const accidental = explicitAccidental || keySignatureAccidental(note, keySignature);
+  return note.octave * 12 + NATURAL_SEMITONES[note.letter] + accidentalOffset(accidental);
+}
+
+function semitoneDistance(startIndex, endIndex, keySignature = [], targetAccidental = null) {
+  const startNote = noteByIndex(startIndex);
+  const endNote = noteByIndex(endIndex);
+  return Math.abs(writtenPitch(endNote, keySignature, targetAccidental) - writtenPitch(startNote, keySignature));
+}
+
+function intervalNameFromHalfSteps(startIndex, endIndex, keySignature = [], targetAccidental = null) {
+  const diatonicSize = Math.abs(endIndex - startIndex) + 1;
+  const halfSteps = semitoneDistance(startIndex, endIndex, keySignature, targetAccidental);
+
+  if (halfSteps === 4 && diatonicSize === 4) return "Diminished 4th";
+  if (halfSteps === 6 && diatonicSize === 4) return "Augmented 4th";
+  if (halfSteps === 6 && diatonicSize === 5) return "Diminished 5th";
+  if (halfSteps === 8 && diatonicSize === 5) return "Augmented 5th";
+  if (halfSteps === 6) return "Tritone";
+
+  return intervalLabel(diatonicSize);
+}
+
+function chromaticQuestionAnswer(interval, keySignature) {
+  const halfSteps = semitoneDistance(interval.startIndex, interval.endIndex, keySignature, interval.targetAccidental);
+  if (interval.id.startsWith("tritone") && halfSteps === 6) return "Tritone";
+  return intervalNameFromHalfSteps(interval.startIndex, interval.endIndex, keySignature, interval.targetAccidental);
+}
+
 function normalizeText(value) {
   return String(value || "").toLowerCase().replace(/[-\s]/g, "");
 }
 
-function chromaticAnswerMatches(raw, label) {
+function answerMatchesLabel(raw, label, allowTritone = false) {
   const compact = normalizeText(raw);
-  return compact === "tritone" || compact === normalizeText(label);
+  const target = normalizeText(label);
+  const accepted = new Set([target]);
+
+  if (allowTritone) accepted.add("tritone");
+
+  if (target === "augmented4th") {
+    accepted.add("aug4");
+    accepted.add("augmentedforth");
+    accepted.add("aug4th");
+  }
+
+  if (target === "diminished4th") {
+    accepted.add("dim4");
+    accepted.add("diminishedfourth");
+    accepted.add("dimished4th");
+    accepted.add("dimishedfourth");
+  }
+
+  if (target === "diminished5th") {
+    accepted.add("dim5");
+    accepted.add("diminishedfifth");
+    accepted.add("dimished5th");
+    accepted.add("dimishedfifth");
+  }
+
+  if (target === "augmented5th") {
+    accepted.add("aug5");
+    accepted.add("augmentedfifth");
+    accepted.add("aug5th");
+  }
+
+  return accepted.has(compact);
+}
+
+function typedFeedbackLabel(question) {
+  if (!question.chromatic) return question.answer;
+  if (question.answer === "Augmented 4th" || question.answer === "Diminished 5th") {
+    return `Tritone or ${question.answer}`;
+  }
+  return question.answer;
+}
+
+function intervalAnswerMatches(raw, label) {
+  if (answerMatchesLabel(raw, label)) return true;
+
+  const compact = normalizeText(raw);
+  const target = normalizeText(label);
+  const simpleAliases = {
+    "2nd": ["2", "second"],
+    "3rd": ["3", "third"],
+    "4th": ["4", "fourth"],
+    "5th": ["5", "fifth"],
+    "6th": ["6", "sixth"],
+    "7th": ["7", "seventh"],
+    octave: ["8", "8th"],
+  };
+
+  return simpleAliases[target]?.includes(compact) || false;
 }
 
 function intervalLabel(size) {
@@ -206,7 +294,7 @@ function intervalsForLevel(level) {
 }
 
 function answerOptionsForQuestion(question, level) {
-  if (question.answerOptions) return question.answerOptions.map((label) => ({ id: label, label }));
+  if (question.typedMode) return [];
   return intervalsForLevel(level).map((interval) => ({ id: interval.size, label: interval.label }));
 }
 
@@ -233,9 +321,18 @@ function getStem(x, y, step, forcedDown = null) {
   return { down, stemX, stemEndY };
 }
 
+function isPlainIntervalQuestion(startIndex, endIndex) {
+  const label = intervalNameFromHalfSteps(startIndex, endIndex);
+  return !label.startsWith("Augmented") && !label.startsWith("Diminished") && label !== "Tritone";
+}
+
 function makeIdentifyQuestion(level = "N5") {
   if (level === "AH" && Math.random() < 0.4) {
-    const interval = randomItem(CHROMATIC_INTERVALS);
+    const weightedInterval = randomItem(CHROMATIC_INTERVAL_WEIGHTS);
+    const interval = weightedInterval || CHROMATIC_INTERVALS.find((item) => item.id.startsWith("tritone"));
+    const keySignature = KEY_SIGNATURES[interval.key].accidentals;
+    const answer = chromaticQuestionAnswer(interval, keySignature);
+
     return {
       id: Math.random().toString(36).slice(2),
       type: "identify",
@@ -243,30 +340,33 @@ function makeIdentifyQuestion(level = "N5") {
       typedMode: true,
       startIndex: interval.startIndex,
       endIndex: interval.endIndex,
-      intervalSize: interval.id,
-      answer: interval.label,
-      direction: interval.direction,
-      targetAccidental: interval.targetAccidental,
-      keySignature: interval.keySignature,
-      answerOptions: interval.answerOptions,
+      intervalSize: answer,
+      answer,
+      direction: "higher",
+      targetAccidental: interval.targetAccidental || null,
+      keySignature,
     };
   }
 
   const interval = randomItem(intervalsForLevel(level));
   const distance = interval.size - 1;
   const direction = Math.random() < 0.5 ? "higher" : "lower";
-  const possibleStarts = NOTES.map((_, index) => index).filter((index) => direction === "higher" ? index + distance < NOTES.length : index - distance >= 0);
+  const possibleStarts = NOTES.map((_, index) => index).filter((index) => {
+    const endIndex = direction === "higher" ? index + distance : index - distance;
+    return endIndex >= 0 && endIndex < NOTES.length && isPlainIntervalQuestion(index, endIndex);
+  });
   const startIndex = randomItem(possibleStarts);
   const endIndex = direction === "higher" ? startIndex + distance : startIndex - distance;
 
   return {
     id: Math.random().toString(36).slice(2),
     type: "identify",
-    typedMode: false,
+    typedMode: Math.random() < 0.35,
     startIndex,
     endIndex,
     intervalSize: interval.size,
     direction,
+    answer: interval.label,
   };
 }
 
@@ -311,7 +411,7 @@ function LedgerLines({ x, step, colour = "currentColor" }) {
   return (
     <g pointerEvents="none">
       {lines.map((y) => (
-        <line key={y} x1={x - 27} x2={x + 27} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />
+        <line key={y} x1={x - 22} x2={x + 22} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />
       ))}
     </g>
   );
@@ -341,7 +441,7 @@ function Staff() {
       {[0, 1, 2, 3, 4].map((line) => (
         <line key={line} x1={STAFF.left} x2={STAFF.right} y1={STAFF.trebleTop + line * STAFF.gap} y2={STAFF.trebleTop + line * STAFF.gap} stroke="url(#intervalStaffFade)" strokeWidth="1.5" />
       ))}
-      <text className="music-symbol" x={STAFF.left + 45} y={STAFF.trebleTop + 64} fontSize="83.232" textAnchor="middle" fill="currentColor">{GLYPH.trebleClef}</text>
+      <text className="music-symbol" x={STAFF.left + 45} y={STAFF.trebleTop + 63} fontSize="83.232" textAnchor="middle" fill="currentColor">{GLYPH.trebleClef}</text>
     </g>
   );
 }
@@ -401,7 +501,7 @@ function IntervalHelpNumbers({ question, startX, secondX }) {
   const totalDistance = Math.max(1, Math.abs(endIndex - question.startIndex));
 
   return (
-    <g fontSize="22" fontWeight="500" fill="black" opacity="0.72" pointerEvents="none">
+    <g fontSize="22" fontWeight="500" fill="black" opacity="0.25" pointerEvents="none">
       {Array.from({ length: noteCount }, (_, countIndex) => {
         const noteIndex = question.startIndex + countIndex * direction;
         const note = noteByIndex(noteIndex);
@@ -423,7 +523,7 @@ function Note({ x, note, colour = "currentColor", opacity = 1, preview = false, 
   );
 }
 
-function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedback, selectedAnswer, touchPreview, onPointerMove, onPointerDown, onPointerUp, onPointerCancel }) {
+function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedback, selectedAnswer, touchPreview, activeLevel, onPointerMove, onPointerDown, onPointerUp, onPointerCancel }) {
   const startX = mode === "identify" ? 392 : 382;
   const secondX = mode === "identify" ? 536 : 536;
   const startNote = noteByIndex(question.startIndex);
@@ -433,7 +533,7 @@ function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedba
   const workingNote = mode === "create" && workingIndex != null ? noteByIndex(workingIndex) : null;
   const selectedNote = mode === "create" && selectedIndex != null ? noteByIndex(selectedIndex) : null;
   const correctIdentifyAnswer = question.answer ?? question.intervalSize;
-  const identifyCorrect = feedback && mode === "identify" && selectedAnswer === correctIdentifyAnswer;
+  const identifyCorrect = feedback && mode === "identify" && selectedAnswer === correctIdentifyAnswer && activeLevel !== "N5";
   const identifyIncorrect = feedback && mode === "identify" && selectedAnswer !== correctIdentifyAnswer;
   const createCorrect = feedback && mode === "create" && selectedIndex === question.targetIndex;
   const createIncorrect = feedback && mode === "create" && selectedIndex !== question.targetIndex;
@@ -448,7 +548,12 @@ function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedba
 
       {mode === "identify" && (
         <>
-          <Note x={secondX} note={targetNote} accidental={question.targetAccidental} colour={identifyCorrect ? COLOUR.green : identifyIncorrect ? COLOUR.red : "currentColor"} />
+          <Note
+            x={secondX}
+            note={targetNote}
+            accidental={question.targetAccidental}
+            colour="currentColor"
+          />
           {showHelp && <IntervalHelpNumbers question={question} startX={startX} secondX={secondX} />}
         </>
       )}
@@ -461,7 +566,7 @@ function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedba
 
       {mode === "create" && createIncorrect && selectedNote && (
         <>
-          <Note x={secondX - 34} note={selectedNote} colour={COLOUR.red} />
+          <Note x={secondX - 34} note={selectedNote} colour={COLOUR.red} opacity={0.45} />
           <Note x={secondX + 34} note={targetNote} colour={COLOUR.green} />
         </>
       )}
@@ -539,22 +644,17 @@ function MenuRows({ enabledModes, setEnabledModes, newQuestion, showHelp, setSho
     <>
       <window.MLH.MenuToggleRow
         glyph={
-          <span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center leading-none">
-            <svg width="34" height="24" viewBox="0 0 34 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <ellipse cx="10" cy="16" rx="5.2" ry="3.8" transform="rotate(-18 10 16)" fill="black" />
-              <ellipse cx="22" cy="8" rx="5.2" ry="3.8" transform="rotate(-18 22 8)" fill="black" />
-              <path d="M13.5 13.5L18.8 9.2" stroke="black" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M16.8 9.2H18.8V11.2" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+          <span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center bg-transparent">
+            <img src="https://mrtennant-music.github.io/musicliteracy/trebleclef.svg?v=1.1" alt="" aria-hidden="true" className="h-[24px] w-[24px] object-contain" />
           </span>
         }
-        label="Identify Interval"
+        label="Identify"
         checked={enabledModes.identify}
         onChange={() => toggleMode("identify")}
       />
       <window.MLH.MenuToggleRow
-        glyph={<span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center text-[17px] font-black leading-none">✎</span>}
-        label="Create Interval"
+        glyph={<span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center"><img src="https://mrtennant-music.github.io/musicliteracy/crotchet.svg?v=1.1" alt="" aria-hidden="true" className="h-[24px] w-[24px] object-contain" /></span>}
+        label="Create"
         checked={enabledModes.create}
         onChange={() => toggleMode("create")}
       />
@@ -570,7 +670,7 @@ function MenuRows({ enabledModes, setEnabledModes, newQuestion, showHelp, setSho
 
 function IntervalOptions({ selectedAnswer, disabled, onSelect, feedback, question, level }) {
   const options = answerOptionsForQuestion(question, level);
-  const correctAnswer = question.answer ?? question.intervalSize;
+  const correctAnswer = question.intervalSize;
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((option) => {
@@ -637,6 +737,9 @@ function App() {
 
   const customiseRef = useRef(null);
   const levelRef = useRef(null);
+  const feedbackFadeTimerRef = useRef(null);
+  const feedbackNextTimerRef = useRef(null);
+  const questionTimerRef = useRef(null);
 
   React.useEffect(() => window.MLH?.installPhoneLandscapeLock?.(), []);
 
@@ -664,17 +767,35 @@ function App() {
     setPrompt("");
   }
 
+  function clearFeedbackTimers() {
+    if (feedbackFadeTimerRef.current) {
+      window.clearTimeout(feedbackFadeTimerRef.current);
+      feedbackFadeTimerRef.current = null;
+    }
+    if (feedbackNextTimerRef.current) {
+      window.clearTimeout(feedbackNextTimerRef.current);
+      feedbackNextTimerRef.current = null;
+    }
+    if (questionTimerRef.current) {
+      window.clearTimeout(questionTimerRef.current);
+      questionTimerRef.current = null;
+    }
+  }
+
   function newQuestion(nextEnabledModes = enabledModes, nextLevel = activeLevel) {
+    clearFeedbackTimers();
     setQuestionVisible(false);
-    window.setTimeout(() => {
+    questionTimerRef.current = window.setTimeout(() => {
       const nextMode = nextLevel === "N5" ? "identify" : pickQuestionMode(nextEnabledModes);
       setMode(nextMode);
       resetTask(createQuestion(nextMode, nextLevel));
       setQuestionVisible(true);
+      questionTimerRef.current = null;
     }, 260);
   }
 
   function resetScore() {
+    clearFeedbackTimers();
     setCorrect(0);
     setAttempted(0);
     setStreak(0);
@@ -686,6 +807,7 @@ function App() {
   }
 
   function applyLevel(levelKey) {
+    clearFeedbackTimers();
     setActiveLevel(levelKey);
     setLevelOpen(false);
     setCorrect(0);
@@ -706,8 +828,18 @@ function App() {
 
   function fadeToNextQuestion() {
     if (!feedback || feedback.correct || feedbackFading) return;
+    clearFeedbackTimers();
     setFeedbackFading(true);
-    window.setTimeout(() => newQuestion(enabledModes, activeLevel), 280);
+    feedbackNextTimerRef.current = window.setTimeout(() => {
+      newQuestion(enabledModes, activeLevel);
+      feedbackNextTimerRef.current = null;
+    }, 280);
+  }
+
+  function skipCorrectFeedback() {
+    if (!feedback || !feedback.correct) return;
+    clearFeedbackTimers();
+    newQuestion(enabledModes, activeLevel);
   }
 
   function scoreAnswer(isCorrect) {
@@ -726,22 +858,29 @@ function App() {
     }
 
     if (isCorrect) {
+      clearFeedbackTimers();
       setFeedbackFading(false);
-      window.setTimeout(() => setFeedbackFading(true), 1700);
-      window.setTimeout(() => newQuestion(enabledModes, activeLevel), 2000);
+      feedbackFadeTimerRef.current = window.setTimeout(() => {
+        setFeedbackFading(true);
+        feedbackFadeTimerRef.current = null;
+      }, 1700);
+      feedbackNextTimerRef.current = window.setTimeout(() => {
+        newQuestion(enabledModes, activeLevel);
+        feedbackNextTimerRef.current = null;
+      }, 2000);
     }
   }
 
   function selectInterval(intervalSize) {
     if (feedback || mode !== "identify") return;
     setSelectedAnswer(intervalSize);
-    scoreAnswer(intervalSize === (question.answer ?? question.intervalSize));
+    scoreAnswer(intervalSize === question.intervalSize);
   }
 
   function submitTypedAnswer() {
     if (feedback || mode !== "identify" || !question.typedMode) return;
-    const correct = chromaticAnswerMatches(typedAnswer, question.answer);
-    setTypedResult(correct ? null : question.answer);
+    const correct = question.chromatic ? answerMatchesLabel(typedAnswer, question.answer, true) : intervalAnswerMatches(typedAnswer, question.answer);
+    setTypedResult(correct ? null : typedFeedbackLabel(question));
     scoreAnswer(correct);
   }
 
@@ -825,6 +964,8 @@ function App() {
     setPrompt("");
   }
 
+  React.useEffect(() => () => clearFeedbackTimers(), []);
+
   return (
     <div className={SHELL.pageShellClass}>
       <window.MLH.AppHeader icon={ASSET.appIcon} title="Intervals" subtitle="Identify and create intervals.">
@@ -832,7 +973,13 @@ function App() {
       </window.MLH.AppHeader>
 
       <div className={SHELL.pageContentClass}>
-        <main className={SHELL.mainShellClass} onPointerDown={() => { if (feedback && !feedback.correct) fadeToNextQuestion(); }}>
+        <main className={SHELL.mainShellClass} onPointerDown={() => {
+          if (feedback && feedback.correct) {
+            skipCorrectFeedback();
+            return;
+          }
+          if (feedback && !feedback.correct) fadeToNextQuestion();
+        }}>
           <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="relative" ref={levelRef}>
@@ -868,11 +1015,17 @@ function App() {
               </div>
             </div>
 
-            <window.MLH.SkipButton onClick={() => newQuestion(enabledModes, activeLevel)} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
+            <window.MLH.SkipButton resetStreak={() => setStreak(0)} onClick={() => newQuestion(enabledModes, activeLevel)} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
             <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><window.MLH.FeedbackBadge feedback={feedback} fading={feedbackFading} animationPrefix="note" /></div>
           </div>
 
-          <div className={`relative -top-[55px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+          {mode === "create" && isTouchDevice && !customiseOpen && !levelOpen && (
+            <p className="relative z-20 mb-2 text-center text-[0.74rem] font-light leading-tight tracking-normal text-stone-600" style={{ opacity: 0.45 }}>
+              Press and hold to drag accidental into place.
+            </p>
+          )}
+
+              <div className={`relative -top-[55px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
             <ScoreArea
               question={question}
               mode={mode}
@@ -882,6 +1035,7 @@ function App() {
               selectedAnswer={selectedAnswer}
               feedback={feedback}
               touchPreview={touchPreview}
+              activeLevel={activeLevel}
               onPointerMove={handlePointerMove}
               onPointerDown={handlePointerDown}
               onPointerUp={handlePointerUp}
@@ -891,33 +1045,35 @@ function App() {
 
 
 
-          <div className="relative z-10 mt-3 h-[112px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[168px] md:mx-3">
+          <div className={`relative z-10 mt-3 flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:p-4 md:-mt-[168px] md:mx-3 ${mode === "identify" && question.typedMode ? "h-[112px]" : "h-[112px]"}`}>
             <div className="space-y-3 text-stone-900">
               <p className="text-base font-semibold leading-tight">{instruction}</p>
               {prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pb-[0px]">
+            <div className="mt-auto w-full">
               {mode === "identify" && !question.typedMode && <IntervalOptions selectedAnswer={selectedAnswer} disabled={Boolean(feedback)} onSelect={selectInterval} feedback={feedback} question={question} level={activeLevel} />}
 
               {mode === "identify" && question.typedMode && (
-                <div className="flex w-full flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    value={typedAnswer}
-                    onChange={(event) => setTypedAnswer(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        submitTypedAnswer();
-                      }
-                    }}
-                    placeholder="Type your answer"
-                    className="h-[48px] w-full max-w-[220px] rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-900 outline-none placeholder:text-stone-400 focus:border-black sm:max-w-[260px]"
-                    disabled={Boolean(feedback)}
-                  />
-                  <button type="button" onClick={submitTypedAnswer} disabled={Boolean(feedback) || !typedAnswer.trim()} className="rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>
-                  {typedResult && <span className="text-sm font-semibold text-green-600">{typedResult}</span>}
+                <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="flex min-w-0 w-full flex-col gap-2 sm:w-1/2 sm:flex-row sm:items-center">
+                    <input
+                      type="text"
+                      value={typedAnswer}
+                      onChange={(event) => setTypedAnswer(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          submitTypedAnswer();
+                        }
+                      }}
+                      placeholder="Type your answer"
+                      className={`min-w-0 w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-[1.05rem] font-normal outline-none ${feedback ? feedback.correct ? "text-green-600" : "text-red-600" : "text-stone-900"}`}
+                      disabled={Boolean(feedback)}
+                    />
+                    {typedResult && <div className="shrink-0 whitespace-nowrap text-[1.05rem] font-semibold text-green-600 sm:ml-3">{typedResult}</div>}
+                  </div>
+                  <button type="button" onClick={submitTypedAnswer} disabled={Boolean(feedback) || !typedAnswer.trim()} className="rounded-xl border border-black bg-black px-5 py-3 text-sm font-bold text-white disabled:opacity-50 sm:ml-auto">Confirm</button>
                 </div>
               )}
 

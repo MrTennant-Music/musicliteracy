@@ -7,10 +7,10 @@
     toolbarButtonClass: "flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5",
     menuPanelClass: "absolute top-full z-[120] mt-2 inline-block w-[calc(100vw-48px)] max-w-[360px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit sm:max-w-none",
     menuTitleClass: "relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8",
-    pageShellClass: "overflow-x-hidden bg-white pb-10 text-stone-950 md:pb-12",
-    pageContentClass: "mx-auto max-w-6xl px-3 pt-[174px] sm:px-4 sm:pt-[174px] md:px-8 md:pt-[124px]",
-    mainShellClass: "relative -mt-[10px] min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]",
-    footerShellClass: "bg-white",
+    pageShellClass: "overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12",
+    pageContentClass: "mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]",
+    mainShellClass: "relative z-0 min-h-[520px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-0 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]",
+    footerShellClass: "bg-stone-50",
   };
 
   function useClickAway(ref, handler) {
