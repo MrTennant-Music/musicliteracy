@@ -22,6 +22,7 @@ const ASSET = {
   level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
   customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
   next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
+  drag: "./drag.svg",
   tick: "https://mrtennant-music.github.io/musicliteracy/tick.svg",
   bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
   silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
@@ -370,6 +371,28 @@ function useMobileFlag() {
     return () => window.removeEventListener("resize", update);
   }, []);
   return mobile;
+}
+
+function useTouchDevice() {
+  const isTouch = () => window.matchMedia("(hover: none) and (pointer: coarse)").matches || window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+  const [touchDevice, setTouchDevice] = useState(isTouch);
+  useEffect(() => {
+    const mediaHover = window.matchMedia("(hover: none) and (pointer: coarse)");
+    const mediaPointer = window.matchMedia("(pointer: coarse)");
+    const update = () => setTouchDevice(isTouch());
+    update();
+    mediaHover.addEventListener?.("change", update);
+    mediaPointer.addEventListener?.("change", update);
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      mediaHover.removeEventListener?.("change", update);
+      mediaPointer.removeEventListener?.("change", update);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+  return touchDevice;
 }
 
 function useLandscapeLock() {
@@ -922,6 +945,7 @@ function App() {
   const requestedLevel = useMemo(() => new URLSearchParams(window.location.search).get("level"), []);
   const session = useSession(LEVELS[requestedLevel] ? requestedLevel : "N5");
   const mobile = useMobileFlag();
+  const touchDevice = useTouchDevice();
   const keyboard = useKeyboardReset();
   const menuRef = useRef(null);
   const [menu, setMenu] = useState(null);
@@ -1011,10 +1035,13 @@ function App() {
             </div>
           </div>
 
-          {mobileBuild && (
-            <p className="relative z-50 top-[25px] mb-1 text-center text-[0.74rem] font-light leading-tight tracking-normal text-stone-500/60 sm:hidden">
-              Press and hold to drag accidental into place
-            </p>
+          {isBuild && touchDevice && (
+            <div className="relative z-[60] top-[25px] mb-1 flex flex-col items-center gap-1">
+              <p className="text-center text-[0.74rem] font-normal leading-tight tracking-normal text-stone-500" style={{ opacity: 0.55 }}>
+                Press and hold to drag accidental into place
+              </p>
+              <img src={ASSET.drag} alt="" aria-hidden="true" className="relative z-[60] h-[20px] w-auto" style={{ opacity: 0.55 }} />
+            </div>
           )}
 
           <div className={`mx-auto flex w-full flex-1 items-center justify-center transition-opacity duration-300 sm:flex-none ${mobile ? "relative -top-[4px]" : "relative top-[24px]"} ${session.visible ? "opacity-100" : "opacity-0"}`}>
