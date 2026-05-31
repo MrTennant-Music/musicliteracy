@@ -92,7 +92,7 @@
           ? { backgroundColor: "rgba(203, 213, 225, .3)", color: "#64748b" }
           : streak >= 10
             ? { backgroundColor: "rgba(180, 83, 9, .2)", color: "#b45309" }
-            : { backgroundColor: "#f8fafc", color: "#000000" };
+            : { backgroundColor: "#fafaf9", color: "#000000" };
     const tile = MLH.shell.scoreTileClass;
     const active = MLH.shell.scoreTileActiveClass;
 
