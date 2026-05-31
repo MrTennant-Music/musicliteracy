@@ -11,6 +11,7 @@
   <script src="./hub-mobile.js"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="./hub-shell.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="overflow-x-hidden bg-stone-50">
@@ -822,63 +823,23 @@ function KeyName({ label, muted = false, inverted = false }) {
 }
 
 function Feedback({ feedback, fading }) {
-  if (!feedback) return null;
-  return (
-    <div className="relative flex w-full items-center justify-center text-center">
-      <div className={`flex h-10 min-w-[58px] max-w-[calc(100vw-96px)] items-center justify-center rounded-xl border px-3 text-[18px] font-black text-white translate-y-[60px] sm:translate-y-0 ${feedback.correct ? "border-[#16a34a] bg-[#16a34a]" : "border-[#dc2626] bg-[#dc2626]"}`} style={{ animation: fading ? "feedbackOut .28s ease-out forwards" : "feedbackIn .45s ease-out forwards" }}>
-        {feedback.correct ? "Correct" : "Incorrect"}
-      </div>
-    </div>
-  );
+  return <window.MLH.FeedbackBadge feedback={feedback} fading={fading} />;
 }
 
 function ScorePanel({ session }) {
-  const [popover, setPopover] = useState(null);
-  const ref = useRef(null);
-  useClickAway(ref, () => setPopover(null));
   const accuracy = session.score.attempted ? Math.round((session.score.correct / session.score.attempted) * 100) : 0;
-  const scoreFill = clamp(accuracy, 0, 100);
-  const scoreColour = scoreFill < 50 ? "rgba(220,38,38,.38)" : scoreFill < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)";
-  const medal = session.score.streak >= 30 ? ASSET.diamond : session.score.streak >= 20 ? ASSET.gold : session.score.streak >= 15 ? ASSET.silver : session.score.streak >= 10 ? ASSET.bronze : null;
-  const tile = "relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm outline-none transition active:scale-[0.98] sm:h-[64px]";
-  const thresholds = [
-    { value: 10, icon: ASSET.bronze, className: "text-amber-700" },
-    { value: 15, icon: ASSET.silver, className: "text-slate-500" },
-    { value: 20, icon: ASSET.gold, className: "text-yellow-500" },
-    { value: 30, icon: ASSET.diamond, className: "text-cyan-500" },
-  ];
   return (
-    <div ref={ref} className="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-[112px_98px] lg:grid-cols-[124px_108px]">
-      <button type="button" className={tile} onClick={() => setPopover(popover === "score" ? null : "score")}>
-        <div className="absolute inset-0 overflow-hidden rounded-xl">
-          <div className="absolute bottom-0 -left-[2px] right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreColour }} />
-        </div>
-        <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
-          <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em]">Score</div>
-          <div className="mt-[3px] text-[20px] font-black leading-none">{session.score.correct}/{session.score.attempted}</div>
-          <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500">Accuracy: {accuracy}%</div>
-        </div>
-        {popover === "score" && <button type="button" onClick={(event) => { event.stopPropagation(); session.resetScore(); setPopover(null); }} className="absolute left-0 right-0 top-full z-50 mt-2 rounded-xl border border-[#dc2626] bg-[#dc2626] px-3 py-2 text-sm font-semibold text-white shadow-lg">Reset</button>}
-      </button>
-      <button type="button" className={tile} onClick={() => setPopover(popover === "streak" ? null : "streak")}>
-        {session.confetti > 0 && <div key={session.confetti} className="pointer-events-none absolute inset-0 z-20 overflow-visible">{Array.from({ length: 18 }).map((_, index) => <span key={index} className="absolute block h-1.5 w-1 rounded-sm" style={{ left: `${8 + ((index * 19) % 84)}%`, top: "-8px", backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80"][index % 4], animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards` }} />)}</div>}
-        <div className="text-[12px] font-bold uppercase tracking-[0.08em]">Streak</div>
-        <div className="text-[20px] font-black leading-none">{session.score.streak}</div>
-        <div className="text-[11px] font-medium text-stone-500">Highest: {session.score.best}</div>
-        {(popover === "streak" || medal) && (
-          <div className="absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]">
-            <div className="flex items-end justify-center gap-3">
-              {thresholds.map((item) => (
-                <div key={item.value} className="flex flex-col items-center justify-end">
-                  <img src={item.icon} alt="" className="h-[23px] w-[23px] object-contain" />
-                  <span className={`mt-1 text-[11px] font-semibold leading-none ${item.className}`}>{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </button>
-    </div>
+    <window.MLH.ScoreStreakPanel
+      assets={ASSET}
+      correct={session.score.correct}
+      attempted={session.score.attempted}
+      accuracy={accuracy}
+      streak={session.score.streak}
+      bestStreak={session.score.best}
+      resetScore={session.resetScore}
+      confettiKey={session.confetti}
+      showMedalPopover={session.score.streak >= 10}
+    />
   );
 }
 
@@ -955,18 +916,9 @@ function App() {
 
   return (
     <div className="overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12">
-      <header className="fixed left-0 right-0 top-0 z-[1000] w-full border-b border-stone-200 bg-white/95 py-2 shadow-sm backdrop-blur sm:py-3">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 sm:px-4 md:flex-row md:items-center md:justify-between md:px-8">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 shadow-sm"><img src={ASSET.appIcon} alt="" className="h-full w-full object-contain" /></div>
-            <div className="flex h-14 flex-col justify-center">
-              <h1 className="relative top-[1px] text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl">Key Signatures</h1>
-              <p className="relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0">Identify key signatures.</p>
-            </div>
-          </div>
-          <ScorePanel session={session} />
-        </div>
-      </header>
+      <window.MLH.AppHeader icon={ASSET.appIcon} title="Key Signatures" subtitle="Identify key signatures.">
+        <ScorePanel session={session} />
+      </window.MLH.AppHeader>
 
       <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]">
         <main className="relative flex min-h-[520px] flex-col overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-3 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 sm:pb-0 md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => {
