@@ -124,6 +124,12 @@
           className: `${tile} overflow-visible ${popover === "streak" ? active : ""}`,
           style: { backgroundColor: medalStyle.backgroundColor },
         },
+          React.createElement("div", { className: "pointer-events-none absolute inset-0 overflow-hidden rounded-xl" },
+            React.createElement("div", {
+              className: "absolute inset-0 rounded-xl transition-colors duration-700",
+              style: { backgroundColor: medalStyle.backgroundColor },
+            })
+          ),
           confettiKey > 0 && React.createElement("div", { key: confettiKey, className: "pointer-events-none absolute inset-0 z-20 overflow-visible" },
             Array.from({ length: 18 }).map((_, index) => React.createElement("span", {
               key: index,
