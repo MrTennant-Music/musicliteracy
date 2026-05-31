@@ -147,7 +147,15 @@ function Accidental({ item, index, opacity = 1, style = null }) {
   );
 }
 
-function playSound(correct, celebration = false) {
+function getStreakMedal(streak) {
+  if (streak >= 30) return { tier: "diamond", icon: ASSET.diamond, bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" };
+  if (streak >= 20) return { tier: "gold", icon: ASSET.gold, bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" };
+  if (streak >= 15) return { tier: "silver", icon: ASSET.silver, bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" };
+  if (streak >= 10) return { tier: "bronze", icon: ASSET.bronze, bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" };
+  return null;
+}
+
+function playSound(correct, celebration = false, medal = null) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return;
   const context = new AudioContextClass();
@@ -171,12 +179,51 @@ function playSound(correct, celebration = false) {
     osc.stop(start + duration + 0.05);
   };
 
+  const trumpet = (freq, start, duration, volume = 0.09) => {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    const filter = context.createBiquadFilter();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(freq, start);
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(freq * 1.7, start);
+    filter.Q.setValueAtTime(7, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + duration + 0.08);
+  };
+
+  const medalPhrase = (root, chord, start, beats = 4) => {
+    const beat = 0.6;
+    const triplet = 0.13;
+    const finalDuration = beats === 2 ? 0.72 : 1.95;
+    chord.forEach((freq) => trumpet(freq, start, beats * beat, 0.045));
+    trumpet(root, start, triplet, 0.11);
+    trumpet(root, start + triplet, triplet, 0.11);
+    trumpet(root, start + triplet * 2, triplet, 0.11);
+    trumpet(root, start + 0.42, finalDuration, 0.13);
+  };
+
   if (!correct) tone(180, now, 0.55, "sawtooth", 0.075);
-  else {
+  else if (celebration) {
+    if (medal === "bronze") medalPhrase(659.25, [329.63, 415.3, 493.88], now);
+    if (medal === "silver") medalPhrase(739.99, [369.99, 466.16, 554.37], now);
+    if (medal === "gold") medalPhrase(830.61, [415.3, 523.25, 622.25], now);
+    if (medal === "platinum") {
+      medalPhrase(739.99, [369.99, 466.16, 554.37], now, 2);
+      medalPhrase(830.61, [415.3, 523.25, 622.25], now + 0.82, 2);
+      medalPhrase(932.33, [466.16, 587.33, 698.46], now + 1.64, 4);
+    }
+  } else {
     tone(740, now, 0.16);
-    tone(988, now + 0.12, celebration ? 0.72 : 0.34, "triangle", 0.12);
+    tone(988, now + 0.12, 0.34, "triangle", 0.12);
   }
-  window.setTimeout(() => context.close?.(), 1000);
+  window.setTimeout(() => context.close?.(), medal === "platinum" ? 9000 : celebration ? 3500 : 1000);
 }
 
 function normaliseAnswer(value) {
@@ -441,6 +488,7 @@ function useSession(initialLevel) {
   const [feedbackFading, setFeedbackFading] = useState(false);
   const [score, setScore] = useState({ correct: 0, attempted: 0, streak: 0, best: 0 });
   const [confetti, setConfetti] = useState(0);
+  const [autoShowMedals, setAutoShowMedals] = useState(false);
   const nextTimer = useRef(null);
   const fadeTimer = useRef(null);
 
@@ -477,7 +525,13 @@ function useSession(initialLevel) {
     playSound(correct);
     setScore((value) => {
       const streak = correct ? value.streak + 1 : 0;
-      if (correct && [10, 15, 20, 30].includes(streak)) setConfetti((count) => count + 1);
+      if (correct && [10, 15, 20, 30].includes(streak)) {
+        const nextMedal = getStreakMedal(streak);
+        setConfetti((count) => count + 1);
+        setAutoShowMedals(true);
+        window.setTimeout(() => setAutoShowMedals(false), 2000);
+        window.setTimeout(() => playSound(true, true, nextMedal.sound), 180);
+      }
       return {
         correct: value.correct + (correct ? 1 : 0),
         attempted: value.attempted + 1,
@@ -509,6 +563,7 @@ function useSession(initialLevel) {
     feedbackFading,
     score,
     confetti,
+    autoShowMedals,
     locked,
     expected,
     setTyped,
@@ -521,12 +576,14 @@ function useSession(initialLevel) {
     resetScore() {
       setScore({ correct: 0, attempted: 0, streak: 0, best: 0 });
       setConfetti(0);
+      setAutoShowMedals(false);
       nextQuestion();
     },
     changeLevel(nextLevel) {
       setLevel(nextLevel);
       setScore({ correct: 0, attempted: 0, streak: 0, best: 0 });
       setConfetti(0);
+      setAutoShowMedals(false);
       nextQuestion(nextLevel, modes);
     },
     toggleIdentify() {
@@ -838,7 +895,7 @@ function ScorePanel({ session }) {
       bestStreak={session.score.best}
       resetScore={session.resetScore}
       confettiKey={session.confetti}
-      showMedalPopover={session.score.streak >= 10}
+      autoShowMedals={session.autoShowMedals}
     />
   );
 }

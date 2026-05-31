@@ -80,6 +80,15 @@
       { tier: "diamond", value: 30, icon: assets.diamond, className: "text-cyan-500", active: streak >= 30 },
     ];
     const medal = thresholds.find((item) => item.active);
+    const medalStyle = streak >= 30
+      ? { bg: "bg-cyan-400/25", text: "text-cyan-500" }
+      : streak >= 20
+        ? { bg: "bg-yellow-400/25", text: "text-yellow-500" }
+        : streak >= 15
+          ? { bg: "bg-slate-300/30", text: "text-slate-500" }
+          : streak >= 10
+            ? { bg: "bg-amber-700/20", text: "text-amber-700" }
+            : { bg: "bg-stone-50", text: "text-black" };
     const tile = MLH.shell.scoreTileClass;
     const active = MLH.shell.scoreTileActiveClass;
 
@@ -112,7 +121,7 @@
           tabIndex: "0",
           onPointerDown: (event) => event.stopPropagation(),
           onClick: () => setPopover((value) => value === "streak" ? null : "streak"),
-          className: `${tile} overflow-visible ${popover === "streak" ? active : ""}`,
+          className: `${tile} overflow-visible ${medalStyle.bg} ${popover === "streak" ? active : ""}`,
         },
           confettiKey > 0 && React.createElement("div", { key: confettiKey, className: "pointer-events-none absolute inset-0 z-20 overflow-visible" },
             Array.from({ length: 18 }).map((_, index) => React.createElement("span", {
@@ -129,7 +138,7 @@
           ),
           React.createElement("div", { className: "relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center" },
             React.createElement("div", { className: "text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]" }, "Streak"),
-            React.createElement("div", { className: "mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]" }, streak),
+            React.createElement("div", { className: `mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px] ${medalStyle.text}` }, streak),
             React.createElement("div", { className: "mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]" }, `Highest: ${bestStreak}`)
           ),
           (popover === "streak" || autoShowMedals || showMedalPopover) && React.createElement("div", {
