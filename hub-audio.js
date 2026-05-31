@@ -64,10 +64,20 @@
     }, medal === "platinum" ? 9000 : celebration ? 3500 : 900);
   }
 
+  function getStreakMedal(streak) {
+    if (streak >= 30) return { sound: "platinum" };
+    if (streak >= 20) return { sound: "gold" };
+    if (streak >= 15) return { sound: "silver" };
+    if (streak >= 10) return { sound: "bronze" };
+    return null;
+  }
+
   MLH.audio = {
     ...(MLH.audio || {}),
     playFeedbackSound,
+    getStreakMedal,
   };
   MLH.playFeedbackSound = playFeedbackSound;
+  MLH.getStreakMedal = getStreakMedal;
   window.MLH = MLH;
 })();
