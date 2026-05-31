@@ -1,3 +1,10 @@
+if (!document.querySelector('link[href$="hub-ui.css"]')) {
+  const hubStyle = document.createElement("link");
+  hubStyle.rel = "stylesheet";
+  hubStyle.href = "https://mrtennant-music.github.io/musicliteracy/hub-ui.css";
+  document.head.appendChild(hubStyle);
+}
+
 document.body.insertAdjacentHTML("beforeend", `
 <footer class="footer" id="resources">
   <div class="footer-grid">
