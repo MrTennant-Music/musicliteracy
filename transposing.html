@@ -15,6 +15,10 @@
   <script src="./hub-shell.js?v=1.1"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="./hub-menu.js?v=1.6"></script>
+  <style>
+    @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+    .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
+  </style>
 </head>
 <body>
   <div id="root"></div>
@@ -28,7 +32,6 @@ const ASSET = {
   levels: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
   customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
   next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
-  barlines: "https://mrtennant-music.github.io/musicliteracy/barlines-icon.svg",
   bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
   silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
   gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
@@ -61,6 +64,9 @@ const COLOUR = {
 const GLYPH = {
   trebleClef: String.fromCodePoint(0x1d11e),
   bassClef: String.fromCodePoint(0x1d122),
+  whole: "\uE0A2",
+  half: "\uE0A3",
+  black: "\uE0A4",
 };
 
 const TREBLE_NOTES = [
@@ -187,7 +193,7 @@ function getStem(x, y, step, rhythm = "crotchet", forcedDown = null, forcedEndY 
   const down = forcedDown ?? stemDown(step);
   const openHead = rhythm === "minim";
   const stemInset = openHead ? NOTE.rx * 0.15 : NOTE.rx;
-  const stemX = down ? x - stemInset - (openHead ? 11 : -0.5) : x + stemInset + (openHead ? 11 : -0.5);
+  const stemX = down ? x - stemInset - (openHead ? 7 : -10) : x + stemInset + (openHead ? 7 : -1.25);
   const stemEndY = forcedEndY ?? (down ? y + NOTE.stemLength : y - NOTE.stemLength);
   return { down, stemX, stemEndY };
 }
@@ -326,25 +332,18 @@ function RhythmNote({
   forcedStemEndY = null,
   scale = 1,
 }) {
-  const open = rhythm === "minim";
   const hasStem = ["minim", "crotchet", "dotted-crotchet", "quaver"].includes(rhythm);
   const stem = getStem(x, y, step, rhythm, forcedDown, forcedStemEndY);
   const flagPath = stem.down
     ? `M ${stem.stemX} ${stem.stemEndY} C ${stem.stemX + 22} ${stem.stemEndY - 8}, ${stem.stemX + 21} ${stem.stemEndY - 24}, ${stem.stemX + 4} ${stem.stemEndY - 31}`
     : `M ${stem.stemX} ${stem.stemEndY} C ${stem.stemX + 22} ${stem.stemEndY + 8}, ${stem.stemX + 21} ${stem.stemEndY + 24}, ${stem.stemX + 4} ${stem.stemEndY + 31}`;
+  const headGlyph = rhythm === "minim" ? GLYPH.half : GLYPH.black;
 
   return (
     <g opacity={opacity} pointerEvents="none" transform={scale !== 1 ? `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})` : undefined}>
-      <ellipse
-        cx={x}
-        cy={y}
-        rx={NOTE.rx}
-        ry={NOTE.ry}
-        transform={`rotate(-18 ${x} ${y})`}
-        fill={open ? "none" : colour}
-        stroke={colour}
-        strokeWidth={preview ? 2 : 2.2}
-      />
+      <text className="music-symbol" x={x} y={y} fontSize="86" textAnchor="middle" fill={colour}>
+        {headGlyph}
+      </text>
       {hasStem && <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />}
       {rhythm === "dotted-crotchet" && <circle cx={x + 26} cy={y - 3 - (step % 2 === 0 ? 4 : 0)} r="3.4" fill={colour} />}
       {rhythm === "quaver" && showFlag && <path d={flagPath} fill="none" stroke={colour} strokeWidth="2.2" strokeLinecap="round" />}
@@ -375,9 +374,9 @@ function Staff({ top, clef }) {
       </g>
       <text
         x={STAFF.left + (isTreble ? 18 : 8)}
-        y={top + (isTreble ? 58 : 48)}
-        fontSize={isTreble ? 189 : 119}
-        fontFamily="serif"
+        y={top + (isTreble ? 63 : 21.5)}
+        fontSize={isTreble ? 84 : 86}
+        className="music-symbol"
         dominantBaseline="middle"
       >
         {isTreble ? GLYPH.trebleClef : GLYPH.bassClef}
@@ -690,7 +689,7 @@ function ScoreArea({
 }
 
 function MenuIcon({ type }) {
-  if (type === "whole-bar") return <span className="music-symbol inline-flex h-[18px] w-[18px] items-center justify-center text-[12px] leading-none text-stone-700"></span>;
+  if (type === "whole-bar") return <span className="music-symbol relative top-[1px] inline-flex h-[18px] w-[18px] items-center justify-center text-[18px] leading-none text-stone-700">𝄁</span>;
   if (type === "abc") return <span className="inline-flex h-[18px] w-[22px] items-center justify-center text-[13px] font-black leading-none tracking-tight text-stone-700">ABC</span>;
   return null;
 }
