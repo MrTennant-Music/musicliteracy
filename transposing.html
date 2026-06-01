@@ -24,8 +24,9 @@
   <div id="root"></div>
 
   <script type="text/babel">
-const { useMemo, useRef, useState } = React;
+const { useRef, useState } = React;
 const SHELL = window.MLH?.shell || {};
+const isTouchDevice = window.MLH?.isTouchDevice?.() || ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
 
 const ASSET = {
   appIcon: "https://mrtennant-music.github.io/musicliteracy/transposing-icon.svg",
@@ -38,7 +39,9 @@ const ASSET = {
   diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
 };
 
-const SVG = { width: 920, height: 420 };
+const INITIAL_LEVEL = new URLSearchParams(window.location.search).get("level") === "AH" ? "AH" : "H";
+
+const SVG = { width: 920, height: 500 };
 
 const STAFF = {
   left: 222,
@@ -47,6 +50,19 @@ const STAFF = {
   bassTop: 229,
   gap: 21,
 };
+
+const SYSTEM_SPREAD = 15;
+const SYSTEM_SPREAD_HALF = SYSTEM_SPREAD / 2;
+const SOURCE_TOP = STAFF.trebleTop - SYSTEM_SPREAD_HALF;
+const ANSWER_TOP = STAFF.bassTop + SYSTEM_SPREAD_HALF;
+
+function getSystemLayout(question) {
+  const swapSystems = question.sourceClef === "bass" && question.answerClef === "treble";
+  return {
+    sourceTop: swapSystems ? ANSWER_TOP : SOURCE_TOP,
+    answerTop: swapSystems ? SOURCE_TOP : ANSWER_TOP,
+  };
+}
 
 const NOTE = {
   rx: 13.55,
@@ -67,29 +83,48 @@ const GLYPH = {
   whole: "\uE0A2",
   half: "\uE0A3",
   black: "\uE0A4",
+  flagUp: "\uE240",
+  flagDown: "\uE241",
+  tie: "\uE1FD",
+  ottavaAlta: "\uE510",
+  ottavaBassa: "\uE5C1",
 };
 
-const TREBLE_NOTES = [
-  { letter: "C", octave: 4, step: -2 },
-  { letter: "D", octave: 4, step: -1 },
-  { letter: "E", octave: 4, step: 0 },
-  { letter: "F", octave: 4, step: 1 },
-  { letter: "G", octave: 4, step: 2 },
-  { letter: "A", octave: 4, step: 3 },
-  { letter: "B", octave: 4, step: 4 },
-  { letter: "C", octave: 5, step: 5 },
-];
+const LETTER_INDEX = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+const INDEX_LETTER = ["C", "D", "E", "F", "G", "A", "B"];
 
-const BASS_ANSWERS = [
-  { letter: "C", octave: 3, step: 3 },
-  { letter: "D", octave: 3, step: 4 },
-  { letter: "E", octave: 3, step: 5 },
-  { letter: "F", octave: 3, step: 6 },
-  { letter: "G", octave: 3, step: 7 },
-  { letter: "A", octave: 3, step: 8 },
-  { letter: "B", octave: 3, step: 9 },
-  { letter: "C", octave: 4, step: 10 },
-];
+function pitch(letter, octave) {
+  return { letter, octave, index: octave * 7 + LETTER_INDEX[letter] };
+}
+
+function pitchFromIndex(index) {
+  return { letter: INDEX_LETTER[((index % 7) + 7) % 7], octave: Math.floor(index / 7), index };
+}
+
+function transposePitch(note, octaves) {
+  return pitchFromIndex(note.index + octaves * 7);
+}
+
+function stepForClef(note, clef) {
+  const reference = clef === "treble" ? pitch("E", 4).index : pitch("G", 2).index;
+  return note.index - reference;
+}
+
+function noteItem(note, clef, rhythm = "crotchet") {
+  return { ...note, clef, rhythm, step: stepForClef(note, clef) };
+}
+
+function pitchRange(startLetter, startOctave, endLetter, endOctave) {
+  const start = pitch(startLetter, startOctave).index;
+  const end = pitch(endLetter, endOctave).index;
+  return Array.from({ length: end - start + 1 }, (_, index) => pitchFromIndex(start + index));
+}
+
+const HIGHER_SOURCE_NOTES = pitchRange("C", 4, "C", 5);
+const SAME_PITCH_NOTES = pitchRange("A", 3, "E", 4);
+const BASS_OCTAVE_SOURCE_NOTES = pitchRange("C", 3, "C", 4);
+const OTTAVA_SOURCE_NOTES = pitchRange("C", 4, "A", 4);
+const OTTAVA_BASS_SOURCE_NOTES = pitchRange("C", 3, "C", 4);
 
 const RHYTHMS = [
   { id: "minim", label: "Minim", beats: 2 },
@@ -182,7 +217,7 @@ function yForStep(top, step) {
 }
 
 function stepFromSvgY(y, top) {
-  return clamp(Math.round((top + STAFF.gap * 4 - y) / (STAFF.gap / 2)), -2, 10);
+  return clamp(Math.round((top + STAFF.gap * 4 - y) / (STAFF.gap / 2)), -4, 12);
 }
 
 function stemDown(step) {
@@ -193,28 +228,30 @@ function getStem(x, y, step, rhythm = "crotchet", forcedDown = null, forcedEndY 
   const down = forcedDown ?? stemDown(step);
   const openHead = rhythm === "minim";
   const stemInset = openHead ? NOTE.rx * 0.15 : NOTE.rx;
-  const stemX = down ? x - stemInset - (openHead ? 7 : -10) : x + stemInset + (openHead ? 7 : -1.25);
-  const stemEndY = forcedEndY ?? (down ? y + NOTE.stemLength : y - NOTE.stemLength);
-  return { down, stemX, stemEndY };
+  const stemX = down ? x - stemInset - (openHead ? 10 : -2) : x + stemInset + (openHead ? 9.75 : -1.5);
+  const stemStartY = down ? y + 0.5 : y - 2.5;
+  const stemEndY = forcedEndY ?? (down ? y + NOTE.stemLength + 0.5 : y - NOTE.stemLength - 2.5);
+  return { down, stemX, stemStartY, stemEndY };
 }
 
-function createStepwiseIndices(count) {
-  const indices = [randomIndex(TREBLE_NOTES.length)];
+function createStepwiseIndices(count, poolLength = HIGHER_SOURCE_NOTES.length) {
+  const indices = [randomIndex(poolLength)];
   for (let i = 1; i < count; i += 1) {
     const current = indices[i - 1];
     const moves = [];
     if (current > 0) moves.push(-1);
-    if (current < TREBLE_NOTES.length - 1) moves.push(1);
+    if (current < poolLength - 1) moves.push(1);
     indices.push(current + randomItem(moves));
   }
   return indices;
 }
 
-function createPassage() {
+function createPassage(transform) {
   const pattern = randomItem(FOUR_BEAT_PATTERNS);
+  const sourceNotes = transform.sourcePool;
   const noteIndices = pattern.stepwise
-    ? createStepwiseIndices(pattern.rhythms.length)
-    : pattern.rhythms.map(() => randomIndex(TREBLE_NOTES.length));
+    ? createStepwiseIndices(pattern.rhythms.length, sourceNotes.length)
+    : pattern.rhythms.map(() => randomIndex(sourceNotes.length));
 
   if (pattern.tieStart != null && noteIndices[pattern.tieStart + 1] != null) {
     noteIndices[pattern.tieStart + 1] = noteIndices[pattern.tieStart];
@@ -223,16 +260,108 @@ function createPassage() {
   return pattern.rhythms.map((rhythm, index) => ({
     rhythm,
     noteIndex: noteIndices[index],
+    source: noteItem(sourceNotes[noteIndices[index]], transform.sourceClef, rhythm),
+    answer: noteItem(transform.answerFor(sourceNotes[noteIndices[index]]), transform.answerClef, rhythm),
     tieToNext: pattern.tieStart === index,
   }));
 }
 
-function createQuestion(mode = "exam", previousSingleIndex = null) {
+const TRANSFORMS = {
+  higher: {
+    id: "higher",
+    sourceClef: "treble",
+    answerClef: "bass",
+    sourcePool: HIGHER_SOURCE_NOTES,
+    answerFor: (note) => transposePitch(note, -1),
+    instruction: {
+      practice: <>Transpose the note from the treble clef <strong>down one octave</strong> into the bass clef.</>,
+      exam: <>Transpose each note <strong>one octave lower</strong> into the bass clef. Choose the rhythm, then place the note.</>,
+    },
+  },
+  samePitch: {
+    id: "samePitch",
+    sourcePool: SAME_PITCH_NOTES,
+    answerFor: (note) => note,
+    instruction: {
+      practice: <>Rewrite the note at the <strong>same pitch</strong> in the other clef.</>,
+      exam: <>Rewrite each note at the <strong>same pitch</strong> in the other clef. Choose the rhythm, then place the note.</>,
+    },
+  },
+  bassOctaveUp: {
+    id: "bassOctaveUp",
+    sourceClef: "bass",
+    answerClef: "treble",
+    sourcePool: BASS_OCTAVE_SOURCE_NOTES,
+    answerFor: (note) => transposePitch(note, 1),
+    instruction: {
+      practice: <>Transpose the note from the bass clef <strong>one octave higher</strong> into the treble clef.</>,
+      exam: <>Transpose each note from the bass clef <strong>one octave higher</strong> into the treble clef. Choose the rhythm, then place the note.</>,
+    },
+  },
+  ottavaAlta: {
+    id: "ottavaAlta",
+    sourceClef: "treble",
+    answerClef: "treble",
+    sourcePool: OTTAVA_SOURCE_NOTES,
+    answerFor: (note) => transposePitch(note, 1),
+    marking: "8va",
+    instruction: {
+      practice: <>Rewrite the 8va note <strong>one octave higher</strong> than written.</>,
+      exam: <>Rewrite the 8va notes <strong>one octave higher</strong> than written. Choose the rhythm, then place the note.</>,
+    },
+  },
+  ottavaBassa: {
+    id: "ottavaBassa",
+    sourceClef: "bass",
+    answerClef: "bass",
+    sourcePool: OTTAVA_BASS_SOURCE_NOTES,
+    answerFor: (note) => transposePitch(note, -1),
+    marking: "8vb",
+    instruction: {
+      practice: <>Rewrite the 8vb note <strong>one octave lower</strong> than written.</>,
+      exam: <>Rewrite the 8vb notes <strong>one octave lower</strong> than written. Choose the rhythm, then place the note.</>,
+    },
+  },
+};
+
+function createTransform(level) {
+  if (level !== "AH") return TRANSFORMS.higher;
+  const transform = randomItem([
+    TRANSFORMS.higher,
+    TRANSFORMS.samePitch,
+    TRANSFORMS.bassOctaveUp,
+    TRANSFORMS.ottavaAlta,
+    TRANSFORMS.ottavaBassa,
+  ]);
+
+  if (transform.id !== "samePitch") return transform;
+  const sourceClef = Math.random() < 0.5 ? "treble" : "bass";
+  return {
+    ...transform,
+    sourceClef,
+    answerClef: sourceClef === "treble" ? "bass" : "treble",
+  };
+}
+
+function createQuestion(mode = "exam", previousSingleIndex = null, level = "H") {
+  const transform = createTransform(level);
+  const singleIndex = randomIndex(transform.sourcePool.length, previousSingleIndex);
+  const singleSource = noteItem(transform.sourcePool[singleIndex], transform.sourceClef);
+  const singleAnswer = noteItem(transform.answerFor(transform.sourcePool[singleIndex]), transform.answerClef);
+
   return {
     id: Math.random().toString(36).slice(2),
     mode,
-    singleIndex: randomIndex(TREBLE_NOTES.length, previousSingleIndex),
-    passage: createPassage(),
+    level,
+    transformId: transform.id,
+    sourceClef: transform.sourceClef,
+    answerClef: transform.answerClef,
+    marking: transform.marking ?? null,
+    instruction: transform.instruction,
+    singleIndex,
+    singleSource,
+    singleAnswer,
+    passage: createPassage(transform),
   };
 }
 
@@ -303,12 +432,11 @@ function beamYAtX(x, beam) {
   return beam.start.y + ratio * (beam.end.y - beam.start.y);
 }
 
-function LedgerLines({ x, step, clef, colour = "currentColor" }) {
-  const top = clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
+function LedgerLines({ x, step, clef, top: staffTop = null, colour = "currentColor" }) {
+  const top = staffTop ?? (clef === "treble" ? STAFF.trebleTop : STAFF.bassTop);
   const lines = [];
-  if (clef === "treble" && step <= -2) lines.push(yForStep(top, -2));
-  if (clef === "bass" && step >= 10) lines.push(yForStep(top, 10));
-  if (clef === "bass" && step <= -2) lines.push(yForStep(top, -2));
+  for (let lineStep = -2; lineStep >= step; lineStep -= 2) lines.push(yForStep(top, lineStep));
+  for (let lineStep = 10; lineStep <= step; lineStep += 2) lines.push(yForStep(top, lineStep));
 
   return (
     <g pointerEvents="none">
@@ -334,9 +462,6 @@ function RhythmNote({
 }) {
   const hasStem = ["minim", "crotchet", "dotted-crotchet", "quaver"].includes(rhythm);
   const stem = getStem(x, y, step, rhythm, forcedDown, forcedStemEndY);
-  const flagPath = stem.down
-    ? `M ${stem.stemX} ${stem.stemEndY} C ${stem.stemX + 22} ${stem.stemEndY - 8}, ${stem.stemX + 21} ${stem.stemEndY - 24}, ${stem.stemX + 4} ${stem.stemEndY - 31}`
-    : `M ${stem.stemX} ${stem.stemEndY} C ${stem.stemX + 22} ${stem.stemEndY + 8}, ${stem.stemX + 21} ${stem.stemEndY + 24}, ${stem.stemX + 4} ${stem.stemEndY + 31}`;
   const headGlyph = rhythm === "minim" ? GLYPH.half : GLYPH.black;
 
   return (
@@ -344,16 +469,20 @@ function RhythmNote({
       <text className="music-symbol" x={x} y={y} fontSize="86" textAnchor="middle" fill={colour}>
         {headGlyph}
       </text>
-      {hasStem && <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />}
+      {hasStem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.stemStartY} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />}
       {rhythm === "dotted-crotchet" && <circle cx={x + 26} cy={y - 3 - (step % 2 === 0 ? 4 : 0)} r="3.4" fill={colour} />}
-      {rhythm === "quaver" && showFlag && <path d={flagPath} fill="none" stroke={colour} strokeWidth="2.2" strokeLinecap="round" />}
+      {rhythm === "quaver" && showFlag && (
+        <text className="music-symbol" x={stem.stemX + (stem.down ? 8 : 7)} y={stem.stemEndY} fontSize="59" textAnchor="middle" fill={colour}>
+          {stem.down ? GLYPH.flagDown : GLYPH.flagUp}
+        </text>
+      )}
     </g>
   );
 }
 
 function Staff({ top, clef }) {
   const isTreble = clef === "treble";
-  const fadeId = `staff-fade-${clef}`;
+  const fadeId = `staff-fade-${clef}-${top}`;
 
   return (
     <g>
@@ -373,7 +502,7 @@ function Staff({ top, clef }) {
         ))}
       </g>
       <text
-        x={STAFF.left + (isTreble ? 18 : 8)}
+        x={STAFF.left + (isTreble ? 18 : 11)}
         y={top + (isTreble ? 63 : 21.5)}
         fontSize={isTreble ? 84 : 86}
         className="music-symbol"
@@ -385,25 +514,32 @@ function Staff({ top, clef }) {
   );
 }
 
-function HelpLabels({ visible }) {
+function HelpLabels({ visible, sourceClef = "treble", answerClef = "bass", sourceTop, answerTop }) {
   if (!visible) return null;
   const lineLabelX = STAFF.left - 11;
   const spaceLabelX = STAFF.left + 16;
+  const systems = [
+    { key: "source", clef: sourceClef, top: sourceTop },
+    { key: "answer", clef: answerClef, top: answerTop },
+  ];
 
   return (
     <g fontSize="14" fontFamily="system-ui, sans-serif" fontWeight="700" dominantBaseline="middle" pointerEvents="none" fill="black">
-      {Object.entries(NOTE_NAME_LABELS).flatMap(([clef, data]) => [
-        ...data.lines.map((note) => (
-          <text key={`${clef}-line-${note.step}`} x={lineLabelX} y={yForStep(data.top, note.step) + 5} textAnchor="start">
-            {note.letter}
-          </text>
-        )),
-        ...data.spaces.map((note) => (
-          <text key={`${clef}-space-${note.step}`} x={spaceLabelX} y={yForStep(data.top, note.step) + 5} textAnchor="end">
-            {note.letter}
-          </text>
-        )),
-      ])}
+      {systems.flatMap(({ key, clef, top }) => {
+        const data = NOTE_NAME_LABELS[clef];
+        return [
+          ...data.lines.map((note) => (
+            <text key={`${key}-${clef}-line-${note.step}`} x={lineLabelX} y={yForStep(top, note.step) + 5} textAnchor="start">
+              {note.letter}
+            </text>
+          )),
+          ...data.spaces.map((note) => (
+            <text key={`${key}-${clef}-space-${note.step}`} x={spaceLabelX} y={yForStep(top, note.step) + 5} textAnchor="end">
+              {note.letter}
+            </text>
+          )),
+        ];
+      })}
     </g>
   );
 }
@@ -411,26 +547,64 @@ function HelpLabels({ visible }) {
 function Tie({ x1, y1, x2, y2, step1, step2, colour = "currentColor", opacity = 1 }) {
   const midX = (x1 + x2) / 2;
   const stemsUp = !stemDown(step1) && !stemDown(step2);
-  const startY = stemsUp ? y1 + 17 : y1 - 17;
-  const endY = stemsUp ? y2 + 17 : y2 - 17;
-  const controlY = stemsUp ? Math.max(startY, endY) + 18 : Math.min(startY, endY) - 18;
+  const y = stemsUp ? Math.max(y1, y2) + 6 : Math.min(y1, y2) - 5;
+  const stretch = clamp(Math.abs(x2 - x1) / 22, 1.4, 5.2);
 
   return (
-    <path
-      d={`M ${x1 - 2} ${startY} Q ${midX} ${controlY}, ${x2 + 2} ${endY}`}
-      fill="none"
-      stroke={colour}
-      strokeWidth="2.8"
-      strokeLinecap="round"
+    <text
+      className="music-symbol"
+      x="0"
+      y="0"
+      fontSize="58"
+      textAnchor="middle"
+      fill={colour}
       opacity={opacity}
       pointerEvents="none"
-    />
+      transform={`translate(${midX} ${y}) scale(${stretch} 1)${stemsUp ? "" : " rotate(180)"}`}
+    >
+      {GLYPH.tie}
+    </text>
+  );
+}
+
+function OttavaMark({ marking, top }) {
+  if (!marking) return null;
+  const label = marking === "8vb" ? GLYPH.ottavaBassa : GLYPH.ottavaAlta;
+  const above = marking !== "8vb";
+  const labelX = STAFF.left + 16;
+  const labelY = top + (above ? -18 : STAFF.gap * 4 + 42);
+  const lineY = labelY;
+  const lineX1 = STAFF.left + 70;
+  const lineX2 = STAFF.right - 4;
+  return (
+    <g pointerEvents="none">
+      <text className="music-symbol" x={labelX} y={labelY} fontSize="42" textAnchor="start" dominantBaseline="middle" fill="currentColor">
+        {label}
+      </text>
+      <line
+        x1={lineX1}
+        x2={lineX2}
+        y1={lineY}
+        y2={lineY}
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeDasharray="5 5"
+      />
+      <line
+        x1={lineX2}
+        x2={lineX2}
+        y1={lineY}
+        y2={lineY + (above ? 12 : -12)}
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </g>
   );
 }
 
 function RenderPassage({ passage, top, clef, answerItems = null, feedbackDetails = null, correctOverlay = false, overlayOffset = 0, userTies = null }) {
   const positions = getPassagePositions(passage).map((x) => x + overlayOffset);
-  const source = answerItems ?? passage.map((item) => ({ ...item, step: TREBLE_NOTES[item.noteIndex].step }));
+  const source = answerItems ?? passage.map((item) => ({ ...item.source, rhythm: item.rhythm, tieToNext: item.tieToNext }));
   const quaverGroups = getQuaverGroups(source);
   const ties = userTies ?? passage.map((item) => Boolean(item.tieToNext));
 
@@ -480,11 +654,11 @@ function RenderPassage({ passage, top, clef, answerItems = null, feedbackDetails
         const groupItems = group ? source.slice(group.start, group.end + 1) : [];
         const groupPositions = group ? positions.slice(group.start, group.end + 1) : [];
         const beam = group && groupItems.every((note) => note?.step != null) ? getBeam(groupItems, groupPositions, top) : null;
-        const stemX = beam ? (beam.down ? x - NOTE.rx + 1 : x + NOTE.rx - 1) : null;
+        const stemX = beam ? (beam.down ? x - NOTE.rx + 0.5 : x + NOTE.rx - 0.5) : null;
 
         return (
           <g key={`${clef}-${index}-${overlayOffset}`}>
-            <LedgerLines x={x} step={item.step} clef={clef} colour={colour} />
+            <LedgerLines x={x} step={item.step} clef={clef} top={top} colour={colour} />
             <RhythmNote
               x={x}
               y={y}
@@ -527,13 +701,13 @@ function ScoreArea({
   onPointerCancel,
 }) {
   const singleX = 490;
-  const singleTreble = TREBLE_NOTES[question.singleIndex];
-  const singleAnswer = BASS_ANSWERS[question.singleIndex];
+  const singleSource = question.singleSource;
+  const singleAnswer = question.singleAnswer;
   const activeSingleStep = lockedStep ?? hoverStep;
   const positions = getPassagePositions(question.passage);
+  const { sourceTop, answerTop } = getSystemLayout(question);
 
   const userPassage = question.passage.map((item, index) => ({
-    noteIndex: item.noteIndex,
     rhythm: selectedRhythms[index] ?? (index === activeSlot && selectedRhythmTool !== "tie" ? selectedRhythmTool : null),
     step: examSteps[index] ?? (index === activeSlot && hoverStep != null && selectedRhythmTool !== "tie" && (selectedRhythmTool || selectedRhythms[index]) ? hoverStep : null),
     tieToNext: Boolean(userTies[index]) || Boolean(item.tieToNext),
@@ -541,12 +715,9 @@ function ScoreArea({
   }));
 
   const correctPassage = question.passage.map((item) => ({
-    noteIndex: item.noteIndex,
     rhythm: item.rhythm,
-    step: BASS_ANSWERS[item.noteIndex].step,
+    step: item.answer.step,
   }));
-
-  const hitX = mode === "exam" ? (positions[activeSlot] ?? STAFF.left + 170) - 35 : singleX - 60;
 
   const tiePreview =
     mode === "exam" &&
@@ -556,9 +727,9 @@ function ScoreArea({
     activeSlot < question.passage.length - 1
       ? {
           x1: positions[activeSlot],
-          y1: yForStep(STAFF.bassTop, examSteps[activeSlot] ?? hoverStep),
+          y1: yForStep(answerTop, examSteps[activeSlot] ?? hoverStep),
           x2: positions[activeSlot + 1],
-          y2: yForStep(STAFF.bassTop, examSteps[activeSlot + 1] ?? examSteps[activeSlot] ?? hoverStep),
+          y2: yForStep(answerTop, examSteps[activeSlot + 1] ?? examSteps[activeSlot] ?? hoverStep),
           step1: examSteps[activeSlot] ?? hoverStep,
           step2: examSteps[activeSlot + 1] ?? examSteps[activeSlot] ?? hoverStep,
         }
@@ -567,21 +738,22 @@ function ScoreArea({
   return (
     <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-visible">
       {mode === "practice" && <rect width={SVG.width} height={SVG.height} fill="white" />}
-      <Staff top={STAFF.trebleTop} clef="treble" />
-      <Staff top={STAFF.bassTop} clef="bass" />
-      <HelpLabels visible={noteNamesVisible} />
+      <Staff top={sourceTop} clef={question.sourceClef} />
+      <Staff top={answerTop} clef={question.answerClef} />
+      <OttavaMark marking={question.marking} top={sourceTop} />
+      <HelpLabels visible={noteNamesVisible} sourceClef={question.sourceClef} answerClef={question.answerClef} sourceTop={sourceTop} answerTop={answerTop} />
 
       {mode === "practice" ? (
         <>
-          <LedgerLines x={singleX} step={singleTreble.step} clef="treble" />
-          <RhythmNote x={singleX} y={yForStep(STAFF.trebleTop, singleTreble.step)} step={singleTreble.step} rhythm="crotchet" />
+          <LedgerLines x={singleX} step={singleSource.step} clef={question.sourceClef} top={sourceTop} />
+          <RhythmNote x={singleX} y={yForStep(sourceTop, singleSource.step)} step={singleSource.step} rhythm="crotchet" />
 
           {activeSingleStep != null && !(feedback && !feedback.correct) && (
             <>
-              <LedgerLines x={singleX} step={activeSingleStep} clef="bass" />
+              <LedgerLines x={singleX} step={activeSingleStep} clef={question.answerClef} top={answerTop} />
               <RhythmNote
                 x={singleX}
-                y={yForStep(STAFF.bassTop, activeSingleStep)}
+                y={yForStep(answerTop, activeSingleStep)}
                 step={activeSingleStep}
                 rhythm="crotchet"
                 colour={lockedStep == null ? COLOUR.preview : "currentColor"}
@@ -593,12 +765,12 @@ function ScoreArea({
 
           {feedback && lockedStep != null && (
             <>
-              <LedgerLines x={singleX} step={lockedStep} clef="bass" colour={feedback.correct ? COLOUR.green : COLOUR.red} />
-              <RhythmNote x={singleX} y={yForStep(STAFF.bassTop, lockedStep)} step={lockedStep} rhythm="crotchet" colour={feedback.correct ? COLOUR.green : COLOUR.red} />
+              <LedgerLines x={singleX} step={lockedStep} clef={question.answerClef} top={answerTop} colour={feedback.correct ? COLOUR.green : COLOUR.red} />
+              <RhythmNote x={singleX} y={yForStep(answerTop, lockedStep)} step={lockedStep} rhythm="crotchet" colour={feedback.correct ? COLOUR.green : COLOUR.red} />
               {!feedback.correct && (
                 <>
-                  <LedgerLines x={singleX + 55} step={singleAnswer.step} clef="bass" colour={COLOUR.green} />
-                  <RhythmNote x={singleX + 55} y={yForStep(STAFF.bassTop, singleAnswer.step)} step={singleAnswer.step} rhythm="crotchet" colour={COLOUR.green} />
+                  <LedgerLines x={singleX + 55} step={singleAnswer.step} clef={question.answerClef} top={answerTop} colour={COLOUR.green} />
+                  <RhythmNote x={singleX + 55} y={yForStep(answerTop, singleAnswer.step)} step={singleAnswer.step} rhythm="crotchet" colour={COLOUR.green} />
                 </>
               )}
             </>
@@ -606,14 +778,14 @@ function ScoreArea({
         </>
       ) : (
         <>
-          <RenderPassage passage={question.passage} top={STAFF.trebleTop} clef="treble" />
-          <RenderPassage passage={question.passage} top={STAFF.bassTop} clef="bass" answerItems={userPassage} feedbackDetails={feedbackDetails} userTies={userTies} />
+          <RenderPassage passage={question.passage} top={sourceTop} clef={question.sourceClef} />
+          <RenderPassage passage={question.passage} top={answerTop} clef={question.answerClef} answerItems={userPassage} feedbackDetails={feedbackDetails} userTies={userTies} />
           {tiePreview && <Tie {...tiePreview} colour={COLOUR.preview} opacity={0.55} />}
           {feedback && !feedback.correct && (
             <RenderPassage
               passage={question.passage}
-              top={STAFF.bassTop}
-              clef="bass"
+              top={answerTop}
+              clef={question.answerClef}
               answerItems={correctPassage}
               feedbackDetails={feedbackDetails}
               correctOverlay
@@ -628,7 +800,7 @@ function ScoreArea({
           <rect
             key={`slot-hit-${index}`}
             x={x - 32}
-            y={STAFF.bassTop - 58}
+            y={answerTop - 58}
             width="64"
             height="170"
             fill="transparent"
@@ -644,9 +816,9 @@ function ScoreArea({
 
       {mode === "practice" && (
         <rect
-          x={hitX}
-          y={STAFF.bassTop - 42}
-          width="120"
+          x={STAFF.left - 24}
+          y={answerTop - 42}
+          width={STAFF.right - STAFF.left + 48}
           height="180"
           fill="transparent"
           pointerEvents="all"
@@ -659,22 +831,22 @@ function ScoreArea({
         />
       )}
 
-      {touchPreview?.active && touchPreview.type !== "tie" && touchPreview.step != null && !feedback && (
+      {isTouchDevice && touchPreview?.active && touchPreview.type !== "tie" && touchPreview.step != null && !feedback && (
         <g pointerEvents="none">
           <line
             x1={STAFF.left - 14}
             x2={STAFF.right + 14}
-            y1={yForStep(STAFF.bassTop, touchPreview.step)}
-            y2={yForStep(STAFF.bassTop, touchPreview.step)}
+            y1={yForStep(answerTop, touchPreview.step)}
+            y2={yForStep(answerTop, touchPreview.step)}
             stroke="black"
             strokeWidth="1.5"
             strokeDasharray="5 5"
             opacity="0.55"
           />
-          <LedgerLines x={touchPreview.x} step={touchPreview.step} clef="bass" colour="black" />
+          <LedgerLines x={touchPreview.x} step={touchPreview.step} clef={question.answerClef} top={answerTop} colour="black" />
           <RhythmNote
             x={touchPreview.x}
-            y={yForStep(STAFF.bassTop, touchPreview.step)}
+            y={yForStep(answerTop, touchPreview.step)}
             step={touchPreview.step}
             rhythm={mode === "exam" ? selectedRhythmTool ?? selectedRhythms[touchPreview.targetSlot ?? activeSlot] ?? "crotchet" : "crotchet"}
             colour="black"
@@ -689,7 +861,7 @@ function ScoreArea({
 }
 
 function MenuIcon({ type }) {
-  if (type === "whole-bar") return <span className="music-symbol relative top-[1px] inline-flex h-[18px] w-[18px] items-center justify-center text-[18px] leading-none text-stone-700">𝄁</span>;
+  if (type === "whole-bar") return <span className="music-symbol relative top-[9px] inline-flex h-[18px] w-[18px] items-center justify-center text-[18px] leading-none text-stone-700">𝄁</span>;
   if (type === "abc") return <span className="inline-flex h-[18px] w-[22px] items-center justify-center text-[13px] font-black leading-none tracking-tight text-stone-700">ABC</span>;
   return null;
 }
@@ -710,9 +882,9 @@ function ToolGlyph({ tool, active }) {
 
   if (tool.id === "tie") {
     return (
-      <svg width="42" height="42" viewBox="0 0 42 42" aria-hidden="true" className="overflow-visible">
-        <path d="M 7 25 Q 21 8, 35 25" fill="none" stroke={colour} strokeWidth="2.7" strokeLinecap="round" />
-      </svg>
+      <span className="music-symbol relative top-[1px] inline-flex h-[42px] w-[42px] items-center justify-center text-[46px] leading-none" style={{ color: colour }} aria-hidden="true">
+        {GLYPH.tie}
+      </span>
     );
   }
 
@@ -763,8 +935,8 @@ function MenuRows({ wholeBarMode, setWholeBarMode, noteNamesVisible, setNoteName
 
 function App() {
   const [wholeBarMode, setWholeBarMode] = useState(false);
-  const [activeLevel, setActiveLevel] = useState("H");
-  const [question, setQuestion] = useState(() => createQuestion("practice"));
+  const [activeLevel, setActiveLevel] = useState(INITIAL_LEVEL);
+  const [question, setQuestion] = useState(() => createQuestion("practice", null, INITIAL_LEVEL));
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
@@ -786,6 +958,7 @@ function App() {
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [confettiKey, setConfettiKey] = useState(0);
+  const feedbackTimerRef = useRef(null);
 
   const mode = wholeBarMode ? "exam" : "practice";
   const customiseRef = useRef(null);
@@ -802,11 +975,18 @@ function App() {
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const examReady = wholeBarMode && question.passage.every((_, index) => examSteps[index] != null && selectedRhythms[index] != null);
   const canConfirm = wholeBarMode ? examReady && !feedback : lockedStep != null && !feedback;
-  const instruction = wholeBarMode
-    ? <>Transpose each note <strong>one octave lower</strong> into the bass clef. Choose the rhythm, then place the note.</>
-    : <>Transpose the note from the treble clef <strong>down one octave</strong> into the bass clef.</>;
+  const { answerTop } = getSystemLayout(question);
+  const instruction = question.instruction?.[mode] ?? (
+    wholeBarMode
+      ? <>Transpose each note <strong>one octave lower</strong> into the bass clef. Choose the rhythm, then place the note.</>
+      : <>Transpose the note from the treble clef <strong>down one octave</strong> into the bass clef.</>
+  );
 
   function resetTask(nextQuestion = question) {
+    if (feedbackTimerRef.current) {
+      window.clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = null;
+    }
     setQuestion(nextQuestion);
     setHoverStep(null);
     setLockedStep(null);
@@ -822,10 +1002,14 @@ function App() {
     setPrompt("");
   }
 
-  function newQuestion(nextMode = mode) {
+  function newQuestion(nextMode = mode, nextLevel = activeLevel) {
+    if (feedbackTimerRef.current) {
+      window.clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = null;
+    }
     setQuestionVisible(false);
     window.setTimeout(() => {
-      resetTask(createQuestion(nextMode, question.singleIndex));
+      resetTask(createQuestion(nextMode, question.singleIndex, nextLevel));
       setQuestionVisible(true);
     }, 260);
   }
@@ -857,7 +1041,7 @@ function App() {
   function getPointerStep(event) {
     const pointer = pointerToSvg(event);
     const touchOffset = event.pointerType === "touch" ? 44 : 0;
-    return { pointer, step: stepFromSvgY(pointer.y - touchOffset, STAFF.bassTop) };
+    return { pointer, step: stepFromSvgY(pointer.y - touchOffset, answerTop) };
   }
 
   function placeStep(step, targetSlot = activeSlot) {
@@ -903,7 +1087,7 @@ function App() {
 
     const rhythmToPlace = selectedRhythmTool ?? selectedRhythms[targetSlot];
     if (!rhythmToPlace) {
-      setPrompt("Choose a rhythm first.");
+      setPrompt("");
       return;
     }
 
@@ -1030,8 +1214,18 @@ function App() {
     if (isCorrect) {
       setFeedbackFading(false);
       window.setTimeout(() => setFeedbackFading(true), 1700);
-      window.setTimeout(() => newQuestion(mode), 2000);
+      feedbackTimerRef.current = window.setTimeout(() => newQuestion(mode), 2000);
     }
+  }
+
+  function skipCorrectFeedback() {
+    if (!feedback || !feedback.correct || feedbackFading) return;
+    if (feedbackTimerRef.current) {
+      window.clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = null;
+    }
+    setFeedbackFading(true);
+    window.setTimeout(() => newQuestion(mode), 280);
   }
 
   function confirmAnswer() {
@@ -1039,10 +1233,10 @@ function App() {
 
     if (!wholeBarMode) {
       if (lockedStep == null) {
-        setPrompt("Place your answer on the bass stave first.");
+        setPrompt("Place your answer on the lower stave first.");
         return;
       }
-      scoreAnswer(lockedStep === BASS_ANSWERS[question.singleIndex].step);
+      scoreAnswer(lockedStep === question.singleAnswer.step);
       return;
     }
 
@@ -1052,7 +1246,7 @@ function App() {
     }
 
     const details = question.passage.map((item, index) => ({
-      pitchCorrect: examSteps[index] === BASS_ANSWERS[item.noteIndex].step,
+      pitchCorrect: examSteps[index] === item.answer.step,
       rhythmCorrect: selectedRhythms[index] === item.rhythm,
       tieCorrect: Boolean(userTies[index]) === Boolean(item.tieToNext),
     }));
@@ -1079,9 +1273,11 @@ function App() {
       <div className={SHELL.pageContentClass}>
         <main
           className={`${SHELL.mainShellClass} min-h-[560px] px-4 pb-4 md:min-h-0`}
-          onPointerDown={() => {
-            if (feedback && !feedback.correct) fadeToNextQuestion();
-          }}
+          onPointerDown={() => window.MLH.advanceFeedbackPointerDown({
+            feedback,
+            onCorrect: skipCorrectFeedback,
+            onIncorrect: fadeToNextQuestion,
+          })}
         >
           <div className="relative z-20 mb-2.5 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 overflow-visible">
             <div className="flex items-center gap-2 overflow-visible">
@@ -1099,7 +1295,10 @@ function App() {
                       onSelect={(key) => {
                         setActiveLevel(key);
                         setLevelOpen(false);
-                        newQuestion(mode);
+                        const url = new URL(window.location.href);
+                        url.searchParams.set("level", key);
+                        window.history.replaceState(null, "", url);
+                        newQuestion(mode, key);
                       }}
                       levels={{
                         H: {
@@ -1129,7 +1328,7 @@ function App() {
                       setWholeBarMode={(value) => {
                         const next = typeof value === "function" ? value(wholeBarMode) : value;
                         setWholeBarMode(next);
-                        newQuestion(next ? "exam" : "practice");
+                        newQuestion(next ? "exam" : "practice", activeLevel);
                       }}
                       noteNamesVisible={noteNamesVisible}
                       setNoteNamesVisible={setNoteNamesVisible}
@@ -1146,7 +1345,13 @@ function App() {
             <window.MLH.SkipButton resetStreak={() => setStreak(0)} onClick={() => newQuestion(mode)} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
           </div>
 
-          <div className={`relative -top-[55px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+          {wholeBarMode && isTouchDevice && !customiseOpen && !levelOpen && (
+            <p className="relative z-20 mb-2 text-center text-[0.74rem] font-light leading-tight tracking-normal text-stone-600" style={{ opacity: 0.45 }}>
+              Press and hold to drag note into place.
+            </p>
+          )}
+
+          <div className={`relative top-[0px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
             <ScoreArea
               question={question}
               mode={mode}
@@ -1168,14 +1373,14 @@ function App() {
             />
           </div>
 
-          <div className="relative z-10 mt-3 h-[108px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:-mt-[123px] md:mx-3">
+          <div className={`relative z-10 mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:-mt-[123px] md:mx-3 ${wholeBarMode ? "h-[160px]" : "h-[108px]"}`}>
             <div className="space-y-3 text-stone-900">
               <p className="text-base font-semibold leading-tight">{instruction}</p>
               {prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}
             </div>
 
             <div className="mt-2 flex flex-wrap items-start justify-between gap-3 pb-[30px]">
-              {wholeBarMode && !feedback && <RhythmChooser selected={selectedRhythmTool} onSelect={selectRhythm} selectedRhythms={selectedRhythms} />}
+              {wholeBarMode && <RhythmChooser selected={selectedRhythmTool} onSelect={selectRhythm} selectedRhythms={selectedRhythms} />}
 
               <div className="absolute bottom-4 right-4 flex shrink-0 justify-end gap-2">
                 <button type="button" disabled={!canConfirm} onClick={confirmAnswer} className="rounded-xl bg-stone-950 px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>

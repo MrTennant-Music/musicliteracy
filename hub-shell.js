@@ -23,6 +23,16 @@
     }, [ref, handler]);
   }
 
+  function advanceFeedbackPointerDown({ feedback, onCorrect, onIncorrect }) {
+    if (!feedback) return false;
+    if (feedback.correct) {
+      onCorrect?.();
+      return true;
+    }
+    onIncorrect?.();
+    return true;
+  }
+
   function AppHeader({ icon, title, subtitle, children }) {
     return (
       React.createElement("header", { className: "fixed left-0 right-0 top-0 z-[1000] w-full overflow-visible border-b border-stone-200 bg-white/95 py-2 shadow-sm backdrop-blur sm:py-3" },
@@ -171,5 +181,6 @@
   MLH.AppHeader = AppHeader;
   MLH.FeedbackBadge = FeedbackBadge;
   MLH.ScoreStreakPanel = ScoreStreakPanel;
+  MLH.advanceFeedbackPointerDown = advanceFeedbackPointerDown;
   window.MLH = MLH;
 })();
