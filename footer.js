@@ -96,6 +96,10 @@ document.body.insertAdjacentHTML("beforeend", `
 
 const footerStyle = document.createElement("style");
 footerStyle.textContent = `
+  .footer .footer-wordmark {
+    width: 187px !important;
+  }
+
   .footer .text-link:hover,
   .footer .text-link:focus-visible {
     text-decoration: underline !important;

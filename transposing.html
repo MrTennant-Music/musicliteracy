@@ -18,6 +18,53 @@
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
+    @media (max-width: 639px) {
+      .transposing-main {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .transposing-main .transposing-score-wrap {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        justify-content: center;
+        min-height: 300px;
+        overflow: visible;
+      }
+
+      .transposing-main .transposing-score-wrap svg {
+        transform: scale(1.615);
+        transform-origin: center center;
+      }
+
+      .transposing-main .transposing-question-panel {
+        height: auto !important;
+        margin-top: auto !important;
+        padding-bottom: 1rem;
+      }
+
+      .transposing-main.is-meaning-mode .meaning-answer-row {
+        flex-direction: column;
+        align-items: stretch;
+        max-width: none;
+        width: 100%;
+      }
+
+      .transposing-main.is-meaning-mode .meaning-answer-input {
+        max-width: none;
+        width: 100%;
+      }
+
+      .transposing-main.is-meaning-mode .meaning-confirm-wrap {
+        position: static !important;
+        width: 100%;
+      }
+
+      .transposing-main.is-meaning-mode .meaning-confirm-wrap button {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
@@ -26,7 +73,9 @@
   <script type="text/babel">
 const { useRef, useState } = React;
 const SHELL = window.MLH?.shell || {};
-const isTouchDevice = window.MLH?.isTouchDevice?.() || ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+function hasTouchInput() {
+  return window.MLH?.isTouchDevice?.() || ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+}
 
 const ASSET = {
   appIcon: "https://mrtennant-music.github.io/musicliteracy/transposing-icon.svg",
@@ -86,8 +135,8 @@ const GLYPH = {
   flagUp: "\uE240",
   flagDown: "\uE241",
   tie: "\uE1FD",
-  ottavaAlta: "\uE510",
-  ottavaBassa: "\uE5C1",
+  ottavaAlta: "\uE512",
+  ottavaBassa: "\uE51C",
 };
 
 const LETTER_INDEX = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
@@ -134,6 +183,13 @@ const RHYTHMS = [
 ];
 
 const TOOLS = [...RHYTHMS, { id: "tie", label: "Tie", type: "tie" }];
+
+const DEFAULT_QUESTION_OPTIONS = {
+  ottava: true,
+  samePitch: true,
+  octaveHigher: true,
+  octaveLower: true,
+};
 
 const RHYTHM_BEATS = Object.fromEntries(RHYTHMS.map((rhythm) => [rhythm.id, rhythm.beats]));
 
@@ -218,6 +274,40 @@ function yForStep(top, step) {
 
 function stepFromSvgY(y, top) {
   return clamp(Math.round((top + STAFF.gap * 4 - y) / (STAFF.gap / 2)), -4, 12);
+}
+
+function meaningQuestion(marking) {
+  const direction = marking === "8vb" ? "lower" : "higher";
+  const transform = marking === "8vb" ? TRANSFORMS.ottavaBassa : TRANSFORMS.ottavaAlta;
+  const passage = createPassage(transform);
+  return {
+    id: Math.random().toString(36).slice(2),
+    type: "meaning",
+    transformId: `meaning-${marking}`,
+    marking,
+    sourceClef: transform.sourceClef,
+    answerClef: transform.answerClef,
+    instruction: {
+      practice: <>Give the meaning of <span className="music-symbol text-[1.35em] leading-none">{marking === "8vb" ? GLYPH.ottavaBassa : GLYPH.ottavaAlta}</span>.</>,
+      exam: <>Give the meaning of <span className="music-symbol text-[1.35em] leading-none">{marking === "8vb" ? GLYPH.ottavaBassa : GLYPH.ottavaAlta}</span>.</>,
+    },
+    correctMeaning: direction,
+    passage,
+  };
+}
+
+function isCorrectMeaningAnswer(answer, direction) {
+  const normalised = answer.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const words = normalised.split(/\s+/).filter(Boolean);
+  const hasOctave = words.includes("octave");
+  const hasDirection = words.includes(direction);
+  const hasCount = words.some((word) => ["an", "one", "1"].includes(word));
+  const hasShortPhrase = normalised.includes(`octave ${direction}`);
+  return hasOctave && hasDirection && (hasCount || hasShortPhrase);
+}
+
+function meaningCorrectionText(direction) {
+  return `Played one octave ${direction} than written.`;
 }
 
 function stemDown(step) {
@@ -306,8 +396,8 @@ const TRANSFORMS = {
     answerFor: (note) => transposePitch(note, 1),
     marking: "8va",
     instruction: {
-      practice: <>Rewrite the 8va note <strong>one octave higher</strong> than written.</>,
-      exam: <>Rewrite the 8va notes <strong>one octave higher</strong> than written. Choose the rhythm, then place the note.</>,
+      practice: <>Rewrite the note as it would sound.</>,
+      exam: <>Rewrite the note as it would sound.</>,
     },
   },
   ottavaBassa: {
@@ -318,20 +408,33 @@ const TRANSFORMS = {
     answerFor: (note) => transposePitch(note, -1),
     marking: "8vb",
     instruction: {
-      practice: <>Rewrite the 8vb note <strong>one octave lower</strong> than written.</>,
-      exam: <>Rewrite the 8vb notes <strong>one octave lower</strong> than written. Choose the rhythm, then place the note.</>,
+      practice: <>Rewrite the note as it would sound.</>,
+      exam: <>Rewrite the note as it would sound.</>,
     },
+  },
+  ottavaMeaning: {
+    id: "ottavaMeaning",
+    type: "meaning",
   },
 };
 
-function createTransform(level) {
+function createTransform(level, options = DEFAULT_QUESTION_OPTIONS) {
   if (level !== "AH") return TRANSFORMS.higher;
-  const transform = randomItem([
+  const pool = [
+    options.octaveLower && TRANSFORMS.higher,
+    options.samePitch && TRANSFORMS.samePitch,
+    options.octaveHigher && TRANSFORMS.bassOctaveUp,
+    options.ottava && TRANSFORMS.ottavaAlta,
+    options.ottava && TRANSFORMS.ottavaBassa,
+    options.ottava && TRANSFORMS.ottavaMeaning,
+  ].filter(Boolean);
+  const transform = randomItem(pool.length ? pool : [
     TRANSFORMS.higher,
     TRANSFORMS.samePitch,
     TRANSFORMS.bassOctaveUp,
     TRANSFORMS.ottavaAlta,
     TRANSFORMS.ottavaBassa,
+    TRANSFORMS.ottavaMeaning,
   ]);
 
   if (transform.id !== "samePitch") return transform;
@@ -343,8 +446,10 @@ function createTransform(level) {
   };
 }
 
-function createQuestion(mode = "exam", previousSingleIndex = null, level = "H") {
-  const transform = createTransform(level);
+function createQuestion(mode = "exam", previousSingleIndex = null, level = "H", options = DEFAULT_QUESTION_OPTIONS) {
+  const transform = createTransform(level, options);
+  if (transform.type === "meaning") return meaningQuestion(randomItem(["8va", "8vb"]));
+
   const singleIndex = randomIndex(transform.sourcePool.length, previousSingleIndex);
   const singleSource = noteItem(transform.sourcePool[singleIndex], transform.sourceClef);
   const singleAnswer = noteItem(transform.answerFor(transform.sourcePool[singleIndex]), transform.answerClef);
@@ -432,7 +537,7 @@ function beamYAtX(x, beam) {
   return beam.start.y + ratio * (beam.end.y - beam.start.y);
 }
 
-function LedgerLines({ x, step, clef, top: staffTop = null, colour = "currentColor" }) {
+function LedgerLines({ x, step, clef, top: staffTop = null, colour = "currentColor", opacity = 1 }) {
   const top = staffTop ?? (clef === "treble" ? STAFF.trebleTop : STAFF.bassTop);
   const lines = [];
   for (let lineStep = -2; lineStep >= step; lineStep -= 2) lines.push(yForStep(top, lineStep));
@@ -441,7 +546,7 @@ function LedgerLines({ x, step, clef, top: staffTop = null, colour = "currentCol
   return (
     <g pointerEvents="none">
       {lines.map((y) => (
-        <line key={y} x1={x - 27} x2={x + 27} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />
+        <line key={y} x1={x - 22} x2={x + 22} y1={y} y2={y} stroke={colour} strokeWidth="1.5" opacity={opacity} />
       ))}
     </g>
   );
@@ -502,7 +607,7 @@ function Staff({ top, clef }) {
         ))}
       </g>
       <text
-        x={STAFF.left + (isTreble ? 18 : 11)}
+        x={STAFF.left + (isTreble ? 18 : 15)}
         y={top + (isTreble ? 63 : 21.5)}
         fontSize={isTreble ? 84 : 86}
         className="music-symbol"
@@ -516,8 +621,9 @@ function Staff({ top, clef }) {
 
 function HelpLabels({ visible, sourceClef = "treble", answerClef = "bass", sourceTop, answerTop }) {
   if (!visible) return null;
-  const lineLabelX = STAFF.left - 11;
-  const spaceLabelX = STAFF.left + 16;
+  const lineLabelX = STAFF.left - 14;
+  const spaceLabelX = STAFF.left + 13;
+  const labelYOffset = 2;
   const systems = [
     { key: "source", clef: sourceClef, top: sourceTop },
     { key: "answer", clef: answerClef, top: answerTop },
@@ -529,12 +635,12 @@ function HelpLabels({ visible, sourceClef = "treble", answerClef = "bass", sourc
         const data = NOTE_NAME_LABELS[clef];
         return [
           ...data.lines.map((note) => (
-            <text key={`${key}-${clef}-line-${note.step}`} x={lineLabelX} y={yForStep(top, note.step) + 5} textAnchor="start">
+            <text key={`${key}-${clef}-line-${note.step}`} x={lineLabelX} y={yForStep(top, note.step) + labelYOffset} textAnchor="start">
               {note.letter}
             </text>
           )),
           ...data.spaces.map((note) => (
-            <text key={`${key}-${clef}-space-${note.step}`} x={spaceLabelX} y={yForStep(top, note.step) + 5} textAnchor="end">
+            <text key={`${key}-${clef}-space-${note.step}`} x={spaceLabelX} y={yForStep(top, note.step) + labelYOffset} textAnchor="end">
               {note.letter}
             </text>
           )),
@@ -572,8 +678,8 @@ function OttavaMark({ marking, top }) {
   const label = marking === "8vb" ? GLYPH.ottavaBassa : GLYPH.ottavaAlta;
   const above = marking !== "8vb";
   const labelX = STAFF.left + 16;
-  const labelY = top + (above ? -18 : STAFF.gap * 4 + 42);
-  const lineY = labelY;
+  const labelY = top + (above ? -33 : STAFF.gap * 4 + 37);
+  const lineY = labelY + (above ? -10 : 0);
   const lineX1 = STAFF.left + 70;
   const lineX2 = STAFF.right - 4;
   return (
@@ -643,6 +749,8 @@ function RenderPassage({ passage, top, clef, answerItems = null, feedbackDetails
         const result = feedbackDetails?.[index];
         let colour = "currentColor";
         if (result) colour = result.pitchCorrect && result.rhythmCorrect ? COLOUR.green : COLOUR.red;
+        const isWrongAnswer = result && !(result.pitchCorrect && result.rhythmCorrect);
+        const opacity = correctOverlay ? 1 : isWrongAnswer ? 0.55 : 1;
         if (correctOverlay) {
           if (!result || (result.pitchCorrect && result.rhythmCorrect)) return null;
           colour = COLOUR.green;
@@ -658,26 +766,38 @@ function RenderPassage({ passage, top, clef, answerItems = null, feedbackDetails
 
         return (
           <g key={`${clef}-${index}-${overlayOffset}`}>
-            <LedgerLines x={x} step={item.step} clef={clef} top={top} colour={colour} />
+            <LedgerLines x={x} step={item.step} clef={clef} top={top} colour={colour} opacity={opacity} />
             <RhythmNote
               x={x}
               y={y}
               step={item.step}
               rhythm={item.rhythm}
               colour={colour}
-              opacity={item.isHover ? 0.55 : 1}
+              opacity={item.isHover ? 0.55 : opacity}
               preview={item.isHover}
               showFlag={!beam}
               forcedDown={beam?.down ?? null}
               forcedStemEndY={beam && stemX ? beamYAtX(stemX, beam) : null}
             />
             {beam && group.start === index && (
-              <line x1={beam.start.x - 1} x2={beam.end.x + 1} y1={beam.start.y} y2={beam.end.y} stroke={colour} strokeWidth="6.75" />
+              <line x1={beam.start.x - 1} x2={beam.end.x + 1} y1={beam.start.y} y2={beam.end.y} stroke={colour} strokeWidth="6.75" opacity={opacity} />
             )}
           </g>
         );
       })}
     </g>
+  );
+}
+
+function MeaningExampleScore({ question }) {
+  const sourceTop = (SVG.height - STAFF.gap * 4) / 2 - 72;
+
+  return (
+    <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none overflow-visible">
+      <Staff top={sourceTop} clef={question.sourceClef} />
+      <OttavaMark marking={question.marking} top={sourceTop} />
+      <RenderPassage passage={question.passage} top={sourceTop} clef={question.sourceClef} />
+    </svg>
   );
 }
 
@@ -765,8 +885,15 @@ function ScoreArea({
 
           {feedback && lockedStep != null && (
             <>
-              <LedgerLines x={singleX} step={lockedStep} clef={question.answerClef} top={answerTop} colour={feedback.correct ? COLOUR.green : COLOUR.red} />
-              <RhythmNote x={singleX} y={yForStep(answerTop, lockedStep)} step={lockedStep} rhythm="crotchet" colour={feedback.correct ? COLOUR.green : COLOUR.red} />
+              <LedgerLines x={singleX} step={lockedStep} clef={question.answerClef} top={answerTop} colour={feedback.correct ? COLOUR.green : COLOUR.red} opacity={feedback.correct ? 1 : 0.4} />
+              <RhythmNote
+                x={singleX}
+                y={yForStep(answerTop, lockedStep)}
+                step={lockedStep}
+                rhythm="crotchet"
+                colour={feedback.correct ? COLOUR.green : COLOUR.red}
+                opacity={feedback.correct ? 1 : 0.4}
+              />
               {!feedback.correct && (
                 <>
                   <LedgerLines x={singleX + 55} step={singleAnswer.step} clef={question.answerClef} top={answerTop} colour={COLOUR.green} />
@@ -831,7 +958,7 @@ function ScoreArea({
         />
       )}
 
-      {isTouchDevice && touchPreview?.active && touchPreview.type !== "tie" && touchPreview.step != null && !feedback && (
+      {hasTouchInput() && touchPreview?.active && touchPreview.type !== "tie" && touchPreview.step != null && !feedback && (
         <g pointerEvents="none">
           <line
             x1={STAFF.left - 14}
@@ -861,8 +988,18 @@ function ScoreArea({
 }
 
 function MenuIcon({ type }) {
-  if (type === "whole-bar") return <span className="music-symbol relative top-[9px] inline-flex h-[18px] w-[18px] items-center justify-center text-[18px] leading-none text-stone-700">𝄁</span>;
+  if (type === "whole-bar") return <span className="music-symbol relative top-[9px] inline-flex h-[18px] w-[18px] items-center justify-center text-[18px] leading-none text-stone-700">{String.fromCodePoint(0x1d11a)}</span>;
   if (type === "abc") return <span className="inline-flex h-[18px] w-[22px] items-center justify-center text-[13px] font-black leading-none tracking-tight text-stone-700">ABC</span>;
+  if (type === "ottava") {
+    return (
+      <span className="music-symbol relative top-[3px] inline-flex h-[22px] w-[22px] items-center justify-center text-[22px] leading-none text-stone-700">
+        {GLYPH.ottavaAlta}
+      </span>
+    );
+  }
+  if (type === "same-pitch") return <span className="music-symbol relative top-[3px] inline-flex h-[18px] w-[18px] items-center justify-center text-[19px] leading-none text-stone-700">{GLYPH.trebleClef}</span>;
+  if (type === "octave-higher") return <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[18px] font-black leading-none text-stone-700">↑</span>;
+  if (type === "octave-lower") return <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[18px] font-black leading-none text-stone-700">↓</span>;
   return null;
 }
 
@@ -913,7 +1050,9 @@ function RhythmChooser({ selected, onSelect, selectedRhythms }) {
   );
 }
 
-function MenuRows({ wholeBarMode, setWholeBarMode, noteNamesVisible, setNoteNamesVisible }) {
+function MenuRows({ wholeBarMode, setWholeBarMode, noteNamesVisible, setNoteNamesVisible, questionOptions, setQuestionOption, activeLevel }) {
+  const showAdvancedHigherOptions = activeLevel === "AH";
+
   return (
     <>
       <window.MLH.MenuToggleRow
@@ -929,6 +1068,38 @@ function MenuRows({ wholeBarMode, setWholeBarMode, noteNamesVisible, setNoteName
         checked={noteNamesVisible}
         onChange={() => setNoteNamesVisible((value) => !value)}
       />
+
+      {showAdvancedHigherOptions && (
+        <>
+          <window.MLH.MenuToggleRow
+            glyph={<MenuIcon type="ottava" />}
+            label="8va and 8vb"
+            checked={questionOptions.ottava}
+            onChange={() => setQuestionOption("ottava")}
+          />
+
+          <window.MLH.MenuToggleRow
+            glyph={<MenuIcon type="same-pitch" />}
+            label="Same Pitch"
+            checked={questionOptions.samePitch}
+            onChange={() => setQuestionOption("samePitch")}
+          />
+
+          <window.MLH.MenuToggleRow
+            glyph={<MenuIcon type="octave-higher" />}
+            label="Octave Higher"
+            checked={questionOptions.octaveHigher}
+            onChange={() => setQuestionOption("octaveHigher")}
+          />
+
+          <window.MLH.MenuToggleRow
+            glyph={<MenuIcon type="octave-lower" />}
+            label="Octave Lower"
+            checked={questionOptions.octaveLower}
+            onChange={() => setQuestionOption("octaveLower")}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -937,6 +1108,7 @@ function App() {
   const [wholeBarMode, setWholeBarMode] = useState(false);
   const [activeLevel, setActiveLevel] = useState(INITIAL_LEVEL);
   const [question, setQuestion] = useState(() => createQuestion("practice", null, INITIAL_LEVEL));
+  const [questionOptions, setQuestionOptions] = useState(DEFAULT_QUESTION_OPTIONS);
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
@@ -953,6 +1125,7 @@ function App() {
   const [feedbackFading, setFeedbackFading] = useState(false);
   const [feedbackDetails, setFeedbackDetails] = useState(null);
   const [prompt, setPrompt] = useState("");
+  const [typedAnswer, setTypedAnswer] = useState("");
   const [correct, setCorrect] = useState(0);
   const [attempted, setAttempted] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -973,14 +1146,16 @@ function App() {
   );
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const examReady = wholeBarMode && question.passage.every((_, index) => examSteps[index] != null && selectedRhythms[index] != null);
-  const canConfirm = wholeBarMode ? examReady && !feedback : lockedStep != null && !feedback;
+  const meaningMode = question.type === "meaning";
+  const meaningMarked = meaningMode && feedback;
+  const examReady = wholeBarMode && !meaningMode && question.passage.every((_, index) => examSteps[index] != null && selectedRhythms[index] != null);
+  const canConfirm = meaningMode ? typedAnswer.trim().length > 0 && !feedback : wholeBarMode ? examReady && !feedback : lockedStep != null && !feedback;
   const { answerTop } = getSystemLayout(question);
-  const instruction = question.instruction?.[mode] ?? (
-    wholeBarMode
-      ? <>Transpose each note <strong>one octave lower</strong> into the bass clef. Choose the rhythm, then place the note.</>
-      : <>Transpose the note from the treble clef <strong>down one octave</strong> into the bass clef.</>
-  );
+  const instruction = meaningMode
+    ? question.instruction?.[mode]
+    : wholeBarMode
+      ? <>Rewrite the notes as they would sound.</>
+      : question.instruction?.[mode] ?? <>Rewrite the note as it would sound.</>;
 
   function resetTask(nextQuestion = question) {
     if (feedbackTimerRef.current) {
@@ -1000,18 +1175,25 @@ function App() {
     setFeedbackFading(false);
     setFeedbackDetails(null);
     setPrompt("");
+    setTypedAnswer("");
   }
 
-  function newQuestion(nextMode = mode, nextLevel = activeLevel) {
+  function newQuestion(nextMode = mode, nextLevel = activeLevel, nextOptions = questionOptions) {
     if (feedbackTimerRef.current) {
       window.clearTimeout(feedbackTimerRef.current);
       feedbackTimerRef.current = null;
     }
     setQuestionVisible(false);
     window.setTimeout(() => {
-      resetTask(createQuestion(nextMode, question.singleIndex, nextLevel));
+      resetTask(createQuestion(nextMode, question.singleIndex, nextLevel, nextOptions));
       setQuestionVisible(true);
     }, 260);
+  }
+
+  function setQuestionOption(key) {
+    const next = { ...questionOptions, [key]: !questionOptions[key] };
+    setQuestionOptions(next);
+    newQuestion(mode, activeLevel, next);
   }
 
   function resetScore() {
@@ -1231,6 +1413,11 @@ function App() {
   function confirmAnswer() {
     if (feedback) return;
 
+    if (meaningMode) {
+      scoreAnswer(isCorrectMeaningAnswer(typedAnswer, question.correctMeaning));
+      return;
+    }
+
     if (!wholeBarMode) {
       if (lockedStep == null) {
         setPrompt("Place your answer on the lower stave first.");
@@ -1272,7 +1459,7 @@ function App() {
 
       <div className={SHELL.pageContentClass}>
         <main
-          className={`${SHELL.mainShellClass} min-h-[560px] px-4 pb-4 md:min-h-0`}
+          className={`${SHELL.mainShellClass} transposing-main ${meaningMode ? "is-meaning-mode" : ""} min-h-[560px] px-4 pb-4 md:min-h-0`}
           onPointerDown={() => window.MLH.advanceFeedbackPointerDown({
             feedback,
             onCorrect: skipCorrectFeedback,
@@ -1332,6 +1519,9 @@ function App() {
                       }}
                       noteNamesVisible={noteNamesVisible}
                       setNoteNamesVisible={setNoteNamesVisible}
+                      questionOptions={questionOptions}
+                      setQuestionOption={setQuestionOption}
+                      activeLevel={activeLevel}
                     />
                   </window.MLH.MenuPanel>
                 )}
@@ -1345,44 +1535,70 @@ function App() {
             <window.MLH.SkipButton resetStreak={() => setStreak(0)} onClick={() => newQuestion(mode)} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
           </div>
 
-          {wholeBarMode && isTouchDevice && !customiseOpen && !levelOpen && (
+          {wholeBarMode && !meaningMode && hasTouchInput() && !customiseOpen && !levelOpen && (
             <p className="relative z-20 mb-2 text-center text-[0.74rem] font-light leading-tight tracking-normal text-stone-600" style={{ opacity: 0.45 }}>
               Press and hold to drag note into place.
             </p>
           )}
 
-          <div className={`relative top-[0px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
-            <ScoreArea
-              question={question}
-              mode={mode}
-              noteNamesVisible={noteNamesVisible}
-              hoverStep={hoverStep}
-              lockedStep={lockedStep}
-              examSteps={examSteps}
-              selectedRhythms={selectedRhythms}
-              selectedRhythmTool={selectedRhythmTool}
-              userTies={userTies}
-              activeSlot={activeSlot}
-              feedback={feedback}
-              feedbackDetails={feedbackDetails}
-              touchPreview={touchPreview}
-              onPointerMove={handlePointerMove}
-              onPointerDown={handlePointerDown}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerCancel}
-            />
+          <div className={`transposing-score-wrap relative top-[0px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+            {meaningMode ? (
+              <MeaningExampleScore question={question} />
+            ) : (
+              <ScoreArea
+                question={question}
+                mode={mode}
+                noteNamesVisible={noteNamesVisible}
+                hoverStep={hoverStep}
+                lockedStep={lockedStep}
+                examSteps={examSteps}
+                selectedRhythms={selectedRhythms}
+                selectedRhythmTool={selectedRhythmTool}
+                userTies={userTies}
+                activeSlot={activeSlot}
+                feedback={feedback}
+                feedbackDetails={feedbackDetails}
+                touchPreview={touchPreview}
+                onPointerMove={handlePointerMove}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
+              />
+            )}
           </div>
 
-          <div className={`relative z-10 mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:-mt-[123px] md:mx-3 ${wholeBarMode ? "h-[160px]" : "h-[108px]"}`}>
+          <div className={`transposing-question-panel relative z-10 mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:mx-3 ${meaningMode ? "h-[120px] md:-mt-[123px]" : wholeBarMode ? "h-[160px] md:-mt-[123px]" : "h-[108px] md:-mt-[123px]"}`}>
             <div className="space-y-3 text-stone-900">
               <p className="text-base font-semibold leading-tight">{instruction}</p>
               {prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}
             </div>
 
             <div className="mt-2 flex flex-wrap items-start justify-between gap-3 pb-[30px]">
-              {wholeBarMode && <RhythmChooser selected={selectedRhythmTool} onSelect={selectRhythm} selectedRhythms={selectedRhythms} />}
+              {meaningMode ? (
+                <div className="meaning-answer-row mt-1 flex w-full max-w-[760px] items-center gap-4">
+                  <input
+                    type="text"
+                    value={typedAnswer}
+                    onChange={(event) => setTypedAnswer(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && typedAnswer.trim() && !feedback) confirmAnswer();
+                    }}
+                    placeholder="Type your answer"
+                    className={`meaning-answer-input h-[48px] w-full max-w-[520px] rounded-xl border border-stone-300 bg-white px-4 text-base font-medium outline-none transition focus:border-stone-500 ${
+                      meaningMarked ? (feedback.correct ? "text-green-700" : "text-red-700") : "text-stone-900"
+                    }`}
+                  />
+                  {meaningMarked && !feedback.correct && (
+                    <span className="whitespace-nowrap text-sm font-semibold text-green-700">
+                      {meaningCorrectionText(question.correctMeaning)}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                wholeBarMode && <RhythmChooser selected={selectedRhythmTool} onSelect={selectRhythm} selectedRhythms={selectedRhythms} />
+              )}
 
-              <div className="absolute bottom-4 right-4 flex shrink-0 justify-end gap-2">
+              <div className={`meaning-confirm-wrap ${meaningMode ? "absolute right-4 top-[65px]" : "absolute bottom-4 right-4"} flex shrink-0 justify-end gap-2`}>
                 <button type="button" disabled={!canConfirm} onClick={confirmAnswer} className="rounded-xl bg-stone-950 px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>
               </div>
             </div>
