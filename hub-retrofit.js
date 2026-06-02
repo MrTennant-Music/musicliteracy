@@ -75,6 +75,10 @@
         color: #78716c !important;
       }
 
+      button[data-mlh-reset-score="true"] {
+        display: none !important;
+      }
+
       .mlh-retrofit-toggle-on {
         background: #0c0a09 !important;
       }
@@ -85,7 +89,8 @@
       }
 
       .mlh-retrofit-level-anchor {
-        position: relative;
+        position: fixed;
+        z-index: 1300;
         display: inline-flex;
       }
 
@@ -112,9 +117,9 @@
       }
 
       .mlh-retrofit-level-menu {
-        position: absolute;
+        position: fixed;
         left: 0;
-        top: calc(100% + .5rem);
+        top: 0;
         z-index: 140;
         width: min(360px, calc(100vw - 2rem));
         border-radius: 1rem;
@@ -157,10 +162,10 @@
       }
 
       .mlh-retrofit-score-popover {
-        position: absolute;
-        left: 50%;
-        top: calc(100% + .5rem);
-        z-index: 150;
+        position: fixed;
+        left: 0;
+        top: 0;
+        z-index: 1300;
         display: none;
         min-width: 112px;
         transform: translateX(-50%);
@@ -301,7 +306,23 @@
       </span>
     `;
     anchor.appendChild(button);
-    toolbar.insertBefore(anchor, toolbar.firstElementChild);
+    document.body.appendChild(anchor);
+
+    function positionAnchor() {
+      if (!document.body.contains(customiseButton)) {
+        anchor.remove();
+        return;
+      }
+      const rect = customiseButton.getBoundingClientRect();
+      const gap = 8;
+      const width = window.matchMedia("(max-width: 639px)").matches ? 58 : 132;
+      anchor.style.left = `${Math.max(12, rect.left - width - gap)}px`;
+      anchor.style.top = `${rect.top}px`;
+      anchor.style.height = `${rect.height}px`;
+    }
+    positionAnchor();
+    window.addEventListener("resize", positionAnchor);
+    window.addEventListener("scroll", positionAnchor, true);
 
     let menu = null;
     function closeMenu() {
@@ -316,6 +337,9 @@
       }
       menu = buildLevelMenu(activeLevel, closeMenu);
       anchor.appendChild(menu);
+      const rect = anchor.getBoundingClientRect();
+      menu.style.left = `${rect.left}px`;
+      menu.style.top = `${rect.bottom + 8}px`;
     });
     document.addEventListener("pointerdown", (event) => {
       if (!anchor.contains(event.target)) closeMenu();
@@ -343,12 +367,27 @@
 
   function removeCustomiseResetButtons() {
     Array.from(document.querySelectorAll("button")).forEach((button) => {
-      if (/reset score/i.test(button.textContent || "")) button.remove();
+      if (/reset score/i.test(button.textContent || "")) button.dataset.mlhResetScore = "true";
     });
   }
 
   function retrofitScoreResetPopover() {
     if (!document.body.classList.contains("mlh-retrofit-active")) return;
+    let popover = document.querySelector(".mlh-retrofit-score-popover");
+    if (!popover) {
+      popover = document.createElement("div");
+      popover.className = "mlh-retrofit-score-popover";
+      popover.innerHTML = `<button type="button" class="mlh-retrofit-score-reset">Reset</button>`;
+      popover.querySelector("button").addEventListener("click", (event) => {
+        event.stopPropagation();
+        window.location.reload();
+      });
+      document.body.appendChild(popover);
+      document.addEventListener("pointerdown", (event) => {
+        if (!popover.contains(event.target)) popover.classList.remove("is-open");
+      }, true);
+    }
+
     const scoreLabels = Array.from(document.querySelectorAll("div,span")).filter((node) => {
       return (node.textContent || "").trim().toLowerCase() === "score";
     });
@@ -362,17 +401,11 @@
       if (!tile || tile.dataset.mlhScorePopover === "true") return;
       if (!/score/i.test(tile.textContent || "")) return;
       tile.dataset.mlhScorePopover = "true";
-      tile.style.position = tile.style.position || "relative";
-      const popover = document.createElement("div");
-      popover.className = "mlh-retrofit-score-popover";
-      popover.innerHTML = `<button type="button" class="mlh-retrofit-score-reset">Reset</button>`;
-      popover.querySelector("button").addEventListener("click", (event) => {
-        event.stopPropagation();
-        window.location.reload();
-      });
-      tile.appendChild(popover);
       tile.addEventListener("click", (event) => {
         event.stopPropagation();
+        const rect = tile.getBoundingClientRect();
+        popover.style.left = `${rect.left + rect.width / 2}px`;
+        popover.style.top = `${rect.bottom + 8}px`;
         popover.classList.toggle("is-open");
       });
     });
