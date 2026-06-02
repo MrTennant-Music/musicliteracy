@@ -9,6 +9,10 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="./hub-mobile.js?v=1.2"></script>
+  <script src="./hub-audio.js?v=1.4"></script>
+  <script src="./hub-shell.js?v=1.2"></script>
+  <script src="./hub-menu.js?v=1.7"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
@@ -225,37 +229,7 @@ function makeQuestion(enabledTimeTypes = { simple: true, compound: true }) {
   return { id: Math.random().toString(36).slice(2), timeSignature, bars, missingBoxes };
 }
 
-function playFeedbackSound(correct, celebration = false, medal = null) {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
-  const context = new AudioContextClass();
-  const master = context.createGain();
-  const now = context.currentTime + 0.01;
-  context.resume?.();
-  master.gain.value = 0.18;
-  master.connect(context.destination);
-  function tone(freq, start, duration, type = "triangle", volume = 0.12) {
-    const osc = context.createOscillator();
-    const gain = context.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, start);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(volume, start + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    osc.connect(gain);
-    gain.connect(master);
-    osc.start(start);
-    osc.stop(start + duration + 0.05);
-  }
-  if (!correct) {
-    tone(196, now, 0.32, "sawtooth", 0.06);
-    tone(185, now + 0.04, 0.38, "triangle", 0.05);
-    tone(174, now + 0.08, 0.45, "sine", 0.04);
-  } else {
-    [523.25, 659.25, 783.99].forEach((freq, index) => tone(freq, now + index * 0.045, 0.42, "triangle", index === 2 ? 0.085 : 0.07));
-  }
-  window.setTimeout(() => { try { context.close(); } catch {} }, 900);
-}
+const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 
 function StaffLines({ systemTop }) {
   return <g>{[0, 1, 2, 3, 4].map((index) => <line key={index} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={systemTop + index * LINE_GAP} y2={systemTop + index * LINE_GAP} stroke="currentColor" strokeWidth="1.2" />)}</g>;
@@ -376,13 +350,7 @@ function Score({ question, selectedRest, placedAnswers, onPlace, feedback, onMis
   return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="h-auto w-full select-none overflow-visible" aria-label="Rests exercise"><rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />{SYSTEM_TOPS.map((systemTop, systemIndex) => { const systemStartX = systemIndex === 0 ? FIRST_SYSTEM_MUSIC_START_X : OTHER_SYSTEM_MUSIC_START_X; const barWidth = (STAFF_RIGHT - systemStartX) / BARS_PER_SYSTEM; return <g key={systemIndex}><StaffLines systemTop={systemTop} /><TrebleClef systemTop={systemTop} />{systemIndex === 0 && <TimeSignatureGlyph signature={question.timeSignature} x={TIME_SIG_X} y={systemTop + 20} colour="#000" />}{Array.from({ length: BARS_PER_SYSTEM }, (_, localBarIndex) => { const globalBarIndex = systemIndex * BARS_PER_SYSTEM + localBarIndex; const startX = systemStartX + localBarIndex * barWidth; const endX = systemStartX + (localBarIndex + 1) * barWidth; return <Bar key={globalBarIndex} bar={question.bars[globalBarIndex]} barIndex={globalBarIndex} systemTop={systemTop} startX={startX} endX={endX} isFinalBar={globalBarIndex === BAR_COUNT - 1} selectedRest={selectedRest} placedAnswers={placedAnswers} onPlace={onPlace} missingBoxesById={missingBoxesById} feedback={feedback} onMissingSelection={onMissingSelection} />; })}</g>; })}</svg>;
 }
 
-function getStreakMedal(streak) {
-  if (streak >= 30) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" };
-  if (streak >= 20) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" };
-  if (streak >= 15) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" };
-  if (streak >= 10) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" };
-  return null;
-}
+const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
 function StatCard({ label, value, footer, progress = null, medal = null, variant = "default", confettiKey = 0 }) {
   const safeProgress = progress == null ? null : clamp(progress, 0, 100);
   const fillHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
@@ -479,13 +447,7 @@ function useInjectedStyles() {
     document.head.appendChild(style);
   }, []);
 }
-function useClickOutside(refs, handlers) {
-  useEffect(() => {
-    function onPointerDown(event) { refs.forEach((ref, index) => { if (!ref.current?.contains(event.target)) handlers[index]?.(); }); }
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [refs, handlers]);
-}
+const useClickOutside = window.MLH.useClickOutside;
 
 function App() {
   useInjectedStyles();
@@ -538,5 +500,6 @@ const rootElement = document.getElementById("root");
 if (ReactDOM.createRoot) ReactDOM.createRoot(rootElement).render(<App />);
 else ReactDOM.render(<App />, rootElement);
   </script>
+<script src="./footer.js?v=1.3"></script>
 </body>
 </html>

@@ -65,10 +65,45 @@
   }
 
   function getStreakMedal(streak) {
-    if (streak >= 30) return { sound: "platinum" };
-    if (streak >= 20) return { sound: "gold" };
-    if (streak >= 15) return { sound: "silver" };
-    if (streak >= 10) return { sound: "bronze" };
+    const medals = {
+      platinum: {
+        tier: "diamond",
+        emoji: "💎",
+        icon: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
+        bg: "bg-cyan-400/25",
+        text: "text-cyan-500",
+        sound: "platinum",
+      },
+      gold: {
+        tier: "gold",
+        emoji: "🥇",
+        icon: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
+        bg: "bg-yellow-400/25",
+        text: "text-yellow-500",
+        sound: "gold",
+      },
+      silver: {
+        tier: "silver",
+        emoji: "🥈",
+        icon: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
+        bg: "bg-slate-300/30",
+        text: "text-slate-500",
+        sound: "silver",
+      },
+      bronze: {
+        tier: "bronze",
+        emoji: "🥉",
+        icon: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
+        bg: "bg-amber-700/20",
+        text: "text-amber-700",
+        sound: "bronze",
+      },
+    };
+
+    if (streak >= 30) return medals.platinum;
+    if (streak >= 20) return medals.gold;
+    if (streak >= 15) return medals.silver;
+    if (streak >= 10) return medals.bronze;
     return null;
   }
 

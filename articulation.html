@@ -9,6 +9,10 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="./hub-mobile.js?v=1.2"></script>
+  <script src="./hub-audio.js?v=1.4"></script>
+  <script src="./hub-shell.js?v=1.2"></script>
+  <script src="./hub-menu.js?v=1.7"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
@@ -304,7 +308,7 @@ function MenuRows({enabledMarkings,setEnabledMarkings,enabledTypes,setEnabledTyp
   return <><h3 className="mb-2 mt-1 text-sm font-bold text-stone-700">Articulations</h3>{MARKINGS.map(mark=><button key={mark.id} onClick={()=>toggleMarking(mark.id)} className={row}><span className="flex min-w-[30px] items-center gap-2 text-sm font-semibold"><span className="flex h-8 w-[54px] items-center justify-center overflow-hidden"><span className={mark.id==="phrase"?"scale-[0.78]":mark.id==="staccato"?"-translate-y-[7px] scale-[0.78]":"-translate-y-[8px] scale-[0.78]"}><ArticulationGlyph id={mark.id}/></span></span><span>{mark.label}</span></span><Toggle active={enabledMarkings.includes(mark.id)}/></button>)}<h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Question Types</h3>{QUESTION_TYPES.map(type=><button key={type} onClick={()=>toggleType(type)} className={row}><span className="flex items-center gap-2 text-left text-sm font-semibold"><span className="w-6 text-center text-base leading-none">{icons[type]}</span><span>{QUESTION_LABELS[type]}</span></span><Toggle active={enabledTypes.includes(type)}/></button>)}<button onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button></>;
 }
 
-function getStreakMedal(s){ if(s>=30)return{emoji:"💎",bg:"bg-cyan-400/25",text:"text-cyan-500",sound:"platinum"}; if(s>=20)return{emoji:"🥇",bg:"bg-yellow-400/25",text:"text-yellow-500",sound:"gold"}; if(s>=15)return{emoji:"🥈",bg:"bg-slate-300/30",text:"text-slate-500",sound:"silver"}; if(s>=10)return{emoji:"🥉",bg:"bg-amber-700/20",text:"text-amber-700",sound:"bronze"}; return null; }
+const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
 function StatCard({label,value,footer,progress=null,medal=null,variant="default"}){
   const isStreak=variant==="streak", safe=progress===null?null:clamp(progress,0,100), fill=safe===null||safe<=0?0:safe, fillColour=safe===null?"transparent":safe<50?"rgba(220,38,38,.38)":safe<70?"rgba(255,120,0,.42)":"rgba(22,163,74,.38)";
   return <div className={isStreak?"relative overflow-visible bg-transparent p-3":`relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal?medal.bg:"bg-stone-50"}`}>{safe!==null&&<div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{height:`${fill}%`,background:fillColour}}/>}<div className="relative z-10 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className={`text-xl font-semibold leading-tight ${isStreak&&medal?medal.text:""}`}>{value}</div>{footer&&<div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}</div>{isStreak&&<div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal&&medal.emoji?{animation:"medalShine 1.4s ease-in-out infinite"}:{opacity:.16,filter:"grayscale(1) brightness(.7)"}}>{medal&&medal.emoji?medal.emoji:"🥉"}</div>}</div>;
@@ -314,7 +318,7 @@ function MultipleChoice({question,selected,feedback,onSelect}){ const options=qu
 function ApplyAnswers({selectedMarking,setSelectedMarking,setSelectedNotes,feedback}){ return <div className="flex flex-wrap justify-start gap-2">{MARKINGS.map(mark=><button key={mark.id} disabled={Boolean(feedback)} onClick={()=>{setSelectedMarking(mark.id);setSelectedNotes([]);}} className={`relative flex h-[58px] w-[120px] items-center justify-center rounded-xl border px-2 py-2 font-bold transition ${selectedMarking===mark.id?"border-stone-950 bg-stone-950 text-white":"border-stone-300 bg-white text-stone-900"}`}>{selectedMarking===mark.id&&(mark.id==="slur"||mark.id==="phrase")&&<div className="absolute -top-9 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg bg-stone-950 px-3 py-1 text-xs font-semibold text-white shadow-lg">{mark.id==="slur"?"Slur":"Phrase marking"}</div>}<span className={mark.id==="phrase"?"":mark.id==="accent"?"-translate-y-[12px]":mark.id==="slur"?"-translate-y-[8px]":"-translate-y-[10px]"}><ArticulationGlyph id={mark.id}/></span></button>)}</div>; }
 
 function useStyles(){ useEffect(()=>{ if(document.getElementById("golden-style"))return; const s=document.createElement("style"); s.id="golden-style"; s.innerHTML=`button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:brightness(1.08);box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}@keyframes medalShine{0%,100%{transform:scale(1) rotate(-4deg);filter:drop-shadow(0 0 0 rgba(250,204,21,0))}50%{transform:scale(1.16) rotate(4deg);filter:drop-shadow(0 0 10px rgba(250,204,21,.9))}}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}`; document.head.appendChild(s); },[]); }
-function useClickOutside(refs, handlers){ useEffect(()=>{ function on(e){ refs.forEach((ref,i)=>{ if(ref.current && !ref.current.contains(e.target)) handlers[i]?.(); }); } document.addEventListener("pointerdown",on,true); return()=>document.removeEventListener("pointerdown",on,true); },[refs,handlers]); }
+const useClickOutside = window.MLH.useClickOutside;
 
 function App(){
   useStyles();
@@ -418,5 +422,6 @@ const root = document.getElementById("root");
 if (ReactDOM.createRoot) ReactDOM.createRoot(root).render(<App />);
 else ReactDOM.render(<App />, root);
   </script>
+<script src="./footer.js?v=1.3"></script>
 </body>
 </html>

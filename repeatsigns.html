@@ -9,6 +9,10 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="./hub-mobile.js?v=1.2"></script>
+  <script src="./hub-audio.js?v=1.4"></script>
+  <script src="./hub-shell.js?v=1.2"></script>
+  <script src="./hub-menu.js?v=1.7"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
@@ -677,7 +681,7 @@ function MenuRows({ enabledTypes, setEnabledTypes, resetScore, newQuestion, foll
   </>;
 }
 
-function getStreakMedal(s) { if (s >= 30) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" }; if (s >= 20) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" }; if (s >= 15) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" }; if (s >= 10) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" }; return null; }
+const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
 
 function StatCard({ label, value, footer, progress = null, medal = null, variant = "default" }) { const isStreak = variant === "streak"; const safe = progress === null ? null : clamp(progress, 0, 100); const fill = safe === null || safe <= 0 ? 0 : safe; const fillColour = safe === null ? "transparent" : safe < 50 ? "rgba(220,38,38,.38)" : safe < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)"; return <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>{safe !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fill}%`, background: fillColour }} />}<div className="relative z-10 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>{footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}</div>{isStreak && <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal && medal.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: .16, filter: "grayscale(1) brightness(.7)" }}>{medal && medal.emoji ? medal.emoji : "🥉"}</div>}</div>; }
 
@@ -686,8 +690,8 @@ function FeedbackBanner({ feedback, fading = false }) { if (!feedback) return nu
 function RepeatAnswers({ selectedSymbolId, setSelectedSymbolId, feedback }) { return <div className="flex flex-nowrap justify-start gap-2 overflow-visible pb-1">{SYMBOLS.map(symbol => <button key={symbol.id} disabled={Boolean(feedback)} onClick={() => setSelectedSymbolId(symbol.id)} className={`relative flex h-[73px] w-[165px] shrink-0 items-center justify-center overflow-visible rounded-xl border px-3 py-3 text-[1.25em] font-bold transition ${selectedSymbolId === symbol.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}><span className="overflow-visible"><SymbolGlyph id={symbol.id} /></span></button>)}</div>; }
 
 function useStyles() { useEffect(() => { if (document.getElementById("golden-style")) return; const s = document.createElement("style"); s.id = "golden-style"; s.innerHTML = `button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:none;box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}@keyframes medalShine{0%,100%{transform:scale(1) rotate(-4deg);filter:drop-shadow(0 0 0 rgba(250,204,21,0))}50%{transform:scale(1.16) rotate(4deg);filter:drop-shadow(0 0 10px rgba(250,204,21,.9))}}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}`; document.head.appendChild(s); }, []); }
-function useClickOutside(refs, handlers) { useEffect(() => { function on(e) { refs.forEach((ref, i) => { if (ref.current && !ref.current.contains(e.target)) handlers[i]?.(); }); } document.addEventListener("pointerdown", on, true); return () => document.removeEventListener("pointerdown", on, true); }, [refs, handlers]); }
-function playFeedbackSound(ok) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; const ctx = new AC(); const now = ctx.currentTime; const notes = ok ? [523.25, 659.25, 783.99] : [220, 196]; notes.forEach((f, i) => { const o = ctx.createOscillator(); const g = ctx.createGain(); o.type = ok ? "triangle" : "sawtooth"; o.frequency.setValueAtTime(f, now + i * 0.09); g.gain.setValueAtTime(0.0001, now + i * 0.09); g.gain.exponentialRampToValueAtTime(ok ? 0.12 : 0.08, now + i * 0.09 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.09 + 0.18); o.connect(g); g.connect(ctx.destination); o.start(now + i * 0.09); o.stop(now + i * 0.09 + 0.2); }); setTimeout(() => { try { ctx.close(); } catch {} }, 500); }
+const useClickOutside = window.MLH.useClickOutside;
+const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 function frequencyForLetter(letter, octave = 3) { const semitone = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 }; return 440 * Math.pow(2, (semitone[letter] + (octave - 4) * 12) / 12); }
 function chordFrequencies(chord) { return (CHORDS[chord] || CHORDS.C).map(letter => frequencyForLetter(letter, letter === "B" ? 2 : 3)); }
 function barDuration(bar, beatSeconds) { return bar.notes.reduce((sum, note) => sum + rhythm(note.rhythm).beats * beatSeconds, 0); }
@@ -997,5 +1001,6 @@ const root = document.getElementById("root");
 if (ReactDOM.createRoot) ReactDOM.createRoot(root).render(<App />);
 else ReactDOM.render(<App />, root);
 </script>
+<script src="./footer.js?v=1.3"></script>
 </body>
 </html>
