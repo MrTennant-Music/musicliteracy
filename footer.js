@@ -10,7 +10,7 @@ const hasHubUiStylesheet = Array.from(document.querySelectorAll('link[rel="style
 if (!hasHubUiStylesheet) {
   const hubStyle = document.createElement("link");
   hubStyle.rel = "stylesheet";
-  hubStyle.href = "https://mrtennant-music.github.io/musicliteracy/hub-ui.css";
+  hubStyle.href = "https://mrtennant-music.github.io/musicliteracy/hub-ui.css?v=1.4";
   document.head.appendChild(hubStyle);
 }
 
@@ -98,6 +98,13 @@ const footerStyle = document.createElement("style");
 footerStyle.textContent = `
   .footer .footer-wordmark {
     width: 187px !important;
+    transform: translateX(-7px);
+  }
+
+  @media (max-width: 980px) {
+    .footer .footer-wordmark {
+      transform: translateX(11px);
+    }
   }
 
   .footer .text-link:hover,
