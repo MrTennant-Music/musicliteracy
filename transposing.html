@@ -9,10 +9,10 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="./hub-ui.css?v=1.4" />
   <script src="./hub-mobile.js?v=1.2"></script>
-  <script src="./hub-audio.js?v=1.2"></script>
+  <script src="./hub-audio.js?v=1.3"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="./hub-shell.js?v=1.1"></script>
+  <script src="./hub-shell.js?v=1.2"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="./hub-menu.js?v=1.7"></script>
   <style>
@@ -489,6 +489,22 @@ function createQuestion(mode = "exam", previousSingleIndex = null, level = "H", 
   };
 }
 
+function safePlayFeedbackSound(...args) {
+  try {
+    window.MLH?.playFeedbackSound?.(...args);
+  } catch {
+    // Ignore shared audio failures so feedback never blocks the app flow.
+  }
+}
+
+function safeGetStreakMedal(streak) {
+  try {
+    return window.MLH?.getStreakMedal?.(streak) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function getPassagePositions(passage) {
   const start = STAFF.left + 142;
   const end = STAFF.right - 52;
@@ -696,7 +712,7 @@ function OttavaMark({ marking, top }) {
   if (!marking) return null;
   const label = marking === "8vb" ? GLYPH.ottavaBassa : GLYPH.ottavaAlta;
   const above = marking !== "8vb";
-  const labelX = STAFF.left + 16;
+  const labelX = STAFF.left + 26;
   const labelY = top + (above ? -33 : STAFF.gap * 4 + 37);
   const lineY = labelY + (above ? -10 : 0);
   const lineX1 = STAFF.left + 70;
@@ -1151,6 +1167,7 @@ function App() {
   const [bestStreak, setBestStreak] = useState(0);
   const [confettiKey, setConfettiKey] = useState(0);
   const feedbackTimerRef = useRef(null);
+  const feedbackFadeTimerRef = useRef(null);
 
   const mode = wholeBarMode ? "exam" : "practice";
   const customiseRef = useRef(null);
@@ -1183,6 +1200,10 @@ function App() {
       window.clearTimeout(feedbackTimerRef.current);
       feedbackTimerRef.current = null;
     }
+    if (feedbackFadeTimerRef.current) {
+      window.clearTimeout(feedbackFadeTimerRef.current);
+      feedbackFadeTimerRef.current = null;
+    }
     setQuestion(nextQuestion);
     setHoverStep(null);
     setLockedStep(null);
@@ -1203,6 +1224,10 @@ function App() {
     if (feedbackTimerRef.current) {
       window.clearTimeout(feedbackTimerRef.current);
       feedbackTimerRef.current = null;
+    }
+    if (feedbackFadeTimerRef.current) {
+      window.clearTimeout(feedbackFadeTimerRef.current);
+      feedbackFadeTimerRef.current = null;
     }
     setQuestionVisible(false);
     window.setTimeout(() => {
@@ -1227,9 +1252,9 @@ function App() {
   }
 
   function fadeToNextQuestion() {
-    if (!feedback || feedback.correct || feedbackFading) return;
+    if (!feedback || feedback.correct || feedbackFading || feedbackTimerRef.current) return;
     setFeedbackFading(true);
-    window.setTimeout(() => newQuestion(mode), 280);
+    feedbackTimerRef.current = window.setTimeout(() => newQuestion(mode), 280);
   }
 
   function pointerToSvg(event) {
@@ -1355,13 +1380,19 @@ function App() {
   }
 
   function handlePointerDown(event, targetSlot = activeSlot) {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-
-    if (feedback && !feedback.correct) {
-      fadeToNextQuestion();
+    if (feedback) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (feedback.correct) {
+        skipCorrectFeedback();
+      } else {
+        fadeToNextQuestion();
+      }
       return;
     }
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
 
     const { pointer, step } = getPointerStep(event);
     setActiveSlot(targetSlot);
@@ -1401,7 +1432,7 @@ function App() {
 
   function scoreAnswer(isCorrect) {
     const nextStreak = isCorrect ? streak + 1 : 0;
-    window.MLH.playFeedbackSound(isCorrect);
+    safePlayFeedbackSound(isCorrect);
     setAttempted((value) => value + 1);
     setCorrect((value) => value + (isCorrect ? 1 : 0));
     setStreak(nextStreak);
@@ -1409,14 +1440,16 @@ function App() {
     setFeedback({ correct: isCorrect });
 
     if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
-      const medal = window.MLH.getStreakMedal(nextStreak);
+      const medal = safeGetStreakMedal(nextStreak);
       setConfettiKey((value) => value + 1);
-      window.setTimeout(() => window.MLH.playFeedbackSound(true, true, medal.sound), 180);
+      if (medal?.sound) {
+        window.setTimeout(() => safePlayFeedbackSound(true, true, medal.sound), 180);
+      }
     }
 
     if (isCorrect) {
       setFeedbackFading(false);
-      window.setTimeout(() => setFeedbackFading(true), 1700);
+      feedbackFadeTimerRef.current = window.setTimeout(() => setFeedbackFading(true), 1700);
       feedbackTimerRef.current = window.setTimeout(() => newQuestion(mode), 2000);
     }
   }
@@ -1427,8 +1460,23 @@ function App() {
       window.clearTimeout(feedbackTimerRef.current);
       feedbackTimerRef.current = null;
     }
+    if (feedbackFadeTimerRef.current) {
+      window.clearTimeout(feedbackFadeTimerRef.current);
+      feedbackFadeTimerRef.current = null;
+    }
     setFeedbackFading(true);
-    window.setTimeout(() => newQuestion(mode), 280);
+    feedbackTimerRef.current = window.setTimeout(() => newQuestion(mode), 280);
+  }
+
+  function handleFeedbackAdvance() {
+    if (feedback?.correct) {
+      skipCorrectFeedback();
+      return;
+    }
+
+    if (feedback) {
+      fadeToNextQuestion();
+    }
   }
 
   function confirmAnswer() {
@@ -1481,11 +1529,7 @@ function App() {
       <div className={SHELL.pageContentClass}>
         <main
           className={`${SHELL.mainShellClass} transposing-main ${meaningMode ? "is-meaning-mode" : ""} min-h-[560px] px-4 pb-4 md:min-h-0`}
-          onPointerDown={() => window.MLH.advanceFeedbackPointerDown({
-            feedback,
-            onCorrect: skipCorrectFeedback,
-            onIncorrect: fadeToNextQuestion,
-          })}
+          onPointerDown={handleFeedbackAdvance}
         >
           <div className="relative z-20 mb-2.5 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 overflow-visible">
             <div className="flex items-center gap-2 overflow-visible">
