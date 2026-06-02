@@ -14,7 +14,7 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-shell.js?v=1.1"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="./hub-menu.js?v=1.6"></script>
+  <script src="./hub-menu.js?v=1.7"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
@@ -117,12 +117,18 @@ const SYSTEM_SPREAD = 15;
 const SYSTEM_SPREAD_HALF = SYSTEM_SPREAD / 2;
 const SOURCE_TOP = STAFF.trebleTop - SYSTEM_SPREAD_HALF;
 const ANSWER_TOP = STAFF.bassTop + SYSTEM_SPREAD_HALF;
+const MOBILE_BOTTOM_SYSTEM_OFFSET = 15;
+
+function isMobileLayout() {
+  return window.matchMedia?.("(max-width: 639px)")?.matches ?? false;
+}
 
 function getSystemLayout(question) {
   const swapSystems = question.sourceClef === "bass" && question.answerClef === "treble";
+  const bottomOffset = isMobileLayout() ? MOBILE_BOTTOM_SYSTEM_OFFSET : 0;
   return {
-    sourceTop: swapSystems ? ANSWER_TOP : SOURCE_TOP,
-    answerTop: swapSystems ? SOURCE_TOP : ANSWER_TOP,
+    sourceTop: swapSystems ? ANSWER_TOP + bottomOffset : SOURCE_TOP,
+    answerTop: swapSystems ? SOURCE_TOP : ANSWER_TOP + bottomOffset,
   };
 }
 
@@ -1495,6 +1501,15 @@ function App() {
                     <window.MLH.LevelMenu
                       activeLevel={activeLevel}
                       onSelect={(key) => {
+                        if (key !== activeLevel) {
+                          window.MLH.resetLevelSessionProgress({
+                            setCorrect,
+                            setAttempted,
+                            setStreak,
+                            setBestStreak,
+                            setConfettiKey,
+                          });
+                        }
                         setActiveLevel(key);
                         setLevelOpen(false);
                         const url = new URL(window.location.href);

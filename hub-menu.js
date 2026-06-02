@@ -107,6 +107,28 @@
     nextQuestion?.();
   }
 
+  function resetLevelSessionProgress({
+    setCorrect,
+    setAttempted,
+    setStreak,
+    setBestStreak,
+    setBest,
+    setConfettiKey,
+    setConfetti,
+    setAutoShowMedals,
+    setScore,
+  } = {}) {
+    setCorrect?.(0);
+    setAttempted?.(0);
+    setStreak?.(0);
+    setBestStreak?.(0);
+    setBest?.(0);
+    setConfettiKey?.(0);
+    setConfetti?.(0);
+    setAutoShowMedals?.(false);
+    setScore?.({ correct: 0, attempted: 0, streak: 0, best: 0 });
+  }
+
   function SkipButton({ onClick, icon, resetStreak }) {
     return e(
       "button",
@@ -195,6 +217,7 @@
   MLH.HelpButton = HelpButton;
   MLH.SkipButton = SkipButton;
   MLH.runSkipQuestion = runSkipQuestion;
+  MLH.resetLevelSessionProgress = resetLevelSessionProgress;
   MLH.MenuToggleRow = MenuToggleRow;
   MLH.LevelMenu = LevelMenu;
 })();
