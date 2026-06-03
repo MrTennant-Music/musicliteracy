@@ -7,6 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="https://mrtennant-music.github.io/musicliteracy/scale-degrees-icon.svg" />
   <link rel="apple-touch-icon" href="https://mrtennant-music.github.io/musicliteracy/scale-degrees-icon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="./hub-ui.css?v=1.4" />
   <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="./hub-mobile.js?v=1.2"></script>
@@ -14,14 +15,37 @@
   <script src="./hub-shell.js?v=1.2"></script>
   <script src="./hub-menu.js?v=1.7"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+    .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
+  </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-const { useEffect, useMemo, useRef, useState } = React;
+const { useMemo, useRef, useState } = React;
+const SHELL = window.MLH?.shell || {};
+const AppHeader = window.MLH?.AppHeader;
+const FeedbackBadge = window.MLH?.FeedbackBadge;
+const ScoreStreakPanel = window.MLH?.ScoreStreakPanel;
+const LevelButton = window.MLH?.LevelButton;
+const CustomiseButton = window.MLH?.CustomiseButton;
+const SkipButton = window.MLH?.SkipButton;
+const LevelMenu = window.MLH?.LevelMenu;
+const useClickOutside = window.MLH?.useClickOutside;
+const playFeedbackSound = window.MLH?.playFeedbackSound;
+const getStreakMedal = window.MLH?.getStreakMedal;
+const advanceFeedbackPointerDown = window.MLH?.advanceFeedbackPointerDown;
 
 const SVG = { width: 920, height: 420 };
+const SCORE_FRAME = {
+  x: 58,
+  y: 112,
+  width: 824,
+  height: 174,
+  zoom: 0.94,
+};
 
 const STAFF = {
   left: 24,
@@ -31,15 +55,18 @@ const STAFF = {
 };
 
 const BAR_COUNT = 4;
-const CLEF_X = STAFF.left + 8;
-const KEY_SIG_X = STAFF.left + 46;
+const CLEF_X = STAFF.left + 16;
+const KEY_SIG_X = STAFF.left + 58;
 const TIME_SIG_X = STAFF.left + 82;
 const MUSIC_START_X = STAFF.left + 112;
 
 const NOTE = {
-  rx: 6.6,
-  ry: 4.7,
+  rx: 8.2,
+  ry: 5.1,
   stemLength: 34,
+  headFont: 51,
+  flagFont: 43,
+  accidentalFont: 26,
 };
 
 const COLOUR = {
@@ -49,7 +76,33 @@ const COLOUR = {
 };
 
 const GLYPH = {
-  trebleClef: String.fromCodePoint(0x1d11e),
+  trebleClef: "\uE050",
+  whole: "\uE0A2",
+  half: "\uE0A3",
+  black: "\uE0A4",
+  flagUp: "\uE240",
+  flagDown: "\uE241",
+  flat: "\uE260",
+  sharp: "\uE262",
+  timeFour: "\uE084",
+};
+
+const ASSET = {
+  appIcon: "https://mrtennant-music.github.io/musicliteracy/scale-degrees-icon.svg",
+  level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
+  customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
+  next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
+  bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
+  silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
+  gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
+  diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
+};
+
+const LEVELS = {
+  H: {
+    label: "Higher",
+    description: "Identifying tonic, subdominant and dominant notes in the keys of C, G and F major and A minor",
+  },
 };
 
 const NOTE_STEPS = {
@@ -440,10 +493,6 @@ function getLayout(question) {
   return { positions, barWidth };
 }
 
-const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
-
-const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
-
 function StaffLines() {
   return (
     <g>
@@ -463,16 +512,16 @@ function StaffLines() {
 }
 
 function TrebleClef() {
-  return <text x={CLEF_X} y={STAFF.top + 31} fontSize="99" fontFamily="serif" dominantBaseline="middle">{GLYPH.trebleClef}</text>;
+  return <text className="music-symbol" x={CLEF_X} y={STAFF.top + 33} fontSize="50" dominantBaseline="middle">{GLYPH.trebleClef}</text>;
 }
 
 function KeySignature({ signature }) {
   if (signature === "sharp") {
-    return <text x={KEY_SIG_X} y={yForStep(8) + 7} fontSize="23" fontFamily="serif" fontWeight="900">♯</text>;
+    return <text className="music-symbol" x={KEY_SIG_X} y={yForStep(8) + 1} fontSize={NOTE.accidentalFont}>{GLYPH.sharp}</text>;
   }
 
   if (signature === "flat") {
-    return <text x={KEY_SIG_X - 6} y={yForStep(4) + 5} fontSize="23" fontFamily="serif" fontWeight="900">♭</text>;
+    return <text className="music-symbol" x={KEY_SIG_X - 6} y={yForStep(4) - 1} fontSize={NOTE.accidentalFont}>{GLYPH.flat}</text>;
   }
 
   return null;
@@ -480,9 +529,9 @@ function KeySignature({ signature }) {
 
 function TimeSignature() {
   return (
-    <g fontFamily="serif" fontWeight="900" fontSize="36" textAnchor="middle">
-      <text x={TIME_SIG_X} y={STAFF.top + 24}>4</text>
-      <text x={TIME_SIG_X} y={STAFF.top + 44}>4</text>
+    <g className="music-symbol" fontSize="48" textAnchor="middle">
+      <text x={TIME_SIG_X} y={STAFF.top + 16}>{GLYPH.timeFour}</text>
+      <text x={TIME_SIG_X} y={STAFF.top + 42}>{GLYPH.timeFour}</text>
     </g>
   );
 }
@@ -499,14 +548,6 @@ function LedgerLines({ x, step, colour = "currentColor" }) {
       ))}
     </g>
   );
-}
-
-function Flag({ stemX, stemEndY, stemDown, colour = "currentColor" }) {
-  const path = stemDown
-    ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 5}, ${stemX + 9} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 15}`
-    : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 5}, ${stemX + 9} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 15}`;
-
-  return <path d={path} fill="none" stroke={colour} strokeWidth="1.6" strokeLinecap="round" />;
 }
 
 function stemData(note, x, y, stemDownOverride = null, forcedStemEndY = null) {
@@ -529,18 +570,30 @@ function NoteGlyph({ note, x, y, selected, hovered, correct, incorrect, showAcci
   const info = rhythmInfo(note.rhythm);
   const stem = stemData(note, x, y, stemDownOverride, forcedStemEndY);
   const colour = incorrect ? COLOUR.red : correct || selected || hovered ? COLOUR.green : "currentColor";
-  const accidental = note.pitch.includes("#") ? "♯" : note.pitch.includes("b") ? "♭" : null;
+  const accidental = note.pitch.includes("#") ? GLYPH.sharp : note.pitch.includes("b") ? GLYPH.flat : null;
   const dotY = Math.abs(stem.step % 2) === 1 ? y : y - 5;
+  const headGlyph = note.rhythm === "semibreve" ? GLYPH.whole : note.rhythm === "minim" ? GLYPH.half : GLYPH.black;
 
   return (
     <g onMouseEnter={onHover} onMouseLeave={onLeave} onPointerDown={onClick} style={{ cursor: "pointer" }}>
       <rect x={x - 19} y={STAFF.top - 38} width="38" height="116" fill="transparent" />
-      {showAccidental && accidental && <text x={x - 21} y={y + 7} fontSize="22" fontFamily="serif" fontWeight="700" fill={colour}>{accidental}</text>}
+      {showAccidental && accidental && <text className="music-symbol" x={x - 21} y={y + 8} fontSize={NOTE.accidentalFont} fill={colour}>{accidental}</text>}
       <LedgerLines x={x} step={stem.step} colour={colour} />
-      <ellipse cx={x} cy={y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.8" />
+      <text className="music-symbol" x={x} y={y + 1} fontSize={NOTE.headFont} textAnchor="middle" fill={colour}>{headGlyph}</text>
       {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="1.6" />}
       {info.dots === 1 && <circle cx={x + 15} cy={dotY} r="2.2" fill={colour} />}
-      {info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={stem.stemEndY} stemDown={stem.stemDown} colour={colour} />}
+      {info.flag && showFlag && (
+        <text
+          className="music-symbol"
+          x={stem.stemX + (stem.stemDown ? 7 : 7)}
+          y={stem.stemEndY + (stem.stemDown ? 1 : 0)}
+          fontSize={NOTE.flagFont}
+          textAnchor="middle"
+          fill={colour}
+        >
+          {stem.stemDown ? GLYPH.flagDown : GLYPH.flagUp}
+        </text>
+      )}
     </g>
   );
 }
@@ -609,288 +662,118 @@ function ScoreArea({ question, selectedId, hoveredId, feedback, onSelect, onHove
   const layout = useMemo(() => getLayout(question), [question]);
   const targetIds = new Set(allNotes(question).filter((note) => isTargetNote(question, note)).map((note) => note.id));
   const selectedCorrect = selectedId ? targetIds.has(selectedId) : false;
+  const zoomOffsetX = (SVG.width * (1 - SCORE_FRAME.zoom)) / 2;
+  const zoomOffsetY = (SVG.height * (1 - SCORE_FRAME.zoom)) / 2;
 
   return (
-    <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none touch-none overflow-visible" aria-label="Tonic, subdominant and dominant exercise">
-      <rect width={SVG.width} height={SVG.height} fill="white" />
-      <StaffLines />
-      <TrebleClef />
-      <KeySignature signature={question.key.signature} />
-      <TimeSignature />
+    <svg
+      viewBox={`${SCORE_FRAME.x} ${SCORE_FRAME.y} ${SCORE_FRAME.width} ${SCORE_FRAME.height}`}
+      preserveAspectRatio="xMidYMid meet"
+      className="block h-auto w-full select-none touch-none overflow-hidden"
+      aria-label="Tonic, subdominant and dominant exercise"
+    >
+      <g transform={`translate(${zoomOffsetX} ${zoomOffsetY}) scale(${SCORE_FRAME.zoom})`}>
+        <rect width={SVG.width} height={SVG.height} fill="white" />
+        <StaffLines />
+        <TrebleClef />
+        <KeySignature signature={question.key.signature} />
+        <TimeSignature />
 
-      {Array.from({ length: BAR_COUNT }, (_, index) => {
-        const x = MUSIC_START_X + layout.barWidth * (index + 1);
-        const isFinal = index === BAR_COUNT - 1;
+        {Array.from({ length: BAR_COUNT }, (_, index) => {
+          const x = MUSIC_START_X + layout.barWidth * (index + 1);
+          const isFinal = index === BAR_COUNT - 1;
 
-        if (isFinal) {
-          return (
-            <g key={index}>
-              <line x1={x - 5} x2={x - 5} y1={STAFF.top - 0.5} y2={STAFF.top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="1.4" />
-              <line x1={x} x2={x} y1={STAFF.top - 0.5} y2={STAFF.top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="4" />
-            </g>
-          );
-        }
-
-        return <line key={index} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.2" />;
-      })}
-
-      {question.bars.map((bar, barIndex) => {
-        const positions = bar.map((note) => layout.positions[note.id].x);
-        const accidentalState = new Set();
-        const renderedBeams = new Set();
-
-        return bar.map((note, noteIndex) => {
-          const position = layout.positions[note.id];
-          const group = getQuaverGroup(bar, noteIndex);
-          const showAccidental = shouldShowAccidental(question.key, note.pitch, accidentalState);
-          let forcedStemEndY = null;
-          let stemDownOverride = null;
-          let beam = null;
-
-          if (group) {
-            beam = getBeamData(bar, group, positions, layout);
-            stemDownOverride = beam.stemDown;
-
-            const stem = stemData(note, position.x, position.y, beam.stemDown);
-            forcedStemEndY = getBeamLineYAtX(stem.stemX, beam.start, beam.end);
-            const stemLength = Math.abs(forcedStemEndY - position.y);
-
-            if (stemLength > 42) forcedStemEndY = stem.stemDown ? position.y + 42 : position.y - 42;
-            if (stemLength < 22) forcedStemEndY = stem.stemDown ? position.y + 22 : position.y - 22;
+          if (isFinal) {
+            return (
+              <g key={index}>
+                <line x1={x - 5} x2={x - 5} y1={STAFF.top - 0.5} y2={STAFF.top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="1.4" />
+                <line x1={x} x2={x} y1={STAFF.top - 0.5} y2={STAFF.top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="4" />
+              </g>
+            );
           }
 
-          const selected = selectedId === note.id && !feedback;
-          const hovered = hoveredId === note.id && !feedback;
-          const correct = Boolean(feedback && targetIds.has(note.id));
-          const incorrect = Boolean(feedback && selectedId === note.id && !selectedCorrect);
+          return <line key={index} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.2" />;
+        })}
 
-          return (
-            <React.Fragment key={note.id}>
-              <NoteGlyph
-                note={note}
-                x={position.x}
-                y={position.y}
-                selected={selected}
-                hovered={hovered}
-                correct={correct}
-                incorrect={incorrect}
-                showAccidental={showAccidental}
-                forcedStemEndY={forcedStemEndY}
-                stemDownOverride={stemDownOverride}
-                showFlag={!group}
-                onHover={() => !feedback && onHover(note.id)}
-                onLeave={onLeave}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (!feedback) onSelect(note.id);
-                }}
-              />
+        {question.bars.map((bar, barIndex) => {
+          const positions = bar.map((note) => layout.positions[note.id].x);
+          const accidentalState = new Set();
+          const renderedBeams = new Set();
 
-              {group && group.start === noteIndex && !renderedBeams.has(`${barIndex}-${group.start}`) && (() => {
-                renderedBeams.add(`${barIndex}-${group.start}`);
+          return bar.map((note, noteIndex) => {
+            const position = layout.positions[note.id];
+            const group = getQuaverGroup(bar, noteIndex);
+            const showAccidental = shouldShowAccidental(question.key, note.pitch, accidentalState);
+            let forcedStemEndY = null;
+            let stemDownOverride = null;
+            let beam = null;
 
-                const data = beam ?? getBeamData(bar, group, positions, layout);
-                const beamIsTarget = bar.slice(group.start, group.end + 1).some((groupNote) => feedback && targetIds.has(groupNote.id));
-                const beamIsIncorrect = feedback && bar.slice(group.start, group.end + 1).some((groupNote) => groupNote.id === selectedId && !selectedCorrect);
-                const beamColour = beamIsIncorrect ? COLOUR.red : beamIsTarget ? COLOUR.green : "currentColor";
+            if (group) {
+              beam = getBeamData(bar, group, positions, layout);
+              stemDownOverride = beam.stemDown;
 
-                return <line x1={data.start.x} y1={data.start.y} x2={data.end.x} y2={data.end.y} stroke={beamColour} strokeWidth="5" strokeLinecap="butt" />;
-              })()}
-            </React.Fragment>
-          );
-        });
-      })}
+              const stem = stemData(note, position.x, position.y, beam.stemDown);
+              forcedStemEndY = getBeamLineYAtX(stem.stemX, beam.start, beam.end);
+              const stemLength = Math.abs(forcedStemEndY - position.y);
+
+              if (stemLength > 42) forcedStemEndY = stem.stemDown ? position.y + 42 : position.y - 42;
+              if (stemLength < 22) forcedStemEndY = stem.stemDown ? position.y + 22 : position.y - 22;
+            }
+
+            const selected = selectedId === note.id && !feedback;
+            const hovered = hoveredId === note.id && !feedback;
+            const correct = Boolean(feedback && targetIds.has(note.id));
+            const incorrect = Boolean(feedback && selectedId === note.id && !selectedCorrect);
+
+            return (
+              <React.Fragment key={note.id}>
+                <NoteGlyph
+                  note={note}
+                  x={position.x}
+                  y={position.y}
+                  selected={selected}
+                  hovered={hovered}
+                  correct={correct}
+                  incorrect={incorrect}
+                  showAccidental={showAccidental}
+                  forcedStemEndY={forcedStemEndY}
+                  stemDownOverride={stemDownOverride}
+                  showFlag={!group}
+                  onHover={() => !feedback && onHover(note.id)}
+                  onLeave={onLeave}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (!feedback) onSelect(note.id);
+                  }}
+                />
+
+                {group && group.start === noteIndex && !renderedBeams.has(`${barIndex}-${group.start}`) && (() => {
+                  renderedBeams.add(`${barIndex}-${group.start}`);
+
+                  const data = beam ?? getBeamData(bar, group, positions, layout);
+                  const beamIsTarget = bar.slice(group.start, group.end + 1).some((groupNote) => feedback && targetIds.has(groupNote.id));
+                  const beamIsIncorrect = feedback && bar.slice(group.start, group.end + 1).some((groupNote) => groupNote.id === selectedId && !selectedCorrect);
+                  const beamColour = beamIsIncorrect ? COLOUR.red : beamIsTarget ? COLOUR.green : "currentColor";
+
+                  return <line x1={data.start.x} y1={data.start.y} x2={data.end.x} y2={data.end.y} stroke={beamColour} strokeWidth="5" strokeLinecap="butt" />;
+                })()}
+              </React.Fragment>
+            );
+          });
+        })}
+      </g>
     </svg>
   );
 }
-
-function StatCard({ label, value, footer, progress = null, medal = null, variant = "default", confettiKey = 0 }) {
-  const safeProgress = progress === null ? null : clamp(progress, 0, 100);
-  const fillHeight = safeProgress === null || safeProgress <= 0 ? 0 : safeProgress;
-  const fillColour = safeProgress === null
-    ? "transparent"
-    : safeProgress < 50
-    ? "rgba(220, 38, 38, 0.38)"
-    : safeProgress < 70
-    ? "rgba(255, 120, 0, 0.42)"
-    : "rgba(22, 163, 74, 0.38)";
-  const isStreak = variant === "streak";
-
-  return (
-    <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>
-      {isStreak && confettiKey > 0 && (
-        <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
-          {Array.from({ length: 18 }).map((_, index) => (
-            <span
-              key={index}
-              className="absolute block h-1.5 w-1 rounded-sm"
-              style={{
-                left: `${8 + ((index * 19) % 84)}%`,
-                top: "-8px",
-                backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5],
-                animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`,
-                animationDelay: `${(index % 6) * 0.035}s`,
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {safeProgress !== null && (
-        <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fillHeight}%`, background: fillColour }} />
-      )}
-
-      <div className="relative z-10 text-center">
-        <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
-        <div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>
-        {footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}
-      </div>
-
-      {isStreak && (
-        <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal?.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>
-          {medal?.emoji || "🥉"}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TapIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]">
-      <path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" />
-    </svg>
-  );
-}
-
-function FeedbackBanner({ feedback, fading }) {
-  if (!feedback) return null;
-
-  const correct = feedback === "correct";
-  const message = correct ? "Correct" : "Incorrect";
-
-  return (
-    <div className="relative flex w-full items-center justify-center text-center">
-      <div
-        className={`flex w-[330px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${correct ? "text-green-600" : "text-red-600"}`}
-        style={{
-          animation: fading
-            ? "feedbackFadeOut .28s ease-out forwards"
-            : correct
-            ? "correctFade .55s ease-out forwards"
-            : "incorrectDropShake .55s ease-out forwards",
-        }}
-      >
-        <span className="translate-y-[14px]">{message}</span>
-        {!correct && (
-          <div className="mt-[12px] flex flex-col items-center">
-            <span className="inline-flex -translate-x-[2px] items-center gap-0 text-sm font-semibold text-black">
-              <TapIcon />
-              <span>Click or tap anywhere to continue</span>
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AppIcon() {
-  return (
-    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
-      <img src="https://mrtennant-music.github.io/musicliteracy/scale-degrees-icon.svg" alt="" aria-hidden="true" className="block h-full w-full object-contain" />
-    </div>
-  );
-}
-
-function MenuRows({ resetScore }) {
-  return (
-    <button type="button" onClick={resetScore} className="w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">
-      ↺ Reset score
-    </button>
-  );
-}
-
-function useInjectedStyles() {
-  useEffect(() => {
-    if (document.getElementById("tsd-golden-style")) return;
-
-    const style = document.createElement("style");
-    style.id = "tsd-golden-style";
-    style.innerHTML = `
-      button {
-        -webkit-tap-highlight-color: transparent;
-        user-select: none;
-        transition: transform 0.08s ease, filter 0.08s ease, background-color 0.12s ease, box-shadow 0.12s ease;
-        cursor: pointer;
-      }
-
-      button:hover {
-        transform: translateY(-1px) scale(1.01);
-        filter: brightness(1.08);
-        box-shadow: 0 6px 18px rgba(0,0,0,0.08);
-      }
-
-      button:active {
-        transform: scale(0.96);
-        filter: brightness(0.92);
-      }
-
-      button:disabled {
-        cursor: not-allowed;
-        opacity: 0.5;
-      }
-
-      button:focus-visible {
-        outline: 2px solid rgba(22,163,74,0.35);
-        outline-offset: 2px;
-      }
-
-      @keyframes medalShine {
-        0%, 100% { transform: scale(1) rotate(-4deg); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); }
-        50% { transform: scale(1.16) rotate(4deg); filter: drop-shadow(0 0 10px rgba(250,204,21,.9)); }
-      }
-
-      @keyframes confettiDrop {
-        0% { transform: translateY(-12px) rotate(0deg); opacity: 0; }
-        12% { opacity: 1; }
-        100% { transform: translateY(72px) rotate(260deg); opacity: 0; }
-      }
-
-      @keyframes incorrectDropShake {
-        0% { transform: translateY(-28px); opacity: 0; }
-        55% { transform: translateY(0); opacity: 1; }
-        68% { transform: translateX(-5px); }
-        78% { transform: translateX(5px); }
-        88% { transform: translateX(-3px); }
-        100% { transform: translateX(0); opacity: 1; }
-      }
-
-      @keyframes correctFade {
-        0% { transform: translateY(-18px); opacity: 0; }
-        100% { transform: translateY(0); opacity: 1; }
-      }
-
-      @keyframes feedbackFadeOut {
-        0% { opacity: 1; transform: translateY(0); }
-        100% { opacity: 0; transform: translateY(-10px); }
-      }
-    `;
-
-    document.head.appendChild(style);
-  }, []);
-}
-
-const useClickOutside = window.MLH.useClickOutside;
 
 function App() {
-  useInjectedStyles();
-
+  const [activeLevel, setActiveLevel] = useState(() => {
+    const level = new URLSearchParams(window.location.search).get("level");
+    return LEVELS[level] ? level : "H";
+  });
   const [question, setQuestion] = useState(() => makeQuestion());
   const [questionVisible, setQuestionVisible] = useState(true);
-  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [levelMenuOpen, setLevelMenuOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -902,13 +785,28 @@ function App() {
   const [bestStreak, setBestStreak] = useState(0);
   const [confettiKey, setConfettiKey] = useState(0);
 
-  const customiseRef = useRef(null);
+  const levelRef = useRef(null);
+  const renderTimerRef = useRef(null);
+  const incorrectAdvanceTimerRef = useRef(null);
+  const medalSoundTimerRef = useRef(null);
+  const correctFadeTimerRef = useRef(null);
+  const correctAdvanceTimerRef = useRef(null);
 
-  useClickOutside([customiseRef], [() => customiseOpen && setCustomiseOpen(false)]);
+  useClickOutside([levelRef], [
+    () => levelMenuOpen && setLevelMenuOpen(false),
+  ]);
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const canConfirm = selectedId !== null && !feedback;
-  const streakMedal = getStreakMedal(streak);
+
+  function clearQueuedTimers() {
+    [renderTimerRef, incorrectAdvanceTimerRef, medalSoundTimerRef, correctFadeTimerRef, correctAdvanceTimerRef].forEach((ref) => {
+      if (ref.current) {
+        window.clearTimeout(ref.current);
+        ref.current = null;
+      }
+    });
+  }
 
   function resetTask(nextQuestion) {
     setQuestion(nextQuestion);
@@ -920,11 +818,13 @@ function App() {
   }
 
   function newQuestion() {
+    clearQueuedTimers();
     setQuestionVisible(false);
 
-    window.setTimeout(() => {
+    renderTimerRef.current = window.setTimeout(() => {
       resetTask(makeQuestion());
       setQuestionVisible(true);
+      renderTimerRef.current = null;
     }, 260);
   }
 
@@ -941,7 +841,25 @@ function App() {
     if (!feedback || feedback === "correct" || feedbackFading) return;
 
     setFeedbackFading(true);
-    window.setTimeout(newQuestion, 280);
+    incorrectAdvanceTimerRef.current = window.setTimeout(() => {
+      incorrectAdvanceTimerRef.current = null;
+      newQuestion();
+    }, 280);
+  }
+
+  function handleLevelSelect(level) {
+    setLevelMenuOpen(false);
+    if (level === activeLevel) return;
+    setActiveLevel(level);
+    const url = new URL(window.location.href);
+    url.searchParams.set("level", level);
+    window.history.replaceState({}, "", url.toString());
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+    resetTask(makeQuestion());
   }
 
   function scoreAnswer(feedbackType) {
@@ -958,13 +876,22 @@ function App() {
     if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
       const medal = getStreakMedal(nextStreak);
       setConfettiKey((value) => value + 1);
-      window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
+      medalSoundTimerRef.current = window.setTimeout(() => {
+        playFeedbackSound(true, true, medal.sound);
+        medalSoundTimerRef.current = null;
+      }, 180);
     }
 
     if (isCorrect) {
       setFeedbackFading(false);
-      window.setTimeout(() => setFeedbackFading(true), 1700);
-      window.setTimeout(newQuestion, 2000);
+      correctFadeTimerRef.current = window.setTimeout(() => {
+        setFeedbackFading(true);
+        correctFadeTimerRef.current = null;
+      }, 1700);
+      correctAdvanceTimerRef.current = window.setTimeout(() => {
+        correctAdvanceTimerRef.current = null;
+        newQuestion();
+      }, 2000);
     }
   }
 
@@ -984,70 +911,76 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <AppIcon />
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Scale Degrees</h1>
-                <p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">
-                  Identify tonic, subdominant and dominant notes.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end">
-              <StatCard variant="score" label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${accuracy}%`} progress={accuracy} />
-
-              <div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${streakMedal?.bg || "bg-stone-50"}`}>
-                <StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} medal={streakMedal} confettiKey={confettiKey} />
-                <div className="relative z-0 flex min-h-[52px] min-w-[64px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700">
-                  <div className="flex items-center gap-1"><span>💎</span><span className="text-cyan-500">30</span></div>
-                  <div className="mt-1">🥇 <span className="text-yellow-500">20</span></div>
-                  <div className="mt-1">🥈 <span className="text-slate-500">15</span></div>
-                  <div className="mt-1">🥉 <span className="text-amber-700">10</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
+    <div className={`min-h-screen ${SHELL.pageShellClass || "overflow-x-hidden bg-stone-50 pb-10 text-black"}`}>
+      <div className={SHELL.pageContentClass || "mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 md:px-8 md:pt-[104px]"}>
+        <AppHeader
+          icon={ASSET.appIcon}
+          title="Scale Degrees"
+          subtitle="Identify tonic, subdominant and dominant notes."
+        >
+          <ScoreStreakPanel
+            assets={ASSET}
+            correct={correct}
+            attempted={attempted}
+            accuracy={accuracy}
+            streak={streak}
+            bestStreak={bestStreak}
+            resetScore={resetScore}
+            confettiKey={confettiKey}
+          />
+        </AppHeader>
 
         <main
-          className="relative -mt-[10px] min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-hidden md:px-6 md:pb-6 md:pt-[14px]"
+          className={`${SHELL.mainShellClass || "relative z-0 min-h-[520px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-0 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:px-6 md:pb-6 md:pt-[14px]"} min-h-[710px] md:overflow-hidden`}
           onPointerDown={() => {
-            if (feedback && feedback !== "correct") fadeToNextQuestion();
+            const advanced = advanceFeedbackPointerDown?.({
+              feedback: feedback ? { correct: feedback === "correct" } : null,
+              onCorrect: newQuestion,
+              onIncorrect: fadeToNextQuestion,
+            });
+            if (!advanced && feedback && feedback !== "correct") fadeToNextQuestion();
           }}
         >
-          <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="relative" ref={customiseRef}>
-                <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">
-                  ⚙️ <span>Customise</span>
-                </button>
-
-                {customiseOpen && (
-                  <div className="absolute left-0 z-[9999] mt-2 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-2xl">
-                    <h2 className="mb-3 text-center text-base font-semibold">Customise</h2>
-                    <MenuRows resetScore={resetScore} />
-                  </div>
+          <div className="hub-toolbar relative z-20">
+            <div className="hub-toolbar-left">
+              <div className="hub-menu-anchor relative" ref={levelRef}>
+                <LevelButton
+                  icon={<img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain" />}
+                  activeLevel={activeLevel}
+                  activeLabel={LEVELS[activeLevel].label}
+                  onClick={() => setLevelMenuOpen((value) => !value)}
+                  dataMenuTrigger={true}
+                />
+                {levelMenuOpen && (
+                  <window.MLH.MenuPanel title="Level" dataMenuPanel={true}>
+                    <LevelMenu activeLevel={activeLevel} onSelect={handleLevelSelect} levels={LEVELS} />
+                  </window.MLH.MenuPanel>
                 )}
               </div>
 
-
+              <div className="hub-menu-anchor relative">
+                <CustomiseButton
+                  icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
+                  onClick={() => {}}
+                  dataMenuTrigger={true}
+                />
+              </div>
             </div>
 
-            <button type="button" onClick={newQuestion} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">
-              <span>Skip Question</span><span className="text-lg leading-none">→</span>
-            </button>
+            <div className="hub-toolbar-feedback">
+              <FeedbackBadge feedback={feedback ? { correct: feedback === "correct" } : null} fading={feedbackFading} animationPrefix="note" />
+            </div>
 
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible">
-              <FeedbackBanner feedback={feedback} fading={feedbackFading} />
+            <div className="hub-toolbar-right">
+              <SkipButton
+                onClick={newQuestion}
+                resetStreak={() => setStreak(0)}
+                icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
+              />
             </div>
           </div>
 
-          <div className={`relative -top-[88px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+          <div className={`relative mt-4 transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
             <ScoreArea
               question={question}
               selectedId={selectedId}
@@ -1059,7 +992,7 @@ function App() {
             />
           </div>
 
-          <div className="relative z-10 mt-1 h-[68px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-2 shadow-md md:-mt-[293px] md:mx-3">
+          <div className="relative z-10 mt-3 h-[68px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-2 shadow-md md:mx-3">
             <div className="flex h-full items-center justify-between gap-4 px-2">
               <div className="flex min-w-0 flex-1 items-center text-stone-900">
                 <div>
@@ -1071,7 +1004,7 @@ function App() {
               </div>
 
               <div className="flex shrink-0 items-center justify-end">
-                <button type="button" disabled={!canConfirm} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-[20px] py-[8px] text-sm font-bold text-white disabled:opacity-60">
+                <button type="button" disabled={!canConfirm} onClick={confirmAnswer} className="rounded-xl border border-black bg-black px-[20px] py-[8px] text-sm font-bold text-white disabled:opacity-60">
                   Confirm
                 </button>
               </div>
