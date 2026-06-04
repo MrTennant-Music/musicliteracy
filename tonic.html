@@ -18,6 +18,13 @@
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
+    .tonic-customise-options .hub-toggle-row { min-height: 40px; margin-bottom: .25rem; padding: 6px 10px; }
+    .tonic-customise-options .hub-toggle-row:last-child { margin-bottom: 0; }
+    .tonic-main { min-height: 0 !important; padding-bottom: 1.5rem !important; }
+    @media (max-width: 639px) {
+      .tonic-main { padding-bottom: 1rem !important; }
+      .tonic-customise-panel { width: calc(100vw - 48px); max-width: 360px; }
+    }
   </style>
 </head>
 <body>
@@ -33,6 +40,8 @@ const LevelButton = window.MLH?.LevelButton;
 const CustomiseButton = window.MLH?.CustomiseButton;
 const SkipButton = window.MLH?.SkipButton;
 const LevelMenu = window.MLH?.LevelMenu;
+const MenuPanel = window.MLH?.MenuPanel;
+const MenuToggleRow = window.MLH?.MenuToggleRow;
 const useClickOutside = window.MLH?.useClickOutside;
 const playFeedbackSound = window.MLH?.playFeedbackSound;
 const getStreakMedal = window.MLH?.getStreakMedal;
@@ -56,16 +65,16 @@ const STAFF = {
 
 const BAR_COUNT = 4;
 const CLEF_X = STAFF.left + 16;
-const KEY_SIG_X = STAFF.left + 58;
-const TIME_SIG_X = STAFF.left + 82;
+const KEY_SIG_X = STAFF.left + 63;
+const TIME_SIG_X = STAFF.left + 90;
 const MUSIC_START_X = STAFF.left + 112;
 
 const NOTE = {
   rx: 8.2,
   ry: 5.1,
   stemLength: 34,
-  headFont: 51,
-  flagFont: 43,
+  headFont: 48.45,
+  flagFont: 38,
   accidentalFont: 26,
 };
 
@@ -173,6 +182,14 @@ const QUESTION_TYPES = [
   { id: "subdominant", label: "subdominant" },
   { id: "dominant", label: "dominant" },
 ];
+
+const QUESTION_TYPE_GLYPHS = {
+  tonic: "I",
+  subdominant: "IV",
+  dominant: "V",
+};
+
+const REVEAL_KEY_GLYPH = GLYPH.trebleClef;
 
 const RHYTHMS = {
   semibreve: { beats: 4, spacing: 8, open: true, stem: false, dots: 0, flag: false },
@@ -379,9 +396,10 @@ function ensureAMinorHasGSharp(bars, key) {
   };
 }
 
-function makeQuestion(attempt = 0) {
+function makeQuestion(enabledQuestionTypeIds = QUESTION_TYPES.map((type) => type.id), attempt = 0) {
   const key = randomItem(KEYS);
-  const questionType = randomItem(QUESTION_TYPES);
+  const availableQuestionTypes = QUESTION_TYPES.filter((type) => enabledQuestionTypeIds.includes(type.id));
+  const questionType = randomItem(availableQuestionTypes.length > 0 ? availableQuestionTypes : QUESTION_TYPES);
   const bars = [];
   let previousPitch = key.tonicStart;
 
@@ -424,7 +442,7 @@ function makeQuestion(attempt = 0) {
   };
 
   if (!questionPassesQuaverRules(finalQuestion) && attempt < 20) {
-    return makeQuestion(attempt + 1);
+    return makeQuestion(enabledQuestionTypeIds, attempt + 1);
   }
 
   return finalQuestion;
@@ -512,16 +530,16 @@ function StaffLines() {
 }
 
 function TrebleClef() {
-  return <text className="music-symbol" x={CLEF_X} y={STAFF.top + 33} fontSize="50" dominantBaseline="middle">{GLYPH.trebleClef}</text>;
+  return <text className="music-symbol" x={CLEF_X} y={STAFF.top + 34} fontSize="45.18" dominantBaseline="middle">{GLYPH.trebleClef}</text>;
 }
 
 function KeySignature({ signature }) {
   if (signature === "sharp") {
-    return <text className="music-symbol" x={KEY_SIG_X} y={yForStep(8) + 1} fontSize={NOTE.accidentalFont}>{GLYPH.sharp}</text>;
+    return <text className="music-symbol" x={KEY_SIG_X} y={yForStep(8)} fontSize={NOTE.accidentalFont * 1.5}>{GLYPH.sharp}</text>;
   }
 
   if (signature === "flat") {
-    return <text className="music-symbol" x={KEY_SIG_X - 6} y={yForStep(4) - 1} fontSize={NOTE.accidentalFont}>{GLYPH.flat}</text>;
+    return <text className="music-symbol" x={KEY_SIG_X - 6} y={yForStep(4)} fontSize={NOTE.accidentalFont * 1.5}>{GLYPH.flat}</text>;
   }
 
   return null;
@@ -529,9 +547,9 @@ function KeySignature({ signature }) {
 
 function TimeSignature() {
   return (
-    <g className="music-symbol" fontSize="48" textAnchor="middle">
-      <text x={TIME_SIG_X} y={STAFF.top + 16}>{GLYPH.timeFour}</text>
-      <text x={TIME_SIG_X} y={STAFF.top + 42}>{GLYPH.timeFour}</text>
+    <g className="music-symbol" fontSize="42.879375" textAnchor="middle">
+      <text x={TIME_SIG_X} y={STAFF.top + 11}>{GLYPH.timeFour}</text>
+      <text x={TIME_SIG_X} y={STAFF.top + 34}>{GLYPH.timeFour}</text>
     </g>
   );
 }
@@ -553,40 +571,61 @@ function LedgerLines({ x, step, colour = "currentColor" }) {
 function stemData(note, x, y, stemDownOverride = null, forcedStemEndY = null) {
   const step = staffStep(note.pitch);
   const stemDown = stemDownOverride ?? stemGoesDown(step);
+  const isDownQuaver = stemDown && note.rhythm === "quaver";
   let stemX = stemDown ? x - NOTE.rx + 2 : x + NOTE.rx;
 
   if (stemDown) {
-    stemX -= 1;
+    stemX += 1.25;
     if (note.rhythm === "minim") stemX -= 1;
     else if (note.rhythm === "quaver") stemX -= 2;
     else if (note.rhythm === "crotchet" || note.rhythm === "dotted-crotchet") stemX -= 1;
+  } else {
+    stemX -= 1.65;
   }
 
   const naturalStemEndY = stemDown ? y + NOTE.stemLength : y - NOTE.stemLength;
-  return { step, stemDown, stemX, stemEndY: forcedStemEndY ?? naturalStemEndY };
+  const adjustedStemEndY = forcedStemEndY ?? naturalStemEndY;
+  return {
+    step,
+    stemDown,
+    stemX: isDownQuaver ? stemX + 1 : stemX,
+    stemEndY: stemDown ? adjustedStemEndY + (isDownQuaver ? 8 : 6) : adjustedStemEndY - 4,
+  };
 }
 
 function NoteGlyph({ note, x, y, selected, hovered, correct, incorrect, showAccidental, forcedStemEndY = null, stemDownOverride = null, showFlag = true, onHover, onLeave, onClick }) {
   const info = rhythmInfo(note.rhythm);
-  const stem = stemData(note, x, y, stemDownOverride, forcedStemEndY);
+  const headY = y - 1;
+  const stem = stemData(note, x, headY, stemDownOverride, forcedStemEndY);
   const colour = incorrect ? COLOUR.red : correct || selected || hovered ? COLOUR.green : "currentColor";
   const accidental = note.pitch.includes("#") ? GLYPH.sharp : note.pitch.includes("b") ? GLYPH.flat : null;
-  const dotY = Math.abs(stem.step % 2) === 1 ? y : y - 5;
+  const isGSharpAccidental = pitchName(note.pitch) === "G#";
+  const dotY = Math.abs(stem.step % 2) === 1 ? headY : headY - 5;
   const headGlyph = note.rhythm === "semibreve" ? GLYPH.whole : note.rhythm === "minim" ? GLYPH.half : GLYPH.black;
 
   return (
     <g onMouseEnter={onHover} onMouseLeave={onLeave} onPointerDown={onClick} style={{ cursor: "pointer" }}>
       <rect x={x - 19} y={STAFF.top - 38} width="38" height="116" fill="transparent" />
-      {showAccidental && accidental && <text className="music-symbol" x={x - 21} y={y + 8} fontSize={NOTE.accidentalFont} fill={colour}>{accidental}</text>}
+      {showAccidental && accidental && (
+        <text
+          className="music-symbol"
+          x={x - 21}
+          y={headY + (isGSharpAccidental ? 2 : 8)}
+          fontSize={isGSharpAccidental ? NOTE.accidentalFont * 1.45 : NOTE.accidentalFont}
+          fill={colour}
+        >
+          {accidental}
+        </text>
+      )}
       <LedgerLines x={x} step={stem.step} colour={colour} />
-      <text className="music-symbol" x={x} y={y + 1} fontSize={NOTE.headFont} textAnchor="middle" fill={colour}>{headGlyph}</text>
-      {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="1.6" />}
+      <text className="music-symbol" x={x} y={headY + 1} fontSize={NOTE.headFont} textAnchor="middle" fill={colour}>{headGlyph}</text>
+      {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={headY} y2={stem.stemEndY} stroke={colour} strokeWidth="1.6" />}
       {info.dots === 1 && <circle cx={x + 15} cy={dotY} r="2.2" fill={colour} />}
       {info.flag && showFlag && (
         <text
           className="music-symbol"
-          x={stem.stemX + (stem.stemDown ? 7 : 7)}
-          y={stem.stemEndY + (stem.stemDown ? 1 : 0)}
+          x={stem.stemX + (stem.stemDown ? (note.rhythm === "quaver" ? 5 : 4) : 5)}
+          y={stem.stemEndY + (stem.stemDown ? (note.rhythm === "quaver" ? -1 : 1) : 1)}
           fontSize={NOTE.flagFont}
           textAnchor="middle"
           fill={colour}
@@ -755,7 +794,11 @@ function ScoreArea({ question, selectedId, hoveredId, feedback, onSelect, onHove
                   const beamIsIncorrect = feedback && bar.slice(group.start, group.end + 1).some((groupNote) => groupNote.id === selectedId && !selectedCorrect);
                   const beamColour = beamIsIncorrect ? COLOUR.red : beamIsTarget ? COLOUR.green : "currentColor";
 
-                  return <line x1={data.start.x} y1={data.start.y} x2={data.end.x} y2={data.end.y} stroke={beamColour} strokeWidth="5" strokeLinecap="butt" />;
+                  const beamShift = data.stemDown ? -1 : 1;
+                  const beamYOffset = data.stemDown ? 5.5 : -1.5;
+                  const beamStartX = data.stemDown ? data.start.x + beamShift + 1 : data.start.x + beamShift - 1;
+                  const beamEndX = data.stemDown ? data.end.x + beamShift + 1 : data.end.x + beamShift - 1;
+                  return <line x1={beamStartX} y1={data.start.y + beamYOffset} x2={beamEndX} y2={data.end.y + beamYOffset} stroke={beamColour} strokeWidth="5" strokeLinecap="butt" />;
                 })()}
               </React.Fragment>
             );
@@ -767,13 +810,22 @@ function ScoreArea({ question, selectedId, hoveredId, feedback, onSelect, onHove
 }
 
 function App() {
+  const defaultQuestionTypeOptions = QUESTION_TYPES.reduce((options, type) => {
+    options[type.id] = true;
+    return options;
+  }, {});
+  const enabledQuestionTypeIds = (options) => QUESTION_TYPES.filter((type) => options[type.id]).map((type) => type.id);
+
   const [activeLevel, setActiveLevel] = useState(() => {
     const level = new URLSearchParams(window.location.search).get("level");
     return LEVELS[level] ? level : "H";
   });
-  const [question, setQuestion] = useState(() => makeQuestion());
+  const [questionTypeOptions, setQuestionTypeOptions] = useState(defaultQuestionTypeOptions);
+  const [question, setQuestion] = useState(() => makeQuestion(enabledQuestionTypeIds(defaultQuestionTypeOptions)));
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelMenuOpen, setLevelMenuOpen] = useState(false);
+  const [customiseMenuOpen, setCustomiseMenuOpen] = useState(false);
+  const [revealKey, setRevealKey] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -786,18 +838,23 @@ function App() {
   const [confettiKey, setConfettiKey] = useState(0);
 
   const levelRef = useRef(null);
+  const customiseRef = useRef(null);
   const renderTimerRef = useRef(null);
   const incorrectAdvanceTimerRef = useRef(null);
   const medalSoundTimerRef = useRef(null);
   const correctFadeTimerRef = useRef(null);
   const correctAdvanceTimerRef = useRef(null);
 
-  useClickOutside([levelRef], [
+  useClickOutside([levelRef, customiseRef], [
     () => levelMenuOpen && setLevelMenuOpen(false),
+    () => customiseMenuOpen && setCustomiseMenuOpen(false),
   ]);
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const canConfirm = selectedId !== null && !feedback;
+  const customisePanelStyle = typeof window !== "undefined" && window.innerWidth < 640 && customiseRef.current
+    ? { left: `${24 - customiseRef.current.getBoundingClientRect().left}px` }
+    : null;
 
   function clearQueuedTimers() {
     [renderTimerRef, incorrectAdvanceTimerRef, medalSoundTimerRef, correctFadeTimerRef, correctAdvanceTimerRef].forEach((ref) => {
@@ -822,7 +879,7 @@ function App() {
     setQuestionVisible(false);
 
     renderTimerRef.current = window.setTimeout(() => {
-      resetTask(makeQuestion());
+      resetTask(makeQuestion(enabledQuestionTypeIds(questionTypeOptions)));
       setQuestionVisible(true);
       renderTimerRef.current = null;
     }, 260);
@@ -859,7 +916,19 @@ function App() {
     setStreak(0);
     setBestStreak(0);
     setConfettiKey(0);
-    resetTask(makeQuestion());
+    resetTask(makeQuestion(enabledQuestionTypeIds(questionTypeOptions)));
+  }
+
+  function handleQuestionTypeToggle(typeId) {
+    setQuestionTypeOptions((current) => {
+      const next = { ...current, [typeId]: !current[typeId] };
+      if (Object.values(next).every((value) => !value)) return current;
+
+      clearQueuedTimers();
+      resetTask(makeQuestion(enabledQuestionTypeIds(next)));
+      setQuestionVisible(true);
+      return next;
+    });
   }
 
   function scoreAnswer(feedbackType) {
@@ -931,7 +1000,7 @@ function App() {
         </AppHeader>
 
         <main
-          className={`${SHELL.mainShellClass || "relative z-0 min-h-[520px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-0 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:px-6 md:pb-6 md:pt-[14px]"} min-h-[710px] md:overflow-hidden`}
+          className={`tonic-main ${SHELL.mainShellClass || "relative z-0 min-h-[520px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-6 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:px-6 md:pb-6 md:pt-[14px]"} min-h-0 md:overflow-hidden`}
           onPointerDown={() => {
             const advanced = advanceFeedbackPointerDown?.({
               feedback: feedback ? { correct: feedback === "correct" } : null,
@@ -958,12 +1027,40 @@ function App() {
                 )}
               </div>
 
-              <div className="hub-menu-anchor relative">
+              <div className="hub-menu-anchor relative" ref={customiseRef}>
                 <CustomiseButton
                   icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
-                  onClick={() => {}}
+                  onClick={() => setCustomiseMenuOpen((value) => !value)}
                   dataMenuTrigger={true}
                 />
+                {customiseMenuOpen && (
+                  <div className="tonic-customise-panel hub-menu-panel hub-menu-panel-level left-0" style={customisePanelStyle || undefined} data-menu-panel={true}>
+                    <div className="hub-menu-title">
+                      <div className="hub-menu-title-text">Customise</div>
+                    </div>
+                    <div className="tonic-customise-options flex flex-col gap-1">
+                      {QUESTION_TYPES.map((type) => {
+                        const enabledCount = Object.values(questionTypeOptions).filter(Boolean).length;
+                        return (
+                          <MenuToggleRow
+                            key={type.id}
+                            glyph={<span className="text-[20px] font-semibold leading-none text-black">{QUESTION_TYPE_GLYPHS[type.id]}</span>}
+                            label={type.label.charAt(0).toUpperCase() + type.label.slice(1)}
+                            checked={questionTypeOptions[type.id]}
+                            disabled={questionTypeOptions[type.id] && enabledCount === 1}
+                            onChange={() => handleQuestionTypeToggle(type.id)}
+                          />
+                        );
+                      })}
+                      <MenuToggleRow
+                        glyph={<span className="music-symbol relative top-[2.5px] text-[18px] leading-none text-black">{REVEAL_KEY_GLYPH}</span>}
+                        label="Reveal Key"
+                        checked={revealKey}
+                        onChange={() => setRevealKey((value) => !value)}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -997,7 +1094,7 @@ function App() {
               <div className="flex min-w-0 flex-1 items-center text-stone-900">
                 <div>
                   <p className="text-[15px] font-semibold leading-tight">
-                    Identify an example of a <strong>{question.questionType.label}</strong> note. The key is <strong>{question.key.label}</strong>.
+                    Identify an example of a <strong>{question.questionType.label}</strong> note.{revealKey ? <> The key is <strong>{question.key.label}</strong>.</> : null}
                   </p>
                   {prompt && <p className="mt-1 text-sm font-medium text-red-700">{prompt}</p>}
                 </div>
