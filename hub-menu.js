@@ -1,7 +1,7 @@
 (function () {
   const MLH = window.MLH || (window.MLH = {});
   const e = React.createElement;
-  const { useEffect, useRef, useState } = React;
+  const { useEffect } = React;
 
   const MENU_PANEL_CLASS = "hub-menu-panel hub-menu-panel-level";
   const MENU_TITLE_CLASS = "hub-menu-title";
@@ -37,55 +37,9 @@
     }, [refs, handlers]);
   }
 
-  function useMobileMenuPanelStyle() {
-    const panelRef = useRef(null);
-    const [style, setStyle] = useState(null);
-
-    useEffect(() => {
-      let frameId = null;
-
-      function update() {
-        if (frameId) window.cancelAnimationFrame(frameId);
-        frameId = window.requestAnimationFrame(() => {
-          if (window.innerWidth >= 640) {
-            setStyle(null);
-            return;
-          }
-
-          const anchor = panelRef.current?.closest(".hub-menu-anchor");
-          const rect = anchor?.getBoundingClientRect();
-          const pad = 24;
-          const top = Math.max(0, (rect?.bottom ?? 0) + 8);
-          setStyle({
-            position: "fixed",
-            top: `${top}px`,
-            left: "50%",
-            right: "auto",
-            width: `calc(100vw - ${pad * 2}px)`,
-            maxWidth: "360px",
-            transform: "translateX(-50%)",
-          });
-        });
-      }
-
-      update();
-      window.addEventListener("resize", update);
-      window.addEventListener("orientationchange", update);
-      return () => {
-        if (frameId) window.cancelAnimationFrame(frameId);
-        window.removeEventListener("resize", update);
-        window.removeEventListener("orientationchange", update);
-      };
-    }, []);
-
-    return [panelRef, style];
-  }
-
   function MenuPanel({ title, children, position = "left-0", variant = "level", dataMenuPanel = false }) {
-    const [panelRef, mobileStyle] = useMobileMenuPanelStyle();
     const className = `${variant === "customise" ? CUSTOMISE_MENU_PANEL_CLASS : MENU_PANEL_CLASS} ${position}`;
-    const props = { className, ref: panelRef };
-    if (mobileStyle) props.style = mobileStyle;
+    const props = { className };
     if (dataMenuPanel) props["data-menu-panel"] = true;
     return e(
       "div",
@@ -244,62 +198,6 @@
     };
   }
 
-  function applySharedControlStyling(root = document) {
-    const buttons = [];
-    if (root.matches?.("button")) buttons.push(root);
-    root.querySelectorAll?.("button")?.forEach((button) => buttons.push(button));
-    buttons.forEach((button) => {
-      const label = (button.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-      if (label === "confirm") button.classList.add("hub-confirm-button");
-    });
-
-    const greenElements = [];
-    if (root.matches?.('[class*="bg-green-600"], [class*="bg-green-700"]')) greenElements.push(root);
-    root.querySelectorAll?.('[class*="bg-green-600"], [class*="bg-green-700"]')?.forEach((element) => greenElements.push(element));
-    greenElements.forEach((element) => {
-      const className = String(element.getAttribute("class") || "");
-      const isToggleTrack = className.includes("rounded-full") && (className.includes("w-11") || className.includes("h-6"));
-      if (isToggleTrack) element.classList.add("hub-toggle-track-normalised");
-    });
-  }
-
-  function installSharedControlStyling() {
-    if (MLH.sharedControlStylingInstalled || typeof MutationObserver === "undefined") return;
-    MLH.sharedControlStylingInstalled = true;
-
-    const run = () => applySharedControlStyling(document);
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", run, { once: true });
-    } else {
-      run();
-    }
-
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === "attributes") {
-          applySharedControlStyling(mutation.target);
-          return;
-        }
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === 1) applySharedControlStyling(node);
-        });
-      });
-    });
-
-    const startObserver = () => {
-      if (!document.body) return;
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ["class"],
-      });
-    };
-
-    if (document.body) startObserver();
-    else document.addEventListener("DOMContentLoaded", startObserver, { once: true });
-  }
-
   function MenuToggleRow({ glyph, label, checked, disabled = false, onChange, labelWidthClass = "min-w-[145px]" }) {
     return e(
       "button",
@@ -385,7 +283,4 @@
   MLH.feedbackNotationStyle = feedbackNotationStyle;
   MLH.feedbackSvgProps = feedbackSvgProps;
   MLH.createFeedbackAdvanceHandler = createFeedbackAdvanceHandler;
-  MLH.applySharedControlStyling = applySharedControlStyling;
-  MLH.installSharedControlStyling = installSharedControlStyling;
-  installSharedControlStyling();
 })();
