@@ -1,12 +1,16 @@
 (function () {
   const MLH = window.MLH || (window.MLH = {});
   const e = React.createElement;
-  const { useEffect } = React;
+  const { useEffect, useRef, useState } = React;
 
   const MENU_PANEL_CLASS = "hub-menu-panel hub-menu-panel-level";
   const MENU_TITLE_CLASS = "hub-menu-title";
   const TOOLBAR_BUTTON_CLASS = "flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5";
   const CUSTOMISE_MENU_PANEL_CLASS = "hub-menu-panel hub-menu-panel-customise";
+  const CONFIRM_BUTTON_CLASS = "hub-confirm-button rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60";
+  const WRONG_NOTATION_COLOUR = "#dc2626";
+  const WRONG_NOTATION_OPACITY = 0.4;
+  const CORRECT_NOTATION_COLOUR = "#16a34a";
 
   function useClickAway(ref, handler) {
     useEffect(() => {
@@ -33,9 +37,55 @@
     }, [refs, handlers]);
   }
 
+  function useMobileMenuPanelStyle() {
+    const panelRef = useRef(null);
+    const [style, setStyle] = useState(null);
+
+    useEffect(() => {
+      let frameId = null;
+
+      function update() {
+        if (frameId) window.cancelAnimationFrame(frameId);
+        frameId = window.requestAnimationFrame(() => {
+          if (window.innerWidth >= 640) {
+            setStyle(null);
+            return;
+          }
+
+          const anchor = panelRef.current?.closest(".hub-menu-anchor");
+          const rect = anchor?.getBoundingClientRect();
+          const pad = 24;
+          const top = Math.max(0, (rect?.bottom ?? 0) + 8);
+          setStyle({
+            position: "fixed",
+            top: `${top}px`,
+            left: "50%",
+            right: "auto",
+            width: `calc(100vw - ${pad * 2}px)`,
+            maxWidth: "360px",
+            transform: "translateX(-50%)",
+          });
+        });
+      }
+
+      update();
+      window.addEventListener("resize", update);
+      window.addEventListener("orientationchange", update);
+      return () => {
+        if (frameId) window.cancelAnimationFrame(frameId);
+        window.removeEventListener("resize", update);
+        window.removeEventListener("orientationchange", update);
+      };
+    }, []);
+
+    return [panelRef, style];
+  }
+
   function MenuPanel({ title, children, position = "left-0", variant = "level", dataMenuPanel = false }) {
+    const [panelRef, mobileStyle] = useMobileMenuPanelStyle();
     const className = `${variant === "customise" ? CUSTOMISE_MENU_PANEL_CLASS : MENU_PANEL_CLASS} ${position}`;
-    const props = { className };
+    const props = { className, ref: panelRef };
+    if (mobileStyle) props.style = mobileStyle;
     if (dataMenuPanel) props["data-menu-panel"] = true;
     return e(
       "div",
@@ -46,6 +96,16 @@
         e("div", { className: "hub-menu-title-text" }, title),
       ),
       children,
+    );
+  }
+
+  function AppToolbar({ left, feedback, right, className = "" }) {
+    return e(
+      "div",
+      { className: `hub-toolbar relative z-20 ${className}`.trim() },
+      e("div", { className: "hub-toolbar-left" }, left),
+      e("div", { className: "hub-toolbar-feedback" }, feedback),
+      e("div", { className: "hub-toolbar-right" }, right),
     );
   }
 
@@ -142,6 +202,104 @@
     );
   }
 
+  function ConfirmButton({ onClick, disabled = false, children = "Confirm", className = "" }) {
+    return e(
+      "button",
+      {
+        type: "button",
+        disabled,
+        onClick,
+        className: `${CONFIRM_BUTTON_CLASS} ${className}`.trim(),
+      },
+      children,
+    );
+  }
+
+  function typedAnswerClass(feedback, baseClass = "") {
+    const tone = !feedback ? "text-stone-900" : feedback.correct ? "text-green-600" : "text-red-600";
+    return `${baseClass} ${tone}`.trim();
+  }
+
+  function feedbackNotationStyle(correct, { wrongOpacity = WRONG_NOTATION_OPACITY, correctOpacity = 1 } = {}) {
+    return {
+      colour: correct ? CORRECT_NOTATION_COLOUR : WRONG_NOTATION_COLOUR,
+      color: correct ? CORRECT_NOTATION_COLOUR : WRONG_NOTATION_COLOUR,
+      opacity: correct ? correctOpacity : wrongOpacity,
+    };
+  }
+
+  function feedbackSvgProps(correct, options) {
+    const style = feedbackNotationStyle(correct, options);
+    return {
+      stroke: style.colour,
+      fill: style.colour,
+      opacity: style.opacity,
+    };
+  }
+
+  function createFeedbackAdvanceHandler({ feedback, feedbackFading, onCorrect, onIncorrect }) {
+    return function onFeedbackPointerDown() {
+      if (!feedback || feedbackFading) return false;
+      return MLH.advanceFeedbackPointerDown?.({ feedback, onCorrect, onIncorrect }) || false;
+    };
+  }
+
+  function applySharedControlStyling(root = document) {
+    const buttons = [];
+    if (root.matches?.("button")) buttons.push(root);
+    root.querySelectorAll?.("button")?.forEach((button) => buttons.push(button));
+    buttons.forEach((button) => {
+      const label = (button.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+      if (label === "confirm") button.classList.add("hub-confirm-button");
+    });
+
+    const greenElements = [];
+    if (root.matches?.('[class*="bg-green-600"], [class*="bg-green-700"]')) greenElements.push(root);
+    root.querySelectorAll?.('[class*="bg-green-600"], [class*="bg-green-700"]')?.forEach((element) => greenElements.push(element));
+    greenElements.forEach((element) => {
+      const className = String(element.getAttribute("class") || "");
+      const isToggleTrack = className.includes("rounded-full") && (className.includes("w-11") || className.includes("h-6"));
+      if (isToggleTrack) element.classList.add("hub-toggle-track-normalised");
+    });
+  }
+
+  function installSharedControlStyling() {
+    if (MLH.sharedControlStylingInstalled || typeof MutationObserver === "undefined") return;
+    MLH.sharedControlStylingInstalled = true;
+
+    const run = () => applySharedControlStyling(document);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", run, { once: true });
+    } else {
+      run();
+    }
+
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes") {
+          applySharedControlStyling(mutation.target);
+          return;
+        }
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) applySharedControlStyling(node);
+        });
+      });
+    });
+
+    const startObserver = () => {
+      if (!document.body) return;
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    };
+
+    if (document.body) startObserver();
+    else document.addEventListener("DOMContentLoaded", startObserver, { once: true });
+  }
+
   function MenuToggleRow({ glyph, label, checked, disabled = false, onChange, labelWidthClass = "min-w-[145px]" }) {
     return e(
       "button",
@@ -166,6 +324,10 @@
   }
 
   function LevelMenu({ activeLevel, onSelect, levels }) {
+    function subtitle(description) {
+      return String(description || "").replace(/\.\s*$/, "");
+    }
+
     return e(
       "div",
       { className: "flex w-full min-w-0 flex-col gap-2" },
@@ -195,7 +357,7 @@
               "div",
               { className: "flex min-h-[46px] min-w-0 flex-1 flex-col justify-center pr-2" },
               e("div", { className: "pb-[1px] text-[13px] font-black leading-[1.2] sm:whitespace-normal" }, level.label),
-              e("div", { className: "mt-[2px] pb-[2px] text-[11px] leading-[1.25] text-stone-600 sm:whitespace-normal" }, level.description),
+              e("div", { className: "mt-[2px] pb-[2px] text-[11px] leading-[1.25] text-stone-600 sm:whitespace-normal" }, subtitle(level.description)),
             ),
             active ? e("img", { src: "https://mrtennant-music.github.io/musicliteracy/tick.svg", alt: "", "aria-hidden": "true", className: "h-[22px] w-[22px] shrink-0 self-center object-contain" }) : null,
           ),
@@ -208,9 +370,11 @@
   MLH.MenuTitleClass = MENU_TITLE_CLASS;
   MLH.CustomiseMenuPanelClass = CUSTOMISE_MENU_PANEL_CLASS;
   MLH.ToolbarButtonClass = TOOLBAR_BUTTON_CLASS;
+  MLH.ConfirmButtonClass = CONFIRM_BUTTON_CLASS;
   MLH.useClickAway = useClickAway;
   MLH.useClickOutside = useClickOutside;
   MLH.MenuPanel = MenuPanel;
+  MLH.AppToolbar = AppToolbar;
   MLH.ToolbarButton = ToolbarButton;
   MLH.LevelButton = LevelButton;
   MLH.CustomiseButton = CustomiseButton;
@@ -220,4 +384,12 @@
   MLH.resetLevelSessionProgress = resetLevelSessionProgress;
   MLH.MenuToggleRow = MenuToggleRow;
   MLH.LevelMenu = LevelMenu;
+  MLH.ConfirmButton = ConfirmButton;
+  MLH.typedAnswerClass = typedAnswerClass;
+  MLH.feedbackNotationStyle = feedbackNotationStyle;
+  MLH.feedbackSvgProps = feedbackSvgProps;
+  MLH.createFeedbackAdvanceHandler = createFeedbackAdvanceHandler;
+  MLH.applySharedControlStyling = applySharedControlStyling;
+  MLH.installSharedControlStyling = installSharedControlStyling;
+  installSharedControlStyling();
 })();

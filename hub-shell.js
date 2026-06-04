@@ -11,6 +11,9 @@
     pageContentClass: "mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]",
     mainShellClass: "relative z-0 min-h-[520px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-0 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]",
     footerShellClass: "bg-stone-50",
+    questionCardMobileClass: "hub-mobile-question-card",
+    confirmButtonClass: "hub-confirm-button rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60",
+    mobileConfirmButtonClass: "hub-confirm-button hub-mobile-confirm-full rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60",
   };
 
   function useClickAway(ref, handler) {

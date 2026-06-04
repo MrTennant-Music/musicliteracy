@@ -1,6 +1,42 @@
 (function () {
   const MLH = window.MLH || {};
 
+  if (!document.getElementById("mlh-phone-landscape-lock-style")) {
+    const style = document.createElement("style");
+    style.id = "mlh-phone-landscape-lock-style";
+    style.textContent = `
+      .phone-landscape-lock {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: #f5f5f4;
+        color: #0f172a;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        text-align: center;
+        transform: translateZ(0);
+      }
+
+      .phone-landscape-lock-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .phone-landscape-lock-icon {
+        width: 110px;
+        height: 110px;
+        object-fit: contain;
+        opacity: .92;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   MLH.isTouchDevice = function isTouchDevice() {
     return window.matchMedia("(hover: none) and (pointer: coarse)").matches ||
       window.matchMedia("(pointer: coarse)").matches ||
@@ -62,6 +98,37 @@
         document.body.style.top = bodyTop.current;
         window.scrollTo({ top: nextY, behavior: "auto" });
       },
+    };
+  };
+
+  MLH.mobileScoreZoomPresets = {
+    compact: 0.9,
+    standard: 1,
+    large: 1.25,
+    touchPractice: 1.45,
+    closeWork: 1.7,
+  };
+
+  MLH.mobileQuestionCardClass = "hub-mobile-question-card";
+  MLH.mobileFullWidthConfirmClass = "hub-mobile-confirm-full";
+  MLH.mobileDragMessageClass = "hub-mobile-drag-message";
+
+  MLH.TouchDragMessage = function TouchDragMessage({ text = "Press and hold to drag note into place." }) {
+    return React.createElement("div", { className: MLH.mobileDragMessageClass }, text);
+  };
+
+  MLH.getTouchPoint = function getTouchPoint(event) {
+    const point = event.touches?.[0] || event.changedTouches?.[0] || event;
+    return { clientX: point.clientX, clientY: point.clientY };
+  };
+
+  MLH.getTouchPreviewPosition = function getTouchPreviewPosition(event, { yOffset = 44 } = {}) {
+    const point = MLH.getTouchPoint(event);
+    return {
+      x: point.clientX,
+      y: point.clientY - yOffset,
+      sourceX: point.clientX,
+      sourceY: point.clientY,
     };
   };
 
