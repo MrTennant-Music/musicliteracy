@@ -49,10 +49,6 @@ const KEY_SIG_X = STAFF_LEFT + 54;
 const TIME_SIG_X = STAFF_LEFT + 82;
 const MUSIC_START_X = STAFF_LEFT + 118;
 const TREBLE = String.fromCodePoint(0x1d11e);
-const BRAVURA_GLYPHS = {
-  metronome: String.fromCodePoint(0xE1D5),
-  follow: "◉",
-};
 const COLOUR = { blue:"#2563eb", green:"#16a34a", red:"#dc2626", black:"#000" };
 const SHELL = window.MLH?.shell || {};
 const ASSET = {
@@ -64,6 +60,8 @@ const ASSET = {
   silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
   gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
   diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
+  eye: "./eye.svg",
+  metronome: "./metronome.svg",
 };
 const LEVELS = {
   N5: { label: "National 5", description: "Chords — C major, G major, F major and A minor" },
@@ -561,33 +559,81 @@ function AHChordTypedAnswer({question,answers,setAnswers,feedback}){
     {feedback && !ok && <div className="text-base font-bold text-green-600">{question.chordType.label}</div>}
   </div>;
 }
-function MenuMusicGlyph({children,className=""}){
-  return <span className={`music-symbol flex h-10 w-10 items-center justify-center text-[30px] leading-none text-stone-950 ${className}`}>{children}</span>;
+function MenuSvgGlyph({src,alt=""}){
+  return <img src={src} alt={alt} className="h-[20px] w-[20px] object-contain" />;
+}
+function BravuraTempoGlyph({className="",style={}}){
+  return <span className={`music-symbol flex h-full w-full items-center justify-center overflow-visible text-stone-950 ${className}`} style={{fontFamily:"Bravura", fontSize:"26.4px", lineHeight:1, transform:"translateY(9px)", ...style}}>{String.fromCodePoint(0xEB38)}</span>;
+}
+function TempoChevron({open}){
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className={`h-[20px] w-[20px] shrink-0 transition-transform duration-150 ease-out ${open?"rotate-90":"rotate-0"}`}>
+    <path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+function TempoDropdownRow({tempo,setTempo,stopAudio}){
+  const [open,setOpen]=useState(false);
+  const menuRef=useRef(null);
+  const selectedTempo=TEMPOS.find(speed=>speed.id===tempo)||TEMPOS[1];
+  useEffect(()=>{
+    function closeOnOutside(event){
+      if(menuRef.current&&!menuRef.current.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOnOutside, true);
+    return ()=>document.removeEventListener("pointerdown", closeOnOutside, true);
+  },[]);
+  const selectTempo=(id)=>{
+    setTempo(id);
+    stopAudio();
+    setOpen(false);
+  };
+  return <div ref={menuRef} className="hub-toggle-row relative min-h-[44px] overflow-visible py-[10px]">
+    <span className="hub-toggle-label min-w-[145px]">
+      <span className="hub-toggle-glyph">
+        <BravuraTempoGlyph />
+      </span>
+      <span className="leading-none">Tempo</span>
+    </span>
+    <button
+      type="button"
+      aria-haspopup="menu"
+      aria-expanded={open}
+      onClick={()=>setOpen(v=>!v)}
+      className="flex h-9 w-[112px] items-center justify-between rounded-xl border border-stone-300 bg-white px-3 text-sm font-bold text-stone-950 shadow-sm"
+    >
+      <span>{selectedTempo.label}</span>
+      <TempoChevron open={open} />
+    </button>
+    <div
+      role="menu"
+      aria-label="Tempo"
+      className={`absolute right-0 top-[calc(100%+8px)] z-50 w-max min-w-[126px] origin-top-right rounded-3xl border border-white/70 bg-white/75 p-2 shadow-2xl backdrop-blur transition duration-150 ease-out ${open?"scale-100 opacity-100":"pointer-events-none scale-95 opacity-0"}`}
+    >
+      {TEMPOS.map(speed=>(
+        <button
+          key={speed.id}
+          type="button"
+          role="menuitemradio"
+          aria-checked={tempo===speed.id}
+          onClick={()=>selectTempo(speed.id)}
+          className={`flex w-full items-center rounded-2xl px-3 py-2 text-left text-sm font-bold whitespace-nowrap ${tempo===speed.id?"bg-stone-950 text-white":"text-stone-950 hover:bg-white/80"}`}
+        >
+          <span>{speed.label}</span>
+        </button>
+      ))}
+    </div>
+  </div>;
 }
 function MenuRows({tempo,setTempo,metronomeOn,setMetronomeOn,highlightPlayback,setHighlightPlayback,stopAudio}){
-  const selectedTempo=TEMPOS.find(speed=>speed.id===tempo)||TEMPOS[1];
   return <>
-    <div className="mb-2.5 flex min-h-[64px] items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[10px]">
-      <span className="flex h-10 w-10 items-center justify-center text-sm font-extrabold text-stone-950">BPM</span>
-      <label className="min-w-0 flex-1">
-        <span className="block text-base font-bold text-stone-950">Tempo</span>
-        <select
-          value={selectedTempo.id}
-          onChange={event=>{setTempo(event.target.value);stopAudio();}}
-          className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-950 outline-none"
-        >
-          {TEMPOS.map(speed=><option key={speed.id} value={speed.id}>{speed.label}</option>)}
-        </select>
-      </label>
-    </div>
+    <TempoDropdownRow tempo={tempo} setTempo={setTempo} stopAudio={stopAudio} />
     <window.MLH.MenuToggleRow
-      glyph={<MenuMusicGlyph>{BRAVURA_GLYPHS.metronome}</MenuMusicGlyph>}
+      glyph={<MenuSvgGlyph src={ASSET.metronome} alt="" />}
       label="Metronome"
       checked={metronomeOn}
       onChange={()=>{setMetronomeOn(v=>!v);stopAudio();}}
     />
     <window.MLH.MenuToggleRow
-      glyph={<MenuMusicGlyph className="text-[26px]">{BRAVURA_GLYPHS.follow}</MenuMusicGlyph>}
+      glyph={<MenuSvgGlyph src={ASSET.eye} alt="" />}
       label="Follow Playback"
       checked={highlightPlayback}
       onChange={()=>setHighlightPlayback(v=>!v)}
