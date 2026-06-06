@@ -44,6 +44,7 @@ const BARS_PER_SYSTEM = 4;
 const NOTE_RX = 6.3;
 const NOTE_RY = 4.6;
 const STEM = 32;
+const NOTE_GLYPH_Y_OFFSET = -5;
 const CLEF_X = STAFF_LEFT + 8;
 const KEY_SIG_X = STAFF_LEFT + 54;
 const TIME_SIG_X = STAFF_LEFT + 82;
@@ -51,16 +52,24 @@ const MUSIC_START_X = STAFF_LEFT + 118;
 const GLYPHS = {
   quarterNoteUnicode: "\u2669",
   eighthNoteUnicode: "\u266A",
-  halfNote: "\uE1D4",
-  quarterNote: "\uE1D5",
-  wholeNote: "\uE1D6",
-  eighthNoteSmufl: "\uE1D7",
-  flaggedNote: "\uE1D8",
+  halfNoteUp: "\uE1D3",
+  halfNoteDown: "\uE1D4",
+  quarterNoteUp: "\uE1D5",
+  quarterNoteDown: "\uE1D6",
+  eighthNoteUp: "\uE1D7",
+  eighthNoteDown: "\uE1D8",
+  wholeNote: "\uE1D2",
+  noteheadWhole: "\uE0A2",
+  noteheadHalf: "\uE0A3",
+  noteheadBlack: "\uE0A4",
   sharp: "\u266F",
   flat: "\u266D",
   doubleSharp: "\uE263",
   doubleFlat: "\uE264",
-  trebleClef: "\uE050"
+  trebleClef: "\uE050",
+  timeSig24: "\uF5F9",
+  timeSig34: "\uF5FC",
+  timeSig44: "\uF5FE"
 };
 const MUSIC_FONT = "Bravura, serif";
 const TREBLE = GLYPHS.trebleClef;
@@ -185,9 +194,16 @@ function getBarStart(barIndex){ const local = barIndex % BARS_PER_SYSTEM; return
 function getSystemTop(barIndex){ return barIndex < 4 ? SYSTEM_TOPS[0] : SYSTEM_TOPS[1]; }
 function noteByLetter(letter, preferredIndex=6){ const c = NOTE_POOL.map((n,i)=>({...n,index:i})).filter(n=>n.letter===letter); return c.reduce((best,item)=>Math.abs(item.index-preferredIndex)<Math.abs(best.index-preferredIndex)?item:best,c[0]); }
 function notePoolIndex(note){ return NOTE_POOL.findIndex(n => n.letter === note.letter && n.octave === note.octave); }
-function keyAccidentalForLetter(key, letter){ return key.keyAccidentals[letter] || 0; }
+function keyAccidentalForLetter(key, letter){
+  if(key?.id==="Am" && letter==="G") return 1;
+  return key.keyAccidentals[letter] || 0;
+}
 function chordAccidentalForLetter(chord, letter){ return chord.raised?.[letter] ?? null; }
-function writtenAccidentalForMelody(key, chord, letter){ const a = chordAccidentalForLetter(chord, letter); return a !== null ? a : null; }
+function writtenAccidentalForMelody(key, chord, letter){
+  if(key?.id==="Am" && letter==="G") return 1;
+  const a = chordAccidentalForLetter(chord, letter);
+  return a !== null ? a : null;
+}
 function pitchForChordLetter(key, chord, letter, preferredIndex=6){ const base=noteByLetter(letter, preferredIndex); const ca=chordAccidentalForLetter(chord, letter); const acc=ca!==null?ca:keyAccidentalForLetter(key, letter); return base.midi + acc; }
 function effectivePitchForMelodyNote(question, bar, noteIndex){
   const note=bar.notes[noteIndex]; let active=null;
@@ -239,7 +255,7 @@ const AH_CHORD_TYPES = [
 ];
 const AH_CHORD_SPELLINGS = [
   { root:"C", type:"dom7", tones:[["C",4,0],["E",4,0],["G",4,0],["B",4,-1]] },
-  { root:"C", type:"dim7", tones:[["C",4,0],["E",4,-1],["G",4,-1],["B",4,-2]] },
+  { root:"C", type:"dim7", tones:[["C",4,0],["E",4,-1],["G",4,-1],["A",4,0]] },
   { root:"C", type:"aug", tones:[["C",4,0],["E",4,0],["G",4,1]] },
   { root:"C", type:"add6", tones:[["C",4,0],["E",4,0],["G",4,0],["A",4,0]] },
   { root:"D", type:"dom7", tones:[["D",4,0],["F",4,1],["A",4,0],["C",5,0]] },
@@ -248,10 +264,10 @@ const AH_CHORD_SPELLINGS = [
   { root:"D", type:"add6", tones:[["D",4,0],["F",4,1],["A",4,0],["B",4,0]] },
   { root:"E", type:"dom7", tones:[["E",4,0],["G",4,1],["B",4,0],["D",5,0]] },
   { root:"E", type:"dim7", tones:[["E",4,0],["G",4,0],["B",4,-1],["D",5,-1]] },
-  { root:"E", type:"aug", tones:[["E",4,0],["G",4,1],["B",4,1]] },
+  { root:"E", type:"aug", tones:[["E",4,0],["G",4,1],["C",5,0]] },
   { root:"E", type:"add6", tones:[["E",4,0],["G",4,1],["B",4,0],["C",5,1]] },
   { root:"F", type:"dom7", tones:[["F",4,0],["A",4,0],["C",5,0],["E",5,-1]] },
-  { root:"F", type:"dim7", tones:[["F",4,0],["A",4,-1],["C",5,-1],["E",5,-2]] },
+  { root:"F", type:"dim7", tones:[["F",4,0],["A",4,-1],["B",4,0],["D",5,0]] },
   { root:"F", type:"aug", tones:[["F",4,0],["A",4,0],["C",5,1]] },
   { root:"F", type:"add6", tones:[["F",4,0],["A",4,0],["C",5,0],["D",5,0]] },
   { root:"G", type:"dom7", tones:[["G",4,0],["B",4,0],["D",5,0],["F",5,0]] },
@@ -260,11 +276,11 @@ const AH_CHORD_SPELLINGS = [
   { root:"G", type:"add6", tones:[["G",4,0],["B",4,0],["D",5,0],["E",5,0]] },
   { root:"A", type:"dom7", tones:[["A",4,0],["C",5,1],["E",5,0],["G",5,0]] },
   { root:"A", type:"dim7", tones:[["A",4,0],["C",5,0],["E",5,-1],["G",5,-1]] },
-  { root:"A", type:"aug", tones:[["A",4,0],["C",5,1],["E",5,1]] },
+  { root:"A", type:"aug", tones:[["A",4,0],["C",5,1],["F",5,0]] },
   { root:"A", type:"add6", tones:[["A",4,0],["C",5,1],["E",5,0],["F",5,1]] },
   { root:"B", type:"dom7", tones:[["B",4,0],["D",5,1],["F",5,1],["A",5,0]] },
   { root:"B", type:"dim7", tones:[["B",4,0],["D",5,0],["F",5,0],["A",5,-1]] },
-  { root:"B", type:"aug", tones:[["B",4,0],["D",5,1],["F",5,2]] },
+  { root:"B", type:"aug", tones:[["B",4,0],["D",5,1],["G",5,0]] },
   { root:"B", type:"add6", tones:[["B",4,0],["D",5,1],["F",5,1],["G",5,1]] },
 ];
 function normaliseAHChordTypeAnswer(value){ return String(value||"").trim().toLowerCase().replace(/[\s\-]+/g,"").replace(/7/g,"7th").replace(/6/g,"6th").replace(/7thth/g,"7th").replace(/6thth/g,"6th"); }
@@ -401,12 +417,21 @@ function makeQuestion(level="N5"){
   return makeHigherQuestion();
 }
 function stemDown(step){ return step > 4; }
-function stemData(note,x,top,override=null){ const yy=y(note.step,top), down=override===null?stemDown(note.step):override, sx=down?x-NOTE_RX:x+NOTE_RX, ey=down?yy+STEM:yy-STEM; return { y:yy, down, sx, ey }; }
+function stemData(note,x,top,override=null){ const yy=y(note.step,top), noteY=yy+NOTE_GLYPH_Y_OFFSET, down=override===null?stemDown(note.step):override, sx=down?x-NOTE_RX:x+NOTE_RX, ey=down?noteY+STEM:noteY-STEM; return { y:yy, noteY, down, sx, ey }; }
 function Ledger({x, step, top, colour}){ const lines=[]; if(step<=-2) lines.push(y(-2,top)); if(step>=10) lines.push(y(10,top)); return <g>{lines.map(yy=><line key={yy} x1={x-12} x2={x+12} y1={yy} y2={yy} stroke={colour} strokeWidth="1.2" />)}</g>; }
-function accidentalSymbol(value){ if(value===2) return "𝄪"; if(value===1) return "♯"; if(value===-2) return "𝄫"; if(value===-1) return "♭"; return ""; }
-function Accidental({value,x,yy}){ if(!value) return null; return <text x={x} y={yy+2} fill="currentColor" fontFamily="Georgia, serif" fontSize={Math.abs(value)===2?22:24} fontWeight="700" textAnchor="middle" dominantBaseline="middle">{accidentalSymbol(value)}</text>; }
-function Flag({stemX, stemEndY, down, colour}){ const d=down?`M ${stemX} ${stemEndY} C ${stemX+10} ${stemEndY-4}, ${stemX+10} ${stemEndY-12}, ${stemX+2} ${stemEndY-16}`:`M ${stemX} ${stemEndY} C ${stemX+10} ${stemEndY+4}, ${stemX+10} ${stemEndY+12}, ${stemX+2} ${stemEndY+16}`; return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />; }
-function Note({note,x,top,colour="currentColor",active=false,showFlag=true,override=null,forced=null,stackLayout="alternate"}){
+function accidentalSymbol(value){ if(value===2) return GLYPHS.doubleSharp; if(value===1) return GLYPHS.sharp; if(value===-2) return GLYPHS.doubleFlat; if(value===-1) return GLYPHS.flat; return ""; }
+function Accidental({value,x,yy,xAdjust=0,yAdjust=0,sizeScale=1}){ if(!value) return null; return <text x={x+xAdjust} y={yy-3+yAdjust} fill="currentColor" fontFamily={MUSIC_FONT} fontSize={(Math.abs(value)===2?35:38)*sizeScale} textAnchor="middle" dominantBaseline="middle">{accidentalSymbol(value)}</text>; }
+function noteGlyph(info,down,showFlag=true){
+  if(!info.stem) return GLYPHS.wholeNote;
+  if(info.flag && showFlag) return down ? GLYPHS.eighthNoteDown : GLYPHS.eighthNoteUp;
+  if(info.open) return down ? GLYPHS.halfNoteDown : GLYPHS.halfNoteUp;
+  return down ? GLYPHS.quarterNoteDown : GLYPHS.quarterNoteUp;
+}
+function NoteGlyph({x,yy,info,colour,down=false,showFlag=true,yAdjust=0}){
+  const glyphY=yy+NOTE_GLYPH_Y_OFFSET-.5+yAdjust, fontSize=info.stem?35.3:38.2;
+  return <text x={x} y={glyphY} fill={colour} fontFamily={MUSIC_FONT} fontSize={fontSize} textAnchor="middle" dominantBaseline="middle">{noteGlyph(info,down,showFlag)}</text>;
+}
+function Note({note,x,top,colour="currentColor",active=false,showFlag=true,override=null,forced=null,stackLayout="alternate",noteheadYAdjust=0,accidentalXAdjust=0,accidentalYAdjust=0,accidentalSizeScale=1}){
   const info=rhythmInfo(note.rhythm), st=stemData(note,x,top,override), ey=forced===null?st.ey:forced, noteColour=active?COLOUR.blue:colour, isLine=note.step%2===0, dotOffset=isLine?-4:0;
   if(note.stack?.length){
     const down=override===null?false:override;
@@ -440,43 +465,47 @@ function Note({note,x,top,colour="currentColor",active=false,showFlag=true,overr
         const yy=y(tone.step,top), isStackLine=tone.step%2===0, noteHeadX=x+stackOffset(tone,i);
         return <g key={`${note.id}-tone-${i}`}>
           <Ledger x={x} step={tone.step} top={top} colour={noteColour}/>
-          <Accidental value={tone.writtenAccidental} x={x-19-(i%2)*8} yy={yy}/>
-          <ellipse cx={noteHeadX} cy={yy} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${noteHeadX} ${yy})`} fill={info.open?"white":noteColour} stroke={noteColour} strokeWidth="1.7" />
+          <Accidental value={tone.writtenAccidental} x={x-19-(i%2)*8} yy={yy} xAdjust={accidentalXAdjust} yAdjust={accidentalYAdjust} sizeScale={accidentalSizeScale}/>
+          <NoteGlyph x={noteHeadX} yy={yy} info={info} colour={noteColour} down={tone.step>4} showFlag={showFlag} yAdjust={noteheadYAdjust}/>
           {isStackLine && <line x1={noteHeadX-8} x2={noteHeadX+12} y1={yy} y2={yy} stroke={noteColour} strokeWidth="1.2"/>}
         </g>;
       })}
-      {info.stem && <line x1={stemX} x2={stemX} y1={stemStart} y2={stemEnd} stroke={noteColour} strokeWidth="1.5"/>}
     </g>;
   }
   return <g opacity={active?1:.98}>
     <Ledger x={x} step={note.step} top={top} colour={noteColour}/>
-    <Accidental value={note.writtenAccidental} x={x-17} yy={st.y}/>
-    <ellipse cx={x} cy={st.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${st.y})`} fill={info.open?"white":noteColour} stroke={noteColour} strokeWidth="1.7" />
+    <Accidental value={note.writtenAccidental} x={x-17} yy={st.y} xAdjust={accidentalXAdjust} yAdjust={accidentalYAdjust} sizeScale={accidentalSizeScale}/>
+    <NoteGlyph x={x} yy={st.y} info={info} colour={noteColour} down={st.down} showFlag={showFlag} yAdjust={noteheadYAdjust}/>
     {info.dotted && <circle cx={x+12} cy={st.y+dotOffset} r="1.7" fill={noteColour}/>} 
     {isLine && <line x1={x-8} x2={x+8} y1={st.y} y2={st.y} stroke={noteColour} strokeWidth="1.2"/>}
-    {info.stem && <line x1={st.sx} x2={st.sx} y1={st.y} y2={ey} stroke={noteColour} strokeWidth="1.5"/>}
-    {info.flag && showFlag && <Flag stemX={st.sx} stemEndY={ey} down={st.down} colour={noteColour}/>} 
   </g>;
 }
-function KeySignature({keySignature,top}){ if(keySignature.id==="F") return <text x={KEY_SIG_X} y={y(4.2,top)+7} fontSize="24" fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">♭</text>; if(keySignature.id==="G") return <text x={KEY_SIG_X} y={y(7.8,top)+7} fontSize="28" fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">♯</text>; return null; }
-function TimeSignature({signature,top}){ return <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle"><text x={TIME_SIG_X} y={top+20}>{signature.top}</text><text x={TIME_SIG_X} y={top+39}>{signature.bottom}</text></g>; }
-function ChordBox({symbol="", chord=null, x, yy, size=30, highlight=false}){ const stroke=highlight?COLOUR.blue:"#444", textColour=highlight?COLOUR.blue:"#111"; return <g><rect x={x} y={yy} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><rect x={x} y={yy+size} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><text x={x+size/2} y={yy+19} textAnchor="middle" fontSize="12.1" fontWeight="900" fill={textColour}>{getChordShortName(chord)}</text><text x={x+size/2} y={yy+size+19} textAnchor="middle" fontSize="12.1" fontWeight="900" fill={textColour}>{symbol}</text></g>; }
+function KeySignature({keySignature,top,yAdjust=0,sizeScale=1}){ if(keySignature.id==="F") return <text x={KEY_SIG_X} y={y(4.2,top)+2+yAdjust} fontSize={48*sizeScale} fontFamily={MUSIC_FONT} textAnchor="middle">{GLYPHS.flat}</text>; if(keySignature.id==="G") return <text x={KEY_SIG_X} y={y(7.8,top)+2+yAdjust} fontSize={56*sizeScale} fontFamily={MUSIC_FONT} textAnchor="middle">{GLYPHS.sharp}</text>; return null; }
+function TimeSignature({signature,top,sizeScale=1}){
+  const glyphMap={ "2/4":GLYPHS.timeSig24, "3/4":GLYPHS.timeSig34, "4/4":GLYPHS.timeSig44 };
+  const glyph=glyphMap[signature.id] || GLYPHS.timeSig44;
+  return <text x={TIME_SIG_X} y={top+34} fontFamily={MUSIC_FONT} fontSize={38*sizeScale} textAnchor="middle" dominantBaseline="middle">{glyph}</text>;
+}
+function ChordBox({symbol="", chord=null, x, yy, size=30, highlight=false}){ const stroke=highlight?COLOUR.blue:"#444", textColour=highlight?COLOUR.blue:"#111"; return <g><rect x={x} y={yy} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><rect x={x} y={yy+size} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><text x={x+size/2} y={yy+20} textAnchor="middle" fontSize="14.5" fontWeight="900" fill={textColour}>{getChordShortName(chord)}</text><text x={x+size/2} y={yy+size+20} textAnchor="middle" fontSize="14.5" fontWeight="900" fill={textColour}>{symbol}</text></g>; }
 function AnswerInput({value,disabled,status,onChange}){ const border=status==="correct"?COLOUR.green:status==="incorrect"?COLOUR.red:"#444", bg=status==="correct"?"#dcfce7":status==="incorrect"?"#fee2e2":"white"; return <input value={value} disabled={disabled} onChange={e=>{ const filtered=e.target.value.toUpperCase().replace(/[^IVA-GM#♯B]/g,"").replace(/M/g,"m").replace(/BB/g,"Bb").slice(0,2); onChange(filtered); }} style={{width:"34px",height:"36px",border:`1.5px solid ${border}`,background:bg,textAlign:"center",fontWeight:900,fontSize:"16px",outline:"none",animation:disabled?"none":"pulseBorder 1.8s ease-in-out infinite"}}/>; }
 function getBarNotePositions(barIndex,notes){ const start=getBarStart(barIndex), end=start+barWidth(barIndex), startX=start+(barIndex===0?4:barIndex<4?15:19), endX=barIndex===BAR_COUNT-1?end-24:end-4, units=notes.reduce((s,n)=>s+rhythmInfo(n.rhythm).spacing,0), unit=Math.max(1,endX-startX)/Math.max(1,units); let c=startX+unit*.38; return notes.map(n=>{ const x=c; c+=rhythmInfo(n.rhythm).spacing*unit; return x; }); }
 function quaverGroups(notes){ const out=[]; let i=0; while(i<notes.length){ if(notes[i].rhythm!=="quaver"){i++;continue;} const s=i; while(i+1<notes.length&&notes[i+1].rhythm==="quaver") i++; const e=i; if(e>s) out.push({start:s,end:e}); i++; } return out; }
 function groupFor(groups,i){ return groups.find(g=>i>=g.start&&i<=g.end) || null; }
-function beamData(notes,xs,top){ const avg=notes.reduce((s,n)=>s+n.step,0)/notes.length, down=avg>4, a=stemData(notes[0],xs[0],top,down), b=stemData(notes[notes.length-1],xs[xs.length-1],top,down); return { down, start:{x:a.sx,y:a.ey}, end:{x:b.sx,y:b.ey} }; }
+function beamData(notes,xs,top){ const avg=notes.reduce((s,n)=>s+n.step,0)/notes.length, down=avg>4, a=stemData(notes[0],xs[0],top,down), b=stemData(notes[notes.length-1],xs[xs.length-1],top,down), beamXShift=down?0.75:-0.75; return { down, start:{x:a.sx+beamXShift,y:a.ey+5}, end:{x:b.sx+beamXShift,y:b.ey+5} }; }
 function beamYAtX(x,beam){ const amount=(x-beam.start.x)/(beam.end.x-beam.start.x||1); return beam.start.y+amount*(beam.end.y-beam.start.y); }
 function Score({question,answers,setAnswers,feedback,activeNoteId,activeBarIndex}){
+  const accidentalXAdjust=question.key.id==="Am"?1:0;
+  const accidentalYAdjust=question.key.id==="Am"?-7:-5;
+  const accidentalSizeScale=.8;
   return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none overflow-visible">
     <rect width={W} height={H} fill="transparent" />
-    {SYSTEM_TOPS.map((top,si)=>{ const finalBar=si===0?3:7; return <g key={si}>{[0,1,2,3,4].map(line=><line key={line} x1={STAFF_LEFT} x2={getBarStart(finalBar)+barWidth(finalBar)} y1={top+line*GAP} y2={top+line*GAP} stroke="currentColor" strokeWidth="1.2"/>)}<text x={CLEF_X} y={top+30} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE}</text>{si===0&&<KeySignature keySignature={question.key} top={top}/>} {si===0&&<TimeSignature signature={question.timeSignature} top={top}/>}</g>; })}
+    {SYSTEM_TOPS.map((top,si)=>{ const finalBar=si===0?3:7; return <g key={si}>{[0,1,2,3,4].map(line=><line key={line} x1={STAFF_LEFT} x2={getBarStart(finalBar)+barWidth(finalBar)} y1={top+line*GAP} y2={top+line*GAP} stroke="currentColor" strokeWidth="1.2"/>)}<text x={CLEF_X} y={top+24.5} fontSize="40" fontFamily={MUSIC_FONT} dominantBaseline="middle">{TREBLE}</text>{si===0&&<KeySignature keySignature={question.key} top={top} yAdjust={-3} sizeScale={.75}/>} {si===0&&<TimeSignature signature={question.timeSignature} top={top} sizeScale={1.01}/>}</g>; })}
     {question.bars.map(bar=>{
       const start=getBarStart(bar.barIndex), end=start+barWidth(bar.barIndex), top=getSystemTop(bar.barIndex), pos=getBarNotePositions(bar.barIndex,bar.notes), isAnswer=question.targetBars.includes(bar.barIndex), showBox=[4,5,6].includes(bar.barIndex), typed=answers[bar.barIndex]||"", ok=isAnswerCorrect(typed,bar.chordSymbol,bar.chord), status=feedback&&isAnswer?(ok?"correct":"incorrect"):null, boxX=bar.barIndex===4?start+5:start+25, boxY=top-78, hi=false, gs=quaverGroups(bar.notes);
       return <g key={bar.barIndex}>
         {showBox && (isAnswer ? <g><foreignObject x={boxX} y={boxY+12} width="34" height="36"><AnswerInput value={typed} disabled={Boolean(feedback)} status={status} onChange={value=>setAnswers(cur=>({...cur,[bar.barIndex]:value}))}/></foreignObject>{feedback&&!ok&&<text x={boxX+42} y={boxY+36} fontSize="16" fontWeight="900" fill={COLOUR.green}>{`${getChordShortName(bar.chord)} or ${bar.chordSymbol}`}</text>}</g> : <ChordBox symbol={bar.chordSymbol} chord={bar.chord} x={boxX} yy={boxY} highlight={hi}/>) }
         <text x={(bar.barIndex===0||bar.barIndex===4)?start-15:start+5} y={top-18} fontSize="13" fontWeight="600">{bar.barIndex+1}</text>
-        {bar.notes.map((note,i)=>{ const g=groupFor(gs,i), beam=g?beamData(bar.notes.slice(g.start,g.end+1),pos.slice(g.start,g.end+1),top):null, sx=beam?(beam.down?pos[i]-NOTE_RX:pos[i]+NOTE_RX):null; return <Note key={note.id} note={note} x={pos[i]} top={top} active={activeNoteId===note.id} showFlag={!beam} override={beam?beam.down:null} forced={beam&&sx?beamYAtX(sx,beam):null}/>; })}
+        {bar.notes.map((note,i)=>{ const g=groupFor(gs,i), beam=g?beamData(bar.notes.slice(g.start,g.end+1),pos.slice(g.start,g.end+1),top):null, sx=beam?(beam.down?pos[i]-NOTE_RX:pos[i]+NOTE_RX):null; return <Note key={note.id} note={note} x={pos[i]} top={top} active={activeNoteId===note.id} showFlag={!beam} override={beam?beam.down:null} forced={beam&&sx?beamYAtX(sx,beam):null} noteheadYAdjust={0.5} accidentalXAdjust={accidentalXAdjust} accidentalYAdjust={accidentalYAdjust} accidentalSizeScale={accidentalSizeScale}/>; })}
         {gs.map((g,i)=>{ const beam=beamData(bar.notes.slice(g.start,g.end+1),pos.slice(g.start,g.end+1),top); return <line key={`beam-${bar.barIndex}-${i}`} x1={beam.start.x-1} y1={beam.start.y} x2={beam.end.x+1} y2={beam.end.y} stroke="currentColor" strokeWidth="4"/>; })}
         {bar.barIndex===BAR_COUNT-1 ? <g><line x1={end-5} x2={end-5} y1={top} y2={top+GAP*4} stroke="currentColor" strokeWidth="1.4"/><line x1={end} x2={end} y1={top} y2={top+GAP*4} stroke="currentColor" strokeWidth="4"/></g> : <line x1={end} x2={end} y1={top} y2={top+GAP*4} stroke="currentColor" strokeWidth="1.4"/>}
       </g>;
@@ -486,6 +515,9 @@ function Score({question,answers,setAnswers,feedback,activeNoteId,activeBarIndex
 function N5Score({question}){
   const top=154, staffStart=248, staffEnd=673, clefX=staffStart+10, noteXs=[338,458,578], fadeId=`n5-staff-fade-${question.id}`;
   const notes=question.bars[0].notes;
+  const accidentalXAdjust=question.key.id==="Am"?1:0;
+  const accidentalYAdjust=question.key.id==="Am"?-7:-5;
+  const accidentalSizeScale=.8;
   return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none overflow-visible">
     <defs>
       <linearGradient id={fadeId} gradientUnits="userSpaceOnUse" x1={staffStart} x2={staffEnd} y1="0" y2="0">
@@ -497,8 +529,8 @@ function N5Score({question}){
     <rect width={W} height={H} fill="transparent" />
     <g transform={`translate(${W/2} ${top+GAP*2}) scale(1.5) translate(${-W/2} ${-(top+GAP*2)})`}>
       {[0,1,2,3,4].map(line=><line key={line} x1={staffStart} x2={staffEnd} y1={top+line*GAP} y2={top+line*GAP} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
-      <text x={clefX} y={top+30} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE}</text>
-      {notes.map((note,i)=><Note key={note.id} note={note} x={noteXs[i]} top={top}/>)}
+      <text x={clefX} y={top+24.5} fontSize="40" fontFamily={MUSIC_FONT} dominantBaseline="middle">{TREBLE}</text>
+      {notes.map((note,i)=><Note key={note.id} note={note} x={noteXs[i]} top={top} noteheadYAdjust={0.5} accidentalXAdjust={accidentalXAdjust} accidentalYAdjust={accidentalYAdjust} accidentalSizeScale={accidentalSizeScale}/>)}
     </g>
   </svg>;
 }
@@ -542,8 +574,8 @@ function AHListeningScore({question,activeNoteId}){
     <rect width={W} height={H} fill="transparent" />
     <g transform={`translate(${W/2} ${top+GAP*2}) scale(2.45) translate(${-W/2} ${-(top+GAP*2)})`}>
       {[0,1,2,3,4].map(line=><line key={line} x1={staffStart} x2={staffEnd} y1={top+line*GAP} y2={top+line*GAP} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
-      <text x={clefX} y={top+30} fontSize="80" fontFamily="serif" dominantBaseline="middle">{TREBLE}</text>
-      {notes.map(note=><Note key={note.id} note={note} x={noteX} top={top} active={activeNoteId===note.id} stackLayout="lineSpace"/>)}
+      <text x={clefX} y={top+24.5} fontSize="40" fontFamily={MUSIC_FONT} dominantBaseline="middle">{TREBLE}</text>
+      {notes.map(note=><Note key={note.id} note={note} x={noteX} top={top} active={activeNoteId===note.id} stackLayout="lineSpace" accidentalYAdjust={-3}/>)}
     </g>
   </svg>;
 }
