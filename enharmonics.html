@@ -33,6 +33,9 @@ const ASSET = {
   level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
   customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
   next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
+  trebleClef: "https://mrtennant-music.github.io/musicliteracy/trebleclef.svg",
+  bassClef: "https://mrtennant-music.github.io/musicliteracy/bassclef.svg",
+  crotchet: "https://mrtennant-music.github.io/musicliteracy/crotchet.svg",
   sharp: "https://mrtennant-music.github.io/musicliteracy/sharp.svg?v=1.1",
   flat: "https://mrtennant-music.github.io/musicliteracy/flat.svg?v=1.1",
   bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
@@ -73,6 +76,55 @@ const PAIRS = [
   [{ letter: "A", accidental: "sharp" }, { letter: "B", accidental: "flat" }],
 ];
 
+const OPTIONAL_NATURAL_PAIRS = {
+  eSharpFflat: [
+    { source: { letter: "E", accidental: "sharp" }, target: { letter: "F", accidental: null } },
+    { source: { letter: "F", accidental: "flat" }, target: { letter: "E", accidental: null } },
+  ],
+  bSharpCflat: [
+    { source: { letter: "B", accidental: "sharp" }, target: { letter: "C", accidental: null }, targetOctaveOffset: 1 },
+    { source: { letter: "C", accidental: "flat" }, target: { letter: "B", accidental: null }, targetOctaveOffset: -1 },
+  ],
+};
+
+const NOTE_NAME_LABELS = {
+  treble: {
+    lines: [
+      { step: 0, letter: "E" },
+      { step: 2, letter: "G" },
+      { step: 4, letter: "B" },
+      { step: 6, letter: "D" },
+      { step: 8, letter: "F" },
+    ],
+    spaces: [
+      { step: 1, letter: "F" },
+      { step: 3, letter: "A" },
+      { step: 5, letter: "C" },
+      { step: 7, letter: "E" },
+    ],
+  },
+  bass: {
+    lines: [
+      { step: 0, letter: "G" },
+      { step: 2, letter: "B" },
+      { step: 4, letter: "D" },
+      { step: 6, letter: "F" },
+      { step: 8, letter: "A" },
+    ],
+    spaces: [
+      { step: 1, letter: "A" },
+      { step: 3, letter: "C" },
+      { step: 5, letter: "E" },
+      { step: 7, letter: "G" },
+    ],
+  },
+};
+
+const CLEF_STEP_RANGE = {
+  treble: { min: -4, max: 12 },
+  bass: { min: -4, max: 12 },
+};
+
 function randomItem(items) {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -109,9 +161,15 @@ function noteY(step, top) {
   return top + GAP * 4 - step * (GAP / 2);
 }
 
-function enharmonicCandidates() {
+function enharmonicCandidates(options = { treble: true, bass: true, eSharpFflat: true, bSharpCflat: true }) {
   const result = [];
-  ["treble", "bass"].forEach((clef) => {
+  const clefs = [options.treble ? "treble" : null, options.bass ? "bass" : null].filter(Boolean);
+  const optionalPairs = [
+    ...(options.eSharpFflat ? OPTIONAL_NATURAL_PAIRS.eSharpFflat : []),
+    ...(options.bSharpCflat ? OPTIONAL_NATURAL_PAIRS.bSharpCflat : []),
+  ];
+  clefs.forEach((clef) => {
+    const range = CLEF_STEP_RANGE[clef];
     for (let octave = 2; octave <= 6; octave += 1) {
       PAIRS.forEach(([sharp, flat]) => {
         const sharpNote = { ...sharp, octave };
@@ -122,29 +180,42 @@ function enharmonicCandidates() {
         ].forEach((item) => {
           const sourceStep = stepFor(item.source, clef);
           const targetStep = stepFor(item.target, clef);
-          if (sourceStep >= -4 && sourceStep <= 12 && targetStep >= -4 && targetStep <= 12) {
+          if (sourceStep >= range.min && sourceStep <= range.max && targetStep >= range.min && targetStep <= range.max) {
             result.push({ clef, source: item.source, target: item.target, sourceStep, targetStep });
           }
         });
+      });
+      optionalPairs.forEach((item) => {
+        const source = { ...item.source, octave };
+        const target = { ...item.target, octave: octave + (item.targetOctaveOffset || 0) };
+        const sourceStep = stepFor(source, clef);
+        const targetStep = stepFor(target, clef);
+        if (pitchOf(source) === pitchOf(target) && sourceStep >= range.min && sourceStep <= range.max && targetStep >= range.min && targetStep <= range.max) {
+          result.push({ clef, source, target, sourceStep, targetStep });
+        }
       });
     }
   });
   return result;
 }
 
-const QUESTIONS = enharmonicCandidates();
-
-function makeQuestion() {
-  const item = randomItem(QUESTIONS);
+function makeQuestion(options) {
+  const candidates = enharmonicCandidates(options);
+  const fallback = enharmonicCandidates();
+  const pool = candidates.length ? candidates : fallback;
+  const item = randomItem(pool);
   return { id: `${Date.now()}-${Math.random()}`, ...item };
 }
 
 function accidentalGlyph(type) {
-  return type === "sharp" ? GLYPH.sharp : GLYPH.flat;
+  if (type === "sharp") return GLYPH.sharp;
+  if (type === "flat") return GLYPH.flat;
+  return "";
 }
 
 function noteLabel(note) {
-  return `${note.letter}${note.accidental === "sharp" ? "#" : "b"}${note.octave}`;
+  const accidental = note.accidental === "sharp" ? "#" : note.accidental === "flat" ? "b" : "";
+  return `${note.letter}${accidental}${note.octave}`;
 }
 
 function ScorePanel({ correct, attempted, accuracy, streak, bestStreak, confettiKey, resetScore }) {
@@ -172,40 +243,129 @@ function StaffLines({ top, fadeId }) {
   );
 }
 
-function LedgerLines({ step, x, top }) {
-  const lines = [];
-  if (step < 0) {
-    for (let s = -2; s >= step; s -= 2) lines.push(s);
-  }
-  if (step > 8) {
-    for (let s = 10; s <= step; s += 2) lines.push(s);
-  }
+function StaffClef({ clef, top }) {
+  const treble = clef === "treble";
   return (
-    <g>
-      {lines.map((s) => (
-        <line key={s} x1={x - 21} x2={x + 21} y1={noteY(s, top)} y2={noteY(s, top)} stroke="currentColor" strokeWidth="1.25" />
+    <image
+      href={treble ? ASSET.trebleClef : ASSET.bassClef}
+      x={STAFF.left + (treble ? 2 : 12)}
+      y={top + (treble ? -45.5 : 0)}
+      width={treble ? 99.3 : 65.5}
+      height={treble ? 179 : 70}
+      preserveAspectRatio="xMidYMid meet"
+      pointerEvents="none"
+    />
+  );
+}
+
+function HelpLabels({ visible, clef, top }) {
+  if (!visible) return null;
+  const data = NOTE_NAME_LABELS[clef];
+  const lineLabelX = STAFF.left - 14;
+  const spaceLabelX = STAFF.left + 12;
+  const lineLabelYOffset = 1;
+  const spaceLabelYOffset = 2;
+
+  return (
+    <g fontSize="14" fontFamily="system-ui, sans-serif" fontWeight="700" dominantBaseline="middle" pointerEvents="none" fill="black">
+      {data.lines.map((note) => (
+        <text key={`${clef}-line-${note.step}`} x={lineLabelX} y={noteY(note.step, top) + lineLabelYOffset} textAnchor="start">
+          {note.letter}
+        </text>
+      ))}
+      {data.spaces.map((note) => (
+        <text key={`${clef}-space-${note.step}`} x={spaceLabelX} y={noteY(note.step, top) + spaceLabelYOffset} textAnchor="end">
+          {note.letter}
+        </text>
       ))}
     </g>
   );
 }
 
-function Note({ note, x, top, colour = "currentColor", opacity = 1, preview = false }) {
-  if (!note) return null;
-  const y = noteY(note.step, top);
-  const stemDown = note.step > 4;
+function LedgerLines({ step, x, top, wide = false }) {
+  const lines = [];
+  if (step <= -2) lines.push(-2);
+  if (step <= -4) lines.push(-4);
+  if (step >= 10) lines.push(10);
+  if (step >= 12) lines.push(12);
   return (
-    <g opacity={opacity} color={colour}>
-      <LedgerLines step={note.step} x={x} top={top} />
-      <text x={x - 26} y={y + 3} fontSize="31" fontFamily={MUSIC_FONT} textAnchor="middle" dominantBaseline="middle">{accidentalGlyph(note.accidental)}</text>
-      <text x={x} y={y + (stemDown ? -1 : 1)} fontSize={preview ? "44" : "39"} fontFamily={MUSIC_FONT} textAnchor="middle" dominantBaseline="middle">
-        {stemDown ? GLYPH.quarterDown : GLYPH.quarterUp}
-      </text>
+    <g pointerEvents="none">
+      {lines.map((s) => (
+        <line key={s} x1={x - (wide ? 26 : 12)} x2={x + (wide ? 26 : 12)} y1={noteY(s, top)} y2={noteY(s, top)} stroke="currentColor" strokeWidth="1.5" />
+      ))}
     </g>
   );
 }
 
-function ScoreArea({ question, selectedAccidental, placed, hoverStep, touchPreview, feedback, onPointerMove, onPointerDown, onPointerUp, onPointerCancel }) {
+function ScoreFilter({ id, values }) {
+  return (
+    <filter id={id} colorInterpolationFilters="sRGB">
+      <feColorMatrix type="matrix" values={values} />
+    </filter>
+  );
+}
+
+function filterForColour(colour) {
+  if (colour === COLOUR.green) return "url(#enharmonicNoteGreenFilter)";
+  if (colour === COLOUR.red) return "url(#enharmonicNoteRedFilter)";
+  if (colour === COLOUR.preview) return "url(#enharmonicNoteBlackFilter)";
+  return "url(#enharmonicNoteBlackFilter)";
+}
+
+function Accidental({ note, x, top, colour }) {
+  if (!note?.accidental) return null;
+  const y = noteY(note.step, top);
+  const isSharp = note.accidental === "sharp";
+  const ledgerOffset = y < 95 || y > 285 ? -6 : 0;
+  const isLedgerLineNote = note.step <= -2 || note.step >= 10;
+  const flatLedgerLineOffset = !isSharp && isLedgerLineNote ? -3 : 0;
+  const sharpLedgerLineOffset = isSharp && isLedgerLineNote ? -3 : 0;
+  return (
+    <image
+      href={isSharp ? ASSET.sharp : ASSET.flat}
+      x={isSharp ? x - 44 + ledgerOffset + sharpLedgerLineOffset : x - 41 + ledgerOffset + flatLedgerLineOffset}
+      y={isSharp ? y - 27 : y - 35}
+      width="28"
+      height={isSharp ? 54 : 49}
+      preserveAspectRatio="xMidYMid meet"
+      pointerEvents="none"
+      filter={filterForColour(colour)}
+    />
+  );
+}
+
+function Note({ note, x, top, colour = COLOUR.black, opacity = 1, preview = false }) {
+  if (!note) return null;
+  const y = noteY(note.step, top);
+  const stemDown = note.step > 4;
+  const noteYAdjust = stemDown ? 0.1 : -2.25;
+  return (
+    <g opacity={opacity} pointerEvents="none">
+      <LedgerLines step={note.step} x={x} top={top} wide />
+      <Accidental note={note} x={x} top={top} colour={colour} />
+      <image
+        href={ASSET.crotchet}
+        x={preview ? x - 20.025 : x - 19.9625}
+        y={preview ? y - 62.915 + noteYAdjust : y - 62.8 + noteYAdjust}
+        width={preview ? "43.05" : "40.425"}
+        height={preview ? "80.43" : "75.6"}
+        preserveAspectRatio="xMidYMid meet"
+        filter={filterForColour(colour)}
+        style={{
+          transformBox: "fill-box",
+          transformOrigin: "center",
+          transform: stemDown ? "translateY(52px) rotate(180deg)" : "none",
+        }}
+      />
+    </g>
+  );
+}
+
+function ScoreArea({ question, selectedAccidental, placed, hoverStep, touchPreview, showNoteNames, feedback, onPointerMove, onPointerDown, onPointerUp, onPointerCancel }) {
   const top = question.clef === "bass" ? STAFF.bassTop : STAFF.trebleTop;
+  const range = CLEF_STEP_RANGE[question.clef];
+  const hitTop = noteY(range.max, top) - 72;
+  const hitBottom = noteY(range.min, top) + 72;
   const fadeId = `enharmonic-fade-${question.id}`;
   const sourceX = 360;
   const answerX = 560;
@@ -225,23 +385,24 @@ function ScoreArea({ question, selectedAccidental, placed, hoverStep, touchPrevi
           <stop offset="86%" stopColor="#000" stopOpacity="1" />
           <stop offset="100%" stopColor="#000" stopOpacity="0" />
         </linearGradient>
+        <ScoreFilter id="enharmonicNoteBlackFilter" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" />
+        <ScoreFilter id="enharmonicNoteGreenFilter" values="0 0 0 0 0.086 0 0 0 0 0.639 0 0 0 0 0.290 0 0 0 1 0" />
+        <ScoreFilter id="enharmonicNoteRedFilter" values="0 0 0 0 0.863 0 0 0 0 0.149 0 0 0 0 0.149 0 0 0 1 0" />
       </defs>
       <rect width={W} height={H} fill="transparent" />
       <g>
         <StaffLines top={top} fadeId={fadeId} />
-        <text x={STAFF.left + 12} y={top + (question.clef === "bass" ? 43 : 45)} fontSize={question.clef === "bass" ? "62" : "72"} fontFamily={MUSIC_FONT} dominantBaseline="middle">
-          {question.clef === "bass" ? GLYPH.bassClef : GLYPH.trebleClef}
-        </text>
-        <Note note={sourceNote} x={sourceX} top={top} />
-        <line x1={answerX - 42} x2={answerX + 42} y1={top - 44} y2={top + GAP * 4 + 44} stroke="rgba(0,0,0,.12)" strokeWidth="1" strokeDasharray="5 5" />
-        {hoverNote && !placedNote && !touchPreview?.active && <Note note={hoverNote} x={answerX} top={top} colour={COLOUR.preview} opacity={0.68} preview />}
-        {placedNote && <Note note={placedNote} x={answerX} top={top} colour={feedback ? (correct ? COLOUR.green : "rgba(220,38,38,.45)") : "currentColor"} />}
-        {feedback && !correct && <Note note={targetNote} x={answerX + 62} top={top} colour={COLOUR.green} />}
+        <HelpLabels visible={showNoteNames} clef={question.clef} top={top} />
+        <StaffClef clef={question.clef} top={top} />
+        <Note note={sourceNote} x={sourceX + 10} top={top} />
+        {hoverNote && !placedNote && !touchPreview?.active && <Note note={hoverNote} x={answerX + 10} top={top} colour={COLOUR.preview} opacity={0.68} />}
+        {placedNote && <Note note={placedNote} x={answerX + 10} top={top} colour={feedback ? (correct ? COLOUR.green : "rgba(220,38,38,.45)") : "currentColor"} />}
+        {feedback && !correct && <Note note={targetNote} x={answerX + 72} top={top} colour={COLOUR.green} />}
         <rect
           x={STAFF.left - 24}
-          y={top - 42}
+          y={hitTop}
           width={STAFF.right - STAFF.left + 48}
-          height="220"
+          height={hitBottom - hitTop}
           fill="transparent"
           pointerEvents="all"
           className="touch-none"
@@ -265,7 +426,7 @@ function ScoreArea({ question, selectedAccidental, placed, hoverStep, touchPrevi
             />
             <Note
               note={{ letter: letterForStep(touchPreview.step, question.clef), octave: octaveForStep(touchPreview.step, question.clef), accidental: selectedAccidental, step: touchPreview.step }}
-              x={touchPreview.x}
+              x={touchPreview.x + 10}
               top={top}
               colour="black"
               opacity={0.86}
@@ -284,10 +445,45 @@ function AccidentalButton({ type, selected, disabled, onClick }) {
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`flex h-9 w-14 items-center justify-center rounded-xl border px-2 py-1 transition ${selected ? "border-black bg-black text-white" : "border-stone-300 bg-white text-black hover:bg-stone-50"}`}
+      className={`flex h-[53px] w-[70px] items-center justify-center rounded-xl border px-2 py-1 transition ${selected ? "border-black bg-black text-white" : "border-stone-300 bg-white text-black hover:bg-stone-50"}`}
     >
-      <span className="music-symbol text-[23px] leading-none">{accidentalGlyph(type)}</span>
+      <span className={`music-symbol block text-[36px] leading-none ${type === "flat" ? "-translate-x-[1px] translate-y-[2px]" : "translate-x-[1px]"}`}>
+        {accidentalGlyph(type)}
+      </span>
     </button>
+  );
+}
+
+function MenuGlyph({ type }) {
+  if (type === "abc") return <span className="inline-flex h-[18px] w-[22px] items-center justify-center text-[13px] font-black leading-none tracking-tight text-black">ABC</span>;
+  if (type === "treble") return <span className="music-symbol relative top-[4px] text-[20px] leading-none text-black">{GLYPH.trebleClef}</span>;
+  if (type === "bass") return <span className="music-symbol relative -top-[4px] text-[25px] leading-none text-black">{GLYPH.bassClef}</span>;
+  if (type === "sharp") return <span className="music-symbol relative top-[2px] text-[27px] leading-none text-black">{GLYPH.quarterUp}</span>;
+  return <span className="music-symbol relative top-[2px] text-[27px] leading-none text-black">{GLYPH.quarterDown}</span>;
+}
+
+function CustomiseRows({ options, onToggle, showNoteNames, setShowNoteNames }) {
+  return (
+    <div className="flex w-full min-w-0 flex-col sm:inline-flex sm:w-max sm:min-w-[260px]">
+      <window.MLH.MenuToggleRow
+        glyph={<MenuGlyph type="treble" />}
+        label="Treble Clef"
+        checked={options.treble}
+        onChange={() => onToggle("treble")}
+      />
+      <window.MLH.MenuToggleRow
+        glyph={<MenuGlyph type="bass" />}
+        label="Bass Clef"
+        checked={options.bass}
+        onChange={() => onToggle("bass")}
+      />
+      <window.MLH.MenuToggleRow
+        glyph={<MenuGlyph type="abc" />}
+        label="Show Note Names"
+        checked={showNoteNames}
+        onChange={() => setShowNoteNames((value) => !value)}
+      />
+    </div>
   );
 }
 
@@ -296,11 +492,13 @@ function App() {
   const customiseRef = useRef(null);
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [question, setQuestion] = useState(() => makeQuestion());
-  const [selectedAccidental, setSelectedAccidental] = useState("sharp");
+  const [options, setOptions] = useState({ treble: true, bass: true, eSharpFflat: true, bSharpCflat: true });
+  const [question, setQuestion] = useState(() => makeQuestion({ treble: true, bass: true, eSharpFflat: true, bSharpCflat: true }));
+  const [selectedAccidental, setSelectedAccidental] = useState(null);
   const [placed, setPlaced] = useState(null);
   const [hoverStep, setHoverStep] = useState(null);
   const [touchPreview, setTouchPreview] = useState(null);
+  const [showNoteNames, setShowNoteNames] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [feedbackFading, setFeedbackFading] = useState(false);
   const [correct, setCorrect] = useState(0);
@@ -314,20 +512,20 @@ function App() {
   window.MLH?.useClickOutside?.([levelRef, customiseRef], [() => setLevelOpen(false), () => setCustomiseOpen(false)]);
 
   const accuracy = attempted ? Math.round((correct / attempted) * 100) : 0;
-  const canConfirm = placed && selectedAccidental && !feedback;
+  const canConfirm = placed && !feedback;
 
   function clearTimers() {
     timers.current.forEach(clearTimeout);
     timers.current = [];
   }
 
-  function nextQuestion() {
+  function nextQuestion(nextOptions = options) {
     clearTimers();
-    setQuestion(makeQuestion());
+    setQuestion(makeQuestion(nextOptions));
     setPlaced(null);
     setHoverStep(null);
     setTouchPreview(null);
-    setSelectedAccidental(Math.random() > 0.5 ? "sharp" : "flat");
+    setSelectedAccidental(null);
     setFeedback(null);
     setFeedbackFading(false);
   }
@@ -348,26 +546,37 @@ function App() {
     nextQuestion();
   }
 
+  function toggleOption(key) {
+    setOptions((current) => {
+      const next = { ...current, [key]: !current[key] };
+      if (!next.treble && !next.bass) {
+        next[key === "treble" ? "bass" : "treble"] = true;
+      }
+      setStreak(0);
+      nextQuestion(next);
+      return next;
+    });
+  }
+
   function submitAnswer() {
     if (!canConfirm) return;
     const ok = placed.step === question.targetStep && placed.accidental === question.target.accidental;
+    window.MLH?.playFeedbackSound?.(ok);
     setAttempted((value) => value + 1);
     if (ok) {
       setCorrect((value) => value + 1);
       setStreak((value) => {
         const next = value + 1;
         setBestStreak((best) => Math.max(best, next));
-        if ([10, 15, 20, 30].includes(next)) {
+        const medal = window.MLH?.getStreakMedal?.(next);
+        if (medal && [10, 15, 20, 30].includes(next)) {
           setConfettiKey((key) => key + 1);
-          window.MLH?.playFeedbackSound?.("medal");
-        } else {
-          window.MLH?.playFeedbackSound?.("correct");
+          timers.current.push(setTimeout(() => window.MLH?.playFeedbackSound?.(true, true, medal.sound), 180));
         }
         return next;
       });
     } else {
       setStreak(0);
-      window.MLH?.playFeedbackSound?.("incorrect");
     }
     setFeedback({ correct: ok });
     timers.current.push(setTimeout(() => setFeedbackFading(true), ok ? 1050 : 1450));
@@ -387,7 +596,10 @@ function App() {
     const pointer = pointerToSvg(event);
     const touchOffset = event.pointerType === "touch" ? 44 : 0;
     const top = question.clef === "bass" ? STAFF.bassTop : STAFF.trebleTop;
-    return { pointer, step: clamp(Math.round((top + GAP * 4 - (pointer.y - touchOffset)) / (GAP / 2)), -4, 12) };
+    const range = CLEF_STEP_RANGE[question.clef];
+    const rawStep = (top + GAP * 4 - (pointer.y - touchOffset)) / (GAP / 2);
+    const step = Math.floor(rawStep + 0.42);
+    return { pointer, step: clamp(step, range.min, range.max) };
   }
 
   function placeStep(step) {
@@ -446,8 +658,11 @@ function App() {
 
   function chooseAccidental(type) {
     if (feedback) return;
-    setSelectedAccidental(type);
-    setPlaced((current) => current ? { ...current, accidental: type } : current);
+    setSelectedAccidental((current) => {
+      const next = current === type ? null : type;
+      setPlaced((placedNote) => placedNote ? { ...placedNote, accidental: next } : placedNote);
+      return next;
+    });
   }
 
   function handleMainPointerDown() {
@@ -492,7 +707,7 @@ function App() {
                 />
                 {customiseOpen && (
                   <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise">
-                    <div className="px-2 pb-2 text-sm font-semibold text-stone-500">No options yet</div>
+                    <CustomiseRows options={options} onToggle={toggleOption} showNoteNames={showNoteNames} setShowNoteNames={setShowNoteNames} />
                   </window.MLH.MenuPanel>
                 )}
               </div>
@@ -510,13 +725,14 @@ function App() {
           )}
 
           <div className="absolute inset-x-3 top-[92px] bottom-[154px] flex items-center justify-center overflow-hidden transition-opacity duration-300 sm:relative sm:inset-auto sm:-top-[42px] sm:block sm:overflow-visible">
-            <div className="w-full">
+            <div className="w-full origin-center scale-[1.5] sm:scale-100">
               <ScoreArea
                 question={question}
                 selectedAccidental={selectedAccidental}
                 placed={placed}
                 hoverStep={hoverStep}
                 touchPreview={touchPreview}
+                showNoteNames={showNoteNames}
                 feedback={feedback}
                 onPointerMove={handlePointerMove}
                 onPointerDown={handlePointerDown}
@@ -527,18 +743,13 @@ function App() {
           </div>
 
           <div className={`${SHELL.questionCardMobileClass} absolute bottom-[12px] left-3 right-3 z-10 flex flex-col rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:mt-3 sm:p-4 md:-mt-[112px] md:mx-3`}>
-            <p className="text-base font-semibold leading-tight text-stone-900">Insert the enharmonic equivalent of note above.</p>
-            <div className="mt-4 flex justify-center gap-3">
-              <AccidentalButton type="sharp" selected={selectedAccidental === "sharp"} disabled={Boolean(feedback)} onClick={() => chooseAccidental("sharp")} />
-              <AccidentalButton type="flat" selected={selectedAccidental === "flat"} disabled={Boolean(feedback)} onClick={() => chooseAccidental("flat")} />
-            </div>
-            {feedback && !feedback.correct && (
-              <div className="mt-3 text-base font-bold text-green-600">
-                {noteLabel(question.target)}
+            <p className="text-base font-semibold leading-tight text-stone-900">Insert the enharmonic equivalent of the written note.</p>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AccidentalButton type="sharp" selected={selectedAccidental === "sharp"} disabled={Boolean(feedback)} onClick={() => chooseAccidental("sharp")} />
+                <AccidentalButton type="flat" selected={selectedAccidental === "flat"} disabled={Boolean(feedback)} onClick={() => chooseAccidental("flat")} />
               </div>
-            )}
-            <div className="mt-4 flex justify-end">
-              <button type="button" disabled={!canConfirm} onClick={submitAnswer} className={`${SHELL.mobileConfirmButtonClass} sm:w-auto`}>
+              <button type="button" disabled={!canConfirm} onClick={submitAnswer} className={`${SHELL.confirmButtonClass} h-[53px]`}>
                 Confirm
               </button>
             </div>
