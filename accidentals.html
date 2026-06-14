@@ -15,6 +15,10 @@
   <script src="./hub-shell.js?v=1.3"></script>
   <script src="./hub-menu.js?v=2.1"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+    .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
+  </style>
 </head>
 <body>
   <div id="root"></div>
@@ -42,7 +46,15 @@ const NOTE = {
 };
 
 const BAR_COUNT = 4;
-const TREBLE_CLEF = String.fromCodePoint(0x1d11e);
+const GLYPH = {
+  trebleClef: "\uE050",
+  flat: "\uE260",
+  natural: "\uE261",
+  sharp: "\uE262",
+  flagUp: "\uE240",
+  flagDown: "\uE241",
+  time: ["\uE080", "\uE081", "\uE082", "\uE083", "\uE084", "\uE085", "\uE086", "\uE087", "\uE088", "\uE089"],
+};
 
 const COLOUR = {
   black: "#000000",
@@ -55,7 +67,13 @@ const ASSET = {
   level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
   customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
   next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
-  audio: "https://mrtennant-music.github.io/musicliteracy/audio-svgrepo-com.svg",
+  hand: "./hand.svg",
+  audio: "./audio-svgrepo-com.svg",
+  crotchet: "./crotchet.svg",
+  minim: "./minim.svg",
+  quaver: "./quaver.svg",
+  quaverDown: "./quaverdown.svg",
+  semibreve: "./semibreve.svg",
   bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
   silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
   gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
@@ -294,7 +312,7 @@ function qSharpFlat(base, enabledAccidentals) {
   note.writtenAccidental = value;
   note.highlight = true;
   applyOctaveCounterparts(base.bars[target.barIndex], note, value, note.noteIndex);
-  return { ...base, accidentalOnlyHighlight: true, answerId: kind === "sharp" ? "raise" : "lower", prompt: kind === "sharp" ? "What does a <strong><span>sharp</span></strong> do to a note?" : "What does a <strong><span>flat</span></strong> do to a note?", choices: [{ id: "raise", text: "Raise by a semitone ↑" }, { id: "lower", text: "Lower by a semitone ↓" }] };
+  return { ...base, accidentalOnlyHighlight: true, answerId: kind === "sharp" ? "raise" : "lower", prompt: kind === "sharp" ? "What does a <strong><span>sharp</span></strong> do to a note?" : "What does a <strong><span>flat</span></strong> do to a note?", choices: [{ id: "raise", text: "Raise by a semitone", arrow: "↑" }, { id: "lower", text: "Lower by a semitone", arrow: "↓" }] };
 }
 function qTone(base, enabledAccidentals) {
   const candidates = [];
@@ -311,7 +329,7 @@ function qTone(base, enabledAccidentals) {
   const target = randomItem(candidates);
   base.bars[target.barIndex].notes[target.noteIndex].highlight = true;
   base.bars[target.barIndex].notes[target.noteIndex + 1].highlight = true;
-  return { ...base, answerId: target.answer, prompt: "Look at the <strong><span style=\"text-shadow: 0 0 6px #facc15, 0 0 12px #eab308;\">notes</span></strong>. Are they a tone or a semitone apart?", choices: [{ id: "Tone", text: "Tone" }, { id: "Semitone", text: "Semitone" }] };
+  return { ...base, answerId: target.answer, prompt: "Look at the <strong><span style=\"text-shadow: 0 0 3px #facc15, 0 0 6px #eab308;\">notes</span></strong>. Are they a tone or a semitone apart?", choices: [{ id: "Tone", text: "Tone" }, { id: "Semitone", text: "Semitone" }] };
 }
 function qCarry(base, enabledAccidentals) {
   const candidates = [];
@@ -334,7 +352,7 @@ function qCarry(base, enabledAccidentals) {
   applyOctaveCounterparts(base.bars[target.barIndex], first, value, first.noteIndex);
   second.highlight = true;
   const answer = nameOf(second.letter, effectiveAccidental(base, target.barIndex, second.noteIndex));
-  return { ...base, answerId: answer, prompt: `Identify the <strong><span style=\"text-shadow: 0 0 6px #facc15, 0 0 12px #eab308;\">note</span></strong> in <strong>bar ${target.barIndex + 1}</strong>.`, choices: noteNameChoices(answer, enabledAccidentals) };
+  return { ...base, answerId: answer, prompt: `Identify the <strong><span style=\"text-shadow: 0 0 3px #facc15, 0 0 6px #eab308;\">note</span></strong> in <strong>bar ${target.barIndex + 1}</strong>.`, choices: noteNameChoices(answer, enabledAccidentals) };
 }
 function qKey(base, enabledAccidentals) {
   const availableKeys = keysForAccidentals(enabledAccidentals).filter((key) => {
@@ -353,7 +371,7 @@ function qKey(base, enabledAccidentals) {
   if (base.key.id === "Am") base.bars[target.barIndex].notes[target.noteIndex].writtenAccidental = 1;
   base.bars[target.barIndex].notes[target.noteIndex].highlight = true;
   const answer = nameOf(letter, value);
-  return { ...base, answerId: answer, keySignatureReminder: true, prompt: `Identify the <strong><span style=\"text-shadow: 0 0 6px #facc15, 0 0 12px #eab308;\">note</span></strong> in <strong>bar ${target.barIndex + 1}</strong>.`, choices: noteNameChoices(answer, enabledAccidentals) };
+  return { ...base, answerId: answer, keySignatureReminder: true, prompt: `Identify the <strong><span style=\"text-shadow: 0 0 3px #facc15, 0 0 6px #eab308;\">note</span></strong> in <strong>bar ${target.barIndex + 1}</strong>.`, choices: noteNameChoices(answer, enabledAccidentals) };
 }
 function makeMultipleChoice(enabledAccidentals) {
   const builders = [qTone];
@@ -382,7 +400,7 @@ function makeApply(enabledAccidentals) {
   const target = randomItem(targets);
   base.bars[target.barIndex].notes[target.noteIndex].highlight = true;
   const id = accidentalId(target.accidental);
-  return { ...base, answerId: id, required: [{ symbolId: id, barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "before-note" }], prompt: `The <strong><span style=\"text-shadow: 0 0 6px #facc15, 0 0 12px #eab308;\">note</span></strong> in <strong>bar ${target.barIndex + 1}</strong> should be a <strong>semitone ${target.direction}</strong>. Apply this change to the score using a symbol from below.<br/><br/>` };
+  return { ...base, answerId: id, required: [{ symbolId: id, barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "before-note" }], prompt: `The <strong><span style=\"text-shadow: 0 0 3px #facc15, 0 0 6px #eab308;\">note</span></strong> in <strong>bar ${target.barIndex + 1}</strong> should be a <strong>semitone ${target.direction}</strong>. Apply this change to the score using a symbol from below.<br/><br/>` };
 }
 function makeAudioTwo(enabledAccidentals) {
   const safeSharps = ["C", "D", "F", "G", "A"];
@@ -554,32 +572,51 @@ function placementPosition(placement, question, offset = false, placements = [])
   return { x: (layout?.positions[placement.noteIndex] ?? 0) - 18, y: note && layout ? yForStep(note.step, layout.systemTop) + (offset ? 42 : 0) : STAFF.top };
 }
 
-function AccidentalGlyph({ id, x = 50, y = 32, colour = "currentColor", opacity = 1, compact = false }) {
-  const offset = id === "sharp" ? 2 : id === "natural" ? 3 : 0;
-  return <text x={x} y={y + offset} opacity={opacity} fill={colour} filter={colour === COLOUR.black ? "url(#blackGlow)" : undefined} fontFamily="Georgia, 'Times New Roman', serif" fontSize={compact ? 26 : 38} fontWeight="700" textAnchor="middle" dominantBaseline="middle">{accidentalById(id).symbol}</text>;
+function AccidentalGlyph({ id, x = 50, y = 32, colour = "currentColor", opacity = 1, compact = false, glow = true }) {
+  const offset = id === "sharp" ? 5.4 : id === "natural" ? 4.9 : 6.2;
+  const size = compact ? 28 : 42;
+  return <text className="music-symbol" x={x} y={y + offset} opacity={opacity} fill={colour} filter={glow && colour === COLOUR.black ? "url(#blackGlow)" : undefined} fontSize={size} textAnchor="middle">{GLYPH[id]}</text>;
 }
-function ButtonGlyph({ id }) { return <svg viewBox="0 0 100 54" className="h-12 w-20 overflow-visible"><AccidentalGlyph id={id} x={50} y={28} /></svg>; }
-function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false, placements = [] }) { const pos = placementPosition(placement, question, feedbackOffset, placements); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} compact />; }
+function ButtonGlyph({ id }) {
+  const yOffset = id === "sharp" ? 2 : id === "natural" ? 1 : 6;
+  return <svg viewBox="0 0 100 74" className="h-[58px] w-20 overflow-visible"><text className="music-symbol" x="50" y={37 + yOffset} fill="currentColor" fontSize="58" textAnchor="middle" dominantBaseline="middle">{GLYPH[id]}</text></svg>;
+}
+function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false, placements = [] }) { const pos = placementPosition(placement, question, feedbackOffset, placements); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} compact glow={false} />; }
 function StaffLines({ top, left = STAFF.left, right = STAFF.right }) { return <g>{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.2" />)}</g>; }
-function TrebleClef({ top, x = STAFF.clefX, size = 92 }) { return <text x={x} y={top + 28} fontSize={size} fontFamily="serif" dominantBaseline="middle">{TREBLE_CLEF}</text>; }
-function TimeSignatureGlyph({ signature, x, y, fontSize = 30 }) { return <g fontFamily="serif" fontWeight="900" fontSize={fontSize} textAnchor="middle" fill="currentColor"><text x={x} y={y}>{signature.top}</text><text x={x} y={y + fontSize * 0.62 + 2}>{signature.bottom}</text></g>; }
-function KeySignature({ question, top }) { if (question.oneBarMode) return null; if (question.key.id === "F") return <text x={STAFF.keySigX} y={yForStep(4.2, top) + 6} fontSize="22" fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">♭</text>; if (question.key.id === "G") return <text x={STAFF.keySigX} y={yForStep(7.8, top) + 6.5} fontSize="24" fontFamily="Georgia, serif" fontWeight="700" textAnchor="middle">♯</text>; return null; }
+function TrebleClef({ top, x = STAFF.clefX, size = 42.75 }) { return <text className="music-symbol" x={x + 19} y={top + 30} fontSize={size} textAnchor="middle">{GLYPH.trebleClef}</text>; }
+function TimeSignatureDigit({ value, x, y, fontSize }) { return <text className="music-symbol" x={x} y={y} fontSize={fontSize} textAnchor="middle" fill="currentColor">{GLYPH.time[Number(value)]}</text>; }
+function TimeSignatureGlyph({ signature, x, y, fontSize = 32 }) { return <g><TimeSignatureDigit value={signature.top} x={x} y={y} fontSize={fontSize} /><TimeSignatureDigit value={signature.bottom} x={x} y={y + 22} fontSize={fontSize} /></g>; }
+function KeySignature({ question, top }) { if (question.oneBarMode) return null; if (question.key.id === "F") return <AccidentalGlyph id="flat" x={STAFF.keySigX} y={yForStep(4.2, top) - 3} compact glow={false} />; if (question.key.id === "G") return <AccidentalGlyph id="sharp" x={STAFF.keySigX} y={yForStep(7.8, top) - 3} compact glow={false} />; return null; }
 function LedgerLines({ x, step, top, colour = "currentColor" }) { const lines = []; if (step <= -2) lines.push(yForStep(-2, top)); if (step >= 10) lines.push(yForStep(10, top)); return <g>{lines.map((y) => <line key={y} x1={x - 10.5} x2={x + 10.5} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}</g>; }
-function NoteHead({ x, y, open, colour }) { return <ellipse cx={x} cy={y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${y})`} fill={open ? "white" : colour} stroke={colour} strokeWidth="1.7" />; }
+function OpenNoteGlow({ x, y, inner = false }) { return <ellipse cx={x} cy={y} rx={inner ? NOTE.rx - 2.4 : NOTE.rx + 2.2} ry={inner ? NOTE.ry - 2 : NOTE.ry + 1.8} transform={`rotate(-18 ${x} ${y})`} fill="#facc15" opacity={inner ? "0.24" : "0.22"} />; }
+function noteImageFilter(colour) { if (colour === COLOUR.green) return "url(#noteGreenFilter)"; if (colour === COLOUR.red) return "url(#noteRedFilter)"; return undefined; }
+function NoteImage({ rhythm, x, y, stemDown, beamed, colour }) {
+  const filter = noteImageFilter(colour);
+  if (rhythm === "semibreve") return <image href={ASSET.semibreve} x={x - 10.4} y={y - 5.9} width="20.8" height="11.8" preserveAspectRatio="xMidYMid meet" pointerEvents="none" filter={filter} />;
+  const src = rhythm === "minim" ? ASSET.minim : ASSET.crotchet;
+  const width = rhythm === "minim" ? 24 : 19.6;
+  const height = rhythm === "minim" ? 44.9 : 36.7;
+  const yAdjust = stemDown ? 0.45 : -0.9;
+  const style = rhythm === "quaver" && !beamed && stemDown ? undefined : { transformBox: "fill-box", transformOrigin: "center", transform: stemDown ? "translateY(28px) rotate(180deg)" : "none" };
+  return <image href={src} x={x - width / 2} y={y - height * 0.831 + yAdjust} width={width} height={height} preserveAspectRatio="xMidYMid meet" pointerEvents="none" filter={filter} style={style} />;
+}
+function QuaverFlag({ stem, colour }) {
+  return <text className="music-symbol" x={stem.stemX + 4.5} y={stem.stemEndY + (stem.down ? -1 : 1.5)} fontSize="30" textAnchor="middle" fill={colour}>{stem.down ? GLYPH.flagDown : GLYPH.flagUp}</text>;
+}
 function Note({ note, x, top, colour = "currentColor", accidentalColour = "currentColor", forcedDown = null, forcedEnd = null, showFlag = true }) {
   const info = rhythmInfo(note.rhythm);
   const stem = stemData(note, x, top, forcedDown);
-  const end = forcedEnd ?? stem.stemEndY;
   const dotY = note.step % 2 === 0 ? stem.y - 4 : stem.y;
   const showAccidental = note.writtenAccidental !== null && note.writtenAccidental !== undefined && note.hiddenAccidental === null;
-  return <g filter={colour === COLOUR.black || accidentalColour === COLOUR.black ? "url(#blackGlow)" : undefined}>
+  const highlighted = colour === COLOUR.black || accidentalColour === COLOUR.black;
+  return <g filter={highlighted ? "url(#noteGlowPulse)" : undefined}>
     <LedgerLines x={x} step={note.step} top={top} colour={colour} />
-    {showAccidental && <AccidentalGlyph id={accidentalId(note.writtenAccidental)} x={x - 18} y={stem.y} colour={accidentalColour} compact />}
-    <NoteHead x={x} y={stem.y} open={info.open} colour={colour} />
+    {showAccidental && <AccidentalGlyph id={accidentalId(note.writtenAccidental)} x={x - 18} y={stem.y} colour={accidentalColour} compact glow={false} />}
+    {highlighted && info.open && <OpenNoteGlow x={x} y={stem.y} />}
+    <NoteImage rhythm={note.rhythm} x={x} y={stem.y} stemDown={stem.down} beamed={!showFlag && note.rhythm === "quaver"} colour={colour} />
+    {info.flag && showFlag && <QuaverFlag stem={stem} colour={colour} />}
+    {highlighted && info.open && <OpenNoteGlow x={x} y={stem.y} inner />}
     {info.dotted && <circle cx={x + 12} cy={dotY} r="1.7" fill={colour} />}
-    {note.step % 2 === 0 && <line x1={x - 8} x2={x + 8} y1={stem.y} y2={stem.y} stroke={colour} strokeWidth="1.2" />}
-    {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={end} stroke={colour} strokeWidth="1.5" />}
-    {info.flag && showFlag && <path d={stem.down ? `M ${stem.stemX} ${end} C ${stem.stemX + 10} ${end - 4}, ${stem.stemX + 10} ${end - 12}, ${stem.stemX + 2} ${end - 16}` : `M ${stem.stemX} ${end} C ${stem.stemX + 10} ${end + 4}, ${stem.stemX + 10} ${end + 12}, ${stem.stemX + 2} ${end + 16}`} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />}
   </g>;
 }
 
@@ -590,12 +627,33 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
   const transform = question.oneBarMode ? "translate(-455 -96) scale(2)" : "";
   return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="h-auto w-full select-none touch-none overflow-visible" onPointerMove={onMove} onPointerLeave={onLeave} onPointerDown={onLock} aria-label="Accidentals exercise">
     <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
-    <defs><filter id="blackGlow" x="-90%" y="-90%" width="300%" height="300%"><feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#facc15" floodOpacity="0.85" /><feDropShadow dx="0" dy="0" stdDeviation="10" floodColor="#eab308" floodOpacity="0.65" /><feDropShadow dx="0" dy="0" stdDeviation="18" floodColor="#ca8a04" floodOpacity="0.45" /></filter></defs>
+    <defs>
+      <filter id="blackGlow" x="-70%" y="-70%" width="240%" height="240%">
+        <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#facc15" floodOpacity="1" />
+        <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#eab308" floodOpacity="1" />
+      </filter>
+      <filter id="noteGreenFilter" colorInterpolationFilters="sRGB">
+        <feColorMatrix type="matrix" values="0 0 0 0 0.086 0 0 0 0 0.639 0 0 0 0 0.290 0 0 0 1 0" />
+      </filter>
+      <filter id="noteRedFilter" colorInterpolationFilters="sRGB">
+        <feColorMatrix type="matrix" values="0 0 0 0 0.863 0 0 0 0 0.149 0 0 0 0 0.149 0 0 0 1 0" />
+      </filter>
+      <filter id="noteGlowPulse" x="-150%" y="-150%" width="400%" height="400%">
+        <feDropShadow dx="0" dy="0" stdDeviation="3.6" floodColor="#facc15" floodOpacity="1">
+          <animate attributeName="stdDeviation" values="3.6;5.8;3.6" dur="1.55s" repeatCount="indefinite" />
+          <animate attributeName="flood-opacity" values="1;1;1" dur="1.55s" repeatCount="indefinite" />
+        </feDropShadow>
+        <feDropShadow dx="0" dy="0" stdDeviation="7.5" floodColor="#eab308" floodOpacity="0.9">
+          <animate attributeName="stdDeviation" values="7.5;11.5;7.5" dur="1.55s" repeatCount="indefinite" />
+          <animate attributeName="flood-opacity" values="0.9;1;0.9" dur="1.55s" repeatCount="indefinite" />
+        </feDropShadow>
+      </filter>
+    </defs>
     <g transform={transform}>
       <StaffLines top={STAFF.top} left={left} right={right} />
-      <TrebleClef top={question.oneBarMode ? STAFF.top - 1 : STAFF.top} x={question.oneBarMode ? 342 : STAFF.clefX} size={question.oneBarMode ? 94 : 92} />
+      <TrebleClef top={question.oneBarMode ? STAFF.top - 1 : STAFF.top} x={question.oneBarMode ? 342 : STAFF.clefX} size={question.oneBarMode ? 43.7 : 42.75} />
       <KeySignature question={question} top={STAFF.top} />
-      {!question.oneBarMode && <TimeSignatureGlyph signature={question.timeSignature} x={STAFF.timeSigX} y={STAFF.top + 20} />}
+      {!question.oneBarMode && <TimeSignatureGlyph signature={question.timeSignature} x={STAFF.timeSigX} y={STAFF.top + 8} />}
       {layouts.map((layout) => {
         const groups = quaverGroups(layout.bar.notes, question.timeSignature);
         return <g key={layout.barIndex}>
@@ -623,7 +681,7 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
 
 const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 function medalNameForStreak(streak) { if (streak === 10) return "bronze"; if (streak === 15) return "silver"; if (streak === 20) return "gold"; if (streak === 30) return "platinum"; return null; }
-function SymbolButton({ accidental, selected, disabled, correct, wrong, onClick }) { let style = "border-stone-300 bg-white text-stone-900"; if (correct) style = "border-green-700 bg-green-600 text-white"; else if (wrong) style = "border-red-700 bg-red-600 text-white"; else if (selected) style = "border-stone-950 bg-stone-950 text-white"; return <button type="button" disabled={disabled} onClick={onClick} className={`flex h-[74px] min-w-[88px] items-center justify-center rounded-xl border px-3 text-sm font-bold transition ${style}`}><ButtonGlyph id={accidental.id} /></button>; }
+function SymbolButton({ accidental, selected, disabled, correct, wrong, onClick }) { let style = "border-stone-300 bg-white text-stone-900"; if (correct) style = "border-green-700 bg-green-600 text-white"; else if (wrong) style = "border-red-700 bg-red-600 text-white"; else if (selected) style = "border-stone-950 bg-stone-950 text-white"; return <button type="button" disabled={disabled} onClick={onClick} className={`flex h-[74px] min-w-[88px] items-center justify-center rounded-xl border px-1 text-sm font-bold transition ${style}`}><ButtonGlyph id={accidental.id} /></button>; }
 
 
 function WarningBanner({ warning = "" }) {
@@ -636,22 +694,13 @@ function MenuGlyphFrame({ children }) {
 }
 
 function AccidentalMenuGlyph({ id }) {
-  return <MenuGlyphFrame><svg viewBox="0 0 28 24" className="h-[22px] w-[28px] overflow-visible"><AccidentalGlyph id={id} x={14} y={13} compact /></svg></MenuGlyphFrame>;
+  return <MenuGlyphFrame><svg viewBox="0 0 28 24" className="h-[22px] w-[28px] overflow-visible"><AccidentalGlyph id={id} x={14} y={8} compact /></svg></MenuGlyphFrame>;
 }
 
 function QuestionTypeGlyph({ type }) {
   if (type === "numbers") return <MenuGlyphFrame><span className="text-[14px] font-black leading-none tracking-tight">123</span></MenuGlyphFrame>;
-  if (type === "audio") return <MenuGlyphFrame><img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] object-contain" /></MenuGlyphFrame>;
-  return (
-    <MenuGlyphFrame>
-      <svg viewBox="0 0 32 32" className="h-[22px] w-[22px]" aria-hidden="true">
-        <path d="M12.3 27.5c-1.7-1.4-3.2-3.2-4.2-5.1l-2.2-4.3c-.5-1-.1-2.1.9-2.6.9-.4 1.9-.1 2.5.7l1.5 2.2V7.2c0-1.1.9-2 2-2s2 .9 2 2v8.1" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M14.8 15.6v-2.7c0-1.1.9-2 2-2s2 .9 2 2v3.1" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M18.8 16v-2.1c0-1 .8-1.9 1.9-1.9s1.9.8 1.9 1.9v3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M22.6 17v-1.6c0-1 .8-1.8 1.8-1.8s1.8.8 1.8 1.8v4.9c0 4.7-3.2 7.2-7.1 7.2h-2.5c-1.6 0-3-.4-4.3-1.3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </MenuGlyphFrame>
-  );
+  if (type === "audio") return <MenuGlyphFrame><img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" /></MenuGlyphFrame>;
+  return <MenuGlyphFrame><img src={ASSET.hand} alt="" aria-hidden="true" className="h-[22px] w-[22px] object-contain" /></MenuGlyphFrame>;
 }
 
 function MenuRows({ enabledAccidentals, setEnabledAccidentals, enabledQuestionTypes, setEnabledQuestionTypes, newQuestion }) {
@@ -716,26 +765,37 @@ function App() {
   function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); newQuestion(); }
   function showWarning(message) { setWarning(message); if (warningTimer.current) clearTimeout(warningTimer.current); warningTimer.current = setTimeout(() => setWarning(""), 1800); }
   function scoreAnswer(ok) { const nextStreak = ok ? streak + 1 : 0; const earnedMedal = ok ? medalNameForStreak(nextStreak) : null; playFeedbackSound(ok, Boolean(earnedMedal), earnedMedal); setAttempted((value) => value + 1); setCorrect((value) => value + (ok ? 1 : 0)); setStreak(nextStreak); setBestStreak((value) => Math.max(value, nextStreak)); setFeedback({ correct: ok }); if (ok) { setFeedbackFading(false); setTimeout(() => setFeedbackFading(true), 1700); nextTimer.current = setTimeout(() => newQuestion(), 2000); } }
-  function fadeToNextQuestion() { if (!feedback || feedback.correct || feedbackFading) return; setFeedbackFading(true); setTimeout(() => newQuestion(), 280); }
+  function fadeToNextQuestion() { if (!feedback || feedbackFading) return; if (nextTimer.current) clearTimeout(nextTimer.current); setFeedbackFading(true); setTimeout(() => newQuestion(), 280); }
+  function handleFeedbackAdvance() { if (!feedback || feedbackFading) return; window.MLH.advanceFeedbackPointerDown?.({ feedback, onCorrect: fadeToNextQuestion, onIncorrect: fadeToNextQuestion }); }
   function pointerInSvg(event) { const rect = event.currentTarget.getBoundingClientRect(); return { x: ((event.clientX - rect.left) / rect.width) * VIEWBOX_WIDTH, y: ((event.clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT }; }
   function handleMove(event) { if (!selectedSymbol || feedback || !isPlacement) { setHoverPlacement(null); return; } setHoverPlacement(snapPlacement(pointerInSvg(event), selectedSymbol, question)); }
   function handleLock(event) { if (!selectedSymbol || feedback || !hoverPlacement || !isPlacement) return; event.preventDefault(); setPlacements([{ ...hoverPlacement, localId: Math.random().toString(36).slice(2) }]); setWarning(""); }
   function confirmPlacement() { if (feedback) return; stopAudio(); if (!placements.length) return showWarning("Place an accidental on the score before pressing Confirm."); const missingNow = missingPlacements(question, placements); const wrongNow = wrongPlacements(question, placements); setMissing(missingNow); setWrong(wrongNow); scoreAnswer(placementsMatch(question, placements)); }
   function pitch(barIndex, noteIndex) { const note = question.bars[barIndex].notes[noteIndex]; let accidental = effectiveAccidental(question, barIndex, noteIndex); if (note.hiddenAccidental !== null && note.hiddenAccidental !== undefined) accidental = note.hiddenAccidental; return note.midi + accidental; }
   function playQuestion() {
-    function playChord(context, notes, startTime, duration, type = "sine", volume = 0.04) { notes.forEach((midi) => { const osc = context.createOscillator(); const gain = context.createGain(); osc.type = type; osc.frequency.setValueAtTime(midiFreq(midi), startTime); gain.gain.setValueAtTime(0.0001, startTime); gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.04); gain.gain.exponentialRampToValueAtTime(volume * 0.7, startTime + duration * 0.7); gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration); osc.connect(gain); gain.connect(context.destination); osc.start(startTime); osc.stop(startTime + duration + 0.05); }); }
+    function playChord(context, output, notes, startTime, duration, type = "sine", volume = 0.022) { notes.forEach((midi) => { const osc = context.createOscillator(); const gain = context.createGain(); osc.type = type; osc.frequency.setValueAtTime(midiFreq(midi), startTime); gain.gain.setValueAtTime(0.0001, startTime); gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.04); gain.gain.exponentialRampToValueAtTime(volume * 0.7, startTime + duration * 0.7); gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration); osc.connect(gain); gain.connect(output); osc.start(startTime); osc.stop(startTime + duration + 0.05); }); }
     const accompanimentPatterns = { "2/4": [0, 1], "3/4": [0, 1, 2], "4/4": [0, 1, 2, 3], "6/8": [0, 0.5, 1, 1.5, 2, 2.5] };
     if (playing) return;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return showWarning("Audio playback is not supported in this browser.");
     stopAudio();
     const context = new AudioContextClass(); audioContext.current = context; setPlaying(true);
+    const master = context.createGain();
+    const compressor = context.createDynamicsCompressor();
+    master.gain.setValueAtTime(0.68, context.currentTime);
+    compressor.threshold.setValueAtTime(-18, context.currentTime);
+    compressor.knee.setValueAtTime(20, context.currentTime);
+    compressor.ratio.setValueAtTime(8, context.currentTime);
+    compressor.attack.setValueAtTime(0.006, context.currentTime);
+    compressor.release.setValueAtTime(0.18, context.currentTime);
+    master.connect(compressor);
+    compressor.connect(context.destination);
     const beat = 60 / (question.audioQuestionKind === "one-bar-hearing" ? 32 : 76);
     const accompaniment = accompanimentPatterns[question.timeSignature.id] ?? [0, 1, 2, 3];
     let time = context.currentTime + 0.08;
     question.performedOrder.forEach((barIndex) => {
       const chordLetters = chordForBar(question, barIndex);
-      accompaniment.forEach((beatOffset) => { const chordMidis = chordLetters.map((letter, idx) => { const tone = noteFromChordTone(letter, 5 + (idx === 0 ? 0 : 1)); const accidental = tone.writtenAccidental ?? 0; return tone.midi + accidental - 12; }); playChord(context, chordMidis, time + beatOffset * beat, beat * 0.9, "sine", 0.04); });
+      accompaniment.forEach((beatOffset) => { const chordMidis = chordLetters.map((letter, idx) => { const tone = noteFromChordTone(letter, 5 + (idx === 0 ? 0 : 1)); const accidental = tone.writtenAccidental ?? 0; return tone.midi + accidental - 12; }); playChord(context, master, chordMidis, time + beatOffset * beat, beat * 0.9); });
       question.bars[barIndex].notes.forEach((note, noteIndex) => {
         const duration = rhythmInfo(note.rhythm).beats * beat;
         const ms = Math.max(0, (time - context.currentTime) * 1000);
@@ -743,12 +803,12 @@ function App() {
         audioTimers.current.push(setTimeout(() => setActiveNote(null), ms + duration * 1000));
         const osc = context.createOscillator(); const gain = context.createGain();
         osc.type = "triangle"; osc.frequency.setValueAtTime(midiFreq(pitch(barIndex, noteIndex)), time);
-        gain.gain.setValueAtTime(0.0001, time); gain.gain.exponentialRampToValueAtTime(question.audioQuestionKind === "one-bar-hearing" ? 0.28 : 0.16, time + 0.08); gain.gain.exponentialRampToValueAtTime(question.audioQuestionKind === "one-bar-hearing" ? 0.18 : 0.08, time + duration * 0.9); gain.gain.exponentialRampToValueAtTime(0.0001, time + duration + 0.08);
-        osc.connect(gain); gain.connect(context.destination); osc.start(time); osc.stop(time + duration + 0.15);
+        gain.gain.setValueAtTime(0.0001, time); gain.gain.exponentialRampToValueAtTime(question.audioQuestionKind === "one-bar-hearing" ? 0.14 : 0.095, time + 0.08); gain.gain.exponentialRampToValueAtTime(question.audioQuestionKind === "one-bar-hearing" ? 0.09 : 0.052, time + duration * 0.9); gain.gain.exponentialRampToValueAtTime(0.0001, time + duration + 0.08);
+        osc.connect(gain); gain.connect(master); osc.start(time); osc.stop(time + duration + 0.15);
         time += duration;
       });
     });
-    audioTimers.current.push(setTimeout(() => { setPlaying(false); setActiveNote(null); audioContext.current = null; }, Math.max(0, (time - context.currentTime) * 1000) + 100));
+    audioTimers.current.push(setTimeout(() => { setPlaying(false); setActiveNote(null); try { context.close(); } catch {} audioContext.current = null; }, Math.max(0, (time - context.currentTime) * 1000) + 100));
   }
   return <div className={window.MLH.shell.pageShellClass}>
     <window.MLH.AppHeader icon={ASSET.appIcon} title="Accidentals" subtitle="Identify and apply flats, sharps and naturals.">
@@ -756,7 +816,7 @@ function App() {
     </window.MLH.AppHeader>
 
     <div className={window.MLH.shell.pageContentClass}>
-      <main className={window.MLH.shell.mainShellClass} onPointerDown={() => { if (feedback && !feedback.correct) fadeToNextQuestion(); }}>
+      <main className={window.MLH.shell.mainShellClass} onPointerDown={handleFeedbackAdvance}>
         <div className="relative z-[90] mb-2.5 grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
           <div className="relative flex items-center gap-2">
             <div className="relative" ref={levelRef}>
@@ -796,7 +856,7 @@ function App() {
           </div>
         </div>
         <div className={`relative -top-[54px] h-[280px] overflow-hidden transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbol={selectedSymbol} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} active={activeNote} onMove={handleMove} onLeave={() => setHoverPlacement(null)} onLock={handleLock} /></div>
-        <div className="relative z-10 mt-[125px] min-h-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 h-auto px-4 py-3 shadow-md md:mx-3 md:mt-[50px]"><div className="flex items-start justify-between gap-3 text-stone-900"><div className="pb-3"><p className="text-base font-semibold leading-none" dangerouslySetInnerHTML={{ __html: question.prompt }} /></div>{(question.questionType === "audio-full" || question.questionType === "audio-two" || question.audioQuestionKind) && <button type="button" onClick={playQuestion} disabled={playing} className="flex h-10 min-w-[112px] shrink-0 items-center justify-center gap-2 rounded-xl bg-stone-950 px-[18px] py-[10px] text-sm font-bold text-white disabled:opacity-50"><span className="text-base leading-none">▶</span><span>Play</span></button>}</div>{isChoice && <div className="mt-5 grid grid-cols-6 gap-2">{question.choices.map((item) => <button key={item.id} type="button" disabled={Boolean(feedback)} onClick={() => { if (feedback) return; setChoice(item.id); scoreAnswer(item.id === question.answerId); }} className={`min-h-[56px] flex items-center justify-center rounded-xl border px-2 py-0 text-sm font-semibold ${feedback ? item.id === question.answerId ? "border-green-700 bg-green-600 text-white" : item.id === choice ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-500" : choice === item.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}><span className="text-base font-semibold tracking-tight">{item.text}</span></button>)}</div>}{isPlacement && <div className="mt-0 flex flex-wrap items-end justify-between gap-3 pb-[0px]"><div className="flex flex-wrap gap-2">{ACCIDENTALS.filter((accidental) => enabledAccidentals.includes(accidental.id)).map((accidental) => <SymbolButton key={accidental.id} accidental={accidental} selected={selectedSymbol === accidental.id} disabled={Boolean(feedback)} correct={Boolean(feedback && !feedback.correct && question.answerId === accidental.id)} wrong={Boolean(feedback && !feedback.correct && selectedSymbol === accidental.id && question.answerId !== accidental.id)} onClick={() => { setSelectedSymbol(accidental.id); setWarning(""); }} />)}</div><div className="ml-auto flex gap-2"><button type="button" disabled={Boolean(feedback) || placements.length === 0} onClick={() => { setPlacements([]); setHoverPlacement(null); setWarning(""); }} className="rounded-xl bg-stone-950 px-[18px] py-[10px] text-sm font-bold text-white disabled:opacity-35">Clear</button><window.MLH.ConfirmButton disabled={!canConfirm || Boolean(feedback)} onClick={confirmPlacement}>Confirm</window.MLH.ConfirmButton></div></div>}</div>
+        <div className="relative z-10 mt-[125px] min-h-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 h-auto px-4 py-3 shadow-md md:mx-3 md:mt-[50px]"><div className="flex items-start justify-between gap-3 text-stone-900"><div className="pb-3"><p className="text-base font-semibold leading-none" dangerouslySetInnerHTML={{ __html: question.prompt }} /></div>{(question.questionType === "audio-full" || question.questionType === "audio-two" || question.audioQuestionKind) && <button type="button" onClick={playQuestion} disabled={playing} className="flex h-10 min-w-[112px] shrink-0 items-center justify-center gap-2 rounded-xl bg-stone-950 px-[18px] py-[10px] text-sm font-bold text-white disabled:opacity-50"><span className="text-base leading-none">▶</span><span>Play</span></button>}</div>{isChoice && <div className="mt-5 grid grid-cols-6 gap-2">{question.choices.map((item) => <button key={item.id} type="button" disabled={Boolean(feedback)} onClick={() => { if (feedback) return; setChoice(item.id); scoreAnswer(item.id === question.answerId); }} className={`min-h-[56px] flex items-center justify-center rounded-xl border px-2 py-0 text-sm font-semibold ${feedback ? item.id === question.answerId ? "border-green-700 bg-green-600 text-white" : item.id === choice ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-500" : choice === item.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>{item.arrow ? <span className="grid w-full grid-cols-[1fr_auto] items-center gap-3 px-1"><span className="text-center text-base font-semibold leading-tight tracking-tight">{item.text}</span><span className="text-3xl font-black leading-none">{item.arrow}</span></span> : <span className="text-base font-semibold tracking-tight">{item.text}</span>}</button>)}</div>}{isPlacement && <div className="mt-0 flex flex-wrap items-end justify-between gap-3 pb-[0px]"><div className="flex flex-wrap gap-2">{ACCIDENTALS.filter((accidental) => enabledAccidentals.includes(accidental.id)).map((accidental) => <SymbolButton key={accidental.id} accidental={accidental} selected={selectedSymbol === accidental.id} disabled={Boolean(feedback)} correct={Boolean(feedback && !feedback.correct && question.answerId === accidental.id)} wrong={Boolean(feedback && !feedback.correct && selectedSymbol === accidental.id && question.answerId !== accidental.id)} onClick={() => { setSelectedSymbol(accidental.id); setWarning(""); }} />)}</div><div className="ml-auto flex gap-2"><button type="button" disabled={Boolean(feedback) || placements.length === 0} onClick={() => { setPlacements([]); setHoverPlacement(null); setWarning(""); }} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-900 disabled:opacity-50">Clear</button><window.MLH.ConfirmButton disabled={!canConfirm || Boolean(feedback)} onClick={confirmPlacement}>Confirm</window.MLH.ConfirmButton></div></div>}</div>
       </main>
     </div>
   </div>;
