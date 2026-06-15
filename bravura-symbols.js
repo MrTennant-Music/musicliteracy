@@ -34,6 +34,7 @@ const BRAVURA_SYMBOLS = {
   timeSig9: "\uE089",
 
   // Full note symbols
+  noteheadBlack: "\uE0A4",
   wholeNote: "\uE1D2",
   halfNoteStemUp: "\uE1D3",
   halfNoteStemDown: "\uE1D4",
@@ -78,9 +79,4 @@ const BRAVURA_SYMBOLS = {
   sforzato: "\uE539",
   crescendo: "\uE53E",
   diminuendo: "\uE53F",
-
-  // Playback icons
-  play: "\uEB1C",
-  stop: "\uEB1D",
 };
-
