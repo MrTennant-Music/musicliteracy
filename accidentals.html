@@ -46,6 +46,7 @@ const NOTE = {
 };
 
 const BAR_COUNT = 4;
+const NOTE_VISUAL_STEP_OFFSET = 1;
 const GLYPH = {
   trebleClef: "\uE050",
   flat: "\uE260",
@@ -170,6 +171,10 @@ function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function rhythmInfo(id) { return RHYTHMS[id] ?? RHYTHMS.crotchet; }
 function yForStep(step, top = STAFF.top) { return top + STAFF.gap * 4 - step * (STAFF.gap / 2); }
 function stemDown(step) { return step > 4; }
+function visualNote(note) {
+  const raisedStep = note.step + NOTE_VISUAL_STEP_OFFSET;
+  return { ...note, step: note.rhythm === "semibreve" || stemDown(raisedStep) ? raisedStep : note.step };
+}
 function accidentalId(value) { if (value === 1) return "sharp"; if (value === -1) return "flat"; return "natural"; }
 function accidentalById(id) { return ACCIDENTALS.find((a) => a.id === id) ?? ACCIDENTALS[0]; }
 function accidentalValue(id) { if (id === "sharp") return 1; if (id === "flat") return -1; return 0; }
@@ -559,7 +564,7 @@ function snapPlacement(pointer, symbolId, question) {
     layout.bar.notes.forEach((note, index) => {
       if (question.audioQuestionKind === "one-bar-hearing" && index === 0) return;
       const x = layout.positions[index];
-      const y = yForStep(note.step, layout.systemTop);
+      const y = yForStep(visualNote(note).step, layout.systemTop);
       const distance = Math.hypot(pointer.x - x, pointer.y - y);
       if (distance < best) { best = distance; closest = { symbolId, barIndex: layout.barIndex, noteIndex: index, anchor: "before-note" }; }
     });
@@ -569,34 +574,34 @@ function snapPlacement(pointer, symbolId, question) {
 function placementPosition(placement, question, offset = false, placements = []) {
   const layout = scoreLayouts(question, placements).find((item) => item.barIndex === placement.barIndex);
   const note = layout?.bar.notes[placement.noteIndex];
-  return { x: (layout?.positions[placement.noteIndex] ?? 0) - 18, y: note && layout ? yForStep(note.step, layout.systemTop) + (offset ? 42 : 0) : STAFF.top };
+  return { x: (layout?.positions[placement.noteIndex] ?? 0) - 16, y: note && layout ? yForStep(visualNote(note).step, layout.systemTop) - STAFF.gap / 2 + (offset ? 42 : 0) : STAFF.top };
 }
 
-function AccidentalGlyph({ id, x = 50, y = 32, colour = "currentColor", opacity = 1, compact = false, glow = true }) {
+function AccidentalGlyph({ id, x = 50, y = 32, colour = "currentColor", opacity = 1, compact = false, glow = true, fontSize = null }) {
   const offset = id === "sharp" ? 5.4 : id === "natural" ? 4.9 : 6.2;
-  const size = compact ? 28 : 42;
+  const size = fontSize ?? (compact ? 28 : 42);
   return <text className="music-symbol" x={x} y={y + offset} opacity={opacity} fill={colour} filter={glow && colour === COLOUR.black ? "url(#blackGlow)" : undefined} fontSize={size} textAnchor="middle">{GLYPH[id]}</text>;
 }
 function ButtonGlyph({ id }) {
-  const yOffset = id === "sharp" ? 2 : id === "natural" ? 1 : 6;
+  const yOffset = id === "sharp" ? 2 : id === "natural" ? 1 : 8;
   return <svg viewBox="0 0 100 74" className="h-[58px] w-20 overflow-visible"><text className="music-symbol" x="50" y={37 + yOffset} fill="currentColor" fontSize="58" textAnchor="middle" dominantBaseline="middle">{GLYPH[id]}</text></svg>;
 }
 function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false, placements = [] }) { const pos = placementPosition(placement, question, feedbackOffset, placements); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} compact glow={false} />; }
 function StaffLines({ top, left = STAFF.left, right = STAFF.right }) { return <g>{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.2" />)}</g>; }
 function TrebleClef({ top, x = STAFF.clefX, size = 42.75 }) { return <text className="music-symbol" x={x + 19} y={top + 30} fontSize={size} textAnchor="middle">{GLYPH.trebleClef}</text>; }
 function TimeSignatureDigit({ value, x, y, fontSize }) { return <text className="music-symbol" x={x} y={y} fontSize={fontSize} textAnchor="middle" fill="currentColor">{GLYPH.time[Number(value)]}</text>; }
-function TimeSignatureGlyph({ signature, x, y, fontSize = 32 }) { return <g><TimeSignatureDigit value={signature.top} x={x} y={y} fontSize={fontSize} /><TimeSignatureDigit value={signature.bottom} x={x} y={y + 22} fontSize={fontSize} /></g>; }
-function KeySignature({ question, top }) { if (question.oneBarMode) return null; if (question.key.id === "F") return <AccidentalGlyph id="flat" x={STAFF.keySigX} y={yForStep(4.2, top) - 3} compact glow={false} />; if (question.key.id === "G") return <AccidentalGlyph id="sharp" x={STAFF.keySigX} y={yForStep(7.8, top) - 3} compact glow={false} />; return null; }
+function TimeSignatureGlyph({ signature, x, y, fontSize = 36.96 }) { return <g><TimeSignatureDigit value={signature.top} x={x} y={y} fontSize={fontSize} /><TimeSignatureDigit value={signature.bottom} x={x} y={y + 20} fontSize={fontSize} /></g>; }
+function KeySignature({ question, top }) { if (question.oneBarMode) return null; if (question.key.id === "F") return <AccidentalGlyph id="flat" x={STAFF.keySigX} y={yForStep(4.2, top) - 5} compact fontSize={35} glow={false} />; if (question.key.id === "G") return <AccidentalGlyph id="sharp" x={STAFF.keySigX} y={yForStep(7.8, top) - 6} compact fontSize={35} glow={false} />; return null; }
 function LedgerLines({ x, step, top, colour = "currentColor" }) { const lines = []; if (step <= -2) lines.push(yForStep(-2, top)); if (step >= 10) lines.push(yForStep(10, top)); return <g>{lines.map((y) => <line key={y} x1={x - 10.5} x2={x + 10.5} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}</g>; }
 function OpenNoteGlow({ x, y, inner = false }) { return <ellipse cx={x} cy={y} rx={inner ? NOTE.rx - 2.4 : NOTE.rx + 2.2} ry={inner ? NOTE.ry - 2 : NOTE.ry + 1.8} transform={`rotate(-18 ${x} ${y})`} fill="#facc15" opacity={inner ? "0.24" : "0.22"} />; }
 function noteImageFilter(colour) { if (colour === COLOUR.green) return "url(#noteGreenFilter)"; if (colour === COLOUR.red) return "url(#noteRedFilter)"; return undefined; }
 function NoteImage({ rhythm, x, y, stemDown, beamed, colour }) {
   const filter = noteImageFilter(colour);
-  if (rhythm === "semibreve") return <image href={ASSET.semibreve} x={x - 10.4} y={y - 5.9} width="20.8" height="11.8" preserveAspectRatio="xMidYMid meet" pointerEvents="none" filter={filter} />;
+  if (rhythm === "semibreve") return <image href={ASSET.semibreve} x={x - 9.88} y={y - 5.61} width="19.76" height="11.21" preserveAspectRatio="xMidYMid meet" pointerEvents="none" filter={filter} />;
   const src = rhythm === "minim" ? ASSET.minim : ASSET.crotchet;
   const width = rhythm === "minim" ? 24 : 19.6;
   const height = rhythm === "minim" ? 44.9 : 36.7;
-  const yAdjust = stemDown ? 0.45 : -0.9;
+  const yAdjust = stemDown ? 2.45 : -0.9;
   const style = rhythm === "quaver" && !beamed && stemDown ? undefined : { transformBox: "fill-box", transformOrigin: "center", transform: stemDown ? "translateY(28px) rotate(180deg)" : "none" };
   return <image href={src} x={x - width / 2} y={y - height * 0.831 + yAdjust} width={width} height={height} preserveAspectRatio="xMidYMid meet" pointerEvents="none" filter={filter} style={style} />;
 }
@@ -604,14 +609,15 @@ function QuaverFlag({ stem, colour }) {
   return <text className="music-symbol" x={stem.stemX + 4.5} y={stem.stemEndY + (stem.down ? -1 : 1.5)} fontSize="30" textAnchor="middle" fill={colour}>{stem.down ? GLYPH.flagDown : GLYPH.flagUp}</text>;
 }
 function Note({ note, x, top, colour = "currentColor", accidentalColour = "currentColor", forcedDown = null, forcedEnd = null, showFlag = true }) {
+  const displayNote = visualNote(note);
   const info = rhythmInfo(note.rhythm);
-  const stem = stemData(note, x, top, forcedDown);
-  const dotY = note.step % 2 === 0 ? stem.y - 4 : stem.y;
+  const stem = stemData(displayNote, x, top, forcedDown);
+  const dotY = displayNote.step % 2 === 0 ? stem.y - 4 : stem.y;
   const showAccidental = note.writtenAccidental !== null && note.writtenAccidental !== undefined && note.hiddenAccidental === null;
   const highlighted = colour === COLOUR.black || accidentalColour === COLOUR.black;
   return <g filter={highlighted ? "url(#noteGlowPulse)" : undefined}>
-    <LedgerLines x={x} step={note.step} top={top} colour={colour} />
-    {showAccidental && <AccidentalGlyph id={accidentalId(note.writtenAccidental)} x={x - 18} y={stem.y} colour={accidentalColour} compact glow={false} />}
+    <LedgerLines x={x} step={displayNote.step} top={top} colour={colour} />
+    {showAccidental && <AccidentalGlyph id={accidentalId(note.writtenAccidental)} x={x - 16} y={stem.y - STAFF.gap / 2} colour={accidentalColour} compact glow={false} />}
     {highlighted && info.open && <OpenNoteGlow x={x} y={stem.y} />}
     <NoteImage rhythm={note.rhythm} x={x} y={stem.y} stemDown={stem.down} beamed={!showFlag && note.rhythm === "quaver"} colour={colour} />
     {info.flag && showFlag && <QuaverFlag stem={stem} colour={colour} />}
@@ -653,21 +659,21 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
       <StaffLines top={STAFF.top} left={left} right={right} />
       <TrebleClef top={question.oneBarMode ? STAFF.top - 1 : STAFF.top} x={question.oneBarMode ? 342 : STAFF.clefX} size={question.oneBarMode ? 43.7 : 42.75} />
       <KeySignature question={question} top={STAFF.top} />
-      {!question.oneBarMode && <TimeSignatureGlyph signature={question.timeSignature} x={STAFF.timeSigX} y={STAFF.top + 8} />}
+      {!question.oneBarMode && <TimeSignatureGlyph signature={question.timeSignature} x={STAFF.timeSigX} y={STAFF.top + 10} />}
       {layouts.map((layout) => {
         const groups = quaverGroups(layout.bar.notes, question.timeSignature);
         return <g key={layout.barIndex}>
           {!question.oneBarMode && <><rect x={layout.startX - 8} y={layout.systemTop - 46} width={48} height={34} fill="white" /><text x={layout.startX + 4} y={layout.systemTop - 18} fontSize="13" fontWeight="500">{layout.barIndex + 1}</text></>}
           {layout.bar.notes.map((note, index) => {
             const group = groupContaining(groups, index);
-            const beam = group ? beamData(layout.bar.notes.slice(group.start, group.end + 1), layout.positions.slice(group.start, group.end + 1), layout.systemTop) : null;
-            const stem = beam ? stemData(note, layout.positions[index], layout.systemTop, beam.down) : null;
+            const beam = group ? beamData(layout.bar.notes.slice(group.start, group.end + 1).map(visualNote), layout.positions.slice(group.start, group.end + 1), layout.systemTop) : null;
+            const stem = beam ? stemData(visualNote(note), layout.positions[index], layout.systemTop, beam.down) : null;
             const accidentalOnly = question.accidentalOnlyHighlight === true;
             const colour = note.highlight && !accidentalOnly ? COLOUR.black : "currentColor";
             const accidentalColour = note.highlight && accidentalOnly ? COLOUR.black : colour;
             return <Note key={note.id} note={note} x={layout.positions[index]} top={layout.systemTop} colour={colour} accidentalColour={accidentalColour} forcedDown={beam ? beam.down : null} forcedEnd={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} />;
           })}
-          {groups.map((group, index) => { const beam = beamData(layout.bar.notes.slice(group.start, group.end + 1), layout.positions.slice(group.start, group.end + 1), layout.systemTop); return <line key={index} x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke="currentColor" strokeWidth="4" />; })}
+          {groups.map((group, index) => { const beam = beamData(layout.bar.notes.slice(group.start, group.end + 1).map(visualNote), layout.positions.slice(group.start, group.end + 1), layout.systemTop); return <line key={index} x1={beam.start.x - 1} y1={beam.start.y + 2} x2={beam.end.x + 1} y2={beam.end.y + 2} stroke="currentColor" strokeWidth="4" />; })}
           {!question.oneBarMode && (layout.barIndex === BAR_COUNT - 1 ? <g><line x1={layout.endX - 5} x2={layout.endX - 5} y1={layout.systemTop} y2={layout.systemTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.4" /><line x1={layout.endX} x2={layout.endX} y1={layout.systemTop - 0.75} y2={layout.systemTop + STAFF.gap * 4 + 0.75} stroke="currentColor" strokeWidth="4" /></g> : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.4" />)}
         </g>;
       })}
@@ -764,7 +770,21 @@ function App() {
   function newQuestion(nextTypes = enabledQuestionTypes, nextAccidentals = enabledAccidentals) { setQuestionVisible(false); setTimeout(() => { resetTask(makeQuestion({ enabledQuestionTypes: nextTypes, enabledAccidentals: nextAccidentals })); setQuestionVisible(true); }, 260); }
   function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); newQuestion(); }
   function showWarning(message) { setWarning(message); if (warningTimer.current) clearTimeout(warningTimer.current); warningTimer.current = setTimeout(() => setWarning(""), 1800); }
-  function scoreAnswer(ok) { const nextStreak = ok ? streak + 1 : 0; const earnedMedal = ok ? medalNameForStreak(nextStreak) : null; playFeedbackSound(ok, Boolean(earnedMedal), earnedMedal); setAttempted((value) => value + 1); setCorrect((value) => value + (ok ? 1 : 0)); setStreak(nextStreak); setBestStreak((value) => Math.max(value, nextStreak)); setFeedback({ correct: ok }); if (ok) { setFeedbackFading(false); setTimeout(() => setFeedbackFading(true), 1700); nextTimer.current = setTimeout(() => newQuestion(), 2000); } }
+  function scoreAnswer(ok) {
+    const nextStreak = ok ? streak + 1 : 0;
+    const earnedMedal = ok ? medalNameForStreak(nextStreak) : null;
+    setAttempted((value) => value + 1);
+    setCorrect((value) => value + (ok ? 1 : 0));
+    setStreak(nextStreak);
+    setBestStreak((value) => Math.max(value, nextStreak));
+    setFeedback({ correct: ok });
+    setFeedbackFading(false);
+    try { playFeedbackSound(ok, Boolean(earnedMedal), earnedMedal); } catch {}
+    if (ok) {
+      setTimeout(() => setFeedbackFading(true), 1700);
+      nextTimer.current = setTimeout(() => newQuestion(), 2000);
+    }
+  }
   function fadeToNextQuestion() { if (!feedback || feedbackFading) return; if (nextTimer.current) clearTimeout(nextTimer.current); setFeedbackFading(true); setTimeout(() => newQuestion(), 280); }
   function handleFeedbackAdvance() { if (!feedback || feedbackFading) return; window.MLH.advanceFeedbackPointerDown?.({ feedback, onCorrect: fadeToNextQuestion, onIncorrect: fadeToNextQuestion }); }
   function pointerInSvg(event) { const rect = event.currentTarget.getBoundingClientRect(); return { x: ((event.clientX - rect.left) / rect.width) * VIEWBOX_WIDTH, y: ((event.clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT }; }
@@ -816,7 +836,7 @@ function App() {
     </window.MLH.AppHeader>
 
     <div className={window.MLH.shell.pageContentClass}>
-      <main className={window.MLH.shell.mainShellClass} onPointerDown={handleFeedbackAdvance}>
+      <main className={window.MLH.shell.mainShellClass} onPointerDownCapture={handleFeedbackAdvance}>
         <div className="relative z-[90] mb-2.5 grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
           <div className="relative flex items-center gap-2">
             <div className="relative" ref={levelRef}>

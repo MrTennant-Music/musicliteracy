@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bravura Glyph Picker</title>
+  <script src="./bravura-symbols.js"></script>
+  <style>
+    @font-face {
+      font-family: "Bravura";
+      src: url("./Bravura.otf") format("opentype");
+      font-display: block;
+    }
+
+    :root {
+      --ink: #111827;
+      --muted: #667085;
+      --line: #dedbd7;
+      --paper: #ffffff;
+      --soft: #f7f5f2;
+      --dark: #0f0f0f;
+      --blue: #2563eb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #fafafa;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+    }
+
+    .wrap {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 0;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto auto;
+      gap: 12px;
+      align-items: center;
+      padding: 0 0 16px;
+    }
+
+    input,
+    select {
+      min-height: 46px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    input {
+      width: 100%;
+      padding: 0 14px;
+    }
+
+    .search-field {
+      position: relative;
+    }
+
+    .search-field::before {
+      content: "\1F50D";
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1;
+      transform: translateY(-50%);
+    }
+
+    .search-field input {
+      padding-left: 42px;
+    }
+
+    select {
+      padding: 0 12px;
+    }
+
+    main {
+      padding: 24px 0 42px;
+    }
+
+    .summary {
+      display: none;
+    }
+
+    .selection-bar {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 46px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      padding: 6px 8px 6px 12px;
+    }
+
+    .toggle-control {
+      display: flex;
+      min-height: 46px;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 700;
+      padding: 0 12px;
+      white-space: nowrap;
+    }
+
+    .toggle-control input {
+      width: 16px;
+      height: 16px;
+      min-height: 0;
+      margin: 0;
+      accent-color: var(--dark);
+    }
+
+    .selection-count {
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      align-items: start;
+      gap: 12px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      padding: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .select-glyph {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .select-glyph input {
+      width: 16px;
+      height: 16px;
+      min-height: 0;
+      margin: 0;
+      accent-color: var(--dark);
+    }
+
+    .glyph {
+      display: grid;
+      width: 88px;
+      height: 88px;
+      place-items: center;
+      border: 1px solid #e7e5e4;
+      border-radius: 8px;
+      background: var(--soft);
+      overflow: hidden;
+    }
+
+    .glyph-symbol {
+      display: inline-block;
+      font-family: "Bravura", serif;
+      font-size: 42px;
+      line-height: 1;
+      max-width: 80px;
+      max-height: 80px;
+      transform: translate(var(--x-offset, 0px), calc(var(--y-offset, 0px) + 9px));
+      transform-origin: center;
+    }
+
+    .meta {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      padding-right: 30px;
+    }
+
+    .name {
+      min-height: 1.25rem;
+      color: var(--ink);
+      font-weight: 700;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+
+    code {
+      display: block;
+      overflow: hidden;
+      color: #344054;
+      font-family: Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 3px;
+    }
+
+    button {
+      min-height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: white;
+      color: var(--ink);
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 0 10px;
+    }
+
+    button:hover {
+      border-color: var(--dark);
+    }
+
+    button.copied {
+      border-color: var(--blue);
+      background: #eff6ff;
+      color: var(--blue);
+    }
+
+    .empty {
+      display: none;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: white;
+      color: var(--muted);
+      padding: 28px;
+      text-align: center;
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        align-items: flex-start;
+      }
+
+      .controls {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (min-width: 721px) and (max-width: 980px) {
+      .grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (min-width: 981px) and (max-width: 1280px) {
+      .grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="topbar">
+        <div>
+          <h1>Bravura Glyph Picker</h1>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="search-field">
+          <input id="search" type="search" placeholder="Search" autocomplete="off" />
+        </div>
+        <select id="category"></select>
+        <label class="toggle-control">
+          <input id="showUnnamed" type="checkbox" />
+          Show unnamed
+        </label>
+        <div class="selection-bar">
+          <span id="selectedCount" class="selection-count">0 selected</span>
+          <button id="copySelected" type="button">Copy</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="summary">
+      <span id="count"></span>
+    </div>
+    <div id="grid" class="grid"></div>
+    <div id="empty" class="empty">No glyphs match this search.</div>
+  </main>
+
+  <script>
+    /*
+      This page deliberately uses plain JavaScript.
+      It is an admin/helper page, so it is separate from the pupil apps.
+    */
+
+    const CATEGORIES = [
+      {
+        id: "smufl-range",
+        label: "All",
+        ranges: [[0xE000, 0xEFFF]],
+        names: {},
+      },
+      {
+        id: "common",
+        label: "Common",
+        codepoints: [
+          0xE000, 0xE030, 0xE032, 0xE040, 0xE041, 0xE045, 0xE046, 0xE047,
+          0xE050, 0xE062,
+          0xE080, 0xE081, 0xE082, 0xE083, 0xE084, 0xE085, 0xE086, 0xE087, 0xE088, 0xE089,
+          0xE0A2, 0xE0A3, 0xE0A4,
+          0xE1D2, 0xE1D3, 0xE1D4, 0xE1D5, 0xE1D6, 0xE1D7, 0xE1D8, 0xE1D9, 0xE1DA, 0xE1E7, 0xE1FD,
+          0xE240, 0xE241,
+          0xE260, 0xE261, 0xE262, 0xE263, 0xE264,
+          0xE4A0, 0xE4A1, 0xE4A2, 0xE4A3, 0xE4A4, 0xE4A5,
+          0xE4E3, 0xE4E4, 0xE4E5, 0xE4E6, 0xE4E7,
+          0xE511, 0xE51C,
+          0xE520, 0xE522, 0xE52B, 0xE52C, 0xE52D, 0xE52F, 0xE539, 0xE53E, 0xE53F,
+          0xEB1C, 0xEB1D,
+        ],
+        ranges: [],
+        names: {},
+      },
+      {
+        id: "clefs",
+        label: "Clefs",
+        ranges: [[0xE050, 0xE07F]],
+        names: {
+          E050: "G clef / treble clef",
+          E05C: "C clef",
+          E062: "F clef / bass clef",
+        },
+      },
+      {
+        id: "noteheads",
+        label: "Noteheads",
+        ranges: [[0xE0A0, 0xE0FF], [0xE1D0, 0xE1EF], [0xE240, 0xE24F]],
+        names: {
+          E0A0: "Double whole notehead",
+          E0A2: "Whole notehead",
+          E0A3: "Half notehead",
+          E0A4: "Black notehead",
+          E240: "8th flag up",
+          E241: "8th flag down",
+        },
+      },
+      {
+        id: "rests",
+        label: "Rests",
+        ranges: [[0xE4E0, 0xE4FF]],
+        names: {
+          E4E3: "Whole rest",
+          E4E4: "Half rest",
+          E4E5: "Quarter rest",
+          E4E6: "8th rest",
+          E4E7: "16th rest",
+        },
+      },
+      {
+        id: "accidentals",
+        label: "Accidentals",
+        ranges: [[0xE260, 0xE2FF]],
+        names: {
+          E260: "Flat",
+          E261: "Natural",
+          E262: "Sharp",
+          E263: "Double sharp",
+          E264: "Double flat",
+        },
+      },
+      {
+        id: "time-signatures",
+        label: "Time signatures",
+        ranges: [[0xE080, 0xE09F]],
+        names: {
+          E080: "Time signature 0",
+          E081: "Time signature 1",
+          E082: "Time signature 2",
+          E083: "Time signature 3",
+          E084: "Time signature 4",
+          E085: "Time signature 5",
+          E086: "Time signature 6",
+          E087: "Time signature 7",
+          E088: "Time signature 8",
+          E089: "Time signature 9",
+        },
+      },
+      {
+        id: "articulations",
+        label: "Articulations",
+        ranges: [[0xE4A0, 0xE4BF]],
+        names: {
+          E4A0: "Accent above",
+          E4A1: "Accent below",
+          E4A2: "Staccato above",
+          E4A3: "Staccato below",
+          E4A4: "Tenuto above",
+          E4A5: "Tenuto below",
+          E4AC: "Marcato above",
+        },
+      },
+      {
+        id: "dynamics",
+        label: "Dynamics",
+        ranges: [[0xE520, 0xE54F]],
+        names: {
+          E520: "Piano",
+          E521: "Mezzo",
+          E522: "Forte",
+          E523: "Rinforzando",
+          E524: "Sforzando",
+          E52F: "Dynamic z",
+        },
+      },
+      {
+        id: "repeats",
+        label: "Repeats",
+        ranges: [[0xE040, 0xE04F], [0xE500, 0xE51F]],
+        names: {
+          E040: "Left repeat sign",
+          E041: "Right repeat sign",
+          E500: "Repeat dots",
+          E501: "Dal segno",
+          E502: "Da capo",
+          E503: "Segno",
+          E504: "Coda",
+        },
+      },
+      {
+        id: "ornaments",
+        label: "Ornaments",
+        ranges: [[0xE560, 0xE59F]],
+        names: {
+          E566: "Trill",
+          E567: "Turn",
+          E56C: "Mordent",
+        },
+      },
+      {
+        id: "octave-markings",
+        label: "Octave markings",
+        ranges: [[0xEC80, 0xECAF]],
+        names: {
+          EC91: "Octave 0",
+          EC92: "Octave 1",
+          EC93: "Octave b",
+          EC95: "Octave m",
+        },
+      },
+      {
+        id: "barlines",
+        label: "Barlines",
+        ranges: [[0xE030, 0xE03F]],
+        names: {
+          E030: "Single barline",
+          E031: "Double barline",
+          E032: "Final barline",
+          E033: "Reverse final barline",
+          E034: "Dashed barline",
+        },
+      },
+    ];
+
+    const categorySelect = document.getElementById("category");
+    const searchInput = document.getElementById("search");
+    const grid = document.getElementById("grid");
+    const count = document.getElementById("count");
+    const empty = document.getElementById("empty");
+    const selectedCount = document.getElementById("selectedCount");
+    const copySelected = document.getElementById("copySelected");
+    const showUnnamedInput = document.getElementById("showUnnamed");
+
+    const allKnownNames = Object.assign({}, ...CATEGORIES.map((category) => category.names));
+    const officialNames = {};
+    const selectedGlyphs = new Set();
+    const SMUFL_GLYPH_NAMES_URL = "https://raw.githubusercontent.com/w3c/smufl/gh-pages/metadata/glyphnames.json";
+
+    categorySelect.innerHTML = CATEGORIES.map((category) => (
+      `<option value="${category.id}">${category.label}</option>`
+    )).join("");
+
+    function toHex(codepoint) {
+      return codepoint.toString(16).toUpperCase().padStart(4, "0");
+    }
+
+    function toGlyph(codepoint) {
+      return String.fromCodePoint(codepoint);
+    }
+
+    function javascriptEscape(hex) {
+      return `\\u${hex}`;
+    }
+
+    function htmlEntity(hex) {
+      return `&#x${hex};`;
+    }
+
+    function escapeHtml(text) {
+      return text
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function nameForGlyph(hex, category) {
+      return officialNames[hex] || category.names[hex] || allKnownNames[hex] || "Unnamed Bravura glyph";
+    }
+
+    function nameForHex(hex) {
+      return officialNames[hex] || allKnownNames[hex] || "Unnamed Bravura glyph";
+    }
+
+    function isUnnamed(name) {
+      return name === "Unnamed Bravura glyph";
+    }
+
+    function tidyOfficialDescription(name, description) {
+      if (description) return description;
+      return name
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/^./, (letter) => letter.toUpperCase());
+    }
+
+    function codepointsForCategory(category) {
+      const seen = new Set();
+      const codepoints = [];
+
+      (category.codepoints || []).forEach((codepoint) => {
+        if (!seen.has(codepoint)) {
+          seen.add(codepoint);
+          codepoints.push(codepoint);
+        }
+      });
+
+      category.ranges.forEach(([start, end]) => {
+        for (let codepoint = start; codepoint <= end; codepoint += 1) {
+          if (!seen.has(codepoint)) {
+            seen.add(codepoint);
+            codepoints.push(codepoint);
+          }
+        }
+      });
+
+      return codepoints;
+    }
+
+    function searchTextFor(codepoint, category) {
+      const hex = toHex(codepoint);
+      const name = nameForGlyph(hex, category);
+      return [
+        name,
+        category.label,
+        `U+${hex}`,
+        hex,
+        javascriptEscape(hex),
+        htmlEntity(hex),
+      ].join(" ").toLowerCase();
+    }
+
+    async function loadOfficialNames() {
+      try {
+        const response = await fetch(SMUFL_GLYPH_NAMES_URL);
+        if (!response.ok) throw new Error("SMuFL metadata could not be loaded.");
+        const glyphNames = await response.json();
+        Object.entries(glyphNames).forEach(([name, details]) => {
+          const hex = (details.codepoint || "").replace("U+", "").toUpperCase();
+          if (!hex) return;
+          officialNames[hex] = tidyOfficialDescription(name, details.description);
+        });
+
+        render();
+      } catch (error) {
+        // The picker still works with local fallback names if the metadata cannot load.
+      }
+    }
+
+    async function copyText(text, button) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (error) {
+        const helper = document.createElement("textarea");
+        helper.value = text;
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand("copy");
+        helper.remove();
+      }
+
+      const original = button.textContent;
+      button.textContent = "Copied";
+      button.classList.add("copied");
+      setTimeout(() => {
+        button.textContent = original;
+        button.classList.remove("copied");
+      }, 900);
+    }
+
+    function selectedJsText() {
+      return [...selectedGlyphs]
+        .sort()
+        .map((hex) => {
+          const name = nameForHex(hex);
+          return `'${javascriptEscape(hex)}', // ${name} (${`U+${hex}`})`;
+        })
+        .join("\n");
+    }
+
+    function updateSelectionSummary() {
+      const total = selectedGlyphs.size;
+      selectedCount.textContent = `${total} selected`;
+      copySelected.disabled = total === 0;
+    }
+
+    const GLYPH_OFFSETS = {
+      // Clefs are visually tall, so they need less of the global downward shift.
+      E050: { y: "-5px" },
+      E051: { y: "-5px" },
+      E052: { y: "-5px" },
+      E053: { y: "-5px" },
+      E054: { y: "-5px" },
+      E055: { y: "-5px" },
+      E056: { y: "-5px" },
+      E057: { y: "-5px" },
+      E058: { y: "-5px" },
+      E059: { y: "-5px" },
+      E05A: { y: "-5px" },
+      E05B: { y: "-5px" },
+      E05C: { y: "-5px" },
+      E062: { y: "-5px" },
+
+      // Barlines and braces are naturally narrow/tall.
+      E000: { y: "-2px" },
+      E030: { y: "-2px" },
+      E031: { y: "-2px" },
+      E032: { y: "-2px" },
+    };
+
+    function glyphOffsetStyle(hex) {
+      const offset = GLYPH_OFFSETS[hex] || {};
+      return `--x-offset: ${offset.x || "0px"}; --y-offset: ${offset.y || "0px"};`;
+    }
+
+    function render() {
+      const category = CATEGORIES.find((item) => item.id === categorySelect.value) || CATEGORIES[0];
+      const search = searchInput.value.trim().toLowerCase();
+      const matches = codepointsForCategory(category).filter((codepoint) => (
+        (showUnnamedInput.checked || !isUnnamed(nameForGlyph(toHex(codepoint), category))) &&
+        (!search || searchTextFor(codepoint, category).includes(search))
+      ));
+
+      grid.innerHTML = matches.map((codepoint) => {
+        const hex = toHex(codepoint);
+        const js = javascriptEscape(hex);
+        const quotedJs = `'${js}'`;
+        const name = nameForGlyph(hex, category);
+
+        return `
+          <article class="card">
+            <label class="select-glyph" title="Select U+${hex}">
+              <input type="checkbox" data-select="${hex}" ${selectedGlyphs.has(hex) ? "checked" : ""} aria-label="Select U+${hex}" />
+            </label>
+            <div class="glyph" title="U+${hex}">
+              <span class="glyph-symbol" style="${glyphOffsetStyle(hex)}">${toGlyph(codepoint)}</span>
+            </div>
+            <div class="meta">
+              <div class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+              <code>U+${hex}</code>
+              <code>${escapeHtml(quotedJs)}</code>
+              <div class="buttons">
+                <button type="button" data-copy="${escapeHtml(quotedJs)}">Copy</button>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join("");
+
+      count.textContent = "";
+      empty.style.display = matches.length ? "none" : "block";
+      updateSelectionSummary();
+    }
+
+    grid.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-copy]");
+      if (!button) return;
+      copyText(button.dataset.copy, button);
+    });
+
+    grid.addEventListener("change", (event) => {
+      const checkbox = event.target.closest("input[data-select]");
+      if (!checkbox) return;
+
+      if (checkbox.checked) {
+        selectedGlyphs.add(checkbox.dataset.select);
+      } else {
+        selectedGlyphs.delete(checkbox.dataset.select);
+      }
+
+      updateSelectionSummary();
+    });
+
+    copySelected.addEventListener("click", () => {
+      if (!selectedGlyphs.size) return;
+      copyText(selectedJsText(), copySelected);
+    });
+
+    categorySelect.addEventListener("change", render);
+    searchInput.addEventListener("input", render);
+    showUnnamedInput.addEventListener("change", render);
+
+    render();
+    loadOfficialNames();
+  </script>
+</body>
+</html>
