@@ -15,10 +15,10 @@ const SHARED_NOTATION_CONFIG = {
   "symbols": {
     "brace": {
       "fontSizeScale": 7,
-      "xOffsetScale": 0.85,
-      "yOffsetScale": 8.65,
+      "xOffsetScale": 0.8,
+      "yOffsetScale": 8.45,
       "widthScale": 1.58,
-      "heightScale": 1.82,
+      "heightScale": 1.78,
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
@@ -32,28 +32,28 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "barlineFinal": {
-      "fontSizeScale": 4.8,
-      "xOffsetScale": -0.35,
-      "yOffsetScale": 1.95,
-      "widthScale": 0.64,
-      "heightScale": 0.82,
+      "fontSizeScale": 4.55,
+      "xOffsetScale": -0.3,
+      "yOffsetScale": 0,
+      "widthScale": 1.04,
+      "heightScale": 1,
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
     "repeatLeft": {
       "fontSizeScale": 4.8,
-      "xOffsetScale": -0.05495997837611607,
-      "yOffsetScale": -2.164220537458147,
-      "widthScale": 1,
-      "heightScale": 0.84,
+      "xOffsetScale": 0.55,
+      "yOffsetScale": 1.05,
+      "widthScale": 0.76,
+      "heightScale": 0.82,
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
     "repeatRight": {
       "fontSizeScale": 4.8,
-      "xOffsetScale": 7.172158377511161,
-      "yOffsetScale": -2.170312064034598,
-      "widthScale": 1,
+      "xOffsetScale": -0.2,
+      "yOffsetScale": 1.15,
+      "widthScale": 0.76,
       "heightScale": 0.84,
       "opticalXOffset": 0,
       "opticalYOffset": 0
@@ -87,7 +87,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "gClef": {
       "fontSizeScale": 4.05,
-      "xOffsetScale": 0,
+      "xOffsetScale": -0.5,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -96,7 +96,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "fClef": {
       "fontSizeScale": 3.8,
-      "xOffsetScale": 0,
+      "xOffsetScale": -0.5,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -105,7 +105,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "timeSig24": {
       "fontSizeScale": 3.5,
-      "xOffsetScale": -4,
+      "xOffsetScale": -2.7,
       "yOffsetScale": 0.15,
       "widthScale": 1,
       "heightScale": 1,
@@ -114,7 +114,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "timeSig34": {
       "fontSizeScale": 3.5,
-      "xOffsetScale": -4,
+      "xOffsetScale": -2.7,
       "yOffsetScale": 0.15,
       "widthScale": 1,
       "heightScale": 1,
@@ -123,7 +123,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "timeSig44": {
       "fontSizeScale": 3.5,
-      "xOffsetScale": -4,
+      "xOffsetScale": -2.7,
       "yOffsetScale": 0.15,
       "widthScale": 1,
       "heightScale": 1,
@@ -132,7 +132,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "timeSig54": {
       "fontSizeScale": 3.5,
-      "xOffsetScale": -4,
+      "xOffsetScale": -2.7,
       "yOffsetScale": 0.15,
       "widthScale": 1,
       "heightScale": 1,
@@ -141,7 +141,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "timeSig68": {
       "fontSizeScale": 3.5,
-      "xOffsetScale": -4,
+      "xOffsetScale": -2.7,
       "yOffsetScale": 0.15,
       "widthScale": 1,
       "heightScale": 1,
@@ -150,7 +150,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "timeSig98": {
       "fontSizeScale": 3.5,
-      "xOffsetScale": -4,
+      "xOffsetScale": -2.7,
       "yOffsetScale": 0.15,
       "widthScale": 1,
       "heightScale": 1,
@@ -159,7 +159,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "timeSig128": {
       "fontSizeScale": 3.5,
-      "xOffsetScale": -4,
+      "xOffsetScale": -2.7,
       "yOffsetScale": 0.15,
       "widthScale": 1,
       "heightScale": 1,
@@ -177,7 +177,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "noteheadBlackStemUp": {
       "fontSizeScale": 3.75,
-      "xOffsetScale": -0.1,
+      "xOffsetScale": 0.1,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -240,7 +240,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "eighthNoteStemUp": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": 0.35,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -258,7 +258,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "sixteenthNoteStemUp": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": 0.45,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -278,7 +278,7 @@ const SHARED_NOTATION_CONFIG = {
       "fontSizeScale": 1,
       "xOffsetScale": 0,
       "yOffsetScale": -0.2,
-      "widthScale": 0.94,
+      "widthScale": 1.06,
       "heightScale": 0.92,
       "opticalXOffset": 0,
       "opticalYOffset": 0
@@ -287,7 +287,7 @@ const SHARED_NOTATION_CONFIG = {
       "fontSizeScale": 1,
       "xOffsetScale": 0,
       "yOffsetScale": 0,
-      "widthScale": 1,
+      "widthScale": 1.06,
       "heightScale": 1,
       "opticalXOffset": 0,
       "opticalYOffset": 0
@@ -296,7 +296,7 @@ const SHARED_NOTATION_CONFIG = {
       "fontSizeScale": 1,
       "xOffsetScale": 0,
       "yOffsetScale": 0,
-      "widthScale": 1,
+      "widthScale": 0.86,
       "heightScale": 1,
       "opticalXOffset": 0,
       "opticalYOffset": 0
@@ -305,7 +305,7 @@ const SHARED_NOTATION_CONFIG = {
       "fontSizeScale": 1,
       "xOffsetScale": 0.1,
       "yOffsetScale": 0,
-      "widthScale": 0.56,
+      "widthScale": 0.7,
       "heightScale": 1.06,
       "opticalXOffset": 0,
       "opticalYOffset": 0
@@ -322,8 +322,8 @@ const SHARED_NOTATION_CONFIG = {
     "tie": {
       "fontSizeScale": 5.3,
       "xOffsetScale": 0,
-      "yOffsetScale": -0.6,
-      "widthScale": 2,
+      "yOffsetScale": -2.55,
+      "widthScale": 1.54,
       "heightScale": 1,
       "opticalXOffset": 0,
       "opticalYOffset": 0
@@ -375,7 +375,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "flatInScore": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": 0.8,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -384,7 +384,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "naturalInScore": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": 0.8,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -393,7 +393,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "sharpInScore": {
       "fontSizeScale": 3.35,
-      "xOffsetScale": 0,
+      "xOffsetScale": 0.8,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -403,7 +403,7 @@ const SHARED_NOTATION_CONFIG = {
     "accentAbove": {
       "fontSizeScale": 3.4,
       "xOffsetScale": 0,
-      "yOffsetScale": 0,
+      "yOffsetScale": 2.25,
       "widthScale": 1,
       "heightScale": 1,
       "opticalXOffset": 0,
@@ -412,7 +412,7 @@ const SHARED_NOTATION_CONFIG = {
     "accentBelow": {
       "fontSizeScale": 3.35,
       "xOffsetScale": 0,
-      "yOffsetScale": 0,
+      "yOffsetScale": -2.05,
       "widthScale": 1,
       "heightScale": 1,
       "opticalXOffset": 0,
@@ -421,7 +421,7 @@ const SHARED_NOTATION_CONFIG = {
     "staccatoAbove": {
       "fontSizeScale": 3.4,
       "xOffsetScale": 0,
-      "yOffsetScale": 0,
+      "yOffsetScale": 0.2,
       "widthScale": 1,
       "heightScale": 1,
       "opticalXOffset": 0,
@@ -430,7 +430,7 @@ const SHARED_NOTATION_CONFIG = {
     "staccatoBelow": {
       "fontSizeScale": 3.4,
       "xOffsetScale": 0,
-      "yOffsetScale": 0,
+      "yOffsetScale": -2.15,
       "widthScale": 1,
       "heightScale": 1,
       "opticalXOffset": 0,
@@ -439,7 +439,7 @@ const SHARED_NOTATION_CONFIG = {
     "wholeRest": {
       "fontSizeScale": 3.4,
       "xOffsetScale": 0,
-      "yOffsetScale": -0.5,
+      "yOffsetScale": -1,
       "widthScale": 1,
       "heightScale": 1,
       "opticalXOffset": 0,
@@ -448,14 +448,14 @@ const SHARED_NOTATION_CONFIG = {
     "halfRest": {
       "fontSizeScale": 3.4,
       "xOffsetScale": 0,
-      "yOffsetScale": 0.5,
+      "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
     "quarterRest": {
-      "fontSizeScale": 3.4,
+      "fontSizeScale": 3.6,
       "xOffsetScale": 0,
       "yOffsetScale": 0,
       "widthScale": 1,
@@ -475,7 +475,7 @@ const SHARED_NOTATION_CONFIG = {
     "sixteenthRest": {
       "fontSizeScale": 3.4,
       "xOffsetScale": 0,
-      "yOffsetScale": -0.1,
+      "yOffsetScale": -0.25,
       "widthScale": 1,
       "heightScale": 1,
       "opticalXOffset": 0,
@@ -509,7 +509,7 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "forte": {
-      "fontSizeScale": 2.2,
+      "fontSizeScale": 3.4,
       "xOffsetScale": 0,
       "yOffsetScale": 0,
       "widthScale": 1,
@@ -518,7 +518,7 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "pianissimo": {
-      "fontSizeScale": 2.2,
+      "fontSizeScale": 3.4,
       "xOffsetScale": 0,
       "yOffsetScale": 0,
       "widthScale": 1,
@@ -527,7 +527,7 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "mezzoPiano": {
-      "fontSizeScale": 2.2,
+      "fontSizeScale": 3.4,
       "xOffsetScale": 0,
       "yOffsetScale": 0,
       "widthScale": 1,
@@ -536,7 +536,7 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "mezzoForte": {
-      "fontSizeScale": 2.2,
+      "fontSizeScale": 3.4,
       "xOffsetScale": 0,
       "yOffsetScale": 0,
       "widthScale": 1,
@@ -545,7 +545,7 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "fortissimo": {
-      "fontSizeScale": 2.2,
+      "fontSizeScale": 3.4,
       "xOffsetScale": 0,
       "yOffsetScale": 0,
       "widthScale": 1,
@@ -554,7 +554,7 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "sforzato": {
-      "fontSizeScale": 2.2,
+      "fontSizeScale": 3.4,
       "xOffsetScale": 0,
       "yOffsetScale": 0,
       "widthScale": 1,
@@ -563,25 +563,25 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "crescendo": {
-      "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "fontSizeScale": 4.3,
+      "xOffsetScale": 4,
       "yOffsetScale": 0,
-      "widthScale": 2,
+      "widthScale": 4.36,
       "heightScale": 1,
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
     "diminuendo": {
-      "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "fontSizeScale": 4.3,
+      "xOffsetScale": 4,
       "yOffsetScale": 0,
-      "widthScale": 2,
+      "widthScale": 4.36,
       "heightScale": 1,
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
     "augmentationDotSpace": {
-      "fontSizeScale": 3,
+      "fontSizeScale": 3.4,
       "xOffsetScale": -0.25,
       "yOffsetScale": -0.1,
       "widthScale": 1,
@@ -590,15 +590,24 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "augmentationDotLine": {
-      "fontSizeScale": 3,
+      "fontSizeScale": 3.4,
       "xOffsetScale": -0.25,
-      "yOffsetScale": -0.1,
+      "yOffsetScale": -0.2,
       "widthScale": 1,
       "heightScale": 1.1,
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
     "ledgerLines": {
+      "fontSizeScale": 2,
+      "xOffsetScale": 0,
+      "yOffsetScale": 0,
+      "widthScale": 0.88,
+      "heightScale": 1,
+      "opticalXOffset": 0,
+      "opticalYOffset": 0
+    },
+    "ledgerLineAccidentals": {
       "fontSizeScale": 2,
       "xOffsetScale": 0,
       "yOffsetScale": 0,

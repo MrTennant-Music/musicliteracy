@@ -20,8 +20,10 @@ const stage = document.getElementById("notationStage");
 const notationScroll = document.querySelector(".notation-scroll");
 const symbolSelect = document.getElementById("symbolSelect");
 const generatedSymbolChecks = document.getElementById("generatedSymbolChecks");
+const previewTestOptions = document.getElementById("previewTestOptions");
+const previewTestsGrid = document.getElementById("previewTestsGrid");
 const exportText = document.getElementById("exportText");
-const importText = document.getElementById("importText");
+const copyConfirmation = document.getElementById("copyConfirmation");
 
 const controls = {
   zoom: document.getElementById("zoom"),
@@ -37,9 +39,12 @@ const outputs = Object.fromEntries(
   Object.keys(controls).map((id) => [id, document.getElementById(`${id}Value`)])
 );
 
-const ALL_NOTE_KEYS = [
+const BEAM_NOTEHEAD_KEYS = [
   "noteheadBlackStemUp",
   "noteheadBlackStemDown",
+];
+
+const ORDINARY_NOTE_KEYS = [
   "wholeNote",
   "halfNoteStemUp",
   "halfNoteStemDown",
@@ -51,11 +56,13 @@ const ALL_NOTE_KEYS = [
   "sixteenthNoteStemDown",
 ];
 
+const ALL_NOTE_KEYS = [...BEAM_NOTEHEAD_KEYS, ...ORDINARY_NOTE_KEYS];
+
 const SYMBOL_GROUPS = {
   "Clefs": ["gClef", "fClef"],
-  "Notes": ["allNotes", ...ALL_NOTE_KEYS, "augmentationDotLine", "augmentationDotSpace", "tie"],
-  "Beams": ["quaverBeam", "semiquaverBeam", "semiquaverSecondBeam", "semiquaverBeamHook"],
-  "Accidentals": ["flatKeySignature", "sharpKeySignature", "flatInScore", "naturalInScore", "sharpInScore"],
+  "Notes": ["allNotes", ...ORDINARY_NOTE_KEYS, "augmentationDotLine", "augmentationDotSpace", "tieStemUp", "tieStemDown"],
+  "Beams": [...BEAM_NOTEHEAD_KEYS, "quaverBeam", "semiquaverBeam", "semiquaverSecondBeam", "semiquaverBeamHook"],
+  "Accidentals": ["keySignatureAccidentals", "scoreAccidentals"],
   "Rests": ["wholeRest", "halfRest", "quarterRest", "eighthRest", "sixteenthRest"],
   "Barlines And Repeats": ["barlineSingle", "barlineFinal", "repeatLeft", "repeatRight"],
   "Time Signatures": ["timeSignature"],
@@ -78,8 +85,8 @@ const SYMBOL_LABELS = {
   barlineFinal: "Final Barline",
   repeatLeft: "Start Repeat",
   repeatRight: "End Repeat",
-  gClef: "Treble Clef",
-  fClef: "Bass Clef",
+  gClef: "Treble",
+  fClef: "Bass",
   timeSignature: "Time Signature",
   timeSig24: "2/4",
   timeSig34: "3/4",
@@ -89,17 +96,17 @@ const SYMBOL_LABELS = {
   timeSig98: "9/8",
   timeSig128: "12/8",
   allNotes: "All Notes",
-  noteheadBlackStemUp: "Black Notehead Stem Up",
-  noteheadBlackStemDown: "Black Notehead Stem Down",
+  noteheadBlackStemUp: "Beamed Notehead - Stem Up",
+  noteheadBlackStemDown: "Beamed Notehead - Stem Down",
   wholeNote: "Semibreve",
-  halfNoteStemUp: "Minim Stem Up",
-  halfNoteStemDown: "Minim Stem Down",
-  quarterNoteStemUp: "Crotchet Stem Up",
-  quarterNoteStemDown: "Crotchet Stem Down",
-  eighthNoteStemUp: "Quaver Stem Up",
-  eighthNoteStemDown: "Quaver Stem Down",
-  sixteenthNoteStemUp: "Semiquaver Stem Up",
-  sixteenthNoteStemDown: "Semiquaver Stem Down",
+  halfNoteStemUp: "Minim - Stem Up",
+  halfNoteStemDown: "Minim - Stem Down",
+  quarterNoteStemUp: "Crotchet - Stem Up",
+  quarterNoteStemDown: "Crotchet - Stem Down",
+  eighthNoteStemUp: "Quaver - Stem Up",
+  eighthNoteStemDown: "Quaver - Stem Down",
+  sixteenthNoteStemUp: "Semiquaver - Stem Up",
+  sixteenthNoteStemDown: "Semiquaver - Stem Down",
   quaverBeam: "Quaver Beam",
   semiquaverBeam: "Semiquaver Beam",
   semiquaverSecondBeam: "Semiquaver Second Beam",
@@ -107,6 +114,10 @@ const SYMBOL_LABELS = {
   augmentationDotLine: "Dot On Line Note",
   augmentationDotSpace: "Dot On Space Note",
   tie: "Tie",
+  tieStemUp: "Tie - Stem Up",
+  tieStemDown: "Tie - Stem Down",
+  keySignatureAccidentals: "Accidentals In Key Signature",
+  scoreAccidentals: "Accidentals In Score",
   flatKeySignature: "Flat In Key Signature",
   sharpKeySignature: "Sharp In Key Signature",
   flatInScore: "Flat In Score",
@@ -138,6 +149,10 @@ function symbolLabel(key) {
   return SYMBOL_LABELS[key] || key;
 }
 
+function titleCase(text) {
+  return text.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 const DEFAULT_GENERATED_SYMBOLS = {
   gClef: true,
   fClef: true,
@@ -164,44 +179,60 @@ const DEFAULT_GENERATED_SYMBOLS = {
   augmentationDotSpace: true,
   flatKeySignature: true,
   sharpKeySignature: true,
+  keySignatureAccidentals: true,
   flatInScore: true,
   sharpInScore: true,
-  naturalInScore: false,
-  tie: false,
-  wholeRest: false,
-  halfRest: false,
-  quarterRest: false,
-  eighthRest: false,
-  sixteenthRest: false,
-  repeatLeft: false,
-  repeatRight: false,
-  accentAbove: false,
-  accentBelow: false,
-  staccatoAbove: false,
-  staccatoBelow: false,
-  piano: false,
-  forte: false,
-  pianissimo: false,
-  mezzoPiano: false,
-  mezzoForte: false,
-  fortissimo: false,
-  sforzato: false,
-  crescendo: false,
-  diminuendo: false,
-  ledgerLines: false,
-  ledgerLineAccidentals: false,
+  naturalInScore: true,
+  scoreAccidentals: true,
+  tieStemUp: true,
+  tieStemDown: true,
+  wholeRest: true,
+  halfRest: true,
+  quarterRest: true,
+  eighthRest: true,
+  sixteenthRest: true,
+  repeatLeft: true,
+  repeatRight: true,
+  accentAbove: true,
+  accentBelow: true,
+  staccatoAbove: true,
+  staccatoBelow: true,
+  piano: true,
+  forte: true,
+  pianissimo: true,
+  mezzoPiano: true,
+  mezzoForte: true,
+  fortissimo: true,
+  sforzato: true,
+  crescendo: true,
+  diminuendo: true,
+  ledgerLines: true,
+  ledgerLineAccidentals: true,
 };
 
 let generatedSymbols = { ...DEFAULT_GENERATED_SYMBOLS };
+let generatedTimeSignatures = {};
+let generatedKeys = {};
 
 function generatedKeyForSymbol(key) {
   if (isTimeSignatureKey(key)) return "timeSignature";
   if (key === "augmentationDot") return "augmentationDotSpace";
+  if (key === "flatKeySignature" || key === "sharpKeySignature") return "keySignatureAccidentals";
+  if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return "scoreAccidentals";
+  if (key === "tie") return "tieStemUp";
   return key;
 }
 
 function generatedEnabled(key) {
   return Boolean(generatedSymbols[generatedKeyForSymbol(key)]);
+}
+
+function timeSignatureEnabled(item) {
+  return generatedTimeSignatures[item.id] !== false;
+}
+
+function keyEnabled(item) {
+  return generatedKeys[item.id] !== false;
 }
 
 const TIME_SIGNATURES = {
@@ -221,6 +252,8 @@ function hasRenderableSymbol(key) {
     || key === "semiquaverBeam"
     || key === "semiquaverSecondBeam"
     || key === "semiquaverBeamHook"
+    || key === "keySignatureAccidentals"
+    || key === "scoreAccidentals"
     || key === "ledgerLines"
     || key === "ledgerLineAccidentals"
     || Boolean(BRAVURA_SYMBOLS[actualSymbolKey(key)] || TIME_SIGNATURES[key]);
@@ -237,6 +270,9 @@ function linkedSymbolKeys(key) {
   if (key === "allNotes") return ALL_NOTE_KEYS;
   if (key === "timeSignature") return Object.keys(TIME_SIGNATURES);
   if (isTimeSignatureKey(key)) return Object.keys(TIME_SIGNATURES);
+  if (key === "keySignatureAccidentals") return ["flatKeySignature", "sharpKeySignature"];
+  if (key === "scoreAccidentals") return ["flatInScore", "naturalInScore", "sharpInScore"];
+  if (key === "tieStemUp" || key === "tieStemDown") return ["tie"];
   if (ORDINARY_DYNAMIC_KEYS.includes(key)) return ORDINARY_DYNAMIC_KEYS;
   if (HAIRPIN_DYNAMIC_KEYS.includes(key)) return HAIRPIN_DYNAMIC_KEYS;
   return [key];
@@ -253,15 +289,25 @@ function syncTimeSignatureSettings() {
 function settingsKeyForControl(key) {
   if (key === "allNotes") return "noteheadBlackStemUp";
   if (key === "timeSignature") return "timeSig44";
+  if (key === "keySignatureAccidentals") return "flatKeySignature";
+  if (key === "scoreAccidentals") return "flatInScore";
+  if (key === "tieStemUp" || key === "tieStemDown") return "tie";
   return key;
 }
 
 function actualSymbolKey(key) {
   if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
   if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
+  if (key === "keySignatureAccidentals" || key === "scoreAccidentals") return "flat";
+  if (key === "tieStemUp" || key === "tieStemDown") return "tie";
   if (key === "flatKeySignature" || key === "flatInScore") return "flat";
   if (key === "naturalInScore") return "natural";
   if (key === "sharpKeySignature" || key === "sharpInScore") return "sharp";
+  return key;
+}
+
+function settingsKeyForDrawing(key) {
+  if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return "flatInScore";
   return key;
 }
 
@@ -281,6 +327,74 @@ const PREVIEW = {
   timeSigX: 124,
   musicStartX: 160,
 };
+
+const PREVIEW_TESTS = [
+  {
+    id: "desktop",
+    label: "Desktop",
+    enabled: true,
+    preview: {},
+  },
+  {
+    id: "narrowMobile",
+    label: "Narrow Mobile",
+    enabled: true,
+    preview: {
+      width: 380,
+      height: 520,
+      staffLeft: 28,
+      staffRight: 350,
+      systemTops: [68, 290],
+      bassStaffOffset: 74,
+      gap: 7.5,
+      keySigX: 72,
+      timeSigX: 94,
+      musicStartX: 112,
+    },
+    cssWidth: "380px",
+  },
+  {
+    id: "smallStave",
+    label: "Small Stave",
+    enabled: true,
+    preview: {
+      height: 560,
+      systemTops: [66, 300],
+      bassStaffOffset: 74,
+      gap: 8,
+    },
+  },
+  {
+    id: "largeStave",
+    label: "Large Stave",
+    enabled: true,
+    preview: {
+      height: 780,
+      systemTops: [92, 455],
+      bassStaffOffset: 112,
+      gap: 13,
+    },
+    minWidth: "920px",
+  },
+  {
+    id: "noBarNumbers",
+    label: "No Bar Numbers",
+    enabled: true,
+    render: {
+      showBarNumbers: false,
+    },
+  },
+  {
+    id: "guideLines",
+    label: "Guide Lines",
+    enabled: false,
+    showGuides: true,
+  },
+];
+
+const previewTestState = Object.fromEntries(
+  PREVIEW_TESTS.map((test) => [test.id, test.enabled])
+);
 
 const PREVIEW_RHYTHMS = {
   quaver: { beats: 0.5, spacing: 0.95 },
@@ -308,6 +422,32 @@ const TWO_BEAT_RHYTHM_UNITS = [
   ["semiquaver", "semiquaver", "dottedCrotchet"],
   ["quaver", "crotchet", "quaver"],
 ];
+
+const COMPOUND_BEAT_UNITS = [
+  ["quaver", "quaver", "quaver"],
+  ["crotchet", "quaver"],
+  ["quaver", "crotchet"],
+  ["dottedCrotchet"],
+  ["semiquaver", "semiquaver", "semiquaver", "semiquaver", "semiquaver", "semiquaver"],
+  ["semiquaver", "semiquaver", "quaver", "quaver"],
+  ["quaver", "semiquaver", "semiquaver", "quaver"],
+  ["quaver", "quaver", "semiquaver", "semiquaver"],
+  ["semiquaver", "semiquaver", "semiquaver", "semiquaver", "quaver"],
+  ["quaver", "semiquaver", "semiquaver", "semiquaver", "semiquaver"],
+];
+
+function combineCompoundBeatUnits(beatCount) {
+  const patterns = [];
+  function addUnits(prefix, remainingBeats) {
+    if (remainingBeats === 0) {
+      patterns.push(prefix);
+      return;
+    }
+    COMPOUND_BEAT_UNITS.forEach((unit) => addUnits([...prefix, ...unit], remainingBeats - 1));
+  }
+  addUnits([], beatCount);
+  return patterns;
+}
 
 const PREVIEW_RHYTHM_PATTERNS = {
   "2/4": [
@@ -352,26 +492,20 @@ const PREVIEW_RHYTHM_PATTERNS = {
     ["semiquaver", "semiquaver", "semiquaver", "semiquaver", "crotchet", "crotchet", "crotchet", "crotchet"],
   ],
   "6/8": [
-    ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
-    ["crotchet", "quaver", "crotchet", "quaver"],
-    ...TWO_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet"]),
-    ...ONE_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet", "quaver", "quaver"]),
-    ["semiquaver", "semiquaver", "semiquaver", "semiquaver", "quaver", "quaver", "crotchet"],
+    ...combineCompoundBeatUnits(2),
     ["dottedMinim"],
   ],
   "9/8": [
-    ["dottedMinim", "crotchet", "quaver"],
-    ["crotchet", "quaver", "crotchet", "quaver", "crotchet", "quaver"],
-    ...TWO_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet", "quaver", "crotchet"]),
-    ...ONE_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet", "quaver", "dottedCrotchet", "quaver"]),
-    ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
+    ...combineCompoundBeatUnits(3),
+    ["dottedMinim", "dottedCrotchet"],
+    ["dottedCrotchet", "dottedMinim"],
   ],
   "12/8": [
+    ...combineCompoundBeatUnits(4),
     ["dottedMinim", "dottedMinim"],
-    ["crotchet", "quaver", "crotchet", "quaver", "crotchet", "quaver", "crotchet", "quaver"],
-    ...TWO_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet", "quaver", "crotchet", "quaver", "crotchet"]),
-    ...ONE_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet", "quaver", "crotchet", "quaver", "crotchet", "quaver", "quaver"]),
-    ["semibreve", "crotchet", "quaver", "quaver"],
+    ...COMPOUND_BEAT_UNITS.flatMap((firstUnit) => COMPOUND_BEAT_UNITS.map((secondUnit) => ["dottedMinim", ...firstUnit, ...secondUnit])),
+    ...COMPOUND_BEAT_UNITS.flatMap((firstUnit) => COMPOUND_BEAT_UNITS.map((secondUnit) => [...firstUnit, "dottedMinim", ...secondUnit])),
+    ...COMPOUND_BEAT_UNITS.flatMap((firstUnit) => COMPOUND_BEAT_UNITS.map((secondUnit) => [...firstUnit, ...secondUnit, "dottedMinim"])),
   ],
 };
 
@@ -436,7 +570,20 @@ const PREVIEW_KEYS = [
   } },
 ];
 
+const DEFAULT_GENERATED_TIME_SIGNATURES = Object.fromEntries(
+  PREVIEW_TIME_SIGNATURES.map((item) => [item.id, true])
+);
+
+const DEFAULT_GENERATED_KEYS = Object.fromEntries(
+  PREVIEW_KEYS.map((item) => [item.id, true])
+);
+
+generatedTimeSignatures = { ...DEFAULT_GENERATED_TIME_SIGNATURES };
+generatedKeys = { ...DEFAULT_GENERATED_KEYS };
+
 const PREVIEW_NOTE_POOL = [
+  { letter: "A", octave: 3, step: -4, midi: 57 },
+  { letter: "B", octave: 3, step: -3, midi: 59 },
   { letter: "C", octave: 4, step: -2, midi: 60 },
   { letter: "D", octave: 4, step: -1, midi: 62 },
   { letter: "E", octave: 4, step: 0, midi: 64 },
@@ -450,6 +597,8 @@ const PREVIEW_NOTE_POOL = [
   { letter: "F", octave: 5, step: 8, midi: 77 },
   { letter: "G", octave: 5, step: 9, midi: 79 },
   { letter: "A", octave: 5, step: 10, midi: 81 },
+  { letter: "B", octave: 5, step: 11, midi: 83 },
+  { letter: "C", octave: 6, step: 12, midi: 84 },
 ];
 
 const KEY_SIG_ORDER = {
@@ -499,8 +648,31 @@ function previewBassPatternForTimeSignature(timeSignature) {
   }[timeSignature.id] || ["semibreve"];
 }
 
-function makePreviewBassNotesForBar(chord, timeSignature) {
-  return previewBassPatternForTimeSignature(timeSignature).map((rhythm) => previewBassRootForChord(chord, rhythm));
+function makePreviewBassNotesForBar(chord, timeSignature, pattern = null) {
+  const rhythms = pattern || previewBassPatternForTimeSignature(timeSignature);
+  let beatPosition = 0;
+  return rhythms.map((rhythm) => {
+    const beats = rhythmInfo(rhythm).beats;
+    const restKey = previewRestKeyForRhythm(rhythm, timeSignature);
+    const commonValues = {
+      rhythm,
+      beats,
+      beatPosition,
+    };
+    beatPosition += beats;
+
+    if (mustGenerateRestForRhythm(rhythm, timeSignature) && restKey) {
+      return {
+        ...commonValues,
+        restKey,
+        step: 4,
+      };
+    }
+    return {
+      ...previewBassRootForChord(chord, rhythm),
+      ...commonValues,
+    };
+  });
 }
 
 function randomItem(items) {
@@ -515,7 +687,8 @@ function rhythmInfo(id) {
   return PREVIEW_RHYTHMS[id] || PREVIEW_RHYTHMS.crotchet;
 }
 
-function previewRestKeyForRhythm(rhythmId) {
+function previewRestKeyForRhythm(rhythmId, timeSignature = null) {
+  if (timeSignature && rhythmInfo(rhythmId).beats === timeSignature.beats) return "wholeRest";
   if (rhythmId === "semibreve") return "wholeRest";
   if (rhythmId === "minim" || rhythmId === "dottedMinim") return "halfRest";
   if (rhythmId === "crotchet" || rhythmId === "dottedCrotchet") return "quarterRest";
@@ -524,9 +697,49 @@ function previewRestKeyForRhythm(rhythmId) {
   return null;
 }
 
-function canGenerateRest(rhythmId) {
-  const restKey = previewRestKeyForRhythm(rhythmId);
+function canGenerateRest(rhythmId, timeSignature = null) {
+  const restKey = previewRestKeyForRhythm(rhythmId, timeSignature);
   return restKey && generatedEnabled(restKey);
+}
+
+function rhythmNeedsDot(rhythmId) {
+  return Boolean(rhythmInfo(rhythmId).dotted);
+}
+
+function canGenerateDotForRhythm(rhythmId) {
+  return !rhythmNeedsDot(rhythmId)
+    || generatedEnabled("augmentationDotLine")
+    || generatedEnabled("augmentationDotSpace");
+}
+
+function canGenerateNoteRhythm(rhythmId) {
+  if (!canGenerateDotForRhythm(rhythmId)) return false;
+  if (rhythmId === "semibreve") return generatedEnabled("wholeNote");
+  if (rhythmId === "minim" || rhythmId === "dottedMinim") {
+    return generatedEnabled("halfNoteStemUp") || generatedEnabled("halfNoteStemDown");
+  }
+  if (rhythmId === "crotchet" || rhythmId === "dottedCrotchet") {
+    return generatedEnabled("quarterNoteStemUp") || generatedEnabled("quarterNoteStemDown");
+  }
+  if (rhythmId === "quaver" || rhythmId === "dottedQuaver") {
+    return generatedEnabled("eighthNoteStemUp") || generatedEnabled("eighthNoteStemDown");
+  }
+  if (rhythmId === "semiquaver") {
+    return generatedEnabled("sixteenthNoteStemUp") || generatedEnabled("sixteenthNoteStemDown");
+  }
+  return false;
+}
+
+function canGenerateRestRhythm(rhythmId, timeSignature = null) {
+  return canGenerateDotForRhythm(rhythmId) && canGenerateRest(rhythmId, timeSignature);
+}
+
+function canGenerateRhythm(rhythmId, timeSignature = null) {
+  return canGenerateNoteRhythm(rhythmId) || canGenerateRestRhythm(rhythmId, timeSignature);
+}
+
+function mustGenerateRestForRhythm(rhythmId, timeSignature = null) {
+  return !canGenerateNoteRhythm(rhythmId) && canGenerateRestRhythm(rhythmId, timeSignature);
 }
 
 function patternBeats(pattern) {
@@ -535,7 +748,10 @@ function patternBeats(pattern) {
 
 function validPreviewPatterns(timeSignature) {
   const patterns = PREVIEW_RHYTHM_PATTERNS[timeSignature.id] || PREVIEW_RHYTHM_PATTERNS["4/4"];
-  return patterns.filter((pattern) => patternBeats(pattern) === timeSignature.beats);
+  return patterns.filter((pattern) => (
+    patternBeats(pattern) === timeSignature.beats
+    && pattern.every((rhythmId) => canGenerateRhythm(rhythmId, timeSignature))
+  ));
 }
 
 function fillPatternToTimeSignature(unit, timeSignature) {
@@ -546,7 +762,7 @@ function fillPatternToTimeSignature(unit, timeSignature) {
     remaining -= 1;
   }
   if (remaining === 0.5) pattern.push("quaver");
-  return patternBeats(pattern) === timeSignature.beats ? pattern : null;
+  return patternBeats(pattern) === timeSignature.beats && pattern.every((rhythmId) => canGenerateRhythm(rhythmId, timeSignature)) ? pattern : null;
 }
 
 function forcedPatternForSymbol(symbolKey, timeSignature) {
@@ -566,11 +782,14 @@ function forcedPatternForSymbol(symbolKey, timeSignature) {
     semiquaverBeamHook: [["dottedQuaver", "semiquaver"], ["semiquaver", "dottedQuaver"], ["quaver", "semiquaver", "semiquaver"]],
     augmentationDotLine: [["dottedCrotchet", "quaver"], ["dottedQuaver", "semiquaver"]],
     augmentationDotSpace: [["dottedCrotchet", "quaver"], ["dottedQuaver", "semiquaver"]],
+    tieStemUp: [["crotchet", "crotchet"]],
+    tieStemDown: [["crotchet", "crotchet"]],
     wholeRest: [["semibreve"]],
     halfRest: [["minim"]],
     quarterRest: [["crotchet"]],
     eighthRest: [["quaver", "quaver"]],
     sixteenthRest: [["semiquaver", "semiquaver", "quaver"]],
+    scoreAccidentals: [["crotchet"]],
     flatInScore: [["crotchet"]],
     naturalInScore: [["crotchet"]],
     sharpInScore: [["crotchet"]],
@@ -586,11 +805,42 @@ function forcedPatternForSymbol(symbolKey, timeSignature) {
 }
 
 function keyForGeneratedSymbol(symbolKey) {
-  if (symbolKey === "flatKeySignature") return randomItem(PREVIEW_KEYS.filter((key) => Object.values(key.keyAccidentals).some((value) => value < 0)));
-  if (symbolKey === "sharpKeySignature" || symbolKey === "ledgerLineAccidentals") return randomItem(PREVIEW_KEYS.filter((key) => Object.values(key.keyAccidentals).some((value) => value > 0)));
-  if (symbolKey === "flatInScore") return randomItem(PREVIEW_KEYS.filter((key) => Object.values(key.keyAccidentals).some((value) => value < 0)));
-  if (symbolKey === "sharpInScore") return randomItem(PREVIEW_KEYS.filter((key) => Object.values(key.keyAccidentals).some((value) => value > 0)));
+  const keys = enabledKeyChoices();
+  if (symbolKey === "keySignatureAccidentals") return randomItem(keys.filter((key) => Object.values(key.keyAccidentals).some((value) => value !== 0)));
+  if (symbolKey === "flatKeySignature") return randomItem(keys.filter((key) => Object.values(key.keyAccidentals).some((value) => value < 0)));
+  if (symbolKey === "sharpKeySignature" || symbolKey === "ledgerLineAccidentals") return randomItem(keys.filter((key) => Object.values(key.keyAccidentals).some((value) => value > 0)));
+  if (symbolKey === "flatInScore") return randomItem(keys.filter((key) => Object.values(key.keyAccidentals).some((value) => value < 0)));
+  if (symbolKey === "sharpInScore") return randomItem(keys.filter((key) => Object.values(key.keyAccidentals).some((value) => value > 0)));
   return null;
+}
+
+function keySignatureAllowed(key) {
+  const values = Object.values(key.keyAccidentals || {});
+  const hasFlats = values.some((value) => value < 0);
+  const hasSharps = values.some((value) => value > 0);
+  if (hasFlats && !generatedEnabled("flatKeySignature")) return false;
+  if (hasSharps && !generatedEnabled("sharpKeySignature")) return false;
+  return true;
+}
+
+function enabledKeyChoices() {
+  const choices = PREVIEW_KEYS.filter((key) => keyEnabled(key) && keySignatureAllowed(key));
+  return choices.length ? choices : PREVIEW_KEYS.filter((key) => key.id === "C");
+}
+
+function enabledPreviewKeyChoicesForShuffle() {
+  return enabledKeyChoices();
+}
+
+function enabledTimeSignatureChoices(requiredSymbolKey = "") {
+  const choices = PREVIEW_TIME_SIGNATURES.filter((item) => (
+    timeSignatureEnabled(item)
+    && (!requiredSymbolKey || forcedPatternForSymbol(requiredSymbolKey, item))
+    && validPreviewPatterns(item).length
+  ));
+  if (choices.length) return choices;
+  const fallback = PREVIEW_TIME_SIGNATURES.filter((item) => item.id === "4/4" && validPreviewPatterns(item).length);
+  return fallback.length ? fallback : PREVIEW_TIME_SIGNATURES.filter((item) => validPreviewPatterns(item).length);
 }
 
 function previewNoteByLetter(letter, preferredIndex = 6) {
@@ -689,11 +939,17 @@ function makePreviewMelodyForBar(key, chordSymbol, barIndex, previousIndex, time
     "9/8": [["dottedMinim", "crotchet", "quaver"]],
     "12/8": [["dottedMinim", "dottedMinim"]],
   };
-  const patternChoices = barIndex === PREVIEW.barCount - 1
-    ? finalPatterns[timeSignature.id] || validPreviewPatterns(timeSignature)
-    : validPreviewPatterns(timeSignature);
+  const validPatterns = validPreviewPatterns(timeSignature);
+  const validFinalPatterns = (finalPatterns[timeSignature.id] || []).filter((pattern) => (
+    patternBeats(pattern) === timeSignature.beats
+    && pattern.every((rhythmId) => canGenerateRhythm(rhythmId, timeSignature))
+  ));
+  const patternChoices = barIndex === PREVIEW.barCount - 1 && validFinalPatterns.length
+    ? validFinalPatterns
+    : validPatterns;
   const forcedPattern = barIndex === 0 ? options.forcedPattern : null;
   const pattern = forcedPattern || randomItem(patternChoices);
+  if (!pattern) return { notes: [], pattern: [], lastIndex: previousIndex };
   const accidentalMemory = {};
   let beatPosition = 0;
   let currentIndex = clamp(previousIndex, 0, PREVIEW_NOTE_POOL.length - 1);
@@ -701,18 +957,18 @@ function makePreviewMelodyForBar(key, chordSymbol, barIndex, previousIndex, time
   const phraseAnchorIndex = currentIndex;
   const phraseDirection = barIndex < 4 ? 1 : -1;
 
-  const notes = pattern.map((rhythmId, noteIndex) => {
-    const beats = rhythmInfo(rhythmId).beats;
+  const notes = pattern.map((patternRhythmId, noteIndex) => {
+    let rhythmId = patternRhythmId;
+    let beats = rhythmInfo(rhythmId).beats;
     const strongBeat = beatPosition === 0 || beatPosition === 2 || beatPosition === 3;
-    const restKey = previewRestKeyForRhythm(rhythmId);
+    const restKey = previewRestKeyForRhythm(rhythmId, timeSignature);
     const forceRest = options.forceRestKey
       && barIndex === 0
-      && previewRestKeyForRhythm(rhythmId) === options.forceRestKey
+      && previewRestKeyForRhythm(rhythmId, timeSignature) === options.forceRestKey
       && !options.usedForcedRest;
-    const mayUseRest = (forceRest || canGenerateRest(rhythmId))
-      && (barIndex > 0 || forceRest)
-      && !(barIndex === PREVIEW.barCount - 1 && noteIndex === pattern.length - 1)
-      && (forceRest || Math.random() < 0.2);
+    const mustUseRest = mustGenerateRestForRhythm(rhythmId, timeSignature);
+    const mayUseRest = (mustUseRest || forceRest || canGenerateRestRhythm(rhythmId, timeSignature))
+      && (mustUseRest || forceRest || Math.random() < 0.35);
 
     if (mayUseRest) {
       if (forceRest) options.usedForcedRest = true;
@@ -792,21 +1048,216 @@ function makePreviewMelodyForBar(key, chordSymbol, barIndex, previousIndex, time
     return note;
   });
 
-  return { notes, lastIndex: currentIndex };
+  return { notes, pattern, lastIndex: currentIndex };
+}
+
+function randomBarIndex() {
+  return Math.floor(Math.random() * PREVIEW.barCount);
+}
+
+function randomUnusedBarIndex(usedBars) {
+  const available = Array.from({ length: PREVIEW.barCount }, (_, index) => index)
+    .filter((index) => !usedBars.has(index));
+  if (!available.length) return null;
+  const barIndex = randomItem(available);
+  usedBars.add(barIndex);
+  return barIndex;
+}
+
+function shuffledCopy(items) {
+  return [...items].sort(() => Math.random() - 0.5);
+}
+
+function randomSubset(items, maxCount) {
+  if (!items.length) return [];
+  const limit = Math.min(maxCount, items.length);
+  const count = Math.floor(Math.random() * (limit + 1));
+  return shuffledCopy(items).slice(0, count);
+}
+
+function randomScoreNotePlacement(bars, predicate = () => true) {
+  const choices = [];
+  bars.forEach((bar) => {
+    bar.notes.forEach((note, noteIndex) => {
+      if (!note.restKey && predicate(note)) choices.push({ staff: "treble", barIndex: bar.barIndex, noteIndex });
+    });
+    (bar.bassNotes || []).forEach((note, noteIndex) => {
+      if (!note.restKey && predicate(note)) choices.push({ staff: "bass", barIndex: bar.barIndex, noteIndex });
+    });
+  });
+  return choices.length ? randomItem(choices) : null;
+}
+
+function articulationNeedsStemDown(key) {
+  if (key === "accentAbove" || key === "staccatoAbove") return true;
+  if (key === "accentBelow" || key === "staccatoBelow") return false;
+  return null;
+}
+
+function notesHaveSamePitch(first, second) {
+  return first
+    && second
+    && !first.restKey
+    && !second.restKey
+    && first.letter === second.letter
+    && first.octave === second.octave
+    && first.step === second.step;
+}
+
+function tieDirectionAllowed(stemDown) {
+  return stemDown ? generatedEnabled("tieStemDown") : generatedEnabled("tieStemUp");
+}
+
+function randomTiePlacement(bars) {
+  const choices = [];
+  bars.forEach((bar) => {
+    [
+      { staff: "treble", notes: bar.notes },
+      { staff: "bass", notes: bar.bassNotes || [] },
+    ].forEach((item) => {
+      for (let noteIndex = 0; noteIndex < item.notes.length - 1; noteIndex += 1) {
+        const first = item.notes[noteIndex];
+        const second = item.notes[noteIndex + 1];
+        const stemDown = previewStemDown(first.step);
+        if (notesHaveSamePitch(first, second) && tieDirectionAllowed(stemDown)) {
+          choices.push({ staff: item.staff, barIndex: bar.barIndex, indexes: [noteIndex, noteIndex + 1], stemDown });
+        }
+      }
+    });
+  });
+  if (choices.length) return randomItem(choices);
+
+  const writableChoices = [];
+  bars.forEach((bar) => {
+    [
+      { staff: "treble", notes: bar.notes },
+      { staff: "bass", notes: bar.bassNotes || [] },
+    ].forEach((item) => {
+      for (let noteIndex = 0; noteIndex < item.notes.length - 1; noteIndex += 1) {
+        const first = item.notes[noteIndex];
+        const second = item.notes[noteIndex + 1];
+        if (!first || !second || first.restKey || second.restKey) continue;
+        const stemDown = previewStemDown(first.step);
+        if (tieDirectionAllowed(stemDown)) writableChoices.push({ bar, staff: item.staff, notes: item.notes, indexes: [noteIndex, noteIndex + 1], stemDown });
+      }
+    });
+  });
+
+  const choice = writableChoices.length ? randomItem(writableChoices) : null;
+  if (!choice) {
+    const fallbackChoices = [];
+    bars.forEach((bar) => {
+      [
+        { staff: "treble", notes: bar.notes },
+        { staff: "bass", notes: bar.bassNotes || [] },
+      ].forEach((item) => {
+        for (let noteIndex = 0; noteIndex < item.notes.length - 1; noteIndex += 1) {
+          const first = item.notes[noteIndex];
+          const second = item.notes[noteIndex + 1];
+          if (!first || !second || first.restKey || second.restKey) continue;
+          fallbackChoices.push({ bar, staff: item.staff, notes: item.notes, indexes: [noteIndex, noteIndex + 1] });
+        }
+      });
+    });
+    const fallback = fallbackChoices.length ? randomItem(fallbackChoices) : null;
+    if (!fallback) return null;
+    const stemDown = generatedEnabled("tieStemDown") && !generatedEnabled("tieStemUp");
+    const note = stemDown
+      ? { letter: "D", octave: 5, step: 6, midi: 74 }
+      : { letter: "E", octave: 4, step: 0, midi: 64 };
+    fallback.notes[fallback.indexes[0]] = { ...fallback.notes[fallback.indexes[0]], ...note, accidental: null };
+    fallback.notes[fallback.indexes[1]] = { ...fallback.notes[fallback.indexes[1]], ...note, accidental: null };
+    return {
+      staff: fallback.staff,
+      barIndex: fallback.bar.barIndex,
+      indexes: fallback.indexes,
+      stemDown,
+    };
+  }
+  const first = choice.notes[choice.indexes[0]];
+  const second = choice.notes[choice.indexes[1]];
+  Object.assign(second, {
+    letter: first.letter,
+    octave: first.octave,
+    step: first.step,
+    midi: first.midi,
+    accidental: null,
+  });
+  return {
+    staff: choice.staff,
+    barIndex: choice.bar.barIndex,
+    indexes: choice.indexes,
+    stemDown: choice.stemDown,
+  };
+}
+
+function makeOptionalPlacements(bars) {
+  const placements = [];
+  const usedDynamicBars = new Set();
+
+  randomSubset(
+    ["accentAbove", "accentBelow", "staccatoAbove", "staccatoBelow"].filter((key) => generatedEnabled(key)),
+    2
+  ).forEach((key) => {
+    const requiredStemDown = articulationNeedsStemDown(key);
+    const note = randomScoreNotePlacement(bars, (candidate) => (
+      requiredStemDown === null || previewStemDown(candidate.step) === requiredStemDown
+    ));
+    if (note) placements.push({ type: "articulation", key, ...note });
+  });
+
+  randomSubset([
+    { key: "flatInScore", value: -1 },
+    { key: "naturalInScore", value: 0 },
+    { key: "sharpInScore", value: 1 },
+  ].filter((item) => generatedEnabled(item.key)), 2).forEach((item) => {
+    const note = randomScoreNotePlacement(bars);
+    if (note) placements.push({ type: "accidental", value: item.value, ...note });
+  });
+
+  randomSubset(
+    ["piano", "forte", "pianissimo", "mezzoPiano", "mezzoForte", "fortissimo", "sforzato"].filter((key) => generatedEnabled(key)),
+    3
+  ).forEach((key) => {
+    const barIndex = randomUnusedBarIndex(usedDynamicBars);
+    if (barIndex !== null) placements.push({ type: "dynamic", key, barIndex });
+  });
+
+  randomSubset(
+    ["crescendo", "diminuendo"].filter((key) => generatedEnabled(key)),
+    1
+  ).forEach((key) => {
+    const barIndex = randomUnusedBarIndex(usedDynamicBars);
+    if (barIndex !== null) placements.push({ type: "hairpin", key, barIndex });
+  });
+
+  if ((generatedEnabled("tieStemUp") || generatedEnabled("tieStemDown")) && Math.random() < 0.35) {
+    const tie = randomTiePlacement(bars);
+    if (tie) placements.push({ type: "tie", ...tie });
+  }
+
+  if (generatedEnabled("repeatLeft") && Math.random() < 0.35) {
+    placements.push({ type: "repeat", key: "repeatLeft", barIndex: randomItem([0, 4]) });
+  }
+
+  if (generatedEnabled("repeatRight") && Math.random() < 0.35) {
+    placements.push({ type: "repeat", key: "repeatRight", barIndex: randomItem([3, 7]) });
+  }
+
+  return placements;
 }
 
 function makeHigherPreviewQuestion(requiredSymbolKey = "") {
-  const timeSignatureChoices = requiredSymbolKey
-    ? PREVIEW_TIME_SIGNATURES.filter((item) => forcedPatternForSymbol(requiredSymbolKey, item))
-    : PREVIEW_TIME_SIGNATURES;
+  const timeSignatureChoices = enabledTimeSignatureChoices(requiredSymbolKey);
   const timeSignature = randomItem(timeSignatureChoices.length ? timeSignatureChoices : PREVIEW_TIME_SIGNATURES);
-  const key = keyForGeneratedSymbol(requiredSymbolKey) || randomItem(PREVIEW_KEYS);
+  const key = keyForGeneratedSymbol(requiredSymbolKey) || randomItem(enabledPreviewKeyChoicesForShuffle());
   const forcedPattern = forcedPatternForSymbol(requiredSymbolKey, timeSignature);
   const melodyOptions = {
     forcedPattern,
     forceRestKey: requiredSymbolKey.endsWith("Rest") ? requiredSymbolKey : "",
     forceDotKey: requiredSymbolKey === "augmentationDotLine" || requiredSymbolKey === "augmentationDotSpace" ? requiredSymbolKey : "",
-    forceLedgerLineNote: requiredSymbolKey === "ledgerLines" || requiredSymbolKey === "ledgerLineAccidentals",
+    forceLedgerLineNote: requiredSymbolKey === "ledgerLines"
+      || requiredSymbolKey === "ledgerLineAccidentals",
     forceLedgerLineAccidental: requiredSymbolKey === "ledgerLineAccidentals",
     forceScoreAccidental: ["flatInScore", "naturalInScore", "sharpInScore"].includes(requiredSymbolKey) ? requiredSymbolKey : "",
   };
@@ -820,7 +1271,7 @@ function makeHigherPreviewQuestion(requiredSymbolKey = "") {
       chordSymbol: symbol,
       chord: key.chords[symbol],
       notes: melody.notes,
-      bassNotes: makePreviewBassNotesForBar(key.chords[symbol], timeSignature),
+      bassNotes: makePreviewBassNotesForBar(key.chords[symbol], timeSignature, melody.pattern),
     };
   });
   return {
@@ -830,6 +1281,7 @@ function makeHigherPreviewQuestion(requiredSymbolKey = "") {
     timeSignatureKey: timeSignature.symbolKey,
     targetBars: [5, 6],
     bars,
+    optionalPlacements: makeOptionalPlacements(bars),
   };
 }
 
@@ -1000,12 +1452,12 @@ function anchorPoint(ctx, anchor, layout) {
   };
 }
 
-function drawSymbol(parent, ctx, key, x, y, interactive) {
+function drawSymbol(parent, ctx, key, x, y, interactive, settingOverrides = {}) {
   const symbol = BRAVURA_SYMBOLS[actualSymbolKey(key)];
   const timeSignature = TIME_SIGNATURES[key];
   if (!symbol && !timeSignature) return null;
 
-  const settings = symbolConfig(key);
+  const settings = { ...symbolConfig(settingsKeyForDrawing(key)), ...settingOverrides };
   const adjustedX = x + px(ctx, settings.xOffsetScale) + Number(settings.opticalXOffset || 0);
   const adjustedY = y + px(ctx, settings.yOffsetScale) + Number(settings.opticalYOffset || 0);
   const fontSize = px(ctx, settings.fontSizeScale);
@@ -1112,6 +1564,77 @@ function renderStage() {
   renderHigherPreview(stage);
 }
 
+function previewSnapshot() {
+  return Object.fromEntries(
+    Object.entries(PREVIEW).map(([key, value]) => [key, Array.isArray(value) ? [...value] : value])
+  );
+}
+
+function restorePreview(snapshot) {
+  Object.entries(snapshot).forEach(([key, value]) => {
+    PREVIEW[key] = Array.isArray(value) ? [...value] : value;
+  });
+}
+
+function renderWithPreviewTestSettings(test, svg) {
+  const previewBefore = previewSnapshot();
+  const showGuidesBefore = config.stave.showGuides;
+
+  Object.assign(PREVIEW, test.preview || {});
+  if (Array.isArray(test.preview?.systemTops)) PREVIEW.systemTops = [...test.preview.systemTops];
+  if (typeof test.showGuides === "boolean") config.stave.showGuides = test.showGuides;
+
+  try {
+    renderHigherPreview(svg, test.render || {});
+  } finally {
+    restorePreview(previewBefore);
+    config.stave.showGuides = showGuidesBefore;
+  }
+}
+
+function fillPreviewTestOptions() {
+  if (!previewTestOptions) return;
+  previewTestOptions.innerHTML = PREVIEW_TESTS.map((test) => `
+    <label>
+      <input type="checkbox" value="${test.id}" ${previewTestState[test.id] ? "checked" : ""} />
+      ${test.label}
+    </label>
+  `).join("");
+}
+
+function renderPreviewTests() {
+  if (!previewTestsGrid) return;
+  previewTestsGrid.replaceChildren();
+
+  PREVIEW_TESTS
+    .filter((test) => previewTestState[test.id])
+    .forEach((test) => {
+      const card = document.createElement("article");
+      card.className = "preview-test-card";
+
+      const title = document.createElement("h3");
+      title.textContent = test.label;
+      card.appendChild(title);
+
+      const scroll = document.createElement("div");
+      scroll.className = "preview-test-scroll";
+
+      const svg = makeElement("svg", {
+        class: "higher-preview-svg preview-test-svg",
+        role: "img",
+        "aria-label": `${test.label} Preview`,
+      });
+      if (test.cssWidth) svg.style.setProperty("--preview-width", test.cssWidth);
+      if (test.minWidth) svg.style.setProperty("--preview-min-width", test.minWidth);
+
+      scroll.appendChild(svg);
+      card.appendChild(scroll);
+      previewTestsGrid.appendChild(card);
+
+      renderWithPreviewTestSettings(test, svg);
+    });
+}
+
 function previewYForStep(step, top) {
   return top + PREVIEW.gap * 4 - step * (PREVIEW.gap / 2);
 }
@@ -1155,10 +1678,14 @@ function previewBarNotePositions(barIndex, notes) {
   const end = start + previewBarWidth(barIndex);
   const startX = start + (barIndex === 0 ? 4 : barIndex < 4 ? 15 : 19);
   const endX = barIndex === PREVIEW.barCount - 1 ? end - 24 : end - 4;
+  const totalBeats = notes.reduce((sum, note) => sum + Number(note.beats || 0), 0);
   const units = notes.reduce((sum, note) => sum + previewRhythmSpacing(note.rhythm), 0);
   const unit = Math.max(1, endX - startX) / Math.max(1, units);
   let cursor = startX + unit * 0.38;
   return notes.map((note) => {
+    if (note.restKey === "wholeRest" && Number(note.beats || 0) === totalBeats) {
+      return startX + (endX - startX) / 2;
+    }
     const x = cursor;
     cursor += previewRhythmSpacing(note.rhythm) * unit;
     return x;
@@ -1178,6 +1705,17 @@ function previewStemDown(step) {
 
 function previewRenderSymbol(parent, key, x, y, lineGap = PREVIEW.gap) {
   drawSymbol(parent, { lineGap, interactive: false }, key, x, y, false);
+}
+
+function previewRenderTie(parent, firstX, secondX, y, stemDown) {
+  const x = (firstX + secondX) / 2;
+  const spacing = Math.abs(secondX - firstX);
+  const baseWidth = Number(symbolConfig("tie").widthScale || 1);
+  const dynamicWidth = clamp(baseWidth * (spacing / (PREVIEW.gap * 3.2)), 0.8, 8);
+  const group = drawSymbol(parent, { lineGap: PREVIEW.gap, interactive: false }, "tie", x, y, false, { widthScale: dynamicWidth });
+  if (group && stemDown) {
+    group.setAttribute("transform", `rotate(180 ${x} ${y})`);
+  }
 }
 
 function previewAnchorX(key) {
@@ -1241,13 +1779,17 @@ function drawPreviewLedgerLines(parent, x, step, top, forceShow = false) {
   const halfWidth = 12 * Number(settings.widthScale || 1);
   const thickness = Math.max(1, 0.6 * Number(settings.fontSizeScale || 2) * Number(settings.heightScale || 1));
 
-  for (let ledgerStep = -2; ledgerStep >= step; ledgerStep -= 2) {
-    const y = previewYForStep(ledgerStep, top) + yOffset;
-    append(parent, makeElement("line", { class: "ledger-line", x1: x + xOffset - halfWidth, x2: x + xOffset + halfWidth, y1: y, y2: y, "stroke-width": thickness }));
+  if (step <= -2) {
+    for (let ledgerStep = -2; ledgerStep >= step; ledgerStep -= 2) {
+      const y = previewYForStep(ledgerStep, top) + yOffset;
+      append(parent, makeElement("line", { class: "ledger-line", x1: x + xOffset - halfWidth, x2: x + xOffset + halfWidth, y1: y, y2: y, "stroke-width": thickness }));
+    }
   }
-  for (let ledgerStep = 10; ledgerStep <= step; ledgerStep += 2) {
-    const y = previewYForStep(ledgerStep, top) + yOffset;
-    append(parent, makeElement("line", { class: "ledger-line", x1: x + xOffset - halfWidth, x2: x + xOffset + halfWidth, y1: y, y2: y, "stroke-width": thickness }));
+  if (step >= 10) {
+    for (let ledgerStep = 10; ledgerStep <= step; ledgerStep += 2) {
+      const y = previewYForStep(ledgerStep, top) + yOffset;
+      append(parent, makeElement("line", { class: "ledger-line", x1: x + xOffset - halfWidth, x2: x + xOffset + halfWidth, y1: y, y2: y, "stroke-width": thickness }));
+    }
   }
 }
 
@@ -1260,6 +1802,10 @@ function drawPreviewAccidental(parent, value, x, y, context = "score") {
   const accidentalKey = accidentalKeyForValue(value, context);
   if (!generatedEnabled(accidentalKey)) return;
   previewRenderSymbol(parent, accidentalKey, x, y, PREVIEW.gap);
+}
+
+function previewAccidentalX(noteheadX) {
+  return noteheadX - PREVIEW.gap * 2.1;
 }
 
 function isLedgerLineStep(step) {
@@ -1300,7 +1846,7 @@ function drawPreviewNote(parent, note, x, top, forcedStemEnd = null, forceStemDo
   if (!generatedEnabled(symbolKey)) return;
   drawPreviewLedgerLines(parent, x, note.step, top, isLedgerLineStep(note.step));
   if (note.accidental !== null && note.accidental !== undefined && (!isLedgerLineStep(note.step) || generatedEnabled("ledgerLineAccidentals"))) {
-    drawPreviewAccidental(parent, note.accidental, x - 17, y);
+    drawPreviewAccidental(parent, note.accidental, previewAccidentalX(x), y);
   }
   if (beamed) {
     const noteheadKey = stemDown ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
@@ -1491,7 +2037,8 @@ function drawPreviewKeySignature(parent, key, top, clef = "treble") {
   const entries = Object.entries(key.keyAccidentals || {});
   if (!entries.length) return;
   const kind = entries.some(([, value]) => value < 0) ? "flat" : "sharp";
-  if (!generatedEnabled(kind)) return;
+  if (kind === "flat" && !generatedEnabled("flatKeySignature")) return;
+  if (kind === "sharp" && !generatedEnabled("sharpKeySignature")) return;
   const steps = clef === "bass" ? BASS_KEY_SIG_STEPS : TREBLE_KEY_SIG_STEPS;
   const letters = KEY_SIG_ORDER[kind].filter((letter) => key.keyAccidentals[letter]);
   letters.forEach((letter, index) => {
@@ -1511,6 +2058,21 @@ function notePositionInBar(bar, note) {
   return positions[index] || previewBarStart(bar.barIndex) + PREVIEW.gap * 3;
 }
 
+function notesForPlacement(bar, staff) {
+  return staff === "bass" ? bar.bassNotes || [] : bar.notes;
+}
+
+function topForPlacement(barIndex, staff) {
+  const top = previewSystemTop(barIndex);
+  return staff === "bass" ? previewBassTop(top) : top;
+}
+
+function notePositionForPlacement(bar, staff, noteIndex) {
+  const notes = notesForPlacement(bar, staff);
+  const positions = previewBarNotePositions(bar.barIndex, notes);
+  return positions[noteIndex] || previewBarStart(bar.barIndex) + PREVIEW.gap * 3;
+}
+
 function drawPreviewArticulation(parent, key, bar, note, top, above = true) {
   if (!generatedEnabled(key) || !note) return;
   const x = notePositionInBar(bar, note);
@@ -1519,92 +2081,78 @@ function drawPreviewArticulation(parent, key, bar, note, top, above = true) {
 }
 
 function drawPreviewOptionalSymbols(parent, question) {
-  const firstTop = PREVIEW.systemTops[0];
-  const firstBassTop = previewBassTop(firstTop);
-  const secondTop = PREVIEW.systemTops[1];
-  const secondBassTop = previewBassTop(secondTop);
-  const firstBar = question.bars[0];
-  const secondBar = question.bars[1];
-  const thirdBar = question.bars[2];
-  const fifthBar = question.bars[4];
-  const sixthBar = question.bars[5];
-  const firstNote = firstDrawableNote(firstBar);
-  const secondNote = firstDrawableNote(secondBar);
-  const thirdNote = firstDrawableNote(thirdBar);
-  const fifthNote = firstDrawableNote(fifthBar);
+  (question.optionalPlacements || []).forEach((placement) => {
+    const bar = question.bars[placement.barIndex];
+    if (!bar) return;
 
-  drawPreviewArticulation(parent, "accentAbove", secondBar, secondNote, firstTop, true);
-  drawPreviewArticulation(parent, "staccatoAbove", thirdBar, thirdNote, firstTop, true);
-  drawPreviewArticulation(parent, "accentBelow", fifthBar, fifthNote, secondTop, false);
-  drawPreviewArticulation(parent, "staccatoBelow", sixthBar, firstDrawableNote(sixthBar), secondTop, false);
-
-  if (generatedEnabled("naturalInScore") && firstNote) {
-    drawPreviewAccidental(parent, 0, notePositionInBar(firstBar, firstNote) - 17, previewYForStep(firstNote.step, firstTop));
-  }
-
-  if (generatedEnabled("tie")) {
-    const tieNotes = firstBar.notes.filter((note) => !note.restKey).slice(0, 2);
-    if (tieNotes.length === 2) {
-      const firstX = notePositionInBar(firstBar, tieNotes[0]);
-      const secondX = notePositionInBar(firstBar, tieNotes[1]);
-      const tieY = previewYForStep(Math.min(tieNotes[0].step, tieNotes[1].step), firstTop) + PREVIEW.gap * 2.4;
-      previewRenderSymbol(parent, "tie", (firstX + secondX) / 2, tieY, PREVIEW.gap);
+    if (placement.type === "articulation") {
+      const notes = notesForPlacement(bar, placement.staff);
+      const note = notes[placement.noteIndex];
+      if (!note) return;
+      const top = topForPlacement(placement.barIndex, placement.staff);
+      const x = notePositionForPlacement(bar, placement.staff, placement.noteIndex);
+      const above = placement.key.includes("Above");
+      const y = previewYForStep(note.step, top) + (above ? -PREVIEW.gap * 3.1 : PREVIEW.gap * 3.1);
+      previewRenderSymbol(parent, placement.key, x, y, PREVIEW.gap);
     }
-  }
 
-  const dynamicKeys = ["piano", "forte", "pianissimo", "mezzoPiano", "mezzoForte", "fortissimo", "sforzato"];
-  dynamicKeys.forEach((key, index) => {
-    if (!generatedEnabled(key)) return;
-    previewRenderSymbol(parent, key, previewBarStart(index % 4) + PREVIEW.gap * 3.5, firstBassTop + PREVIEW.gap * 8.4, PREVIEW.gap);
+    if (placement.type === "accidental") {
+      const notes = notesForPlacement(bar, placement.staff);
+      const note = notes[placement.noteIndex];
+      if (!note) return;
+      const top = topForPlacement(placement.barIndex, placement.staff);
+      const x = notePositionForPlacement(bar, placement.staff, placement.noteIndex);
+      drawPreviewAccidental(parent, placement.value, previewAccidentalX(x), previewYForStep(note.step, top));
+    }
+
+    if (placement.type === "dynamic") {
+      const top = previewBassTop(previewSystemTop(placement.barIndex));
+      previewRenderSymbol(parent, placement.key, previewBarStart(placement.barIndex) + PREVIEW.gap * 3.5, top + PREVIEW.gap * 8.4, PREVIEW.gap);
+    }
+
+    if (placement.type === "hairpin") {
+      const top = previewBassTop(previewSystemTop(placement.barIndex));
+      previewRenderSymbol(parent, placement.key, previewBarStart(placement.barIndex) + PREVIEW.gap * 4, top + PREVIEW.gap * 8.5, PREVIEW.gap);
+    }
+
+    if (placement.type === "tie") {
+      const notes = notesForPlacement(bar, placement.staff);
+      const top = topForPlacement(placement.barIndex, placement.staff);
+      const firstNote = notes[placement.indexes[0]];
+      const secondNote = notes[placement.indexes[1]];
+      if (!firstNote || !secondNote) return;
+      const firstX = notePositionForPlacement(bar, placement.staff, placement.indexes[0]);
+      const secondX = notePositionForPlacement(bar, placement.staff, placement.indexes[1]);
+      const stemDown = placement.stemDown ?? previewStemDown(firstNote.step);
+      const tieY = previewYForStep(firstNote.step, top) + (stemDown ? -PREVIEW.gap * 2.4 : PREVIEW.gap * 2.4);
+      previewRenderTie(parent, firstX, secondX, tieY, stemDown);
+    }
+
+    if (placement.type === "repeat") {
+      const top = previewSystemTop(placement.barIndex);
+      const bassTop = previewBassTop(top);
+      const x = placement.key === "repeatLeft"
+        ? previewBarStart(placement.barIndex) - PREVIEW.gap * 1.1
+        : previewBarStart(placement.barIndex) + previewBarWidth(placement.barIndex) - PREVIEW.gap * 0.5;
+      previewRenderSymbol(parent, placement.key, x, top + PREVIEW.gap * 2.9, PREVIEW.gap);
+      previewRenderSymbol(parent, placement.key, x, bassTop + PREVIEW.gap * 2.9, PREVIEW.gap);
+    }
   });
 
-  if (generatedEnabled("crescendo")) {
-    previewRenderSymbol(parent, "crescendo", previewBarStart(5) + PREVIEW.gap * 4, secondBassTop + PREVIEW.gap * 8.5, PREVIEW.gap);
-  }
-
-  if (generatedEnabled("diminuendo")) {
-    previewRenderSymbol(parent, "diminuendo", previewBarStart(6) + PREVIEW.gap * 4, secondBassTop + PREVIEW.gap * 8.5, PREVIEW.gap);
-  }
-
-  if (shouldShowLedgerLines()) {
-    drawPreviewNote(parent, {
-      rhythm: "crotchet",
-      step: 10,
-      accidental: generatedEnabled("ledgerLineAccidentals") ? 1 : null,
-    }, previewBarStart(3) + PREVIEW.gap * 6.2, firstTop);
-    drawPreviewNote(parent, {
-      rhythm: "crotchet",
-      step: -2,
-      accidental: generatedEnabled("ledgerLineAccidentals") ? -1 : null,
-    }, previewBarStart(7) + PREVIEW.gap * 4.2, secondBassTop);
-  }
-
-  const restExamples = [
-    { key: "wholeRest", barIndex: 4, staffTop: secondTop },
-    { key: "halfRest", barIndex: 5, staffTop: secondTop },
-    { key: "quarterRest", barIndex: 6, staffTop: secondTop },
-    { key: "eighthRest", barIndex: 4, staffTop: secondBassTop },
-    { key: "sixteenthRest", barIndex: 5, staffTop: secondBassTop },
-  ];
-  restExamples.forEach((item) => {
-    if (!generatedEnabled(item.key)) return;
-    const alreadyShown = question.bars.some((bar) => bar.notes.some((note) => note.restKey === item.key));
-    if (alreadyShown) return;
-    previewRenderSymbol(parent, item.key, previewBarStart(item.barIndex) + PREVIEW.gap * 5, previewYForStep(4, item.staffTop), PREVIEW.gap);
-  });
-
-  if (generatedEnabled("repeatLeft")) {
-    previewRenderSymbol(parent, "repeatLeft", previewBarStart(4) - PREVIEW.gap * 1.1, secondTop + PREVIEW.gap * 2.9, PREVIEW.gap);
-  }
-
-  if (generatedEnabled("repeatRight")) {
-    previewRenderSymbol(parent, "repeatRight", previewBarStart(3) + previewBarWidth(3) - PREVIEW.gap * 0.5, firstTop + PREVIEW.gap * 2.9, PREVIEW.gap);
-  }
 }
 
-function renderHigherPreview(parent) {
+function hasRepeatAtBar(question, repeatKey, barIndex) {
+  return (question.optionalPlacements || []).some((placement) => (
+    placement.type === "repeat"
+    && placement.key === repeatKey
+    && placement.barIndex === barIndex
+  ));
+}
+
+function renderHigherPreview(parent, options = {}) {
   parent.replaceChildren();
-  const question = previewQuestion;
+  const question = options.question || previewQuestion;
+  const showBarNumbers = options.showBarNumbers !== false;
   parent.setAttribute("viewBox", `0 0 ${PREVIEW.width} ${PREVIEW.height}`);
   append(parent, makeElement("rect", { width: PREVIEW.width, height: PREVIEW.height, fill: "transparent" }));
 
@@ -1618,9 +2166,11 @@ function renderHigherPreview(parent) {
     if (generatedEnabled("gClef")) previewRenderSymbol(parent, "gClef", previewAnchorX("gClef"), previewAnchorY("gClef", top), PREVIEW.gap);
     if (generatedEnabled("fClef")) previewRenderSymbol(parent, "fClef", previewAnchorX("fClef"), previewAnchorY("fClef", bassTop), PREVIEW.gap);
     if (generatedEnabled("brace")) previewRenderSymbol(parent, "brace", PREVIEW.staffLeft - 18, top + PREVIEW.gap * 4, PREVIEW.gap);
-    if (systemIndex === 0) {
+    if (systemIndex === 0 || systemIndex === 1) {
       drawPreviewKeySignature(parent, question.key, top, "treble");
       drawPreviewKeySignature(parent, question.key, bassTop, "bass");
+    }
+    if (systemIndex === 0) {
       if (generatedEnabled("timeSignature")) {
         previewRenderSymbol(parent, question.timeSignatureKey, previewAnchorX(question.timeSignatureKey), previewAnchorY(question.timeSignatureKey, top), PREVIEW.gap);
         previewRenderSymbol(parent, question.timeSignatureKey, previewAnchorX(question.timeSignatureKey), previewAnchorY(question.timeSignatureKey, bassTop), PREVIEW.gap);
@@ -1637,27 +2187,39 @@ function renderHigherPreview(parent) {
     const bassPositions = previewBarNotePositions(bar.barIndex, bar.bassNotes || []);
     const groups = previewQuaverGroups(bar.notes, question.timeSignature)
       .filter((group) => generatedEnabled(previewBeamConfigKey(bar.notes.slice(group.start, group.end + 1))));
+    const bassGroups = previewQuaverGroups(bar.bassNotes || [], question.timeSignature)
+      .filter((group) => generatedEnabled(previewBeamConfigKey((bar.bassNotes || []).slice(group.start, group.end + 1))));
     const groupedIndexes = new Set(groups.flatMap((group) => {
       const indexes = [];
       for (let index = group.start; index <= group.end; index += 1) indexes.push(index);
       return indexes;
     }));
-    append(parent, makeElement("text", {
-      x: (bar.barIndex === 0 || bar.barIndex === 4) ? start - 15 : start + 5,
-      y: top - 18,
-      "font-size": 13,
-      "font-weight": 600,
-    }, String(bar.barIndex + 1)));
+    const bassGroupedIndexes = new Set(bassGroups.flatMap((group) => {
+      const indexes = [];
+      for (let index = group.start; index <= group.end; index += 1) indexes.push(index);
+      return indexes;
+    }));
+    if (showBarNumbers) {
+      append(parent, makeElement("text", {
+        x: (bar.barIndex === 0 || bar.barIndex === 4) ? start - 15 : start + 5,
+        y: top - 18,
+        "font-size": 13,
+        "font-weight": 600,
+      }, String(bar.barIndex + 1)));
+    }
 
     bar.notes.forEach((note, index) => {
       if (!groupedIndexes.has(index)) drawPreviewNote(parent, note, positions[index], top);
     });
     groups.forEach((group) => drawPreviewBeam(parent, bar.notes, positions, top, group));
     (bar.bassNotes || []).forEach((note, index) => {
-      drawPreviewNote(parent, note, bassPositions[index], bassTop);
+      if (!bassGroupedIndexes.has(index)) drawPreviewNote(parent, note, bassPositions[index], bassTop);
     });
+    bassGroups.forEach((group) => drawPreviewBeam(parent, bar.bassNotes || [], bassPositions, bassTop, group));
 
-    if (bar.barIndex === PREVIEW.barCount - 1) {
+    if (bar.barIndex === PREVIEW.barCount - 1 && hasRepeatAtBar(question, "repeatRight", PREVIEW.barCount - 1)) {
+      return;
+    } else if (bar.barIndex === PREVIEW.barCount - 1) {
       if (generatedEnabled("barlineFinal")) drawPreviewSystemBarline(parent, end, top, bassTop, true);
     } else if (generatedEnabled("barlineSingle")) {
       drawPreviewSystemBarline(parent, end, top, bassTop);
@@ -1672,18 +2234,40 @@ function updateExportText() {
 }
 
 function fillGeneratedSymbolChecks() {
-  generatedSymbolChecks.innerHTML = Object.entries(SYMBOL_GROUPS).map(([groupName, keys]) => {
+  const symbolSections = Object.entries(SYMBOL_GROUPS).map(([groupName, keys]) => {
     const rows = keys
-      .filter((key) => hasRenderableSymbol(key))
+      .filter((key) => key !== "allNotes" && key !== "timeSignature" && hasRenderableSymbol(key))
       .map((key) => `
         <label>
-          <input type="checkbox" value="${key}" ${generatedEnabled(key) ? "checked" : ""} />
+          <input type="checkbox" value="${key}" data-generated-kind="symbol" ${generatedEnabled(key) ? "checked" : ""} />
           ${symbolLabel(key)}
         </label>
       `)
       .join("");
     return `<div class="checkbox-heading">${groupName}</div>${rows}`;
   }).join("");
+
+  const timeSignatureRows = PREVIEW_TIME_SIGNATURES.map((item) => `
+    <label>
+      <input type="checkbox" value="${item.id}" data-generated-kind="timeSignature" ${timeSignatureEnabled(item) ? "checked" : ""} />
+      ${item.id}
+    </label>
+  `).join("");
+
+  const keyRows = PREVIEW_KEYS.map((item) => `
+    <label>
+      <input type="checkbox" value="${item.id}" data-generated-kind="key" ${keyEnabled(item) ? "checked" : ""} />
+      ${titleCase(item.name)}
+    </label>
+  `).join("");
+
+  generatedSymbolChecks.innerHTML = `
+    ${symbolSections}
+    <div class="checkbox-heading">Time Signatures</div>
+    ${timeSignatureRows}
+    <div class="checkbox-heading">Keys</div>
+    ${keyRows}
+  `;
 }
 
 function fillSymbolSelect() {
@@ -1729,6 +2313,11 @@ function setSymbolControlsDisabled(disabled) {
   });
 }
 
+function syncSymbolRangeLimits() {
+  const wideHairpin = HAIRPIN_DYNAMIC_KEYS.includes(selectedSymbolKey);
+  controls.widthScale.max = wideHairpin ? "6" : "2";
+}
+
 function setAllNotesControls() {
   const positionOnly = selectedSymbolKey === "allNotes";
   ["fontSizeScale", "widthScale", "heightScale"].forEach((key) => {
@@ -1751,6 +2340,7 @@ function syncControlsFromConfig() {
   }
 
   setSymbolControlsDisabled(false);
+  syncSymbolRangeLimits();
   setAllNotesControls();
   const settings = symbolConfig(settingsKeyForControl(selectedSymbolKey));
   SYMBOL_SETTING_KEYS.forEach((key) => setRange(controls[key], settings[key]));
@@ -1781,6 +2371,7 @@ function updateAll() {
   syncControlsFromConfig();
   updateZoom();
   renderStage();
+  renderPreviewTests();
   updateExportText();
 }
 
@@ -1791,15 +2382,6 @@ function updateSymbolSetting(key, value) {
     symbolConfig(symbolKey)[key] = Number(value);
   });
   updateAll();
-}
-
-function parseImportedConfig(text) {
-  const trimmed = text.trim();
-  if (!trimmed) throw new Error("Import box is empty.");
-  const objectText = trimmed
-    .replace(/^const\s+SHARED_NOTATION_CONFIG\s*=\s*/, "")
-    .replace(/;\s*$/, "");
-  return JSON.parse(objectText);
 }
 
 symbolSelect.addEventListener("change", () => {
@@ -1824,10 +2406,29 @@ document.getElementById("shufflePreviewButton").addEventListener("click", () => 
   updateAll();
 });
 
+document.getElementById("renderPreviewTestsButton").addEventListener("click", () => {
+  renderPreviewTests();
+});
+
+if (previewTestOptions) {
+  previewTestOptions.addEventListener("change", (event) => {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    previewTestState[event.target.value] = event.target.checked;
+    renderPreviewTests();
+  });
+}
+
 generatedSymbolChecks.addEventListener("change", (event) => {
   if (!(event.target instanceof HTMLInputElement)) return;
-  generatedSymbols[event.target.value] = event.target.checked;
-  previewQuestion = makeHigherPreviewQuestion(event.target.checked ? event.target.value : "");
+  const kind = event.target.dataset.generatedKind || "symbol";
+  if (kind === "timeSignature") {
+    generatedTimeSignatures[event.target.value] = event.target.checked;
+  } else if (kind === "key") {
+    generatedKeys[event.target.value] = event.target.checked;
+  } else {
+    generatedSymbols[event.target.value] = event.target.checked;
+  }
+  previewQuestion = makeHigherPreviewQuestion();
   updateAll();
 });
 
@@ -1846,6 +2447,7 @@ document.getElementById("resetButton").addEventListener("click", () => {
 });
 
 document.getElementById("exportButton").addEventListener("click", async () => {
+  const button = document.getElementById("exportButton");
   updateExportText();
   try {
     await navigator.clipboard.writeText(exportText.value);
@@ -1855,18 +2457,15 @@ document.getElementById("exportButton").addEventListener("click", async () => {
     document.execCommand("copy");
     exportText.classList.add("export-storage");
   }
+  button.classList.add("copied");
+  copyConfirmation.textContent = "Configuration copied";
+  copyConfirmation.classList.add("visible");
+  window.setTimeout(() => {
+    button.classList.remove("copied");
+    copyConfirmation.classList.remove("visible");
+  }, 1600);
 });
 
-document.getElementById("importButton").addEventListener("click", () => {
-  try {
-    const imported = parseImportedConfig(importText.value);
-    config = cloneConfig(imported);
-    if (!config.stave.grandStaffGapScale) config.stave.grandStaffGapScale = DEFAULT_CONFIG.stave.grandStaffGapScale;
-    updateAll();
-  } catch (error) {
-    alert("The pasted config could not be imported. Please check it is valid JSON from the export box.");
-  }
-});
-
+fillPreviewTestOptions();
 fillGeneratedSymbolChecks();
 updateAll();
