@@ -32,11 +32,11 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "barlineFinal": {
-      "fontSizeScale": 4.55,
-      "xOffsetScale": -0.3,
-      "yOffsetScale": 0,
-      "widthScale": 1.04,
-      "heightScale": 1,
+      "fontSizeScale": 4.5,
+      "xOffsetScale": -0.45,
+      "yOffsetScale": 2,
+      "widthScale": 0.94,
+      "heightScale": 0.9,
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
@@ -51,7 +51,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "repeatRight": {
       "fontSizeScale": 4.8,
-      "xOffsetScale": -0.2,
+      "xOffsetScale": -0.15,
       "yOffsetScale": 1.15,
       "widthScale": 0.76,
       "heightScale": 0.84,
