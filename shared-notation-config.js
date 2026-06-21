@@ -320,11 +320,38 @@ const SHARED_NOTATION_CONFIG = {
       "opticalYOffset": 0
     },
     "tie": {
+      "fontSizeScale": 5.05,
+      "xOffsetScale": 0,
+      "yOffsetScale": -0.05,
+      "widthScale": 0.4,
+      "heightScale": 1,
+      "opticalXOffset": 0,
+      "opticalYOffset": 0
+    },
+    "slurStemUp": {
+      "fontSizeScale": 5.3,
+      "xOffsetScale": -0.15,
+      "yOffsetScale": -0.05,
+      "widthScale": 0.48,
+      "heightScale": 0.8,
+      "opticalXOffset": 0,
+      "opticalYOffset": 0
+    },
+    "slurStemDown": {
+      "fontSizeScale": 4.9,
+      "xOffsetScale": 0.2,
+      "yOffsetScale": -0.15,
+      "widthScale": 0.4,
+      "heightScale": 1.16,
+      "opticalXOffset": 0,
+      "opticalYOffset": 0
+    },
+    "phraseMarking": {
       "fontSizeScale": 5.3,
       "xOffsetScale": 0,
-      "yOffsetScale": -2.55,
-      "widthScale": 1.54,
-      "heightScale": 1,
+      "yOffsetScale": -0.05,
+      "widthScale": 0.4,
+      "heightScale": 1.08,
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
@@ -421,7 +448,7 @@ const SHARED_NOTATION_CONFIG = {
     "staccatoAbove": {
       "fontSizeScale": 3.4,
       "xOffsetScale": 0,
-      "yOffsetScale": 0.2,
+      "yOffsetScale": 2.1,
       "widthScale": 1,
       "heightScale": 1,
       "opticalXOffset": 0,
@@ -501,7 +528,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "piano": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": -1.15,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -510,7 +537,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "forte": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": -1.15,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -519,7 +546,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "pianissimo": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": -1.15,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -528,7 +555,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "mezzoPiano": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": -1.15,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -537,7 +564,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "mezzoForte": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": -1.15,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -546,7 +573,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "fortissimo": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": -1.15,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,
@@ -555,7 +582,7 @@ const SHARED_NOTATION_CONFIG = {
     },
     "sforzato": {
       "fontSizeScale": 3.4,
-      "xOffsetScale": 0,
+      "xOffsetScale": -1.15,
       "yOffsetScale": 0,
       "widthScale": 1,
       "heightScale": 1,

@@ -29,8 +29,6 @@ const controls = {
   barCount: document.getElementById("barCount"),
   showGuides: document.getElementById("showGuides"),
   showBarNumbers: document.getElementById("showBarNumbers"),
-  showTimeSignatures: document.getElementById("showTimeSignatures"),
-  showKeySignatures: document.getElementById("showKeySignatures"),
   fontSizeScale: document.getElementById("fontSizeScale"),
   widthScale: document.getElementById("widthScale"),
   heightScale: document.getElementById("heightScale"),
@@ -68,7 +66,7 @@ const SYMBOL_GROUPS = {
   "Rhythms": [...ORDINARY_NOTE_KEYS, ...BEAM_NOTEHEAD_KEYS, "quaverBeam", "semiquaverBeam", "semiquaverSecondBeam", "semiquaverBeamHook", "augmentationDotLine", "augmentationDotSpace", "tieStemUp", "tieStemDown"],
   "Rests": ["wholeRest", "halfRest", "quarterRest", "eighthRest", "sixteenthRest"],
   "Accidentals": ["scoreAccidentals"],
-  "Articulations": ["accentAbove", "accentBelow", "staccatoAbove", "staccatoBelow"],
+  "Articulations": ["accentAbove", "accentBelow", "staccatoAbove", "staccatoBelow", "slurStemUp", "slurStemDown", "phraseMarking"],
   "Dynamics": ["piano", "forte", "pianissimo", "mezzoPiano", "mezzoForte", "fortissimo", "sforzato", "crescendo", "diminuendo"],
   "Barlines And Repeat Signs": ["barlineSingle", "barlineFinal", "repeatLeft", "repeatRight"],
   "Other": ["brace", "ledgerLines", "ledgerLineAccidentals"],
@@ -93,6 +91,8 @@ const GENERATED_SYMBOL_GROUPS = {
   "Articulations": [
     { key: "accent", label: "Accent", keys: ["accentAbove", "accentBelow"] },
     { key: "staccato", label: "Staccato", keys: ["staccatoAbove", "staccatoBelow"] },
+    { key: "slur", label: "Slur", keys: ["slurStemUp", "slurStemDown"] },
+    { key: "phraseMarking", label: "Phrase Marking" },
   ],
   "Dynamics": ["piano", "forte", "pianissimo", "mezzoPiano", "mezzoForte", "fortissimo", "sforzato", "crescendo", "diminuendo"],
   "Barlines And Repeat Signs": [
@@ -147,6 +147,10 @@ const SYMBOL_LABELS = {
   tie: "Tie",
   tieStemUp: "Tie - Stem Up",
   tieStemDown: "Tie - Stem Down",
+  slur: "Slur",
+  slurStemUp: "Slur - Stem Up",
+  slurStemDown: "Slur - Stem Down",
+  phraseMarking: "Phrase Marking",
   keySignatureAccidentals: "Accidentals In Key Signature",
   scoreAccidentals: "Accidentals",
   flatKeySignature: "Flat In Key Signature",
@@ -250,6 +254,9 @@ const DEFAULT_GENERATED_SYMBOLS = {
   scoreAccidentals: false,
   tieStemUp: false,
   tieStemDown: false,
+  slurStemUp: false,
+  slurStemDown: false,
+  phraseMarking: false,
   wholeRest: false,
   halfRest: false,
   quarterRest: false,
@@ -309,6 +316,7 @@ function generatedKeyForSymbol(key) {
   if (key === "flatKeySignature" || key === "sharpKeySignature") return "keySignatureAccidentals";
   if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return "scoreAccidentals";
   if (key === "tie") return "tieStemUp";
+  if (key === "slur") return "slurStemUp";
   return key;
 }
 
@@ -416,6 +424,7 @@ function actualSymbolKey(key) {
   if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
   if (key === "keySignatureAccidentals" || key === "scoreAccidentals") return "flat";
   if (key === "tieStemUp" || key === "tieStemDown") return "tie";
+  if (key === "slurStemUp" || key === "slurStemDown" || key === "phraseMarking") return "tie";
   if (key === "flatKeySignature" || key === "flatInScore") return "flat";
   if (key === "naturalInScore") return "natural";
   if (key === "sharpKeySignature" || key === "sharpInScore") return "sharp";
@@ -514,6 +523,36 @@ const TWO_BEAT_RHYTHM_UNITS = [
   ["quaver", "crotchet", "quaver"],
 ];
 
+const TWO_BEAT_GROUP_UNITS = [
+  ["minim"],
+  ["crotchet", "crotchet"],
+  ["quaver", "quaver", "crotchet"],
+  ["crotchet", "quaver", "quaver"],
+  ...TWO_BEAT_RHYTHM_UNITS,
+];
+
+const THREE_BEAT_RHYTHM_UNITS = [
+  ["dottedMinim"],
+  ["minim", "crotchet"],
+  ["crotchet", "minim"],
+  ["crotchet", "crotchet", "crotchet"],
+  ["quaver", "quaver", "crotchet", "crotchet"],
+  ["crotchet", "quaver", "quaver", "crotchet"],
+  ...TWO_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet"]),
+  ...ONE_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet", "crotchet"]),
+];
+
+function combineFiveFourGroups() {
+  return [
+    ...THREE_BEAT_RHYTHM_UNITS.flatMap((threeBeatUnit) => (
+      TWO_BEAT_GROUP_UNITS.map((twoBeatUnit) => [...threeBeatUnit, ...twoBeatUnit])
+    )),
+    ...TWO_BEAT_GROUP_UNITS.flatMap((twoBeatUnit) => (
+      THREE_BEAT_RHYTHM_UNITS.map((threeBeatUnit) => [...twoBeatUnit, ...threeBeatUnit])
+    )),
+  ];
+}
+
 const COMPOUND_BEAT_UNITS = [
   ["quaver", "quaver", "quaver"],
   ["crotchet", "quaver"],
@@ -579,13 +618,9 @@ const PREVIEW_RHYTHM_PATTERNS = {
     ["semiquaver", "semiquaver", "semiquaver", "semiquaver", "crotchet", "crotchet", "crotchet"],
   ],
   "5/4": [
-    ["semibreve", "crotchet"],
-    ["minim", "minim", "crotchet"],
-    ["crotchet", "crotchet", "crotchet", "crotchet", "crotchet"],
-    ["minim", "crotchet", "quaver", "quaver", "crotchet"],
-    ...TWO_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet", "crotchet", "crotchet"]),
-    ...ONE_BEAT_RHYTHM_UNITS.map((unit) => [...unit, "crotchet", "crotchet", "crotchet", "crotchet"]),
-    ["semiquaver", "semiquaver", "semiquaver", "semiquaver", "crotchet", "crotchet", "crotchet", "crotchet"],
+    ["dottedMinim", "minim"],
+    ["minim", "dottedMinim"],
+    ...combineFiveFourGroups(),
   ],
   "6/8": [
     ...combineCompoundBeatUnits(2),
@@ -618,7 +653,24 @@ function patternStartsWithUnit(pattern, index, unit) {
   return unit.every((rhythmId, unitIndex) => pattern[index + unitIndex] === rhythmId);
 }
 
+function patternHasBeatBoundary(pattern, targetBeat) {
+  let beat = 0;
+  for (let index = 0; index < pattern.length - 1; index += 1) {
+    beat += rhythmInfo(pattern[index]).beats;
+    if (Math.abs(beat - targetBeat) < 0.001) return true;
+    if (beat > targetBeat) return false;
+  }
+  return false;
+}
+
+function patternRespectsFiveFourGroupings(pattern, timeSignature) {
+  if (timeSignature?.id !== "5/4") return true;
+  if (Math.abs(patternBeats(pattern) - 5) > 0.001) return false;
+  return patternHasBeatBoundary(pattern, 2) || patternHasBeatBoundary(pattern, 3);
+}
+
 function patternRespectsCompoundGroupings(pattern, timeSignature) {
+  if (!patternRespectsFiveFourGroupings(pattern, timeSignature)) return false;
   if (!isCompoundTimeSignature(timeSignature)) return true;
   const units = allowedCompoundUnits(timeSignature);
 
@@ -765,7 +817,7 @@ function previewBassPatternForTimeSignature(timeSignature) {
     "2/4": ["minim"],
     "3/4": ["dottedMinim"],
     "4/4": ["semibreve"],
-    "5/4": ["semibreve", "crotchet"],
+    "5/4": ["dottedMinim", "minim"],
     "6/8": ["dottedMinim"],
     "9/8": ["dottedMinim", "crotchet", "quaver"],
     "12/8": ["dottedMinim", "dottedMinim"],
@@ -950,7 +1002,6 @@ function keyForGeneratedSymbol(symbolKey) {
 }
 
 function keySignatureAllowed(key) {
-  if (!controls.showKeySignatures.checked) return key.id === "C";
   return true;
 }
 
@@ -1052,6 +1103,12 @@ function enableEveryGeneratedControl() {
   setGeneratedSection("timeSignature", PREVIEW_TIME_SIGNATURES.map((item) => item.id), true);
 }
 
+function disableEveryGeneratedControl() {
+  setGeneratedSection("symbol", visibleGeneratedSymbolKeys(), false);
+  setGeneratedSection("key", PREVIEW_KEYS.map((item) => item.id), false);
+  setGeneratedSection("timeSignature", PREVIEW_TIME_SIGNATURES.map((item) => item.id), false);
+}
+
 function previewNoteByLetter(letter, preferredIndex = 6) {
   const candidates = PREVIEW_NOTE_POOL
     .map((note, index) => ({ ...note, index }))
@@ -1144,7 +1201,7 @@ function makePreviewMelodyForBar(key, chordSymbol, barIndex, previousIndex, time
     "2/4": [["minim"]],
     "3/4": [["dottedMinim"]],
     "4/4": [["semibreve"]],
-    "5/4": [["semibreve", "crotchet"]],
+    "5/4": [["dottedMinim", "minim"], ["minim", "dottedMinim"]],
     "6/8": [["dottedMinim"]],
     "9/8": [["dottedMinim", "crotchet", "quaver"]],
     "12/8": [["dottedMinim", "dottedMinim"]],
@@ -1339,12 +1396,14 @@ function randomScoreNotePlacement(bars, predicate = () => true) {
   bars.forEach((bar) => {
     if (visibleStaffs.includes("treble")) {
       bar.notes.forEach((note, noteIndex) => {
-        if (!note.restKey && predicate(note)) choices.push({ staff: "treble", barIndex: bar.barIndex, noteIndex });
+        const placement = { staff: "treble", barIndex: bar.barIndex, noteIndex };
+        if (!note.restKey && predicate(note, placement)) choices.push(placement);
       });
     }
     if (visibleStaffs.includes("bass")) {
       (bar.bassNotes || []).forEach((note, noteIndex) => {
-        if (!note.restKey && predicate(note)) choices.push({ staff: "bass", barIndex: bar.barIndex, noteIndex });
+        const placement = { staff: "bass", barIndex: bar.barIndex, noteIndex };
+        if (!note.restKey && predicate(note, placement)) choices.push(placement);
       });
     }
   });
@@ -1377,6 +1436,30 @@ function notesHaveSamePitch(first, second) {
 
 function tieDirectionAllowed(stemDown) {
   return stemDown ? generatedEnabled("tieStemDown") : generatedEnabled("tieStemUp");
+}
+
+function slurDirectionAllowed(stemDown) {
+  return stemDown ? generatedEnabled("slurStemDown") : generatedEnabled("slurStemUp");
+}
+
+function notesHaveDifferentLetters(first, second) {
+  return first
+    && second
+    && !first.restKey
+    && !second.restKey
+    && first.letter
+    && second.letter
+    && first.letter !== second.letter;
+}
+
+function nearbyDifferentLetterNote(note, direction = 1) {
+  const noteIndex = previewNoteIndex(note);
+  const candidates = direction >= 0
+    ? PREVIEW_NOTE_POOL.slice(noteIndex + 1)
+    : PREVIEW_NOTE_POOL.slice(0, Math.max(0, noteIndex)).reverse();
+  return candidates.find((candidate) => candidate.letter !== note.letter)
+    || PREVIEW_NOTE_POOL.find((candidate) => candidate.letter !== note.letter)
+    || null;
 }
 
 function randomTiePlacement(bars) {
@@ -1463,16 +1546,147 @@ function randomTiePlacement(bars) {
   };
 }
 
+function randomSlurPlacement(bars) {
+  const choices = [];
+  const visibleStaffs = previewVisibleStaffs();
+  bars.forEach((bar) => {
+    [
+      { staff: "treble", notes: bar.notes },
+      { staff: "bass", notes: bar.bassNotes || [] },
+    ].filter((item) => visibleStaffs.includes(item.staff)).forEach((item) => {
+      for (let noteIndex = 0; noteIndex < item.notes.length - 1; noteIndex += 1) {
+        const first = item.notes[noteIndex];
+        const second = item.notes[noteIndex + 1];
+        const stemDown = previewStemDown(first?.step ?? 0);
+        if (notesHaveDifferentLetters(first, second) && slurDirectionAllowed(stemDown)) {
+          choices.push({ staff: item.staff, barIndex: bar.barIndex, indexes: [noteIndex, noteIndex + 1], stemDown });
+        }
+      }
+    });
+  });
+  if (choices.length) return randomItem(choices);
+
+  const writableChoices = [];
+  bars.forEach((bar) => {
+    [
+      { staff: "treble", notes: bar.notes },
+      { staff: "bass", notes: bar.bassNotes || [] },
+    ].filter((item) => visibleStaffs.includes(item.staff)).forEach((item) => {
+      for (let noteIndex = 0; noteIndex < item.notes.length - 1; noteIndex += 1) {
+        const first = item.notes[noteIndex];
+        const second = item.notes[noteIndex + 1];
+        if (!first || !second || first.restKey || second.restKey) continue;
+        const stemDown = previewStemDown(first.step);
+        if (slurDirectionAllowed(stemDown)) writableChoices.push({ bar, staff: item.staff, notes: item.notes, indexes: [noteIndex, noteIndex + 1], stemDown });
+      }
+    });
+  });
+
+  const choice = writableChoices.length ? randomItem(writableChoices) : null;
+  if (!choice) return null;
+  const first = choice.notes[choice.indexes[0]];
+  const replacement = nearbyDifferentLetterNote(first, 1);
+  if (!replacement) return null;
+  Object.assign(choice.notes[choice.indexes[1]], {
+    letter: replacement.letter,
+    octave: replacement.octave,
+    step: replacement.step,
+    midi: replacement.midi,
+    accidental: null,
+  });
+  return {
+    staff: choice.staff,
+    barIndex: choice.bar.barIndex,
+    indexes: choice.indexes,
+    stemDown: choice.stemDown,
+  };
+}
+
+function firstPlayableNoteIndex(notes) {
+  return notes.findIndex((note) => note && !note.restKey);
+}
+
+function lastPlayableNoteIndex(notes) {
+  for (let index = notes.length - 1; index >= 0; index -= 1) {
+    if (notes[index] && !notes[index].restKey) return index;
+  }
+  return -1;
+}
+
+function phraseStemDownFromMajority(bars, staff, startBarIndex, startNoteIndex, endBarIndex, endNoteIndex) {
+  let stemUpCount = 0;
+  let stemDownCount = 0;
+
+  for (let barIndex = startBarIndex; barIndex <= endBarIndex; barIndex += 1) {
+    const bar = bars[barIndex];
+    if (!bar) continue;
+    const notes = notesForPlacement(bar, staff);
+    const firstIndex = barIndex === startBarIndex ? startNoteIndex : 0;
+    const lastIndex = barIndex === endBarIndex ? endNoteIndex : notes.length - 1;
+
+    for (let noteIndex = firstIndex; noteIndex <= lastIndex; noteIndex += 1) {
+      const note = notes[noteIndex];
+      if (!note || note.restKey) continue;
+      if (previewStemDown(note.step)) {
+        stemDownCount += 1;
+      } else {
+        stemUpCount += 1;
+      }
+    }
+  }
+
+  if (stemDownCount > stemUpCount) return true;
+  if (stemUpCount > stemDownCount) return false;
+
+  const startBar = bars[startBarIndex];
+  const startNote = startBar ? notesForPlacement(startBar, staff)[startNoteIndex] : null;
+  return previewStemDown(startNote?.step ?? 0);
+}
+
+function randomPhrasePlacement(bars) {
+  const choices = [];
+  const visibleStaffs = previewVisibleStaffs();
+  activePreviewSystemTops().forEach((_, systemIndex) => {
+    const systemStartBar = systemIndex * PREVIEW.barsPerSystem;
+    const systemEndBar = Math.min(systemStartBar + PREVIEW.barsPerSystem - 1, previewBarCount() - 1);
+    if (systemEndBar - systemStartBar < 1) return;
+    visibleStaffs.forEach((staff) => {
+      const startBar = bars[systemStartBar];
+      const endBar = bars[systemEndBar];
+      const startNotes = notesForPlacement(startBar, staff);
+      const endNotes = notesForPlacement(endBar, staff);
+      const startNoteIndex = firstPlayableNoteIndex(startNotes);
+      const endNoteIndex = lastPlayableNoteIndex(endNotes);
+      if (startNoteIndex < 0 || endNoteIndex < 0) return;
+      choices.push({
+        staff,
+        startBarIndex: systemStartBar,
+        startNoteIndex,
+        endBarIndex: systemEndBar,
+        endNoteIndex,
+        stemDown: phraseStemDownFromMajority(bars, staff, systemStartBar, startNoteIndex, systemEndBar, endNoteIndex),
+      });
+    });
+  });
+  return choices.length ? randomItem(choices) : null;
+}
+
 function makeOptionalPlacements(bars) {
   const placements = [];
+  const usedArticulationNotes = new Set();
   const usedDynamicBars = new Set();
 
   shuffledCopy(["accentAbove", "accentBelow", "staccatoAbove", "staccatoBelow"].filter((key) => generatedEnabled(key))).forEach((key) => {
     const requiredStemDown = articulationNeedsStemDown(key);
-    const note = randomScoreNotePlacement(bars, (candidate) => (
-      requiredStemDown === null || previewStemDown(candidate.step) === requiredStemDown
-    ));
-    if (note) placements.push({ type: "articulation", key, ...note });
+    const note = randomScoreNotePlacement(bars, (candidate, placement) => {
+      const noteId = `${placement.staff}-${placement.barIndex}-${placement.noteIndex}`;
+      return !usedArticulationNotes.has(noteId)
+        && (requiredStemDown === null || previewStemDown(candidate.step) === requiredStemDown);
+    });
+    if (note) {
+      usedArticulationNotes.add(`${note.staff}-${note.barIndex}-${note.noteIndex}`);
+      placements.push({ type: "articulation", key, ...note });
+    }
   });
 
   const enabledScoreAccidentals = [
@@ -1506,6 +1720,16 @@ function makeOptionalPlacements(bars) {
   if (generatedEnabled("tieStemUp") || generatedEnabled("tieStemDown")) {
     const tie = randomTiePlacement(bars);
     if (tie) placements.push({ type: "tie", ...tie });
+  }
+
+  if (generatedEnabled("slurStemUp") || generatedEnabled("slurStemDown")) {
+    const slur = randomSlurPlacement(bars);
+    if (slur) placements.push({ type: "slur", ...slur });
+  }
+
+  if (generatedEnabled("phraseMarking")) {
+    const phrase = randomPhrasePlacement(bars);
+    if (phrase) placements.push({ type: "phrase", barIndex: phrase.startBarIndex, ...phrase });
   }
 
   if (generatedEnabled("repeatLeft")) {
@@ -1587,6 +1811,9 @@ const SYMBOL_ANCHORS = {
   augmentationDotLine: { staff: "treble", xScale: 35.8, step: 8 },
   augmentationDotSpace: { staff: "treble", xScale: 35.8, step: 7 },
   tie: { staff: "treble", xScale: 54, step: -1 },
+  slurStemUp: { staff: "treble", xScale: 54, step: 0 },
+  slurStemDown: { staff: "treble", xScale: 54, step: 8 },
+  phraseMarking: { staff: "treble", xScale: 54, step: 10 },
   flat: { staff: "treble", xScale: 17, step: 0 },
   natural: { staff: "treble", xScale: 25, step: 4 },
   sharp: { staff: "treble", xScale: 33, step: 8 },
@@ -1632,6 +1859,10 @@ function yForStep(ctx, top, step) {
 
 function symbolConfig(key) {
   if (!config.symbols[key]) {
+    if ((key === "slurStemUp" || key === "slurStemDown" || key === "phraseMarking") && config.symbols.tie) {
+      config.symbols[key] = cloneConfig(config.symbols.tie);
+      return config.symbols[key];
+    }
     if ((key === "augmentationDotLine" || key === "augmentationDotSpace") && config.symbols.augmentationDot) {
       config.symbols[key] = cloneConfig(config.symbols.augmentationDot);
       return config.symbols[key];
@@ -1799,6 +2030,19 @@ function drawSupportMarks(parent, ctx, key, anchor, point, layout) {
   if (key === "tie") {
     drawSymbol(parent, ctx, "quarterNoteStemUp", point.x - px(ctx, 2), yForStep(ctx, layout.trebleTop, 0), false);
     drawSymbol(parent, ctx, "quarterNoteStemUp", point.x + px(ctx, 2), yForStep(ctx, layout.trebleTop, 0), false);
+  }
+  if (key === "slurStemUp") {
+    drawSymbol(parent, ctx, "quarterNoteStemUp", point.x - px(ctx, 2), yForStep(ctx, layout.trebleTop, 0), false);
+    drawSymbol(parent, ctx, "quarterNoteStemUp", point.x + px(ctx, 2), yForStep(ctx, layout.trebleTop, 1), false);
+  }
+  if (key === "slurStemDown") {
+    drawSymbol(parent, ctx, "quarterNoteStemDown", point.x - px(ctx, 2), yForStep(ctx, layout.trebleTop, 7), false);
+    drawSymbol(parent, ctx, "quarterNoteStemDown", point.x + px(ctx, 2), yForStep(ctx, layout.trebleTop, 6), false);
+  }
+  if (key === "phraseMarking") {
+    [0, 1, 2, 3].forEach((index) => {
+      drawSymbol(parent, ctx, "quarterNoteStemUp", point.x - px(ctx, 6) + px(ctx, index * 4), yForStep(ctx, layout.trebleTop, index % 2 === 0 ? 2 : 4), false);
+    });
   }
 }
 
@@ -2002,15 +2246,37 @@ function previewRenderSymbol(parent, key, x, y, lineGap = PREVIEW.gap) {
   drawSymbol(parent, { lineGap, interactive: false }, key, x, y, false);
 }
 
-function previewRenderTie(parent, firstX, secondX, y, stemDown) {
-  const x = (firstX + secondX) / 2;
-  const spacing = Math.abs(secondX - firstX);
-  const baseWidth = Number(symbolConfig("tie").widthScale || 1);
-  const dynamicWidth = clamp(baseWidth * (spacing / (PREVIEW.gap * 3.2)), 0.8, 8);
-  const group = drawSymbol(parent, { lineGap: PREVIEW.gap, interactive: false }, "tie", x, y, false, { widthScale: dynamicWidth });
-  if (group && stemDown) {
-    group.setAttribute("transform", `rotate(180 ${x} ${y})`);
-  }
+function previewRenderCurve(parent, key, firstX, firstY, secondX, secondY, stemDown, options = {}) {
+  const settings = symbolConfig(key);
+  const direction = stemDown ? -1 : 1;
+  const sizeRatio = clamp(Number(settings.fontSizeScale || 5.3) / 5.3, 0.55, 1.8);
+  const widthRatio = clamp(Number(settings.widthScale || 1), 0.35, 2.5);
+  const heightRatio = clamp(Number(settings.heightScale || 1), 0.35, 2.5);
+  const xOffset = PREVIEW.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const yOffset = PREVIEW.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const endpointGap = PREVIEW.gap * (options.endpointGapScale ?? 1.05) * sizeRatio;
+  const startX = firstX + xOffset;
+  const endX = secondX + xOffset;
+  const startY = firstY + direction * endpointGap + yOffset;
+  const endY = secondY + direction * endpointGap + yOffset;
+  const span = Math.max(PREVIEW.gap * 1.4, Math.abs(endX - startX));
+  const handleWidth = span * 0.28 * widthRatio;
+  const curveDepth = direction * PREVIEW.gap * (options.depthScale ?? 1) * heightRatio * sizeRatio;
+  const strokeWidth = Math.max(1.1, PREVIEW.gap * 0.13 * sizeRatio);
+
+  append(parent, makeElement("path", {
+    class: "marking-curve",
+    d: [
+      `M ${startX} ${startY}`,
+      `C ${startX + handleWidth} ${startY + curveDepth},`,
+      `${endX - handleWidth} ${endY + curveDepth},`,
+      `${endX} ${endY}`,
+    ].join(" "),
+    fill: "none",
+    stroke: "currentColor",
+    "stroke-width": strokeWidth,
+    "stroke-linecap": "round",
+  }));
 }
 
 function previewAnchorX(key) {
@@ -2037,7 +2303,7 @@ function drawPreviewStave(parent, top, endX) {
 
   if (!config.stave.showGuides) return;
 
-  for (let step = -2; step <= 10; step += 1) {
+  for (let step = -4; step <= 12; step += 1) {
     const y = previewYForStep(step, top);
     append(parent, makeElement("line", {
       class: "guide-line",
@@ -2096,9 +2362,7 @@ function accidentalKeyForValue(value, context = "score") {
 
 function drawPreviewAccidental(parent, value, x, y, context = "score") {
   const accidentalKey = accidentalKeyForValue(value, context);
-  if (context === "keySignature") {
-    if (!controls.showKeySignatures.checked) return;
-  } else if (!generatedEnabled(accidentalKey)) {
+  if (context !== "keySignature" && !generatedEnabled(accidentalKey)) {
     return;
   }
   previewRenderSymbol(parent, accidentalKey, x, y, PREVIEW.gap);
@@ -2336,7 +2600,6 @@ function drawPreviewBeam(parent, notes, positions, top, group) {
 }
 
 function drawPreviewKeySignature(parent, key, top, clef = "treble") {
-  if (!controls.showKeySignatures.checked) return;
   const entries = Object.entries(key.keyAccidentals || {});
   if (!entries.length) return;
   const kind = entries.some(([, value]) => value < 0) ? "flat" : "sharp";
@@ -2424,8 +2687,58 @@ function drawPreviewOptionalSymbols(parent, question) {
       const firstX = notePositionForPlacement(bar, placement.staff, placement.indexes[0]);
       const secondX = notePositionForPlacement(bar, placement.staff, placement.indexes[1]);
       const stemDown = placement.stemDown ?? previewStemDown(firstNote.step);
-      const tieY = previewYForStep(firstNote.step, top) + (stemDown ? -PREVIEW.gap * 2.4 : PREVIEW.gap * 2.4);
-      previewRenderTie(parent, firstX, secondX, tieY, stemDown);
+      const firstY = previewYForStep(firstNote.step, top);
+      const secondY = previewYForStep(secondNote.step, top);
+      previewRenderCurve(parent, "tie", firstX, firstY, secondX, secondY, stemDown, {
+        endpointGapScale: 0.85,
+        depthScale: 0.7,
+      });
+    }
+
+    if (placement.type === "slur") {
+      const notes = notesForPlacement(bar, placement.staff);
+      const top = topForPlacement(placement.barIndex, placement.staff);
+      const firstNote = notes[placement.indexes[0]];
+      const secondNote = notes[placement.indexes[1]];
+      if (!firstNote || !secondNote) return;
+      const firstX = notePositionForPlacement(bar, placement.staff, placement.indexes[0]);
+      const secondX = notePositionForPlacement(bar, placement.staff, placement.indexes[1]);
+      const stemDown = placement.stemDown ?? previewStemDown(firstNote.step);
+      const slurKey = stemDown ? "slurStemDown" : "slurStemUp";
+      const firstY = previewYForStep(firstNote.step, top);
+      const secondY = previewYForStep(secondNote.step, top);
+      previewRenderCurve(parent, slurKey, firstX, firstY, secondX, secondY, stemDown, {
+        endpointGapScale: 1.05,
+        depthScale: 1,
+      });
+    }
+
+    if (placement.type === "phrase") {
+      const startBar = question.bars[placement.startBarIndex];
+      const endBar = question.bars[placement.endBarIndex];
+      if (!startBar || !endBar) return;
+      const startNotes = notesForPlacement(startBar, placement.staff);
+      const endNotes = notesForPlacement(endBar, placement.staff);
+      const firstNote = startNotes[placement.startNoteIndex];
+      const lastNote = endNotes[placement.endNoteIndex];
+      if (!firstNote || !lastNote) return;
+      const top = topForPlacement(placement.startBarIndex, placement.staff);
+      const firstX = notePositionForPlacement(startBar, placement.staff, placement.startNoteIndex);
+      const secondX = notePositionForPlacement(endBar, placement.staff, placement.endNoteIndex);
+      const stemDown = placement.stemDown ?? phraseStemDownFromMajority(
+        question.bars,
+        placement.staff,
+        placement.startBarIndex,
+        placement.startNoteIndex,
+        placement.endBarIndex,
+        placement.endNoteIndex,
+      );
+      const firstY = previewYForStep(firstNote.step, top);
+      const secondY = previewYForStep(lastNote.step, topForPlacement(placement.endBarIndex, placement.staff));
+      previewRenderCurve(parent, "phraseMarking", firstX, firstY, secondX, secondY, stemDown, {
+        endpointGapScale: 1.4,
+        depthScale: 2.1,
+      });
     }
 
     if (placement.type === "repeat") {
@@ -2506,14 +2819,12 @@ function renderHigherPreviewWithCurrentLayout(parent, options = {}) {
       if (visibility.bass) drawPreviewKeySignature(parent, question.key, previewStaffTopForSystem(top, "bass"), "bass");
     }
     if (systemIndex === 0) {
-      if (controls.showTimeSignatures.checked) {
-        if (visibility.treble) {
-          previewRenderSymbol(parent, question.timeSignatureKey, previewAnchorX(question.timeSignatureKey), previewAnchorY(question.timeSignatureKey, top), PREVIEW.gap);
-        }
-        if (visibility.bass) {
-          const timeSigTop = previewStaffTopForSystem(top, "bass");
-          previewRenderSymbol(parent, question.timeSignatureKey, previewAnchorX(question.timeSignatureKey), previewAnchorY(question.timeSignatureKey, timeSigTop), PREVIEW.gap);
-        }
+      if (visibility.treble) {
+        previewRenderSymbol(parent, question.timeSignatureKey, previewAnchorX(question.timeSignatureKey), previewAnchorY(question.timeSignatureKey, top), PREVIEW.gap);
+      }
+      if (visibility.bass) {
+        const timeSigTop = previewStaffTopForSystem(top, "bass");
+        previewRenderSymbol(parent, question.timeSignatureKey, previewAnchorX(question.timeSignatureKey), previewAnchorY(question.timeSignatureKey, timeSigTop), PREVIEW.gap);
       }
     }
   });
@@ -2819,7 +3130,9 @@ function syncControlsFromConfig() {
 }
 
 function updateZoom() {
-  stage.style.width = `${Number(controls.zoom.value || 100)}%`;
+  const zoom = Number(controls.zoom.value || 100);
+  stage.style.width = `${zoom}%`;
+  stage.style.height = `${zoom}%`;
 }
 
 function setZoomValue(value) {
@@ -2879,16 +3192,6 @@ controls.showGuides.addEventListener("change", () => {
 
 controls.showBarNumbers.addEventListener("change", updateAll);
 
-controls.showTimeSignatures.addEventListener("change", () => {
-  previewQuestion = makeHigherPreviewQuestion();
-  updateAll();
-});
-
-controls.showKeySignatures.addEventListener("change", () => {
-  previewQuestion = makeHigherPreviewQuestion();
-  updateAll();
-});
-
 document.getElementById("shufflePreviewButton").addEventListener("click", () => {
   previewQuestion = makeHigherPreviewQuestion();
   updateAll();
@@ -2898,12 +3201,12 @@ if (enableAllGeneratedSymbols) {
   enableAllGeneratedSymbols.addEventListener("change", () => {
     if (enableAllGeneratedSymbols.checked) {
       enableEveryGeneratedControl();
-      refreshGeneratedSymbolChecks();
-      previewQuestion = makeHigherPreviewQuestion();
-      updateAll();
     } else {
-      refreshGeneratedSymbolChecks();
+      disableEveryGeneratedControl();
     }
+    refreshGeneratedSymbolChecks();
+    previewQuestion = makeHigherPreviewQuestion();
+    updateAll();
   });
 }
 
