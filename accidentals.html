@@ -14,6 +14,8 @@
   <script src="./hub-audio.js?v=1.4"></script>
   <script src="./hub-shell.js?v=1.3"></script>
   <script src="./hub-menu.js?v=2.1"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
@@ -53,16 +55,96 @@ const NOTE = {
 };
 
 const BAR_COUNT = 4;
-const NOTE_VISUAL_STEP_OFFSET = 1;
 const GLYPH = {
-  trebleClef: "\uE050",
-  flat: "\uE260",
-  natural: "\uE261",
-  sharp: "\uE262",
+  trebleClef: window.BRAVURA_SYMBOLS?.gClef ?? "\uE050",
+  flat: window.BRAVURA_SYMBOLS?.flat ?? "\uE260",
+  natural: window.BRAVURA_SYMBOLS?.natural ?? "\uE261",
+  sharp: window.BRAVURA_SYMBOLS?.sharp ?? "\uE262",
   flagUp: "\uE240",
   flagDown: "\uE241",
-  time: ["\uE080", "\uE081", "\uE082", "\uE083", "\uE084", "\uE085", "\uE086", "\uE087", "\uE088", "\uE089"],
+  time: ["\uE080", window.BRAVURA_SYMBOLS?.timeSig1 ?? "\uE081", window.BRAVURA_SYMBOLS?.timeSig2 ?? "\uE082", window.BRAVURA_SYMBOLS?.timeSig3 ?? "\uE083", window.BRAVURA_SYMBOLS?.timeSig4 ?? "\uE084", window.BRAVURA_SYMBOLS?.timeSig5 ?? "\uE085", window.BRAVURA_SYMBOLS?.timeSig6 ?? "\uE086", "\uE087", window.BRAVURA_SYMBOLS?.timeSig8 ?? "\uE088", window.BRAVURA_SYMBOLS?.timeSig9 ?? "\uE089"],
 };
+
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
+
+const TIME_SIGNATURE_SYMBOLS = {
+  "2/4": { top: ["timeSig2"], bottom: ["timeSig4"], key: "timeSig24" },
+  "3/4": { top: ["timeSig3"], bottom: ["timeSig4"], key: "timeSig34" },
+  "4/4": { top: ["timeSig4"], bottom: ["timeSig4"], key: "timeSig44" },
+  "5/4": { top: ["timeSig5"], bottom: ["timeSig4"], key: "timeSig54" },
+  "6/8": { top: ["timeSig6"], bottom: ["timeSig8"], key: "timeSig68" },
+  "9/8": { top: ["timeSig9"], bottom: ["timeSig8"], key: "timeSig98" },
+  "12/8": { top: ["timeSig1", "timeSig2"], bottom: ["timeSig8"], key: "timeSig128" },
+};
+
+const CALIBRATION_ANCHORS = {
+  gClef: { xScale: 3.2, step: 2 },
+  timeSig24: { xScale: 12, step: 5.3 },
+  timeSig34: { xScale: 12, step: 5.3 },
+  timeSig44: { xScale: 12, step: 5.3 },
+  timeSig54: { xScale: 12, step: 5.3 },
+  timeSig68: { xScale: 12, step: 5.3 },
+  timeSig98: { xScale: 12, step: 5.3 },
+  timeSig128: { xScale: 12, step: 5.3 },
+};
+
+function sharedActualSymbolKey(key) {
+  if (key === "flatInScore" || key === "flatKeySignature") return "flat";
+  if (key === "naturalInScore") return "natural";
+  if (key === "sharpInScore" || key === "sharpKeySignature") return "sharp";
+  if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
+  if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
+  return key;
+}
+
+function sharedSettingsKey(key) {
+  if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return "flatInScore";
+  return key;
+}
+
+function sharedSymbolConfig(key) {
+  const symbols = SHARED_CONFIG.symbols ?? {};
+  const settingsKey = sharedSettingsKey(key);
+  return symbols[settingsKey] ?? symbols[sharedActualSymbolKey(settingsKey)] ?? {
+    fontSizeScale: 3.4,
+    xOffsetScale: 0,
+    yOffsetScale: 0,
+    widthScale: 1,
+    heightScale: 1,
+    opticalXOffset: 0,
+    opticalYOffset: 0,
+  };
+}
+
+function sharedSymbolForKey(key) {
+  return SHARED_SYMBOLS[sharedActualSymbolKey(key)] ?? "";
+}
+
+function accidentalSymbolKey(id, context = "score") {
+  if (context === "keySignature") return id === "sharp" ? "sharpKeySignature" : "flatKeySignature";
+  if (id === "sharp") return "sharpInScore";
+  if (id === "flat") return "flatInScore";
+  return "naturalInScore";
+}
+
+function noteSymbolKey(rhythm, down, beamed = false) {
+  if (rhythm === "semibreve") return "wholeNote";
+  if (beamed && rhythm === "quaver") return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
+  if (rhythm === "minim" || rhythm === "dottedMinim") return down ? "halfNoteStemDown" : "halfNoteStemUp";
+  if (rhythm === "quaver") return down ? "eighthNoteStemDown" : "eighthNoteStemUp";
+  return down ? "quarterNoteStemDown" : "quarterNoteStemUp";
+}
+
+function calibrationAnchorX(key, left = STAFF.left) {
+  const anchor = CALIBRATION_ANCHORS[key];
+  return anchor ? left + anchor.xScale * STAFF.gap : left;
+}
+
+function calibrationAnchorY(key, top = STAFF.top) {
+  const anchor = CALIBRATION_ANCHORS[key];
+  return anchor ? yForStep(anchor.step, top) : yForStep(4, top);
+}
 
 const COLOUR = {
   black: "#000000",
@@ -178,10 +260,7 @@ function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 function rhythmInfo(id) { return RHYTHMS[id] ?? RHYTHMS.crotchet; }
 function yForStep(step, top = STAFF.top) { return top + STAFF.gap * 4 - step * (STAFF.gap / 2); }
 function stemDown(step) { return step > 4; }
-function visualNote(note) {
-  const raisedStep = note.step + NOTE_VISUAL_STEP_OFFSET;
-  return { ...note, step: note.rhythm === "semibreve" || stemDown(raisedStep) ? raisedStep : note.step };
-}
+function visualNote(note) { return note; }
 function accidentalId(value) { if (value === 1) return "sharp"; if (value === -1) return "flat"; return "natural"; }
 function accidentalById(id) { return ACCIDENTALS.find((a) => a.id === id) ?? ACCIDENTALS[0]; }
 function accidentalValue(id) { if (id === "sharp") return 1; if (id === "flat") return -1; return 0; }
@@ -535,7 +614,12 @@ function scoreLayouts(question, placements = []) {
     return { ...geometry, bar, positions: getBarPositions(bar.notes, geometry.startX, geometry.endX - 40, question.oneBarMode, placedAccidentalIndexes, question.timeSignature.compound) };
   });
 }
-function stemData(note, x, systemTop, forcedDown = null) { const y = yForStep(note.step, systemTop); const down = forcedDown ?? stemDown(note.step); const stemX = down ? x - NOTE.rx : x + NOTE.rx; return { y, down, stemX, stemEndY: down ? y + NOTE.stemLength : y - NOTE.stemLength }; }
+function stemData(note, x, systemTop, forcedDown = null, forcedEnd = null) {
+  const y = yForStep(note.step, systemTop);
+  const down = forcedDown ?? stemDown(note.step);
+  const stemX = x + (down ? -6 : 6);
+  return { y, down, stemX, stemEndY: forcedEnd ?? (down ? y + NOTE.stemLength : y - NOTE.stemLength) };
+}
 function quaverGroups(notes, timeSignature) {
   const groups = [];
   let index = 0;
@@ -555,8 +639,30 @@ function quaverGroups(notes, timeSignature) {
   return groups;
 }
 function groupContaining(groups, index) { return groups.find((group) => index >= group.start && index <= group.end) ?? null; }
-function beamData(notes, positions, systemTop) { const averageStep = notes.reduce((sum, note) => sum + note.step, 0) / notes.length; const down = averageStep > 4; const first = stemData(notes[0], positions[0], systemTop, down); const last = stemData(notes[notes.length - 1], positions[positions.length - 1], systemTop, down); return { down, start: { x: first.stemX, y: first.stemEndY }, end: { x: last.stemX, y: last.stemEndY } }; }
+function beamData(notes, positions, systemTop) {
+  const settings = sharedSymbolConfig("quaverBeam");
+  const averageStep = notes.reduce((sum, note) => sum + note.step, 0) / notes.length;
+  const down = averageStep > 4;
+  const firstY = yForStep(notes[0].step, systemTop);
+  const lastY = yForStep(notes[notes.length - 1].step, systemTop);
+  const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0);
+  const yOffset = STAFF.gap * Number(settings.yOffsetScale || 0);
+  const stemLength = 31 * Number(settings.heightScale || 1);
+  const beamWidthAdjust = STAFF.gap * (Number(settings.widthScale || 1) - 1);
+  const firstStemX = positions[0] + xOffset + (down ? -6 : 6);
+  const lastStemX = positions[positions.length - 1] + xOffset + (down ? -6 : 6);
+  return {
+    down,
+    xOffset,
+    start: { x: firstStemX - beamWidthAdjust, y: firstY + yOffset + (down ? stemLength : -stemLength) },
+    end: { x: lastStemX + beamWidthAdjust, y: lastY + yOffset + (down ? stemLength : -stemLength) },
+  };
+}
 function beamYAtX(x, beam) { const progress = (x - beam.start.x) / (beam.end.x - beam.start.x || 1); return beam.start.y + progress * (beam.end.y - beam.start.y); }
+function beamPolygonPoints(x1, y1, x2, y2, thickness) {
+  const halfThickness = thickness / 2;
+  return [`${x1},${y1 - halfThickness}`, `${x2},${y2 - halfThickness}`, `${x2},${y2 + halfThickness}`, `${x1},${y1 + halfThickness}`].join(" ");
+}
 function placementKey(placement) { return `${placement.symbolId}:${placement.barIndex}:${placement.noteIndex}:${placement.anchor}`; }
 function missingPlacements(question, placements) { return question.required.filter((required) => !placements.some((placement) => placementKey(placement) === placementKey(required))); }
 function wrongPlacements(question, placements) { return placements.filter((placement) => !question.required.some((required) => placementKey(required) === placementKey(placement))); }
@@ -581,13 +687,57 @@ function snapPlacement(pointer, symbolId, question) {
 function placementPosition(placement, question, offset = false, placements = []) {
   const layout = scoreLayouts(question, placements).find((item) => item.barIndex === placement.barIndex);
   const note = layout?.bar.notes[placement.noteIndex];
-  return { x: (layout?.positions[placement.noteIndex] ?? 0) - 16, y: note && layout ? yForStep(visualNote(note).step, layout.systemTop) - STAFF.gap / 2 + (offset ? 42 : 0) : STAFF.top };
+  return { x: scoreAccidentalBaseX(layout?.positions[placement.noteIndex] ?? 0), y: note && layout ? yForStep(visualNote(note).step, layout.systemTop) - STAFF.gap / 2 + (offset ? 42 : 0) : STAFF.top };
+}
+
+function scoreAccidentalBaseX(noteheadX) {
+  return noteheadX - STAFF.gap * 2.1;
+}
+
+function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = STAFF.gap, glow = false, settingOverrides = {} }) {
+  const glyph = sharedSymbolForKey(symbolKey);
+  if (!glyph) return null;
+  const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+  const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const fontSize = lineGap * Number(settings.fontSizeScale || 3.4);
+  return (
+    <text
+      className="music-symbol"
+      x={adjustedX}
+      y={adjustedY}
+      opacity={opacity}
+      fill={colour}
+      filter={glow && colour === COLOUR.black ? "url(#blackGlow)" : undefined}
+      fontSize={fontSize}
+      textAnchor="middle"
+      transform={`translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale || 1} ${settings.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`}
+    >
+      {glyph}
+    </text>
+  );
+}
+
+function CalibratedTimeSignature({ signature, x, y, colour = "currentColor", lineGap = STAFF.gap }) {
+  const definition = TIME_SIGNATURE_SYMBOLS[signature.id] ?? { top: [`timeSig${signature.top}`], bottom: [`timeSig${signature.bottom}`], key: `timeSig${signature.top}${signature.bottom}` };
+  const settings = sharedSymbolConfig(definition.key);
+  const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const fontSize = lineGap * Number(settings.fontSizeScale || 3.5);
+  const topText = definition.top.map((key) => SHARED_SYMBOLS[key]).join("");
+  const bottomText = definition.bottom.map((key) => SHARED_SYMBOLS[key]).join("");
+  return (
+    <g transform={`translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale || 1} ${settings.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`} fill={colour}>
+      <text className="music-symbol" x={adjustedX} y={adjustedY - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{topText}</text>
+      <text className="music-symbol" x={adjustedX} y={adjustedY + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{bottomText}</text>
+    </g>
+  );
 }
 
 function AccidentalGlyph({ id, x = 50, y = 32, colour = "currentColor", opacity = 1, compact = false, glow = true, fontSize = null }) {
-  const offset = id === "sharp" ? 5.4 : id === "natural" ? 4.9 : 6.2;
-  const size = fontSize ?? (compact ? 28 : 42);
-  return <text className="music-symbol" x={x} y={y + offset} opacity={opacity} fill={colour} filter={glow && colour === COLOUR.black ? "url(#blackGlow)" : undefined} fontSize={size} textAnchor="middle">{GLYPH[id]}</text>;
+  const symbolKey = accidentalSymbolKey(id);
+  const override = fontSize ? { fontSizeScale: fontSize / STAFF.gap } : compact ? { fontSizeScale: 2.8 } : {};
+  return <CalibratedSymbol symbolKey={symbolKey} x={x} y={y + STAFF.gap / 2} colour={colour} opacity={opacity} glow={glow} settingOverrides={override} />;
 }
 function ButtonGlyph({ id }) {
   const yOffset = id === "sharp" ? 2 : id === "natural" ? 1 : 8;
@@ -595,22 +745,40 @@ function ButtonGlyph({ id }) {
 }
 function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false, placements = [] }) { const pos = placementPosition(placement, question, feedbackOffset, placements); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} compact glow={false} />; }
 function StaffLines({ top, left = STAFF.left, right = STAFF.right }) { return <g>{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.2" />)}</g>; }
-function TrebleClef({ top, x = STAFF.clefX, size = 42.75 }) { return <text className="music-symbol" x={x + 19} y={top + 30} fontSize={size} textAnchor="middle">{GLYPH.trebleClef}</text>; }
-function TimeSignatureDigit({ value, x, y, fontSize }) { return <text className="music-symbol" x={x} y={y} fontSize={fontSize} textAnchor="middle" fill="currentColor">{GLYPH.time[Number(value)]}</text>; }
-function TimeSignatureGlyph({ signature, x, y, fontSize = 36.96 }) { return <g><TimeSignatureDigit value={signature.top} x={x} y={y} fontSize={fontSize} /><TimeSignatureDigit value={signature.bottom} x={x} y={y + 20} fontSize={fontSize} /></g>; }
-function KeySignature({ question, top }) { if (question.oneBarMode) return null; if (question.key.id === "F") return <AccidentalGlyph id="flat" x={STAFF.keySigX} y={yForStep(4.2, top) - 5} compact fontSize={35} glow={false} />; if (question.key.id === "G") return <AccidentalGlyph id="sharp" x={STAFF.keySigX} y={yForStep(7.8, top) - 6} compact fontSize={35} glow={false} />; return null; }
-function LedgerLines({ x, step, top, colour = "currentColor" }) { const lines = []; if (step <= -2) lines.push(yForStep(-2, top)); if (step >= 10) lines.push(yForStep(10, top)); return <g>{lines.map((y) => <line key={y} x1={x - 10.5} x2={x + 10.5} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}</g>; }
+function TrebleClef({ top, left = STAFF.left }) { return <CalibratedSymbol symbolKey="gClef" x={calibrationAnchorX("gClef", left)} y={calibrationAnchorY("gClef", top)} />; }
+function TimeSignatureGlyph({ signature, top = STAFF.top }) {
+  const definition = TIME_SIGNATURE_SYMBOLS[signature.id] ?? { key: `timeSig${signature.top}${signature.bottom}` };
+  return <CalibratedTimeSignature signature={signature} x={calibrationAnchorX(definition.key)} y={calibrationAnchorY(definition.key, top)} />;
+}
+function KeySignature({ question, top }) { if (question.oneBarMode) return null; if (question.key.id === "F") return <CalibratedSymbol symbolKey="flatKeySignature" x={STAFF.keySigX} y={yForStep(4, top)} />; if (question.key.id === "G") return <CalibratedSymbol symbolKey="sharpKeySignature" x={STAFF.keySigX} y={yForStep(8, top)} />; return null; }
+function LedgerLines({ x, step, top, colour = "currentColor" }) {
+  const lines = [];
+  const settings = sharedSymbolConfig("ledgerLines");
+  const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0);
+  const yOffset = STAFF.gap * Number(settings.yOffsetScale || 0);
+  const halfWidth = 12 * Number(settings.widthScale || 1);
+  const thickness = Math.max(1, 0.6 * Number(settings.fontSizeScale || 2) * Number(settings.heightScale || 1));
+  if (step <= -2) {
+    for (let ledgerStep = -2; ledgerStep >= step; ledgerStep -= 2) lines.push(yForStep(ledgerStep, top) + yOffset);
+  }
+  if (step >= 10) {
+    for (let ledgerStep = 10; ledgerStep <= step; ledgerStep += 2) lines.push(yForStep(ledgerStep, top) + yOffset);
+  }
+  return <g>{lines.map((y) => <line key={y} x1={x + xOffset - halfWidth} x2={x + xOffset + halfWidth} y1={y} y2={y} stroke={colour} strokeWidth={thickness} />)}</g>;
+}
 function OpenNoteGlow({ x, y, inner = false }) { return <ellipse cx={x} cy={y} rx={inner ? NOTE.rx - 2.4 : NOTE.rx + 2.2} ry={inner ? NOTE.ry - 2 : NOTE.ry + 1.8} transform={`rotate(-18 ${x} ${y})`} fill="#facc15" opacity={inner ? "0.24" : "0.22"} />; }
-function noteImageFilter(colour) { if (colour === COLOUR.green) return "url(#noteGreenFilter)"; if (colour === COLOUR.red) return "url(#noteRedFilter)"; return undefined; }
 function NoteImage({ rhythm, x, y, stemDown, beamed, colour }) {
-  const filter = noteImageFilter(colour);
-  if (rhythm === "semibreve") return <image href={ASSET.semibreve} x={x - 9.88} y={y - 5.61} width="19.76" height="11.21" preserveAspectRatio="xMidYMid meet" pointerEvents="none" filter={filter} />;
-  const src = rhythm === "minim" ? ASSET.minim : ASSET.crotchet;
-  const width = rhythm === "minim" ? 24 : 19.6;
-  const height = rhythm === "minim" ? 44.9 : 36.7;
-  const yAdjust = stemDown ? 2.45 : -0.9;
-  const style = rhythm === "quaver" && !beamed && stemDown ? undefined : { transformBox: "fill-box", transformOrigin: "center", transform: stemDown ? "translateY(28px) rotate(180deg)" : "none" };
-  return <image href={src} x={x - width / 2} y={y - height * 0.831 + yAdjust} width={width} height={height} preserveAspectRatio="xMidYMid meet" pointerEvents="none" filter={filter} style={style} />;
+  return <CalibratedSymbol symbolKey={noteSymbolKey(rhythm, stemDown, beamed)} x={x} y={y} colour={colour} />;
+}
+function Dot({ x, y, step, colour }) {
+  const dotKey = step % 2 === 0 ? "augmentationDotLine" : "augmentationDotSpace";
+  const dotY = step % 2 === 0 ? y - STAFF.gap * 0.25 : y;
+  return <CalibratedSymbol symbolKey={dotKey} x={x + 13} y={dotY} colour={colour} />;
+}
+function BeamShape({ beam, colour = "currentColor" }) {
+  const settings = sharedSymbolConfig("quaverBeam");
+  const thickness = Math.max(1, 4 * Number(settings.fontSizeScale || 1));
+  return <polygon points={beamPolygonPoints(beam.start.x, beam.start.y, beam.end.x, beam.end.y, thickness)} fill={colour} />;
 }
 function QuaverFlag({ stem, colour }) {
   return <text className="music-symbol" x={stem.stemX + 4.5} y={stem.stemEndY + (stem.down ? -1 : 1.5)} fontSize="30" textAnchor="middle" fill={colour}>{stem.down ? GLYPH.flagDown : GLYPH.flagUp}</text>;
@@ -618,18 +786,17 @@ function QuaverFlag({ stem, colour }) {
 function Note({ note, x, top, colour = "currentColor", accidentalColour = "currentColor", forcedDown = null, forcedEnd = null, showFlag = true }) {
   const displayNote = visualNote(note);
   const info = rhythmInfo(note.rhythm);
-  const stem = stemData(displayNote, x, top, forcedDown);
-  const dotY = displayNote.step % 2 === 0 ? stem.y - 4 : stem.y;
+  const stem = stemData(displayNote, x, top, forcedDown, forcedEnd);
   const showAccidental = note.writtenAccidental !== null && note.writtenAccidental !== undefined && note.hiddenAccidental === null;
   const highlighted = colour === COLOUR.black || accidentalColour === COLOUR.black;
   return <g filter={highlighted ? "url(#noteGlowPulse)" : undefined}>
     <LedgerLines x={x} step={displayNote.step} top={top} colour={colour} />
-    {showAccidental && <AccidentalGlyph id={accidentalId(note.writtenAccidental)} x={x - 16} y={stem.y - STAFF.gap / 2} colour={accidentalColour} compact glow={false} />}
+    {showAccidental && <AccidentalGlyph id={accidentalId(note.writtenAccidental)} x={scoreAccidentalBaseX(x)} y={stem.y - STAFF.gap / 2} colour={accidentalColour} compact glow={false} />}
     {highlighted && info.open && <OpenNoteGlow x={x} y={stem.y} />}
     <NoteImage rhythm={note.rhythm} x={x} y={stem.y} stemDown={stem.down} beamed={!showFlag && note.rhythm === "quaver"} colour={colour} />
-    {info.flag && showFlag && <QuaverFlag stem={stem} colour={colour} />}
+    {forcedEnd !== null && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y + (stem.down ? 0.5 : -0.5)} y2={forcedEnd} stroke={colour} strokeWidth={Math.max(1, STAFF.gap * 0.115)} />}
     {highlighted && info.open && <OpenNoteGlow x={x} y={stem.y} inner />}
-    {info.dotted && <circle cx={x + 12} cy={dotY} r="1.7" fill={colour} />}
+    {info.dotted && <Dot x={x} y={stem.y} step={displayNote.step} colour={colour} />}
   </g>;
 }
 
@@ -664,9 +831,9 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
     </defs>
     <g transform={transform}>
       <StaffLines top={STAFF.top} left={left} right={right} />
-      <TrebleClef top={question.oneBarMode ? STAFF.top - 1 : STAFF.top} x={question.oneBarMode ? 342 : STAFF.clefX} size={question.oneBarMode ? 43.7 : 42.75} />
+      <TrebleClef top={question.oneBarMode ? STAFF.top - 1 : STAFF.top} left={left} />
       <KeySignature question={question} top={STAFF.top} />
-      {!question.oneBarMode && <TimeSignatureGlyph signature={question.timeSignature} x={STAFF.timeSigX} y={STAFF.top + 10} />}
+      {!question.oneBarMode && <TimeSignatureGlyph signature={question.timeSignature} top={STAFF.top} />}
       {layouts.map((layout) => {
         const groups = quaverGroups(layout.bar.notes, question.timeSignature);
         return <g key={layout.barIndex}>
@@ -674,14 +841,15 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
           {layout.bar.notes.map((note, index) => {
             const group = groupContaining(groups, index);
             const beam = group ? beamData(layout.bar.notes.slice(group.start, group.end + 1).map(visualNote), layout.positions.slice(group.start, group.end + 1), layout.systemTop) : null;
-            const stem = beam ? stemData(visualNote(note), layout.positions[index], layout.systemTop, beam.down) : null;
+            const noteX = beam ? layout.positions[index] + beam.xOffset : layout.positions[index];
+            const stem = beam ? stemData(visualNote(note), noteX, layout.systemTop, beam.down) : null;
             const accidentalOnly = question.accidentalOnlyHighlight === true;
             const colour = note.highlight && !accidentalOnly ? COLOUR.black : "currentColor";
             const accidentalColour = note.highlight && accidentalOnly ? COLOUR.black : colour;
-            return <Note key={note.id} note={note} x={layout.positions[index]} top={layout.systemTop} colour={colour} accidentalColour={accidentalColour} forcedDown={beam ? beam.down : null} forcedEnd={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} />;
+            return <Note key={note.id} note={note} x={noteX} top={layout.systemTop} colour={colour} accidentalColour={accidentalColour} forcedDown={beam ? beam.down : null} forcedEnd={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} />;
           })}
-          {groups.map((group, index) => { const beam = beamData(layout.bar.notes.slice(group.start, group.end + 1).map(visualNote), layout.positions.slice(group.start, group.end + 1), layout.systemTop); return <line key={index} x1={beam.start.x - 1} y1={beam.start.y + 2} x2={beam.end.x + 1} y2={beam.end.y + 2} stroke="currentColor" strokeWidth="4" />; })}
-          {!question.oneBarMode && (layout.barIndex === BAR_COUNT - 1 ? <g><line x1={layout.endX - 5} x2={layout.endX - 5} y1={layout.systemTop} y2={layout.systemTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.4" /><line x1={layout.endX} x2={layout.endX} y1={layout.systemTop - 0.75} y2={layout.systemTop + STAFF.gap * 4 + 0.75} stroke="currentColor" strokeWidth="4" /></g> : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.4" />)}
+          {groups.map((group, index) => { const beam = beamData(layout.bar.notes.slice(group.start, group.end + 1).map(visualNote), layout.positions.slice(group.start, group.end + 1), layout.systemTop); return <BeamShape key={index} beam={beam} />; })}
+          {!question.oneBarMode && (layout.barIndex === BAR_COUNT - 1 ? <CalibratedSymbol symbolKey="barlineFinal" x={layout.endX} y={yForStep(4, layout.systemTop)} /> : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.4" />)}
         </g>;
       })}
       {feedback && !feedback.correct && question.keySignatureReminder && !question.oneBarMode && <text style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 4 }} x={(STAFF.left + STAFF.right) / 2} y={STAFF.top + 114} fill={COLOUR.red} fontSize="14" fontWeight="600" textAnchor="middle">Don't forget to check the key signature!</text>}

@@ -80,3 +80,5 @@ const BRAVURA_SYMBOLS = {
   crescendo: "\uE53E",
   diminuendo: "\uE53F",
 };
+
+window.BRAVURA_SYMBOLS = BRAVURA_SYMBOLS;
