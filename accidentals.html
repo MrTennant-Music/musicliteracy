@@ -23,14 +23,7 @@
   </style>
 </head>
 <body>
-  <div id="root">
-    <main class="mx-auto max-w-3xl px-6 py-16 text-center">
-      <h1 class="text-3xl font-black text-stone-950">Accidentals</h1>
-      <p class="mt-3 text-base font-semibold text-stone-600">
-        This app is waiting for its page scripts to load. If only this message and the footer appear, check your internet connection or open the site from the hosted Music Literacy Hub page.
-      </p>
-    </main>
-  </div>
+  <div id="root"></div>
   <script type="text/babel">
 const { useEffect, useMemo, useRef, useState } = React;
 
@@ -55,15 +48,6 @@ const NOTE = {
 };
 
 const BAR_COUNT = 4;
-const GLYPH = {
-  trebleClef: window.BRAVURA_SYMBOLS?.gClef ?? "\uE050",
-  flat: window.BRAVURA_SYMBOLS?.flat ?? "\uE260",
-  natural: window.BRAVURA_SYMBOLS?.natural ?? "\uE261",
-  sharp: window.BRAVURA_SYMBOLS?.sharp ?? "\uE262",
-  flagUp: "\uE240",
-  flagDown: "\uE241",
-  time: ["\uE080", window.BRAVURA_SYMBOLS?.timeSig1 ?? "\uE081", window.BRAVURA_SYMBOLS?.timeSig2 ?? "\uE082", window.BRAVURA_SYMBOLS?.timeSig3 ?? "\uE083", window.BRAVURA_SYMBOLS?.timeSig4 ?? "\uE084", window.BRAVURA_SYMBOLS?.timeSig5 ?? "\uE085", window.BRAVURA_SYMBOLS?.timeSig6 ?? "\uE086", "\uE087", window.BRAVURA_SYMBOLS?.timeSig8 ?? "\uE088", window.BRAVURA_SYMBOLS?.timeSig9 ?? "\uE089"],
-};
 
 const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
 const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
@@ -178,9 +162,9 @@ const LEVELS = {
 };
 
 const ACCIDENTALS = [
-  { id: "sharp", symbol: "♯", name: "Sharp", value: 1, description: "Raise by a semitone" },
-  { id: "flat", symbol: "♭", name: "Flat", value: -1, description: "Lower by a semitone" },
-  { id: "natural", symbol: "♮", name: "Natural", value: 0, description: "Cancel a sharp or flat" },
+  { id: "sharp", symbol: sharedSymbolForKey("sharp"), name: "Sharp", value: 1, description: "Raise by a semitone" },
+  { id: "flat", symbol: sharedSymbolForKey("flat"), name: "Flat", value: -1, description: "Lower by a semitone" },
+  { id: "natural", symbol: sharedSymbolForKey("natural"), name: "Natural", value: 0, description: "Cancel a sharp or flat" },
 ];
 
 const QUESTION_TYPES = [
@@ -570,8 +554,16 @@ function makeQuestion(options = {}) {
   return makeMultipleChoice(enabledAccidentals);
 }
 
-function getBarGeometry(barIndex, oneBarMode = false) {
+function getBarGeometry(barIndex, oneBarMode = false, mobileTwoLine = false) {
   if (oneBarMode) return { barIndex: 0, systemTop: STAFF.top, startX: 398, endX: 456 };
+  if (mobileTwoLine) {
+    const barsPerLine = 2;
+    const systemTop = STAFF.top + Math.floor(barIndex / barsPerLine) * 88;
+    const barInSystem = barIndex % barsPerLine;
+    const barWidth = (STAFF.right - STAFF.musicStartX) / barsPerLine;
+    const startX = STAFF.musicStartX + barInSystem * barWidth;
+    return { barIndex, systemTop, startX, endX: startX + barWidth };
+  }
   const barWidth = (STAFF.right - STAFF.musicStartX) / BAR_COUNT;
   const startX = STAFF.musicStartX + barIndex * barWidth;
   return { barIndex, systemTop: STAFF.top, startX, endX: startX + barWidth };
@@ -607,9 +599,9 @@ function getBarPositions(notes, startX, endX, oneBarMode = false, placedAccident
   });
   return output;
 }
-function scoreLayouts(question, placements = []) {
+function scoreLayouts(question, placements = [], mobileTwoLine = false) {
   return question.bars.map((bar) => {
-    const geometry = getBarGeometry(bar.barIndex, question.oneBarMode);
+    const geometry = getBarGeometry(bar.barIndex, question.oneBarMode, mobileTwoLine && !question.oneBarMode);
     const placedAccidentalIndexes = placements.filter((placement) => placement.barIndex === bar.barIndex).map((placement) => placement.noteIndex);
     return { ...geometry, bar, positions: getBarPositions(bar.notes, geometry.startX, geometry.endX - 40, question.oneBarMode, placedAccidentalIndexes, question.timeSignature.compound) };
   });
@@ -667,12 +659,12 @@ function placementKey(placement) { return `${placement.symbolId}:${placement.bar
 function missingPlacements(question, placements) { return question.required.filter((required) => !placements.some((placement) => placementKey(placement) === placementKey(required))); }
 function wrongPlacements(question, placements) { return placements.filter((placement) => !question.required.some((required) => placementKey(required) === placementKey(placement))); }
 function placementsMatch(question, placements) { return missingPlacements(question, placements).length === 0 && wrongPlacements(question, placements).length === 0; }
-function snapPlacement(pointer, symbolId, question) {
+function snapPlacement(pointer, symbolId, question, mobileTwoLine = false) {
   if (question.audioQuestionKind === "one-bar-hearing") return { ...question.required[0], symbolId };
   let best = Infinity;
   let closest = null;
   const allowedBar = question.required?.[0]?.barIndex;
-  scoreLayouts(question).forEach((layout) => {
+  scoreLayouts(question, [], mobileTwoLine).forEach((layout) => {
     if (allowedBar !== undefined && layout.barIndex !== allowedBar) return;
     layout.bar.notes.forEach((note, index) => {
       if (question.audioQuestionKind === "one-bar-hearing" && index === 0) return;
@@ -684,8 +676,8 @@ function snapPlacement(pointer, symbolId, question) {
   });
   return closest;
 }
-function placementPosition(placement, question, offset = false, placements = []) {
-  const layout = scoreLayouts(question, placements).find((item) => item.barIndex === placement.barIndex);
+function placementPosition(placement, question, offset = false, placements = [], mobileTwoLine = false) {
+  const layout = scoreLayouts(question, placements, mobileTwoLine).find((item) => item.barIndex === placement.barIndex);
   const note = layout?.bar.notes[placement.noteIndex];
   return { x: scoreAccidentalBaseX(layout?.positions[placement.noteIndex] ?? 0), y: note && layout ? yForStep(visualNote(note).step, layout.systemTop) - STAFF.gap / 2 + (offset ? 42 : 0) : STAFF.top };
 }
@@ -734,17 +726,20 @@ function CalibratedTimeSignature({ signature, x, y, colour = "currentColor", lin
   );
 }
 
-function AccidentalGlyph({ id, x = 50, y = 32, colour = "currentColor", opacity = 1, compact = false, glow = true, fontSize = null }) {
+function AccidentalGlyph({ id, x = 50, y = 32, colour = "currentColor", opacity = 1, compact = false, glow = true }) {
   const symbolKey = accidentalSymbolKey(id);
-  const override = fontSize ? { fontSizeScale: fontSize / STAFF.gap } : compact ? { fontSizeScale: 2.8 } : {};
+  const override = compact ? { fontSizeScale: 2.8 } : {};
   return <CalibratedSymbol symbolKey={symbolKey} x={x} y={y + STAFF.gap / 2} colour={colour} opacity={opacity} glow={glow} settingOverrides={override} />;
 }
 function ButtonGlyph({ id }) {
   const yOffset = id === "sharp" ? 2 : id === "natural" ? 1 : 8;
-  return <svg viewBox="0 0 100 74" className="h-[58px] w-20 overflow-visible"><text className="music-symbol" x="50" y={37 + yOffset} fill="currentColor" fontSize="58" textAnchor="middle" dominantBaseline="middle">{GLYPH[id]}</text></svg>;
+  return <svg viewBox="0 0 100 74" className="h-[44px] w-14 overflow-visible sm:h-[58px] sm:w-20"><text className="music-symbol" x="50" y={37 + yOffset} fill="currentColor" fontSize="58" textAnchor="middle" dominantBaseline="middle">{sharedSymbolForKey(id)}</text></svg>;
 }
-function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false, placements = [] }) { const pos = placementPosition(placement, question, feedbackOffset, placements); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} compact glow={false} />; }
-function StaffLines({ top, left = STAFF.left, right = STAFF.right }) { return <g>{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.2" />)}</g>; }
+function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false, placements = [], mobileTwoLine = false }) { const pos = placementPosition(placement, question, feedbackOffset, placements, mobileTwoLine); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} glow={false} />; }
+function StaffLines({ top, left = STAFF.left, right = STAFF.right, fadeGradientId = null }) {
+  const stroke = fadeGradientId ? `url(#${fadeGradientId})` : "currentColor";
+  return <g>{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke={stroke} strokeWidth="1.2" />)}</g>;
+}
 function TrebleClef({ top, left = STAFF.left }) { return <CalibratedSymbol symbolKey="gClef" x={calibrationAnchorX("gClef", left)} y={calibrationAnchorY("gClef", top)} />; }
 function TimeSignatureGlyph({ signature, top = STAFF.top }) {
   const definition = TIME_SIGNATURE_SYMBOLS[signature.id] ?? { key: `timeSig${signature.top}${signature.bottom}` };
@@ -777,11 +772,8 @@ function Dot({ x, y, step, colour }) {
 }
 function BeamShape({ beam, colour = "currentColor" }) {
   const settings = sharedSymbolConfig("quaverBeam");
-  const thickness = Math.max(1, 4 * Number(settings.fontSizeScale || 1));
+  const thickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42) * Number(settings.fontSizeScale || 1));
   return <polygon points={beamPolygonPoints(beam.start.x, beam.start.y, beam.end.x, beam.end.y, thickness)} fill={colour} />;
-}
-function QuaverFlag({ stem, colour }) {
-  return <text className="music-symbol" x={stem.stemX + 4.5} y={stem.stemEndY + (stem.down ? -1 : 1.5)} fontSize="30" textAnchor="middle" fill={colour}>{stem.down ? GLYPH.flagDown : GLYPH.flagUp}</text>;
 }
 function Note({ note, x, top, colour = "currentColor", accidentalColour = "currentColor", forcedDown = null, forcedEnd = null, showFlag = true }) {
   const displayNote = visualNote(note);
@@ -791,20 +783,21 @@ function Note({ note, x, top, colour = "currentColor", accidentalColour = "curre
   const highlighted = colour === COLOUR.black || accidentalColour === COLOUR.black;
   return <g filter={highlighted ? "url(#noteGlowPulse)" : undefined}>
     <LedgerLines x={x} step={displayNote.step} top={top} colour={colour} />
-    {showAccidental && <AccidentalGlyph id={accidentalId(note.writtenAccidental)} x={scoreAccidentalBaseX(x)} y={stem.y - STAFF.gap / 2} colour={accidentalColour} compact glow={false} />}
+    {showAccidental && <AccidentalGlyph id={accidentalId(note.writtenAccidental)} x={scoreAccidentalBaseX(x)} y={stem.y - STAFF.gap / 2} colour={accidentalColour} glow={false} />}
     {highlighted && info.open && <OpenNoteGlow x={x} y={stem.y} />}
     <NoteImage rhythm={note.rhythm} x={x} y={stem.y} stemDown={stem.down} beamed={!showFlag && note.rhythm === "quaver"} colour={colour} />
-    {forcedEnd !== null && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y + (stem.down ? 0.5 : -0.5)} y2={forcedEnd} stroke={colour} strokeWidth={Math.max(1, STAFF.gap * 0.115)} />}
+    {forcedEnd !== null && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y + (stem.down ? 0.5 : -0.5)} y2={forcedEnd} stroke={colour} strokeWidth={Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12))} />}
     {highlighted && info.open && <OpenNoteGlow x={x} y={stem.y} inner />}
     {info.dotted && <Dot x={x} y={stem.y} step={displayNote.step} colour={colour} />}
   </g>;
 }
 
-function Score({ question, selectedSymbol, placements, hoverPlacement, feedback, wrong, missing, active, onMove, onLeave, onLock }) {
-  const layouts = useMemo(() => scoreLayouts(question, placements), [question, placements]);
+function Score({ question, selectedSymbol, placements, hoverPlacement, feedback, wrong, missing, active, onMove, onLeave, onLock, mobileTwoLine = false }) {
+  const layouts = useMemo(() => scoreLayouts(question, placements, mobileTwoLine), [question, placements, mobileTwoLine]);
   const left = question.oneBarMode ? 335 : STAFF.left;
   const right = question.oneBarMode ? 535 : STAFF.right;
-  const transform = question.oneBarMode ? "translate(-455 -96) scale(2)" : "";
+  const transform = question.oneBarMode ? (mobileTwoLine ? "translate(-758 -225) scale(2.8)" : "translate(-410 -120) scale(2)") : "";
+  const systemTops = question.oneBarMode ? [STAFF.top] : mobileTwoLine ? [STAFF.top, STAFF.top + 88] : [STAFF.top];
   return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="h-auto w-full select-none touch-none overflow-visible" onPointerMove={onMove} onPointerLeave={onLeave} onPointerDown={onLock} aria-label="Accidentals exercise">
     <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
     <defs>
@@ -828,12 +821,19 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
           <animate attributeName="flood-opacity" values="0.9;1;0.9" dur="1.55s" repeatCount="indefinite" />
         </feDropShadow>
       </filter>
+      {question.oneBarMode && <linearGradient id="oneBarStaffFade" gradientUnits="userSpaceOnUse" x1={left} x2={right} y1="0" y2="0">
+        <stop offset="0%" stopColor="currentColor" stopOpacity="1" />
+        <stop offset="72%" stopColor="currentColor" stopOpacity="1" />
+        <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+      </linearGradient>}
     </defs>
     <g transform={transform}>
-      <StaffLines top={STAFF.top} left={left} right={right} />
-      <TrebleClef top={question.oneBarMode ? STAFF.top - 1 : STAFF.top} left={left} />
-      <KeySignature question={question} top={STAFF.top} />
-      {!question.oneBarMode && <TimeSignatureGlyph signature={question.timeSignature} top={STAFF.top} />}
+      {systemTops.map((top, index) => <g key={top}>
+        <StaffLines top={top} left={left} right={right} fadeGradientId={question.oneBarMode ? "oneBarStaffFade" : null} />
+        <TrebleClef top={top} left={left} />
+        <KeySignature question={question} top={top} />
+        {!question.oneBarMode && index === 0 && <TimeSignatureGlyph signature={question.timeSignature} top={top} />}
+      </g>)}
       {layouts.map((layout) => {
         const groups = quaverGroups(layout.bar.notes, question.timeSignature);
         return <g key={layout.barIndex}>
@@ -849,20 +849,22 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
             return <Note key={note.id} note={note} x={noteX} top={layout.systemTop} colour={colour} accidentalColour={accidentalColour} forcedDown={beam ? beam.down : null} forcedEnd={beam && stem ? beamYAtX(stem.stemX, beam) : null} showFlag={!beam} />;
           })}
           {groups.map((group, index) => { const beam = beamData(layout.bar.notes.slice(group.start, group.end + 1).map(visualNote), layout.positions.slice(group.start, group.end + 1), layout.systemTop); return <BeamShape key={index} beam={beam} />; })}
-          {!question.oneBarMode && (layout.barIndex === BAR_COUNT - 1 ? <CalibratedSymbol symbolKey="barlineFinal" x={layout.endX} y={yForStep(4, layout.systemTop)} /> : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.4" />)}
+          {!question.oneBarMode && (layout.barIndex === BAR_COUNT - 1
+            ? <CalibratedSymbol symbolKey="barlineFinal" x={layout.endX} y={yForStep(4, layout.systemTop)} />
+            : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.4" />)}
         </g>;
       })}
       {feedback && !feedback.correct && question.keySignatureReminder && !question.oneBarMode && <text style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 4 }} x={(STAFF.left + STAFF.right) / 2} y={STAFF.top + 114} fill={COLOUR.red} fontSize="14" fontWeight="600" textAnchor="middle">Don't forget to check the key signature!</text>}
-      {placements.map((placement) => <Placement key={placement.localId} placement={placement} question={question} placements={placements} colour={feedback ? wrong.some((item) => placementKey(item) === placementKey(placement)) ? COLOUR.red : COLOUR.green : COLOUR.black} />)}
-      {feedback && missing.map((placement, index) => <Placement key={`missing-${index}`} placement={placement} question={question} placements={placements} colour={COLOUR.green} feedbackOffset={wrong.some((item) => item.barIndex === placement.barIndex && item.noteIndex === placement.noteIndex)} />)}
-      {!feedback && selectedSymbol && hoverPlacement && <Placement placement={hoverPlacement} question={question} placements={placements} colour={COLOUR.black} opacity={0.45} />}
+      {placements.map((placement) => <Placement key={placement.localId} placement={placement} question={question} placements={placements} mobileTwoLine={mobileTwoLine} colour={feedback ? wrong.some((item) => placementKey(item) === placementKey(placement)) ? COLOUR.red : COLOUR.green : COLOUR.black} />)}
+      {feedback && missing.map((placement, index) => <Placement key={`missing-${index}`} placement={placement} question={question} placements={placements} mobileTwoLine={mobileTwoLine} colour={COLOUR.green} feedbackOffset={wrong.some((item) => item.barIndex === placement.barIndex && item.noteIndex === placement.noteIndex)} />)}
+      {!feedback && selectedSymbol && hoverPlacement && <Placement placement={hoverPlacement} question={question} placements={placements} mobileTwoLine={mobileTwoLine} colour={COLOUR.black} opacity={0.45} />}
     </g>
   </svg>;
 }
 
 const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 function medalNameForStreak(streak) { if (streak === 10) return "bronze"; if (streak === 15) return "silver"; if (streak === 20) return "gold"; if (streak === 30) return "platinum"; return null; }
-function SymbolButton({ accidental, selected, disabled, correct, wrong, onClick }) { let style = "border-stone-300 bg-white text-stone-900"; if (correct) style = "border-green-700 bg-green-600 text-white"; else if (wrong) style = "border-red-700 bg-red-600 text-white"; else if (selected) style = "border-stone-950 bg-stone-950 text-white"; return <button type="button" disabled={disabled} onClick={onClick} className={`flex h-[74px] min-w-[88px] items-center justify-center rounded-xl border px-1 text-sm font-bold transition ${style}`}><ButtonGlyph id={accidental.id} /></button>; }
+function SymbolButton({ accidental, selected, disabled, correct, wrong, onClick }) { let style = "border-stone-300 bg-white text-stone-900"; if (correct) style = "border-green-700 bg-green-600 text-white"; else if (wrong) style = "border-red-700 bg-red-600 text-white"; else if (selected) style = "border-stone-950 bg-stone-950 text-white"; return <button type="button" disabled={disabled} onClick={onClick} className={`flex h-[64px] flex-1 items-center justify-center rounded-xl border px-1 text-sm font-bold transition sm:h-[74px] sm:min-w-[88px] sm:flex-none ${style}`}><ButtonGlyph id={accidental.id} /></button>; }
 
 
 function WarningBanner({ warning = "" }) {
@@ -875,7 +877,7 @@ function MenuGlyphFrame({ children }) {
 }
 
 function AccidentalMenuGlyph({ id }) {
-  return <MenuGlyphFrame><svg viewBox="0 0 28 24" className="h-[22px] w-[28px] overflow-visible"><AccidentalGlyph id={id} x={14} y={8} compact /></svg></MenuGlyphFrame>;
+  return <MenuGlyphFrame><svg viewBox="0 0 28 24" className="h-[22px] w-[28px] overflow-visible"><AccidentalGlyph id={id} x={6} y={8} compact /></svg></MenuGlyphFrame>;
 }
 
 function QuestionTypeGlyph({ type }) {
@@ -910,6 +912,22 @@ function useInjectedStyles() {
 }
 const useClickOutside = window.MLH.useClickOutside;
 
+function useMobileScoreLayout() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const update = () => setMobile(query.matches);
+    update();
+    if (query.addEventListener) query.addEventListener("change", update);
+    else query.addListener(update);
+    return () => {
+      if (query.removeEventListener) query.removeEventListener("change", update);
+      else query.removeListener(update);
+    };
+  }, []);
+  return mobile;
+}
+
 function App() {
   useInjectedStyles();
   const [enabledAccidentals, setEnabledAccidentals] = useState(() => ACCIDENTALS.map((accidental) => accidental.id));
@@ -934,6 +952,7 @@ function App() {
   const [playing, setPlaying] = useState(false);
   const [activeNote, setActiveNote] = useState(null);
   const levelRef = useRef(null), customiseRef = useRef(null), warningTimer = useRef(null), nextTimer = useRef(null), audioContext = useRef(null), audioTimers = useRef([]);
+  const mobileTwoLineScore = false;
   useClickOutside([levelRef, customiseRef], [() => levelOpen && setLevelOpen(false), () => customiseOpen && setCustomiseOpen(false)]);
   useEffect(() => () => stopAudio(), []);
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
@@ -963,7 +982,7 @@ function App() {
   function fadeToNextQuestion() { if (!feedback || feedbackFading) return; if (nextTimer.current) clearTimeout(nextTimer.current); setFeedbackFading(true); setTimeout(() => newQuestion(), 280); }
   function handleFeedbackAdvance() { if (!feedback || feedbackFading) return; window.MLH.advanceFeedbackPointerDown?.({ feedback, onCorrect: fadeToNextQuestion, onIncorrect: fadeToNextQuestion }); }
   function pointerInSvg(event) { const rect = event.currentTarget.getBoundingClientRect(); return { x: ((event.clientX - rect.left) / rect.width) * VIEWBOX_WIDTH, y: ((event.clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT }; }
-  function handleMove(event) { if (!selectedSymbol || feedback || !isPlacement) { setHoverPlacement(null); return; } setHoverPlacement(snapPlacement(pointerInSvg(event), selectedSymbol, question)); }
+  function handleMove(event) { if (!selectedSymbol || feedback || !isPlacement) { setHoverPlacement(null); return; } setHoverPlacement(snapPlacement(pointerInSvg(event), selectedSymbol, question, mobileTwoLineScore)); }
   function handleLock(event) { if (!selectedSymbol || feedback || !hoverPlacement || !isPlacement) return; event.preventDefault(); setPlacements([{ ...hoverPlacement, localId: Math.random().toString(36).slice(2) }]); setWarning(""); }
   function confirmPlacement() { if (feedback) return; stopAudio(); if (!placements.length) return showWarning("Place an accidental on the score before pressing Confirm."); const missingNow = missingPlacements(question, placements); const wrongNow = wrongPlacements(question, placements); setMissing(missingNow); setWrong(wrongNow); scoreAnswer(placementsMatch(question, placements)); }
   function pitch(barIndex, noteIndex) { const note = question.bars[barIndex].notes[noteIndex]; let accidental = effectiveAccidental(question, barIndex, noteIndex); if (note.hiddenAccidental !== null && note.hiddenAccidental !== undefined) accidental = note.hiddenAccidental; return note.midi + accidental; }
@@ -1005,13 +1024,15 @@ function App() {
     });
     audioTimers.current.push(setTimeout(() => { setPlaying(false); setActiveNote(null); try { context.close(); } catch {} audioContext.current = null; }, Math.max(0, (time - context.currentTime) * 1000) + 100));
   }
+  const mobileScoreHeight = "min-h-[260px] flex-1";
+  const hasPlayButton = question.questionType === "audio-full" || question.questionType === "audio-two" || question.audioQuestionKind;
   return <div className={window.MLH.shell.pageShellClass}>
     <window.MLH.AppHeader icon={ASSET.appIcon} title="Accidentals" subtitle="Identify and apply flats, sharps and naturals.">
       <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} />
     </window.MLH.AppHeader>
 
     <div className={window.MLH.shell.pageContentClass}>
-      <main className={window.MLH.shell.mainShellClass} onPointerDownCapture={handleFeedbackAdvance}>
+      <main className={`${window.MLH.shell.mainShellClass} flex flex-col`} onPointerDownCapture={handleFeedbackAdvance}>
         <div className="relative z-[90] mb-2.5 grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
           <div className="relative flex items-center gap-2">
             <div className="relative" ref={levelRef}>
@@ -1050,8 +1071,8 @@ function App() {
             <window.MLH.SkipButton onClick={() => newQuestion()} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
           </div>
         </div>
-        <div className={`relative -top-[54px] h-[280px] overflow-hidden transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbol={selectedSymbol} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} active={activeNote} onMove={handleMove} onLeave={() => setHoverPlacement(null)} onLock={handleLock} /></div>
-        <div className="relative z-10 mt-[125px] min-h-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 h-auto px-4 py-3 shadow-md md:mx-3 md:mt-[50px]"><div className="flex items-start justify-between gap-3 text-stone-900"><div className="pb-3"><p className="text-base font-semibold leading-none" dangerouslySetInnerHTML={{ __html: question.prompt }} /></div>{(question.questionType === "audio-full" || question.questionType === "audio-two" || question.audioQuestionKind) && <button type="button" onClick={playQuestion} disabled={playing} className="flex h-10 min-w-[112px] shrink-0 items-center justify-center gap-2 rounded-xl bg-stone-950 px-[18px] py-[10px] text-sm font-bold text-white disabled:opacity-50"><span className="text-base leading-none">▶</span><span>Play</span></button>}</div>{isChoice && <div className="mt-5 grid grid-cols-6 gap-2">{question.choices.map((item) => <button key={item.id} type="button" disabled={Boolean(feedback)} onClick={() => { if (feedback) return; setChoice(item.id); scoreAnswer(item.id === question.answerId); }} className={`min-h-[56px] flex items-center justify-center rounded-xl border px-2 py-0 text-sm font-semibold ${feedback ? item.id === question.answerId ? "border-green-700 bg-green-600 text-white" : item.id === choice ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-500" : choice === item.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>{item.arrow ? <span className="grid w-full grid-cols-[1fr_auto] items-center gap-3 px-1"><span className="text-center text-base font-semibold leading-tight tracking-tight">{item.text}</span><span className="text-3xl font-black leading-none">{item.arrow}</span></span> : <span className="text-base font-semibold tracking-tight">{item.text}</span>}</button>)}</div>}{isPlacement && <div className="mt-0 flex flex-wrap items-end justify-between gap-3 pb-[0px]"><div className="flex flex-wrap gap-2">{ACCIDENTALS.filter((accidental) => enabledAccidentals.includes(accidental.id)).map((accidental) => <SymbolButton key={accidental.id} accidental={accidental} selected={selectedSymbol === accidental.id} disabled={Boolean(feedback)} correct={Boolean(feedback && !feedback.correct && question.answerId === accidental.id)} wrong={Boolean(feedback && !feedback.correct && selectedSymbol === accidental.id && question.answerId !== accidental.id)} onClick={() => { setSelectedSymbol(accidental.id); setWarning(""); }} />)}</div><div className="ml-auto flex gap-2"><button type="button" disabled={Boolean(feedback) || placements.length === 0} onClick={() => { setPlacements([]); setHoverPlacement(null); setWarning(""); }} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-900 disabled:opacity-50">Clear</button><window.MLH.ConfirmButton disabled={!canConfirm || Boolean(feedback)} onClick={confirmPlacement}>Confirm</window.MLH.ConfirmButton></div></div>}</div>
+        <div className={`relative -top-[6px] ${mobileScoreHeight} flex items-center overflow-hidden transition-opacity duration-300 md:block md:h-[280px] md:flex-none ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbol={selectedSymbol} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} active={activeNote} onMove={handleMove} onLeave={() => setHoverPlacement(null)} onLock={handleLock} mobileTwoLine={mobileTwoLineScore} /></div>
+        <div className="relative z-10 mx-0 mb-[10px] mt-auto min-h-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 h-auto px-4 py-3 shadow-md md:mx-3 md:mb-0 md:mt-[50px]"><div className="flex items-start justify-between gap-3 text-stone-900"><div className={hasPlayButton ? "pb-3" : "pb-1 sm:pb-3"}><p className="text-base font-semibold leading-none" dangerouslySetInnerHTML={{ __html: question.prompt }} /></div>{hasPlayButton && <button type="button" onClick={playQuestion} disabled={playing} className="hidden h-10 min-w-[112px] shrink-0 items-center justify-center gap-2 rounded-xl bg-stone-950 px-[18px] py-[10px] text-sm font-bold text-white disabled:opacity-50 sm:flex"><span className="text-base leading-none">▶</span><span>Play</span></button>}</div>{isChoice && <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-6">{question.choices.map((item) => <button key={item.id} type="button" disabled={Boolean(feedback)} onClick={() => { if (feedback) return; setChoice(item.id); scoreAnswer(item.id === question.answerId); }} className={`min-h-[56px] flex items-center justify-center rounded-xl border px-2 py-0 text-sm font-semibold ${feedback ? item.id === question.answerId ? "border-green-700 bg-green-600 text-white" : item.id === choice ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-500" : choice === item.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>{item.arrow ? <span className="grid w-full grid-cols-[1fr_auto] items-center gap-3 px-1"><span className="text-center text-base font-semibold leading-tight tracking-tight">{item.text}</span><span className="text-3xl font-black leading-none">{item.arrow}</span></span> : <span className="text-base font-semibold tracking-tight">{item.text}</span>}</button>)}</div>}{isPlacement && <div className="mt-0 flex flex-wrap items-end justify-between gap-3 pb-[0px]"><div className="flex flex-nowrap gap-2">{ACCIDENTALS.filter((accidental) => enabledAccidentals.includes(accidental.id)).map((accidental) => <SymbolButton key={accidental.id} accidental={accidental} selected={selectedSymbol === accidental.id} disabled={Boolean(feedback)} correct={Boolean(feedback && !feedback.correct && question.answerId === accidental.id)} wrong={Boolean(feedback && !feedback.correct && selectedSymbol === accidental.id && question.answerId !== accidental.id)} onClick={() => { setSelectedSymbol(accidental.id); setWarning(""); }} />)}</div>{hasPlayButton && <button type="button" onClick={playQuestion} disabled={playing} className="flex h-11 min-w-[92px] items-center justify-center gap-2 rounded-xl bg-stone-950 px-3 text-sm font-bold text-white disabled:opacity-50 sm:hidden"><span className="text-base leading-none">▶</span><span>Play</span></button>}<div className="ml-auto flex gap-2"><button type="button" disabled={Boolean(feedback) || placements.length === 0} onClick={() => { setPlacements([]); setHoverPlacement(null); setWarning(""); }} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-900 disabled:opacity-50">Clear</button><window.MLH.ConfirmButton disabled={!canConfirm || Boolean(feedback)} onClick={confirmPlacement}>Confirm</window.MLH.ConfirmButton></div></div>}</div>
       </main>
     </div>
   </div>;
