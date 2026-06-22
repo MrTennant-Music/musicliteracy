@@ -143,11 +143,6 @@ const ASSET = {
   next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
   hand: "./hand.svg",
   audio: "./audio-svgrepo-com.svg",
-  crotchet: "./crotchet.svg",
-  minim: "./minim.svg",
-  quaver: "./quaver.svg",
-  quaverDown: "./quaverdown.svg",
-  semibreve: "./semibreve.svg",
   bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
   silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
   gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
@@ -162,9 +157,9 @@ const LEVELS = {
 };
 
 const ACCIDENTALS = [
-  { id: "sharp", symbol: sharedSymbolForKey("sharp"), name: "Sharp", value: 1, description: "Raise by a semitone" },
-  { id: "flat", symbol: sharedSymbolForKey("flat"), name: "Flat", value: -1, description: "Lower by a semitone" },
-  { id: "natural", symbol: sharedSymbolForKey("natural"), name: "Natural", value: 0, description: "Cancel a sharp or flat" },
+  { id: "sharp", name: "Sharp", value: 1 },
+  { id: "flat", name: "Flat", value: -1 },
+  { id: "natural", name: "Natural", value: 0 },
 ];
 
 const QUESTION_TYPES = [
@@ -554,16 +549,8 @@ function makeQuestion(options = {}) {
   return makeMultipleChoice(enabledAccidentals);
 }
 
-function getBarGeometry(barIndex, oneBarMode = false, mobileTwoLine = false) {
+function getBarGeometry(barIndex, oneBarMode = false) {
   if (oneBarMode) return { barIndex: 0, systemTop: STAFF.top, startX: 398, endX: 456 };
-  if (mobileTwoLine) {
-    const barsPerLine = 2;
-    const systemTop = STAFF.top + Math.floor(barIndex / barsPerLine) * 88;
-    const barInSystem = barIndex % barsPerLine;
-    const barWidth = (STAFF.right - STAFF.musicStartX) / barsPerLine;
-    const startX = STAFF.musicStartX + barInSystem * barWidth;
-    return { barIndex, systemTop, startX, endX: startX + barWidth };
-  }
   const barWidth = (STAFF.right - STAFF.musicStartX) / BAR_COUNT;
   const startX = STAFF.musicStartX + barIndex * barWidth;
   return { barIndex, systemTop: STAFF.top, startX, endX: startX + barWidth };
@@ -599,9 +586,9 @@ function getBarPositions(notes, startX, endX, oneBarMode = false, placedAccident
   });
   return output;
 }
-function scoreLayouts(question, placements = [], mobileTwoLine = false) {
+function scoreLayouts(question, placements = []) {
   return question.bars.map((bar) => {
-    const geometry = getBarGeometry(bar.barIndex, question.oneBarMode, mobileTwoLine && !question.oneBarMode);
+    const geometry = getBarGeometry(bar.barIndex, question.oneBarMode);
     const placedAccidentalIndexes = placements.filter((placement) => placement.barIndex === bar.barIndex).map((placement) => placement.noteIndex);
     return { ...geometry, bar, positions: getBarPositions(bar.notes, geometry.startX, geometry.endX - 40, question.oneBarMode, placedAccidentalIndexes, question.timeSignature.compound) };
   });
@@ -659,12 +646,12 @@ function placementKey(placement) { return `${placement.symbolId}:${placement.bar
 function missingPlacements(question, placements) { return question.required.filter((required) => !placements.some((placement) => placementKey(placement) === placementKey(required))); }
 function wrongPlacements(question, placements) { return placements.filter((placement) => !question.required.some((required) => placementKey(required) === placementKey(placement))); }
 function placementsMatch(question, placements) { return missingPlacements(question, placements).length === 0 && wrongPlacements(question, placements).length === 0; }
-function snapPlacement(pointer, symbolId, question, mobileTwoLine = false) {
+function snapPlacement(pointer, symbolId, question) {
   if (question.audioQuestionKind === "one-bar-hearing") return { ...question.required[0], symbolId };
   let best = Infinity;
   let closest = null;
   const allowedBar = question.required?.[0]?.barIndex;
-  scoreLayouts(question, [], mobileTwoLine).forEach((layout) => {
+  scoreLayouts(question).forEach((layout) => {
     if (allowedBar !== undefined && layout.barIndex !== allowedBar) return;
     layout.bar.notes.forEach((note, index) => {
       if (question.audioQuestionKind === "one-bar-hearing" && index === 0) return;
@@ -676,8 +663,8 @@ function snapPlacement(pointer, symbolId, question, mobileTwoLine = false) {
   });
   return closest;
 }
-function placementPosition(placement, question, offset = false, placements = [], mobileTwoLine = false) {
-  const layout = scoreLayouts(question, placements, mobileTwoLine).find((item) => item.barIndex === placement.barIndex);
+function placementPosition(placement, question, offset = false, placements = []) {
+  const layout = scoreLayouts(question, placements).find((item) => item.barIndex === placement.barIndex);
   const note = layout?.bar.notes[placement.noteIndex];
   return { x: scoreAccidentalBaseX(layout?.positions[placement.noteIndex] ?? 0), y: note && layout ? yForStep(visualNote(note).step, layout.systemTop) - STAFF.gap / 2 + (offset ? 42 : 0) : STAFF.top };
 }
@@ -735,7 +722,7 @@ function ButtonGlyph({ id }) {
   const yOffset = id === "sharp" ? 2 : id === "natural" ? 1 : 8;
   return <svg viewBox="0 0 100 74" className="h-[44px] w-14 overflow-visible sm:h-[58px] sm:w-20"><text className="music-symbol" x="50" y={37 + yOffset} fill="currentColor" fontSize="58" textAnchor="middle" dominantBaseline="middle">{sharedSymbolForKey(id)}</text></svg>;
 }
-function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false, placements = [], mobileTwoLine = false }) { const pos = placementPosition(placement, question, feedbackOffset, placements, mobileTwoLine); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} glow={false} />; }
+function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false, placements = [] }) { const pos = placementPosition(placement, question, feedbackOffset, placements); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} glow={false} />; }
 function StaffLines({ top, left = STAFF.left, right = STAFF.right, fadeGradientId = null }) {
   const stroke = fadeGradientId ? `url(#${fadeGradientId})` : "currentColor";
   return <g>{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke={stroke} strokeWidth="1.2" />)}</g>;
@@ -792,24 +779,18 @@ function Note({ note, x, top, colour = "currentColor", accidentalColour = "curre
   </g>;
 }
 
-function Score({ question, selectedSymbol, placements, hoverPlacement, feedback, wrong, missing, active, onMove, onLeave, onLock, mobileTwoLine = false }) {
-  const layouts = useMemo(() => scoreLayouts(question, placements, mobileTwoLine), [question, placements, mobileTwoLine]);
+function Score({ question, selectedSymbol, placements, hoverPlacement, feedback, wrong, missing, onMove, onLeave, onLock }) {
+  const layouts = useMemo(() => scoreLayouts(question, placements), [question, placements]);
   const left = question.oneBarMode ? 335 : STAFF.left;
   const right = question.oneBarMode ? 535 : STAFF.right;
-  const transform = question.oneBarMode ? (mobileTwoLine ? "translate(-758 -225) scale(2.8)" : "translate(-410 -120) scale(2)") : "";
-  const systemTops = question.oneBarMode ? [STAFF.top] : mobileTwoLine ? [STAFF.top, STAFF.top + 88] : [STAFF.top];
+  const transform = question.oneBarMode ? "translate(-410 -120) scale(2)" : "";
+  const systemTops = [STAFF.top];
   return <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="h-auto w-full select-none touch-none overflow-visible" onPointerMove={onMove} onPointerLeave={onLeave} onPointerDown={onLock} aria-label="Accidentals exercise">
     <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
     <defs>
       <filter id="blackGlow" x="-70%" y="-70%" width="240%" height="240%">
         <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#facc15" floodOpacity="1" />
         <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#eab308" floodOpacity="1" />
-      </filter>
-      <filter id="noteGreenFilter" colorInterpolationFilters="sRGB">
-        <feColorMatrix type="matrix" values="0 0 0 0 0.086 0 0 0 0 0.639 0 0 0 0 0.290 0 0 0 1 0" />
-      </filter>
-      <filter id="noteRedFilter" colorInterpolationFilters="sRGB">
-        <feColorMatrix type="matrix" values="0 0 0 0 0.863 0 0 0 0 0.149 0 0 0 0 0.149 0 0 0 1 0" />
       </filter>
       <filter id="noteGlowPulse" x="-150%" y="-150%" width="400%" height="400%">
         <feDropShadow dx="0" dy="0" stdDeviation="3.6" floodColor="#facc15" floodOpacity="1">
@@ -855,9 +836,9 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
         </g>;
       })}
       {feedback && !feedback.correct && question.keySignatureReminder && !question.oneBarMode && <text style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 4 }} x={(STAFF.left + STAFF.right) / 2} y={STAFF.top + 114} fill={COLOUR.red} fontSize="14" fontWeight="600" textAnchor="middle">Don't forget to check the key signature!</text>}
-      {placements.map((placement) => <Placement key={placement.localId} placement={placement} question={question} placements={placements} mobileTwoLine={mobileTwoLine} colour={feedback ? wrong.some((item) => placementKey(item) === placementKey(placement)) ? COLOUR.red : COLOUR.green : COLOUR.black} />)}
-      {feedback && missing.map((placement, index) => <Placement key={`missing-${index}`} placement={placement} question={question} placements={placements} mobileTwoLine={mobileTwoLine} colour={COLOUR.green} feedbackOffset={wrong.some((item) => item.barIndex === placement.barIndex && item.noteIndex === placement.noteIndex)} />)}
-      {!feedback && selectedSymbol && hoverPlacement && <Placement placement={hoverPlacement} question={question} placements={placements} mobileTwoLine={mobileTwoLine} colour={COLOUR.black} opacity={0.45} />}
+      {placements.map((placement) => <Placement key={placement.localId} placement={placement} question={question} placements={placements} colour={feedback ? wrong.some((item) => placementKey(item) === placementKey(placement)) ? COLOUR.red : COLOUR.green : COLOUR.black} />)}
+      {feedback && missing.map((placement, index) => <Placement key={`missing-${index}`} placement={placement} question={question} placements={placements} colour={COLOUR.green} feedbackOffset={wrong.some((item) => item.barIndex === placement.barIndex && item.noteIndex === placement.noteIndex)} />)}
+      {!feedback && selectedSymbol && hoverPlacement && <Placement placement={hoverPlacement} question={question} placements={placements} colour={COLOUR.black} opacity={0.45} />}
     </g>
   </svg>;
 }
@@ -912,22 +893,6 @@ function useInjectedStyles() {
 }
 const useClickOutside = window.MLH.useClickOutside;
 
-function useMobileScoreLayout() {
-  const [mobile, setMobile] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 639px)");
-    const update = () => setMobile(query.matches);
-    update();
-    if (query.addEventListener) query.addEventListener("change", update);
-    else query.addListener(update);
-    return () => {
-      if (query.removeEventListener) query.removeEventListener("change", update);
-      else query.removeListener(update);
-    };
-  }, []);
-  return mobile;
-}
-
 function App() {
   useInjectedStyles();
   const [enabledAccidentals, setEnabledAccidentals] = useState(() => ACCIDENTALS.map((accidental) => accidental.id));
@@ -950,16 +915,14 @@ function App() {
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [activeNote, setActiveNote] = useState(null);
   const levelRef = useRef(null), customiseRef = useRef(null), warningTimer = useRef(null), nextTimer = useRef(null), audioContext = useRef(null), audioTimers = useRef([]);
-  const mobileTwoLineScore = false;
   useClickOutside([levelRef, customiseRef], [() => levelOpen && setLevelOpen(false), () => customiseOpen && setCustomiseOpen(false)]);
   useEffect(() => () => stopAudio(), []);
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const isChoice = question.questionType === "multiple-choice";
   const isPlacement = !isChoice;
   const canConfirm = isPlacement && placements.length > 0;
-  function stopAudio() { audioTimers.current.forEach(clearTimeout); audioTimers.current = []; if (audioContext.current) { try { audioContext.current.close(); } catch {} } audioContext.current = null; setPlaying(false); setActiveNote(null); }
+  function stopAudio() { audioTimers.current.forEach(clearTimeout); audioTimers.current = []; if (audioContext.current) { try { audioContext.current.close(); } catch {} } audioContext.current = null; setPlaying(false); }
   function resetTask(nextQuestion = question) { stopAudio(); if (nextTimer.current) clearTimeout(nextTimer.current); setQuestion(nextQuestion); setSelectedSymbol(null); setPlacements([]); setHoverPlacement(null); setFeedback(null); setFeedbackFading(false); setWarning(""); setChoice(null); setWrong([]); setMissing([]); }
   function newQuestion(nextTypes = enabledQuestionTypes, nextAccidentals = enabledAccidentals) { setQuestionVisible(false); setTimeout(() => { resetTask(makeQuestion({ enabledQuestionTypes: nextTypes, enabledAccidentals: nextAccidentals })); setQuestionVisible(true); }, 260); }
   function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); newQuestion(); }
@@ -982,7 +945,7 @@ function App() {
   function fadeToNextQuestion() { if (!feedback || feedbackFading) return; if (nextTimer.current) clearTimeout(nextTimer.current); setFeedbackFading(true); setTimeout(() => newQuestion(), 280); }
   function handleFeedbackAdvance() { if (!feedback || feedbackFading) return; window.MLH.advanceFeedbackPointerDown?.({ feedback, onCorrect: fadeToNextQuestion, onIncorrect: fadeToNextQuestion }); }
   function pointerInSvg(event) { const rect = event.currentTarget.getBoundingClientRect(); return { x: ((event.clientX - rect.left) / rect.width) * VIEWBOX_WIDTH, y: ((event.clientY - rect.top) / rect.height) * VIEWBOX_HEIGHT }; }
-  function handleMove(event) { if (!selectedSymbol || feedback || !isPlacement) { setHoverPlacement(null); return; } setHoverPlacement(snapPlacement(pointerInSvg(event), selectedSymbol, question, mobileTwoLineScore)); }
+  function handleMove(event) { if (!selectedSymbol || feedback || !isPlacement) { setHoverPlacement(null); return; } setHoverPlacement(snapPlacement(pointerInSvg(event), selectedSymbol, question)); }
   function handleLock(event) { if (!selectedSymbol || feedback || !hoverPlacement || !isPlacement) return; event.preventDefault(); setPlacements([{ ...hoverPlacement, localId: Math.random().toString(36).slice(2) }]); setWarning(""); }
   function confirmPlacement() { if (feedback) return; stopAudio(); if (!placements.length) return showWarning("Place an accidental on the score before pressing Confirm."); const missingNow = missingPlacements(question, placements); const wrongNow = wrongPlacements(question, placements); setMissing(missingNow); setWrong(wrongNow); scoreAnswer(placementsMatch(question, placements)); }
   function pitch(barIndex, noteIndex) { const note = question.bars[barIndex].notes[noteIndex]; let accidental = effectiveAccidental(question, barIndex, noteIndex); if (note.hiddenAccidental !== null && note.hiddenAccidental !== undefined) accidental = note.hiddenAccidental; return note.midi + accidental; }
@@ -1012,9 +975,6 @@ function App() {
       accompaniment.forEach((beatOffset) => { const chordMidis = chordLetters.map((letter, idx) => { const tone = noteFromChordTone(letter, 5 + (idx === 0 ? 0 : 1)); const accidental = tone.writtenAccidental ?? 0; return tone.midi + accidental - 12; }); playChord(context, master, chordMidis, time + beatOffset * beat, beat * 0.9); });
       question.bars[barIndex].notes.forEach((note, noteIndex) => {
         const duration = rhythmInfo(note.rhythm).beats * beat;
-        const ms = Math.max(0, (time - context.currentTime) * 1000);
-        audioTimers.current.push(setTimeout(() => setActiveNote(note.id), ms));
-        audioTimers.current.push(setTimeout(() => setActiveNote(null), ms + duration * 1000));
         const osc = context.createOscillator(); const gain = context.createGain();
         osc.type = "triangle"; osc.frequency.setValueAtTime(midiFreq(pitch(barIndex, noteIndex)), time);
         gain.gain.setValueAtTime(0.0001, time); gain.gain.exponentialRampToValueAtTime(question.audioQuestionKind === "one-bar-hearing" ? 0.14 : 0.095, time + 0.08); gain.gain.exponentialRampToValueAtTime(question.audioQuestionKind === "one-bar-hearing" ? 0.09 : 0.052, time + duration * 0.9); gain.gain.exponentialRampToValueAtTime(0.0001, time + duration + 0.08);
@@ -1022,7 +982,7 @@ function App() {
         time += duration;
       });
     });
-    audioTimers.current.push(setTimeout(() => { setPlaying(false); setActiveNote(null); try { context.close(); } catch {} audioContext.current = null; }, Math.max(0, (time - context.currentTime) * 1000) + 100));
+    audioTimers.current.push(setTimeout(() => { setPlaying(false); try { context.close(); } catch {} audioContext.current = null; }, Math.max(0, (time - context.currentTime) * 1000) + 100));
   }
   const mobileScoreHeight = "min-h-[260px] flex-1";
   const hasPlayButton = question.questionType === "audio-full" || question.questionType === "audio-two" || question.audioQuestionKind;
@@ -1071,7 +1031,7 @@ function App() {
             <window.MLH.SkipButton onClick={() => newQuestion()} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
           </div>
         </div>
-        <div className={`relative -top-[6px] ${mobileScoreHeight} flex items-center overflow-hidden transition-opacity duration-300 md:block md:h-[280px] md:flex-none ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbol={selectedSymbol} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} active={activeNote} onMove={handleMove} onLeave={() => setHoverPlacement(null)} onLock={handleLock} mobileTwoLine={mobileTwoLineScore} /></div>
+        <div className={`relative -top-[6px] ${mobileScoreHeight} flex items-center overflow-hidden transition-opacity duration-300 md:block md:h-[280px] md:flex-none ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbol={selectedSymbol} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} onMove={handleMove} onLeave={() => setHoverPlacement(null)} onLock={handleLock} /></div>
         <div className="relative z-10 mx-0 mb-[10px] mt-auto min-h-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 h-auto px-4 py-3 shadow-md md:mx-3 md:mb-0 md:mt-[50px]"><div className="flex items-start justify-between gap-3 text-stone-900"><div className={hasPlayButton ? "pb-3" : "pb-1 sm:pb-3"}><p className="text-base font-semibold leading-none" dangerouslySetInnerHTML={{ __html: question.prompt }} /></div>{hasPlayButton && <button type="button" onClick={playQuestion} disabled={playing} className="hidden h-10 min-w-[112px] shrink-0 items-center justify-center gap-2 rounded-xl bg-stone-950 px-[18px] py-[10px] text-sm font-bold text-white disabled:opacity-50 sm:flex"><span className="text-base leading-none">▶</span><span>Play</span></button>}</div>{isChoice && <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-6">{question.choices.map((item) => <button key={item.id} type="button" disabled={Boolean(feedback)} onClick={() => { if (feedback) return; setChoice(item.id); scoreAnswer(item.id === question.answerId); }} className={`min-h-[56px] flex items-center justify-center rounded-xl border px-2 py-0 text-sm font-semibold ${feedback ? item.id === question.answerId ? "border-green-700 bg-green-600 text-white" : item.id === choice ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-500" : choice === item.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white hover:bg-stone-100"}`}>{item.arrow ? <span className="grid w-full grid-cols-[1fr_auto] items-center gap-3 px-1"><span className="text-center text-base font-semibold leading-tight tracking-tight">{item.text}</span><span className="text-3xl font-black leading-none">{item.arrow}</span></span> : <span className="text-base font-semibold tracking-tight">{item.text}</span>}</button>)}</div>}{isPlacement && <div className="mt-0 flex flex-wrap items-end justify-between gap-3 pb-[0px]"><div className="flex flex-nowrap gap-2">{ACCIDENTALS.filter((accidental) => enabledAccidentals.includes(accidental.id)).map((accidental) => <SymbolButton key={accidental.id} accidental={accidental} selected={selectedSymbol === accidental.id} disabled={Boolean(feedback)} correct={Boolean(feedback && !feedback.correct && question.answerId === accidental.id)} wrong={Boolean(feedback && !feedback.correct && selectedSymbol === accidental.id && question.answerId !== accidental.id)} onClick={() => { setSelectedSymbol(accidental.id); setWarning(""); }} />)}</div>{hasPlayButton && <button type="button" onClick={playQuestion} disabled={playing} className="flex h-11 min-w-[92px] items-center justify-center gap-2 rounded-xl bg-stone-950 px-3 text-sm font-bold text-white disabled:opacity-50 sm:hidden"><span className="text-base leading-none">▶</span><span>Play</span></button>}<div className="ml-auto flex gap-2"><button type="button" disabled={Boolean(feedback) || placements.length === 0} onClick={() => { setPlacements([]); setHoverPlacement(null); setWarning(""); }} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-900 disabled:opacity-50">Clear</button><window.MLH.ConfirmButton disabled={!canConfirm || Boolean(feedback)} onClick={confirmPlacement}>Confirm</window.MLH.ConfirmButton></div></div>}</div>
       </main>
     </div>
