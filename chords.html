@@ -25,7 +25,6 @@
     }
     .music-symbol {
       font-family: "Bravura", serif;
-      dominant-baseline: alphabetic;
       text-rendering: geometricPrecision;
     }
   </style>
@@ -47,7 +46,6 @@ const BARS_PER_SYSTEM = 4;
 const NOTE_RX = 6.3;
 const NOTE_RY = 4.6;
 const STEM = 32;
-const NOTE_GLYPH_Y_OFFSET = -5;
 const CLEF_X = STAFF_LEFT + 8;
 const KEY_SIG_X = STAFF_LEFT + 54;
 const TIME_SIG_X = STAFF_LEFT + 82;
@@ -671,11 +669,32 @@ function makeQuestion(level="N5", ahCustomise=DEFAULT_AH_CUSTOMISE){
   return makeHigherQuestion();
 }
 function stemDown(step){ return step > 4; }
-function stemData(note,x,top,override=null){ const yy=y(note.step,top), noteY=yy+NOTE_GLYPH_Y_OFFSET, down=override===null?stemDown(note.step):override, sx=down?x-NOTE_RX:x+NOTE_RX, ey=down?noteY+STEM:noteY-STEM; return { y:yy, noteY, down, sx, ey }; }
+function stemData(note,x,top,override=null,forcedEnd=null){
+  const yy=y(note.step,top);
+  const down=override===null?stemDown(note.step):override;
+  const sx=x+(down?-6:6);
+  const ey=forcedEnd ?? (down?yy+STEM:yy-STEM);
+  return { y:yy, noteY:yy, down, sx, ey, stemX:sx, stemEndY:ey };
+}
 const TIME_SIGNATURE_SYMBOLS = {
   "2/4": { key:"timeSig24", top:["timeSig2"], bottom:["timeSig4"] },
   "3/4": { key:"timeSig34", top:["timeSig3"], bottom:["timeSig4"] },
   "4/4": { key:"timeSig44", top:["timeSig4"], bottom:["timeSig4"] },
+  "5/4": { key:"timeSig54", top:["timeSig5"], bottom:["timeSig4"] },
+  "6/8": { key:"timeSig68", top:["timeSig6"], bottom:["timeSig8"] },
+  "9/8": { key:"timeSig98", top:["timeSig9"], bottom:["timeSig8"] },
+  "12/8": { key:"timeSig128", top:["timeSig1","timeSig2"], bottom:["timeSig8"] },
+};
+const CALIBRATION_ANCHORS = {
+  gClef: { xScale:3.2, step:2 },
+  fClef: { xScale:3.2, step:6 },
+  timeSig24: { xScale:12, step:5.3 },
+  timeSig34: { xScale:12, step:5.3 },
+  timeSig44: { xScale:12, step:5.3 },
+  timeSig54: { xScale:12, step:5.3 },
+  timeSig68: { xScale:12, step:5.3 },
+  timeSig98: { xScale:12, step:5.3 },
+  timeSig128: { xScale:12, step:5.3 },
 };
 function sharedActualSymbolKey(key){
   if(key==="flatInScore" || key==="flatKeySignature") return "flat";
@@ -690,7 +709,9 @@ function sharedSettingsKey(key){
   return key;
 }
 function sharedSymbolConfig(key){
-  return SHARED_CONFIG.symbols?.[sharedSettingsKey(key)] || {
+  const symbols=SHARED_CONFIG.symbols || {};
+  const settingsKey=sharedSettingsKey(key);
+  return symbols[settingsKey] || symbols[sharedActualSymbolKey(settingsKey)] || {
     fontSizeScale:3.4,
     xOffsetScale:0,
     yOffsetScale:0,
@@ -701,6 +722,15 @@ function sharedSymbolConfig(key){
   };
 }
 function sharedSymbolForKey(key){ return SHARED_SYMBOLS[sharedActualSymbolKey(key)] || ""; }
+function calibrationAnchorX(symbolKey,left=STAFF_LEFT){
+  const anchor=CALIBRATION_ANCHORS[symbolKey];
+  return left+(anchor?.xScale ?? 0)*GAP;
+}
+function calibrationAnchorY(symbolKey,top=SYSTEM_TOPS[0]){
+  const anchor=CALIBRATION_ANCHORS[symbolKey];
+  return y(anchor?.step ?? 4,top);
+}
+function scoreAccidentalBaseX(noteheadX){ return noteheadX-GAP*2.1; }
 function accidentalSymbolKey(value,context="score"){
   if(value===1) return context==="keySignature" ? "sharpKeySignature" : "sharpInScore";
   if(value===-1) return context==="keySignature" ? "flatKeySignature" : "flatInScore";
@@ -730,10 +760,19 @@ function CalibratedSymbol({symbolKey,x,y:yy,colour="currentColor",opacity=1,line
     opacity={opacity}
     fontSize={fontSize}
     textAnchor="middle"
-    dominantBaseline="middle"
-    transform={`scale(${config.widthScale||1} ${config.heightScale||1})`}
-    transformOrigin={`${adjustedX} ${adjustedY}`}
+    transform={`translate(${adjustedX} ${adjustedY}) scale(${config.widthScale||1} ${config.heightScale||1}) translate(${-adjustedX} ${-adjustedY})`}
   >{glyph}</text>;
+}
+function CalibratedTimeSignature({signatureInfo,top,sizeScale=1}){
+  const config=sharedSymbolConfig(signatureInfo.key);
+  const adjustedX=calibrationAnchorX(signatureInfo.key)+(config.xOffsetScale||0)*GAP+(config.opticalXOffset||0);
+  const adjustedY=calibrationAnchorY(signatureInfo.key,top)+(config.yOffsetScale||0)*GAP+(config.opticalYOffset||0);
+  const fontSize=(config.fontSizeScale||3.4)*GAP*sizeScale;
+  const transform=`translate(${adjustedX} ${adjustedY}) scale(${config.widthScale||1} ${config.heightScale||1}) translate(${-adjustedX} ${-adjustedY})`;
+  return <g>
+    <text className="music-symbol" x={adjustedX} y={adjustedY-fontSize*0.14} fill="currentColor" fontSize={fontSize} textAnchor="middle" transform={transform}>{signatureInfo.top.map(symbolKey=>sharedSymbolForKey(symbolKey)).join("")}</text>
+    <text className="music-symbol" x={adjustedX} y={adjustedY+fontSize*0.43} fill="currentColor" fontSize={fontSize} textAnchor="middle" transform={transform}>{signatureInfo.bottom.map(symbolKey=>sharedSymbolForKey(symbolKey)).join("")}</text>
+  </g>;
 }
 function accidentalSymbolFallback(symbolKey){
   if(symbolKey==="doubleSharp") return GLYPHS.doubleSharp;
@@ -745,8 +784,8 @@ function Ledger({x, step, top, colour}) {
   for(let ledgerStep=-2; ledgerStep>=step; ledgerStep-=2) lines.push(y(ledgerStep,top));
   for(let ledgerStep=10; ledgerStep<=step; ledgerStep+=2) lines.push(y(ledgerStep,top));
   const ledgerConfig=SHARED_CONFIG.symbols?.ledgerLines || {};
-  const width=(ledgerConfig.widthScale || SHARED_CONFIG.drawing?.ledgerLineWidthScale || 1.8) * GAP;
-  const thickness=(ledgerConfig.heightScale || SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11) * GAP;
+  const width=12 * Number(ledgerConfig.widthScale || 1);
+  const thickness=Math.max(1,0.6*Number(ledgerConfig.fontSizeScale || 2)*Number(ledgerConfig.heightScale || 1));
   const xOffset=(ledgerConfig.xOffsetScale || 0) * GAP;
   const yOffset=(ledgerConfig.yOffsetScale || 0) * GAP;
   return <g>{lines.map(ledgerY=><line key={ledgerY} x1={x+xOffset-width} x2={x+xOffset+width} y1={ledgerY+yOffset} y2={ledgerY+yOffset} stroke={colour} strokeWidth={thickness}/>)}</g>;
@@ -759,8 +798,8 @@ function Accidental({value,x,yy,xAdjust=0,yAdjust=0,sizeScale=1,context="score"}
   const overrides=sizeScale!==1 ? {fontSizeScale:(base.fontSizeScale||3.4)*sizeScale} : {};
   return <CalibratedSymbol symbolKey={symbolKey} x={x+xAdjust} y={yy+yAdjust} settingOverrides={overrides}/>;
 }
-function NoteGlyph({x,yy,info,colour,down=false,showFlag=true,yAdjust=0}){
-  return <CalibratedSymbol symbolKey={noteSymbolKey(info,down,showFlag)} x={x} y={yy+yAdjust} colour={colour}/>;
+function NoteGlyph({x,yy,info,colour,down=false,showFlag=true}){
+  return <CalibratedSymbol symbolKey={noteSymbolKey(info,down,showFlag)} x={x} y={yy} colour={colour}/>;
 }
 const NOTE_NAME_GUIDES = {
   treble:{ lines:[[0,"E"],[2,"G"],[4,"B"],[6,"D"],[8,"F"]], spaces:[[1,"F"],[3,"A"],[5,"C"],[7,"E"]] },
@@ -774,8 +813,8 @@ function StaffNoteNames({visible,clef,top,lineX,spaceX}){
     {guide.spaces.map(([step,letter])=><text key={`${clef}-space-${step}`} x={spaceX-2} y={y(step,top)+1}>{letter}</text>)}
   </g>;
 }
-function Note({note,x,top,colour="currentColor",active=false,showFlag=true,override=null,forced=null,stackLayout="alternate",stackStemDown=null,noteheadYAdjust=0,accidentalXAdjust=0,accidentalYAdjust=0,accidentalSizeScale=1,showNoteNames=false}){
-  const info=rhythmInfo(note.rhythm), st=stemData(note,x,top,override), ey=forced===null?st.ey:forced, noteColour=active?COLOUR.blue:colour, isLine=note.step%2===0, dotOffset=isLine?-4:0;
+function Note({note,x,top,colour="currentColor",active=false,showFlag=true,override=null,forced=null,stackLayout="alternate",stackStemDown=null,accidentalXAdjust=0,accidentalYAdjust=0,accidentalSizeScale=1,showNoteNames=false}){
+  const info=rhythmInfo(note.rhythm), st=stemData(note,x,top,override), ey=forced===null?st.ey:forced, noteColour=active?COLOUR.blue:colour, isLine=note.step%2===0;
   if(note.stack?.length){
     const down=override===null?false:override;
     const ys=note.stack.map(tone=>y(tone.step,top));
@@ -821,8 +860,8 @@ function Note({note,x,top,colour="currentColor",active=false,showFlag=true,overr
         const yy=y(tone.step,top), isStackLine=tone.step%2===0, noteHeadX=x+stackOffset(tone,i);
         return <g key={`${note.id}-tone-${i}`}>
           <Ledger x={x} step={tone.step} top={top} colour={noteColour}/>
-          <Accidental value={tone.writtenAccidental} x={x-19-accidentalStackOffset(i)} yy={yy} xAdjust={accidentalXAdjust} yAdjust={accidentalYAdjust} sizeScale={accidentalSizeScale}/>
-          <NoteGlyph x={noteHeadX} yy={yy} info={info} colour={noteColour} down={stackStemDown===null?tone.step>4:stackStemDown} showFlag={showFlag} yAdjust={noteheadYAdjust}/>
+          <Accidental value={tone.writtenAccidental} x={scoreAccidentalBaseX(x)-accidentalStackOffset(i)} yy={yy} xAdjust={accidentalXAdjust} yAdjust={accidentalYAdjust} sizeScale={accidentalSizeScale}/>
+          <NoteGlyph x={noteHeadX} yy={yy} info={info} colour={noteColour} down={stackStemDown===null?tone.step>4:stackStemDown} showFlag={showFlag}/>
           {isStackLine && <line x1={noteHeadX-8} x2={noteHeadX+12} y1={yy} y2={yy} stroke={noteColour} strokeWidth="1.2"/>}
         </g>;
       })}
@@ -830,9 +869,10 @@ function Note({note,x,top,colour="currentColor",active=false,showFlag=true,overr
   }
   return <g opacity={active?1:.98}>
     <Ledger x={x} step={note.step} top={top} colour={noteColour}/>
-    <Accidental value={note.writtenAccidental} x={x-17} yy={st.y} xAdjust={accidentalXAdjust} yAdjust={accidentalYAdjust} sizeScale={accidentalSizeScale}/>
-    <NoteGlyph x={x} yy={st.y} info={info} colour={noteColour} down={st.down} showFlag={showFlag} yAdjust={noteheadYAdjust}/>
-    {info.dotted && <DotSymbol x={x} yy={st.y+dotOffset} step={note.step} colour={noteColour}/>} 
+    <Accidental value={note.writtenAccidental} x={scoreAccidentalBaseX(x)} yy={st.y} xAdjust={accidentalXAdjust} yAdjust={accidentalYAdjust} sizeScale={accidentalSizeScale}/>
+    <NoteGlyph x={x} yy={st.y} info={info} colour={noteColour} down={st.down} showFlag={showFlag}/>
+    {forced!==null && <line x1={st.sx} x2={st.sx} y1={st.y+(st.down?0.5:-0.5)} y2={ey} stroke={noteColour} strokeWidth={Math.max(1,GAP*Number(SHARED_CONFIG.drawing?.stemThicknessScale||0.12))}/>}
+    {info.dotted && <DotSymbol x={x} yy={st.y} step={note.step} colour={noteColour}/>}
     {isLine && <line x1={x-8} x2={x+8} y1={st.y} y2={st.y} stroke={noteColour} strokeWidth="1.2"/>}
   </g>;
 }
@@ -870,33 +910,32 @@ function GrandKeySignature({keySignature,top,x,clef}){
 }
 function TimeSignature({signature,top,sizeScale=1}){
   const signatureInfo=TIME_SIGNATURE_SYMBOLS[signature.id] || TIME_SIGNATURE_SYMBOLS["4/4"];
-  const config=sharedSymbolConfig(signatureInfo.key);
-  const fontSize=(config.fontSizeScale||3.5)*GAP*sizeScale;
-  const x=TIME_SIG_X+(config.xOffsetScale||0)*GAP;
-  const centreY=y(4,top)+(config.yOffsetScale||0)*GAP;
-  const gap=fontSize*.48;
-  const makeLine=(symbols,lineY,key)=>(
-    <text key={key} className="music-symbol" x={x} y={lineY} fill="currentColor" fontSize={fontSize} textAnchor="middle" dominantBaseline="middle"
-      transform={`scale(${config.widthScale||1} ${config.heightScale||1})`} transformOrigin={`${x} ${lineY}`}>
-      {symbols.map(symbolKey=>sharedSymbolForKey(symbolKey)).join("")}
-    </text>
-  );
-  return <g>{makeLine(signatureInfo.top,centreY-gap/2,"top")}{makeLine(signatureInfo.bottom,centreY+gap/2,"bottom")}</g>;
+  return <CalibratedTimeSignature signatureInfo={signatureInfo} top={top} sizeScale={sizeScale}/>;
 }
 function TrebleClef({top,left=STAFF_LEFT,x=null}){
-  const anchorX=x===null ? left+GAP*3.2 : x;
-  return <CalibratedSymbol symbolKey="gClef" x={anchorX} y={y(2,top)}/>;
+  const anchorX=x===null ? calibrationAnchorX("gClef",left) : x;
+  return <CalibratedSymbol symbolKey="gClef" x={anchorX} y={calibrationAnchorY("gClef",top)}/>;
 }
 function BassClef({top,left=STAFF_LEFT,x=null}){
-  const anchorX=x===null ? left+GAP*3.2 : x;
-  return <CalibratedSymbol symbolKey="fClef" x={anchorX} y={y(4,top)}/>;
+  const anchorX=x===null ? calibrationAnchorX("fClef",left) : x;
+  return <CalibratedSymbol symbolKey="fClef" x={anchorX} y={calibrationAnchorY("fClef",top)}/>;
 }
 function BraceSymbol({x,top,bottom}){
-  return <CalibratedSymbol symbolKey="brace" x={x} y={(top+bottom+GAP*4)/2}/>;
+  const braceConfig=sharedSymbolConfig("brace");
+  return <CalibratedSymbol
+    symbolKey="brace"
+    x={x-18}
+      y={top+GAP*4+19}
+    settingOverrides={{
+      widthScale:(braceConfig.widthScale||1)*1.16,
+      heightScale:(braceConfig.heightScale||1)*1.12
+    }}
+  />;
 }
 function DotSymbol({x,yy,step,colour}){
   const symbolKey=step%2===0 ? "augmentationDotLine" : "augmentationDotSpace";
-  return <CalibratedSymbol symbolKey={symbolKey} x={x+GAP*1.2} y={yy} colour={colour}/>;
+  const dotY=step%2===0 ? yy-GAP*0.25 : yy;
+  return <CalibratedSymbol symbolKey={symbolKey} x={x+13} y={dotY} colour={colour}/>;
 }
 function ChordBox({symbol="", chord=null, x, yy, size=30, highlight=false}){ const stroke=highlight?COLOUR.blue:"#444", textColour=highlight?COLOUR.blue:"#111"; return <g><rect x={x} y={yy} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><rect x={x} y={yy+size} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><text x={x+size/2} y={yy+20} textAnchor="middle" fontSize="14.5" fontWeight="900" fill={textColour}>{getChordShortName(chord)}</text><text x={x+size/2} y={yy+size+20} textAnchor="middle" fontSize="14.5" fontWeight="900" fill={textColour}>{symbol}</text></g>; }
 function AnswerInput({value,disabled,status,onChange}){ const border=status==="correct"?COLOUR.green:status==="incorrect"?COLOUR.red:"#444", bg=status==="correct"?"#dcfce7":status==="incorrect"?"#fee2e2":"white"; return <input value={value} disabled={disabled} onChange={e=>onChange(formatHigherAnswer(e.target.value))} style={{width:"34px",height:"36px",border:`1.5px solid ${border}`,background:bg,textAlign:"center",fontWeight:900,fontSize:"16px",outline:"none",animation:disabled?"none":"pulseBorder 1.8s ease-in-out infinite"}}/>; }
@@ -924,8 +963,35 @@ function HigherMobileAnswerBoxes({question,answers,setAnswers,feedback}){
 function getBarNotePositions(barIndex,notes){ const start=getBarStart(barIndex), end=start+barWidth(barIndex), startX=start+(barIndex===0?4:barIndex<4?15:19), endX=barIndex===BAR_COUNT-1?end-24:end-4, units=notes.reduce((s,n)=>s+rhythmInfo(n.rhythm).spacing,0), unit=Math.max(1,endX-startX)/Math.max(1,units); let c=startX+unit*.38; return notes.map(n=>{ const x=c; c+=rhythmInfo(n.rhythm).spacing*unit; return x; }); }
 function quaverGroups(notes){ const out=[]; let i=0; while(i<notes.length){ if(notes[i].rhythm!=="quaver"){i++;continue;} const s=i; while(i+1<notes.length&&notes[i+1].rhythm==="quaver") i++; const e=i; if(e>s) out.push({start:s,end:e}); i++; } return out; }
 function groupFor(groups,i){ return groups.find(g=>i>=g.start&&i<=g.end) || null; }
-function beamData(notes,xs,top){ const avg=notes.reduce((s,n)=>s+n.step,0)/notes.length, down=avg>4, a=stemData(notes[0],xs[0],top,down), b=stemData(notes[notes.length-1],xs[xs.length-1],top,down), beamXShift=down?0.75:-0.75; return { down, start:{x:a.sx+beamXShift,y:a.ey+5}, end:{x:b.sx+beamXShift,y:b.ey+5} }; }
+function beamData(notes,xs,top){
+  const settings=sharedSymbolConfig("quaverBeam");
+  const avg=notes.reduce((s,n)=>s+n.step,0)/notes.length;
+  const down=avg>4;
+  const firstY=y(notes[0].step,top);
+  const lastY=y(notes[notes.length-1].step,top);
+  const xOffset=GAP*Number(settings.xOffsetScale||0);
+  const yOffset=GAP*Number(settings.yOffsetScale||0);
+  const stemLength=31*Number(settings.heightScale||1);
+  const beamWidthAdjust=GAP*(Number(settings.widthScale||1)-1);
+  const firstStemX=xs[0]+xOffset+(down?-6:6);
+  const lastStemX=xs[xs.length-1]+xOffset+(down?-6:6);
+  return {
+    down,
+    xOffset,
+    start:{x:firstStemX-beamWidthAdjust,y:firstY+yOffset+(down?stemLength:-stemLength)},
+    end:{x:lastStemX+beamWidthAdjust,y:lastY+yOffset+(down?stemLength:-stemLength)}
+  };
+}
 function beamYAtX(x,beam){ const amount=(x-beam.start.x)/(beam.end.x-beam.start.x||1); return beam.start.y+amount*(beam.end.y-beam.start.y); }
+function beamPolygonPoints(x1,y1,x2,y2,thickness){
+  const half=thickness/2;
+  return [`${x1},${y1-half}`,`${x2},${y2-half}`,`${x2},${y2+half}`,`${x1},${y1+half}`].join(" ");
+}
+function BeamShape({beam,colour="currentColor"}){
+  const settings=sharedSymbolConfig("quaverBeam");
+  const thickness=Math.max(1,GAP*Number(SHARED_CONFIG.drawing?.beamThicknessScale||0.42)*Number(settings.fontSizeScale||1));
+  return <polygon points={beamPolygonPoints(beam.start.x,beam.start.y,beam.end.x,beam.end.y,thickness)} fill={colour}/>;
+}
 function Score({question,answers,setAnswers,feedback,activeNoteId,activeBarIndex,level,showNoteNames=false}){
   const accidentalXAdjust=0;
   const accidentalYAdjust=0;
@@ -938,15 +1004,15 @@ function Score({question,answers,setAnswers,feedback,activeNoteId,activeBarIndex
       return <g key={bar.barIndex}>
         {showBox && (isAnswer ? <g className="higher-score-answer"><foreignObject x={boxX} y={boxY+12} width="34" height="36"><AnswerInput value={typed} disabled={Boolean(feedback)} status={status} onChange={value=>setAnswers(cur=>({...cur,[bar.barIndex]:value}))}/></foreignObject>{feedback&&!ok&&<text x={boxX+42} y={boxY+36} fontSize="16" fontWeight="900" fill={COLOUR.green}>{`${getChordShortName(bar.chord)} or ${bar.chordSymbol}`}</text>}</g> : <ChordBox symbol={bar.chordSymbol} chord={bar.chord} x={boxX} yy={boxY} highlight={hi}/>) }
         <text x={(bar.barIndex===0||bar.barIndex===4)?start-15:start+5} y={top-18} fontSize="13" fontWeight="600">{bar.barIndex+1}</text>
-        {bar.notes.map((note,i)=>{ const g=groupFor(gs,i), beam=g?beamData(bar.notes.slice(g.start,g.end+1),pos.slice(g.start,g.end+1),top):null, sx=beam?(beam.down?pos[i]-NOTE_RX:pos[i]+NOTE_RX):null; return <Note key={note.id} note={note} x={pos[i]} top={top} active={activeNoteId===note.id} showFlag={!beam} override={beam?beam.down:null} forced={beam&&sx?beamYAtX(sx,beam):null} noteheadYAdjust={0.5} accidentalXAdjust={accidentalXAdjust} accidentalYAdjust={accidentalYAdjust} accidentalSizeScale={accidentalSizeScale} showNoteNames={showNoteNames}/>; })}
-        {gs.map((g,i)=>{ const beam=beamData(bar.notes.slice(g.start,g.end+1),pos.slice(g.start,g.end+1),top); return <line key={`beam-${bar.barIndex}-${i}`} x1={beam.start.x-1} y1={beam.start.y} x2={beam.end.x+1} y2={beam.end.y} stroke="currentColor" strokeWidth="4"/>; })}
+        {bar.notes.map((note,i)=>{ const g=groupFor(gs,i), beam=g?beamData(bar.notes.slice(g.start,g.end+1),pos.slice(g.start,g.end+1),top):null, stem=beam?stemData(note,pos[i],top,beam.down):null; return <Note key={note.id} note={note} x={pos[i]} top={top} active={activeNoteId===note.id} showFlag={!beam} override={beam?beam.down:null} forced={beam&&stem?beamYAtX(stem.sx,beam):null} accidentalXAdjust={accidentalXAdjust} accidentalYAdjust={accidentalYAdjust} accidentalSizeScale={accidentalSizeScale} showNoteNames={showNoteNames}/>; })}
+        {gs.map((g,i)=>{ const beam=beamData(bar.notes.slice(g.start,g.end+1),pos.slice(g.start,g.end+1),top); return <BeamShape key={`beam-${bar.barIndex}-${i}`} beam={beam}/>; })}
         {bar.barIndex===BAR_COUNT-1 ? <CalibratedSymbol symbolKey="barlineFinal" x={end} y={y(4,top)} /> : <line x1={end} x2={end} y1={top} y2={top+GAP*4} stroke="currentColor" strokeWidth="1.4"/>}
       </g>;
     })}
   </svg>;
 }
 function N5Score({question,level,showNoteNames=false}){
-  const top=154, staffStart=248, staffEnd=673, clefX=staffStart+10, noteXs=[338,458,578], fadeId=`n5-staff-fade-${question.id}`;
+  const top=154, staffStart=248, staffEnd=673, noteXs=[338,458,578], fadeId=`n5-staff-fade-${question.id}`;
   const notes=question.bars[0].notes;
   const accidentalXAdjust=0;
   const accidentalYAdjust=0;
@@ -963,8 +1029,8 @@ function N5Score({question,level,showNoteNames=false}){
     <g transform={`translate(${W/2} ${top+GAP*2}) scale(1.5) translate(${-W/2} ${-(top+GAP*2)})`}>
       {[0,1,2,3,4].map(line=><line key={line} x1={staffStart} x2={staffEnd} y1={top+line*GAP} y2={top+line*GAP} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
       <StaffNoteNames visible={showNoteNames} clef="treble" top={top} lineX={staffStart-11} spaceX={staffStart+7}/>
-      <TrebleClef top={top} x={clefX+GAP*2.4}/>
-      {notes.map((note,i)=><Note key={note.id} note={note} x={noteXs[i]} top={top} noteheadYAdjust={0.5} accidentalXAdjust={accidentalXAdjust} accidentalYAdjust={accidentalYAdjust} accidentalSizeScale={accidentalSizeScale} showNoteNames={showNoteNames}/>)}
+      <TrebleClef top={top} left={staffStart}/>
+      {notes.map((note,i)=><Note key={note.id} note={note} x={noteXs[i]} top={top} accidentalXAdjust={accidentalXAdjust} accidentalYAdjust={accidentalYAdjust} accidentalSizeScale={accidentalSizeScale} showNoteNames={showNoteNames}/>)}
     </g>
   </svg>;
 }
@@ -1009,7 +1075,7 @@ function AHListeningScore({question,activeNoteId,showNoteNames=false}){
     <g transform={`translate(${W/2} ${top+GAP*2}) scale(2.45) translate(${-W/2} ${-(top+GAP*2)})`}>
       {[0,1,2,3,4].map(line=><line key={line} x1={staffStart} x2={staffEnd} y1={top+line*GAP} y2={top+line*GAP} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
       <StaffNoteNames visible={showNoteNames} clef="treble" top={top} lineX={staffStart-11} spaceX={staffStart+7}/>
-      <TrebleClef top={top} x={clefX+GAP*2.4}/>
+      <TrebleClef top={top} left={staffStart}/>
       {notes.map(note=><Note key={note.id} note={note} x={noteX} top={top} active={activeNoteId===note.id} stackLayout="lineSpace" showNoteNames={showNoteNames}/>)}
     </g>
   </svg>;
@@ -1052,15 +1118,16 @@ function AHInversionCell({children,status,muted=false,withArrows=false,onPrev,on
     </div>
   </td>;
 }
-function AHInversionTable({question,answers,feedback,onCycle,isMobile=false}){
+function AHInversionTable({question,answers,feedback,onCycle,isMobile=false,tableWidth=null,columnWidth=null}){
       const visibleChords=isMobile?question.chords.slice(0,2):question.chords;
-      const tableWidth=isMobile?456:480;
+      const resolvedColumnWidth=columnWidth || (isMobile?228:120);
+      const resolvedTableWidth=tableWidth || resolvedColumnWidth*visibleChords.length;
       const tableScale=isMobile?0.95:1;
-      const tableStyle={borderCollapse:"collapse",tableLayout:"fixed",width:`${tableWidth}px`,color:"#111",fontSize:isMobile?"21px":"11px",lineHeight:"1"};
-      return <div xmlns="http://www.w3.org/1999/xhtml" style={{display:"block",width:`${tableWidth}px`,transform:`scale(${tableScale})`,transformOrigin:"center center"}}>
+      const tableStyle={borderCollapse:"collapse",tableLayout:"fixed",width:`${resolvedTableWidth}px`,color:"#111",fontSize:isMobile?"21px":"11px",lineHeight:"1"};
+      return <div xmlns="http://www.w3.org/1999/xhtml" style={{display:"block",width:`${resolvedTableWidth}px`,transform:`scale(${tableScale})`,transformOrigin:"center center"}}>
     <table style={tableStyle}>
       <colgroup>
-        {visibleChords.map(item=><col key={`col-${item.index}`} style={{width:isMobile?"228px":"120px"}} />)}
+        {visibleChords.map(item=><col key={`col-${item.index}`} style={{width:`${resolvedColumnWidth}px`}} />)}
       </colgroup>
       <tbody>
         <tr>
@@ -1084,9 +1151,13 @@ function AHInversionTable({question,answers,feedback,onCycle,isMobile=false}){
   </div>;
 }
 function AHInversionScore({question,answers,setAnswers,feedback,showNoteNames=false,isMobile=false}){
-  const scoreYShift=isMobile?-25:0, trebleTop=112+scoreYShift, bassTop=220+scoreYShift, staffStart=250, staffEnd=710, scoreWidth=staffEnd+130-staffStart, staveShift=((W-scoreWidth)/2)-staffStart+(isMobile?100:0), shiftedStart=staffStart+staveShift, shiftedEnd=staffEnd+130+staveShift-(isMobile?220:0), clefX=shiftedStart+10, keyX=shiftedStart+68, chordXs=isMobile?[385,525]:[382,500,618,736], fadeId=`ah-inv-staff-fade-${question.id}`;
+  const scoreYShift=isMobile?-25:0, trebleTop=112+scoreYShift, bassTop=220+scoreYShift, staffStart=250, staffEnd=710, scoreWidth=staffEnd+130-staffStart, staveShift=((W-scoreWidth)/2)-staffStart+(isMobile?100:0), shiftedStart=staffStart+staveShift, shiftedEnd=staffEnd+130+staveShift-(isMobile?220:0), keyX=shiftedStart+68, chordXs=isMobile?[385,525]:[382,500,618,736], fadeId=`ah-inv-staff-fade-${question.id}`;
   const actualChordXs=chordXs.map(x=>x+staveShift);
   const visibleChords=isMobile?question.chords.slice(0,2):question.chords;
+  const tableColumnWidth=isMobile?228:Math.max(120,actualChordXs[1]-actualChordXs[0]);
+  const tableWidth=tableColumnWidth*visibleChords.length;
+  const tablePadding=8;
+  const tableX=isMobile?(W-tableWidth)/2:actualChordXs[0]-tableColumnWidth/2;
   const scoreTransform=`translate(${W/2} 202) scale(${isMobile?1.56:1.13}) translate(${-W/2} -202)`;
   const mobileFeedbackItems=isMobile&&feedback
     ? visibleChords.filter((item,index)=>index>0&&!isAHInversionSelectionCorrect(answers[`ah-inv-${index}`]||null,item)).map(ahChordDisplay)
@@ -1114,17 +1185,17 @@ function AHInversionScore({question,answers,setAnswers,feedback,showNoteNames=fa
       {[0,1,2,3,4].map(line=><line key={line} x1={shiftedStart} x2={shiftedEnd} y1={top+line*GAP} y2={top+line*GAP} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
       <StaffNoteNames visible={showNoteNames} clef={staffIndex===0?"treble":"bass"} top={top} lineX={shiftedStart-11} spaceX={shiftedStart+7}/>
     </g>)}
-        <BraceSymbol x={shiftedStart-GAP*2.4} top={trebleTop} bottom={bassTop}/>
-    <TrebleClef top={trebleTop} x={clefX+GAP*2.4}/>
-    <BassClef top={bassTop} x={clefX+GAP*2.4}/>
+        <BraceSymbol x={shiftedStart} top={trebleTop} bottom={bassTop}/>
+    <TrebleClef top={trebleTop} left={shiftedStart}/>
+    <BassClef top={bassTop} left={shiftedStart}/>
     <GrandKeySignature keySignature={question.key} top={trebleTop} x={keyX} clef="treble"/>
     <GrandKeySignature keySignature={question.key} top={bassTop} x={keyX} clef="bass"/>
     <line x1={shiftedStart} x2={shiftedStart} y1={trebleTop} y2={bassTop+GAP*4} stroke="currentColor" strokeWidth="1.4"/>
     {visibleChords.map((item,index)=>{
       const x=actualChordXs[index], key=`ah-inv-${index}`, value=answers[key]||null, correct=isAHInversionSelectionCorrect(value,item), status=feedback&&index>0?(correct?"correct":"incorrect"):null, trebleStemDown=!item.trebleNote.stack.some(tone=>tone.step<4);
       return <g key={key}>
-        <Note note={item.trebleNote} x={x} top={trebleTop} stackLayout="lineSpace" stackStemDown={trebleStemDown} noteheadYAdjust={0.5} showNoteNames={showNoteNames}/>
-        <Note note={item.bassNote} x={x} top={bassTop} stackLayout="lineSpace" noteheadYAdjust={0.5} showNoteNames={showNoteNames}/>
+        <Note note={item.trebleNote} x={x} top={trebleTop} stackLayout="lineSpace" stackStemDown={trebleStemDown} showNoteNames={showNoteNames}/>
+        <Note note={item.bassNote} x={x} top={bassTop} stackLayout="lineSpace" showNoteNames={showNoteNames}/>
         {index>0 && (
           <g>
             {feedback&&!isMobile&&!correct&&(
@@ -1138,8 +1209,10 @@ function AHInversionScore({question,answers,setAnswers,feedback,showNoteNames=fa
         )}
       </g>;
     })}
-    <foreignObject x={isMobile?(W-460)/2:actualChordXs[0]-126} y={bassTop+64} width={isMobile?460:482} height={isMobile?114:60}>
-      <AHInversionTable question={question} answers={answers} feedback={feedback} onCycle={updatePicker} isMobile={isMobile}/>
+    <foreignObject x={tableX-tablePadding/2} y={bassTop+72} width={tableWidth+tablePadding} height={isMobile?114:60}>
+      <div xmlns="http://www.w3.org/1999/xhtml" style={{padding:`0 ${tablePadding/2}px`,boxSizing:"border-box"}}>
+        <AHInversionTable question={question} answers={answers} feedback={feedback} onCycle={updatePicker} isMobile={isMobile} tableWidth={tableWidth} columnWidth={tableColumnWidth}/>
+      </div>
     </foreignObject>
     {mobileFeedbackItems.length>0&&(
       <foreignObject x={(W-460)/2} y={bassTop+172} width="460" height="34">
@@ -1156,13 +1229,17 @@ function letterForClefStep(step,clef){
   const base=clef==="bass"?LETTERS.indexOf("G"):LETTERS.indexOf("E");
   return LETTERS[((base+step)%7+7)%7];
 }
-function AHCompletedTable({question,isMobile=false}){
+function AHCompletedTable({question,isMobile=false,tableWidth=null,columnWidth=null}){
   const visibleChords=isMobile?question.chords.slice(0,2):question.chords;
-  const tableWidth=isMobile?456:480;
+  const resolvedColumnWidth=columnWidth || (isMobile?228:120);
+  const resolvedTableWidth=tableWidth || resolvedColumnWidth*visibleChords.length;
   const tableScale=isMobile?0.95:1;
-  const tableStyle={borderCollapse:"collapse",tableLayout:"fixed",width:`${tableWidth}px`,color:"#111",fontSize:isMobile?"21px":"11px",lineHeight:"1"};
-  return <div xmlns="http://www.w3.org/1999/xhtml" style={{display:"block",width:`${tableWidth}px`,transform:`scale(${tableScale})`,transformOrigin:"center center"}}>
+  const tableStyle={borderCollapse:"collapse",tableLayout:"fixed",width:`${resolvedTableWidth}px`,color:"#111",fontSize:isMobile?"21px":"11px",lineHeight:"1"};
+  return <div xmlns="http://www.w3.org/1999/xhtml" style={{display:"block",width:`${resolvedTableWidth}px`,transform:`scale(${tableScale})`,transformOrigin:"center center"}}>
     <table style={tableStyle}>
+      <colgroup>
+        {visibleChords.map(item=><col key={`col-${item.index}`} style={{width:`${resolvedColumnWidth}px`}} />)}
+      </colgroup>
       <tbody>
         <tr>{visibleChords.map(item=><AHInversionCell key={`symbol-${item.index}`} large={isMobile}>{`${item.symbol} or ${getChordShortName(item.chord)}`}</AHInversionCell>)}</tr>
         <tr>{visibleChords.map(item=>{
@@ -1174,9 +1251,13 @@ function AHCompletedTable({question,isMobile=false}){
   </div>;
 }
 function AHBassLineScore({question,answers,setAnswers,feedback,showNoteNames=false,isMobile=false}){
-  const scoreYShift=isMobile?-25:0, trebleTop=112+scoreYShift, bassTop=220+scoreYShift, staffStart=250, staffEnd=710, scoreWidth=staffEnd+130-staffStart, staveShift=((W-scoreWidth)/2)-staffStart+(isMobile?100:0), shiftedStart=staffStart+staveShift, shiftedEnd=staffEnd+130+staveShift-(isMobile?220:0), clefX=shiftedStart+10, keyX=shiftedStart+68, chordXs=isMobile?[385,525]:[382,500,618,736], fadeId=`ah-bass-staff-fade-${question.id}`;
+  const scoreYShift=isMobile?-25:0, trebleTop=112+scoreYShift, bassTop=220+scoreYShift, staffStart=250, staffEnd=710, scoreWidth=staffEnd+130-staffStart, staveShift=((W-scoreWidth)/2)-staffStart+(isMobile?100:0), shiftedStart=staffStart+staveShift, shiftedEnd=staffEnd+130+staveShift-(isMobile?220:0), keyX=shiftedStart+68, chordXs=isMobile?[385,525]:[382,500,618,736], fadeId=`ah-bass-staff-fade-${question.id}`;
   const actualChordXs=chordXs.map(x=>x+staveShift);
   const visibleChords=isMobile?question.chords.slice(0,2):question.chords;
+  const tableColumnWidth=isMobile?228:Math.max(120,actualChordXs[1]-actualChordXs[0]);
+  const tableWidth=tableColumnWidth*visibleChords.length;
+  const tablePadding=8;
+  const tableX=isMobile?(W-tableWidth)/2:actualChordXs[0]-tableColumnWidth/2;
   const scoreScale=isMobile?1.56:1.13;
   const scoreTransform=`translate(${W/2} 202) scale(${scoreScale}) translate(${-W/2} -202)`;
   const pointerToSvg=event=>{
@@ -1222,29 +1303,31 @@ function AHBassLineScore({question,answers,setAnswers,feedback,showNoteNames=fal
         {[0,1,2,3,4].map(line=><line key={line} x1={shiftedStart} x2={shiftedEnd} y1={top+line*GAP} y2={top+line*GAP} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
         <StaffNoteNames visible={showNoteNames} clef={staffIndex===0?"treble":"bass"} top={top} lineX={shiftedStart-11} spaceX={shiftedStart+7}/>
       </g>)}
-      <BraceSymbol x={shiftedStart-GAP*2.4} top={trebleTop} bottom={bassTop}/>
-      <TrebleClef top={trebleTop} x={clefX+GAP*2.4}/>
-      <BassClef top={bassTop} x={clefX+GAP*2.4}/>
+      <BraceSymbol x={shiftedStart} top={trebleTop} bottom={bassTop}/>
+      <TrebleClef top={trebleTop} left={shiftedStart}/>
+      <BassClef top={bassTop} left={shiftedStart}/>
       <GrandKeySignature keySignature={question.key} top={trebleTop} x={keyX} clef="treble"/>
       <GrandKeySignature keySignature={question.key} top={bassTop} x={keyX} clef="bass"/>
       <line x1={shiftedStart} x2={shiftedStart} y1={trebleTop} y2={bassTop+GAP*4} stroke="currentColor" strokeWidth="1.4"/>
       {visibleChords.map((item,index)=>{
         const x=actualChordXs[index], placed=answers[`ah-bass-${index}`], correctLetter=item.bassNote.stack[0].letter, isCorrect=feedback&&index>0&&placed?.letter===correctLetter, isWrong=feedback&&index>0&&placed?.letter!==correctLetter, userNote=placed?{id:`user-bass-${index}`,rhythm:"crotchet",step:placed.step,letter:placed.letter,writtenAccidental:null}:null;
         return <g key={`bass-line-${index}`}>
-          <Note note={item.trebleNote} x={x} top={trebleTop} stackLayout="lineSpace" stackStemDown={!item.trebleNote.stack.some(tone=>tone.step<4)} noteheadYAdjust={0.5}/>
-          {index===0&&<Note note={item.bassNote} x={x} top={bassTop} stackLayout="lineSpace" noteheadYAdjust={0.5}/>} 
-          {index>0&&<CalibratedSymbol symbolKey="quarterNoteStemUp" x={x} y={bassTop-18} colour="#777" opacity="0.55"/>} 
-          {userNote&&<Note note={userNote} x={x} top={bassTop} colour={isCorrect?COLOUR.green:isWrong?"rgba(220,38,38,.45)":"currentColor"} noteheadYAdjust={0.5}/>} 
-          {feedback&&index>0&&placed?.letter!==correctLetter&&<Note note={item.bassNote} x={x+24} top={bassTop} colour={COLOUR.green} stackLayout="lineSpace" noteheadYAdjust={0.5}/>} 
-          {index>0&&<rect x={x-32} y={bassTop-58} width="64" height="220" fill="transparent" pointerEvents="all" className="touch-none" style={{touchAction:"none"}} onPointerDown={event=>pointerDown(event,index)} onPointerMove={event=>pointerMove(event,index)} onPointerLeave={pointerLeave} onPointerUp={pointerUp} onPointerCancel={()=>setAnswers(cur=>{const next={...cur};delete next.ahBassPreview;return next;})}/>} 
+          <Note note={item.trebleNote} x={x} top={trebleTop} stackLayout="lineSpace" stackStemDown={!item.trebleNote.stack.some(tone=>tone.step<4)}/>
+          {index===0&&<Note note={item.bassNote} x={x} top={bassTop} stackLayout="lineSpace"/>}
+          {index>0&&<CalibratedSymbol symbolKey="quarterNoteStemUp" x={x} y={bassTop-18} colour="#777" opacity="0.55"/>}
+          {userNote&&<Note note={userNote} x={x} top={bassTop} colour={isCorrect?COLOUR.green:isWrong?"rgba(220,38,38,.45)":"currentColor"}/>}
+          {feedback&&index>0&&placed?.letter!==correctLetter&&<Note note={item.bassNote} x={x+24} top={bassTop} colour={COLOUR.green} stackLayout="lineSpace"/>}
+          {index>0&&<rect x={x-32} y={bassTop-58} width="64" height="220" fill="transparent" pointerEvents="all" className="touch-none" style={{touchAction:"none"}} onPointerDown={event=>pointerDown(event,index)} onPointerMove={event=>pointerMove(event,index)} onPointerLeave={pointerLeave} onPointerUp={pointerUp} onPointerCancel={()=>setAnswers(cur=>{const next={...cur};delete next.ahBassPreview;return next;})}/>}
         </g>;
       })}
       {preview?.active&&preview.step!=null&&!feedback&&<g pointerEvents="none">
         <line x1={shiftedStart-14} x2={shiftedEnd+14} y1={y(preview.step,bassTop)} y2={y(preview.step,bassTop)} stroke="black" strokeWidth="1.5" strokeDasharray="5 5" opacity="0.55"/>
-        <Note note={{id:"bass-preview",rhythm:"crotchet",step:preview.step,letter:letterForClefStep(preview.step,"bass"),writtenAccidental:null}} x={preview.x} top={bassTop} colour="black" noteheadYAdjust={0.5}/>
+        <Note note={{id:"bass-preview",rhythm:"crotchet",step:preview.step,letter:letterForClefStep(preview.step,"bass"),writtenAccidental:null}} x={preview.x} top={bassTop} colour="black"/>
       </g>}
-      <foreignObject x={isMobile?(W-460)/2:actualChordXs[0]-126} y={bassTop+64} width={isMobile?460:482} height={isMobile?114:60}>
-        <AHCompletedTable question={question} isMobile={isMobile}/>
+      <foreignObject x={tableX-tablePadding/2} y={bassTop+72} width={tableWidth+tablePadding} height={isMobile?114:60}>
+        <div xmlns="http://www.w3.org/1999/xhtml" style={{padding:`0 ${tablePadding/2}px`,boxSizing:"border-box"}}>
+          <AHCompletedTable question={question} isMobile={isMobile} tableWidth={tableWidth} columnWidth={tableColumnWidth}/>
+        </div>
       </foreignObject>
     </g>
   </svg>;
