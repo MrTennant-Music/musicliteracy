@@ -13,8 +13,10 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-shell.js?v=1.3"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <script src="./hub-menu.js?v=2.1"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     .music-symbol { font-family: "Bravura", serif; text-rendering: geometricPrecision; }
@@ -33,11 +35,6 @@ const ASSET = {
   level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
   customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
   next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
-  trebleClef: "https://mrtennant-music.github.io/musicliteracy/trebleclef.svg",
-  bassClef: "https://mrtennant-music.github.io/musicliteracy/bassclef.svg",
-  crotchet: "https://mrtennant-music.github.io/musicliteracy/crotchet.svg",
-  sharp: "https://mrtennant-music.github.io/musicliteracy/sharp.svg?v=1.1",
-  flat: "https://mrtennant-music.github.io/musicliteracy/flat.svg?v=1.1",
   bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
   silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
   gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
@@ -55,15 +52,13 @@ const W = 920;
 const H = 420;
 const GAP = 21;
 const STAFF = { left: 230, right: 700, trebleTop: 132, bassTop: 132 };
-const MUSIC_FONT = "Bravura";
 const COLOUR = { green: "#16a34a", red: "#dc2626", black: "#000000", preview: "#444444" };
-const GLYPH = {
-  trebleClef: "\uE050",
-  bassClef: "\uE062",
-  quarterUp: "\uE1D5",
-  quarterDown: "\uE1D6",
-  sharp: "\uE262",
-  flat: "\uE260",
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
+
+const CALIBRATION_ANCHORS = {
+  gClef: { xScale: 3.2, step: 2 },
+  fClef: { xScale: 3.2, step: 6 },
 };
 
 const LETTERS = ["C", "D", "E", "F", "G", "A", "B"];
@@ -161,6 +156,84 @@ function noteY(step, top) {
   return top + GAP * 4 - step * (GAP / 2);
 }
 
+function sharedActualSymbolKey(key) {
+  if (key === "flatInScore" || key === "flatKeySignature") return "flat";
+  if (key === "naturalInScore") return "natural";
+  if (key === "sharpInScore" || key === "sharpKeySignature") return "sharp";
+  if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
+  if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
+  return key;
+}
+
+function sharedSettingsKey(key) {
+  if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return "flatInScore";
+  return key;
+}
+
+function sharedSymbolConfig(key) {
+  const symbols = SHARED_CONFIG.symbols ?? {};
+  const settingsKey = sharedSettingsKey(key);
+  return symbols[settingsKey] ?? symbols[sharedActualSymbolKey(settingsKey)] ?? {
+    fontSizeScale: 3.4,
+    xOffsetScale: 0,
+    yOffsetScale: 0,
+    widthScale: 1,
+    heightScale: 1,
+    opticalXOffset: 0,
+    opticalYOffset: 0,
+  };
+}
+
+function sharedSymbolForKey(key) {
+  return SHARED_SYMBOLS[sharedActualSymbolKey(key)] ?? "";
+}
+
+function accidentalSymbolKey(type) {
+  if (type === "sharp") return "sharpInScore";
+  if (type === "flat") return "flatInScore";
+  return "naturalInScore";
+}
+
+function noteSymbolKey(note) {
+  if (!note) return "quarterNoteStemUp";
+  return note.step > 4 ? "quarterNoteStemDown" : "quarterNoteStemUp";
+}
+
+function calibrationAnchorX(key) {
+  const anchor = CALIBRATION_ANCHORS[key];
+  return anchor ? STAFF.left + anchor.xScale * GAP : STAFF.left;
+}
+
+function calibrationAnchorY(key, top) {
+  const anchor = CALIBRATION_ANCHORS[key];
+  return anchor ? noteY(anchor.step, top) : noteY(4, top);
+}
+
+function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = GAP, filter = null, settingOverrides = {} }) {
+  const glyph = sharedSymbolForKey(symbolKey);
+  const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+  const fontSize = lineGap * (settings.fontSizeScale ?? 3.4);
+  const xOffset = lineGap * (settings.xOffsetScale ?? 0) + (settings.opticalXOffset ?? 0);
+  const yOffset = lineGap * (settings.yOffsetScale ?? 0) + (settings.opticalYOffset ?? 0);
+  return (
+    <text
+      className="music-symbol"
+      x="0"
+      y="0"
+      transform={`translate(${x + xOffset} ${y + yOffset}) scale(${settings.widthScale ?? 1} ${settings.heightScale ?? 1})`}
+      fill={colour}
+      opacity={opacity}
+      fontSize={fontSize}
+      textAnchor="middle"
+      dominantBaseline="alphabetic"
+      filter={filter}
+      pointerEvents="none"
+    >
+      {glyph}
+    </text>
+  );
+}
+
 function enharmonicCandidates(options = { treble: true, bass: true, eSharpFflat: true, bSharpCflat: true }) {
   const result = [];
   const clefs = [options.treble ? "treble" : null, options.bass ? "bass" : null].filter(Boolean);
@@ -208,9 +281,7 @@ function makeQuestion(options) {
 }
 
 function accidentalGlyph(type) {
-  if (type === "sharp") return GLYPH.sharp;
-  if (type === "flat") return GLYPH.flat;
-  return "";
+  return sharedSymbolForKey(accidentalSymbolKey(type));
 }
 
 function noteLabel(note) {
@@ -234,28 +305,19 @@ function ScorePanel({ correct, attempted, accuracy, streak, bestStreak, confetti
 }
 
 function StaffLines({ top, fadeId }) {
+  const lineWidth = Math.max(1.1, GAP * 0.13);
   return (
     <g>
       {[0, 1, 2, 3, 4].map((line) => (
-        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * GAP} y2={top + line * GAP} stroke={`url(#${fadeId})`} strokeWidth="1.25" />
+        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * GAP} y2={top + line * GAP} stroke={`url(#${fadeId})`} strokeWidth={lineWidth} />
       ))}
     </g>
   );
 }
 
 function StaffClef({ clef, top }) {
-  const treble = clef === "treble";
-  return (
-    <image
-      href={treble ? ASSET.trebleClef : ASSET.bassClef}
-      x={STAFF.left + (treble ? 2 : 12)}
-      y={top + (treble ? -45.5 : 0)}
-      width={treble ? 99.3 : 65.5}
-      height={treble ? 179 : 70}
-      preserveAspectRatio="xMidYMid meet"
-      pointerEvents="none"
-    />
-  );
+  const symbolKey = clef === "bass" ? "fClef" : "gClef";
+  return <CalibratedSymbol symbolKey={symbolKey} x={calibrationAnchorX(symbolKey)} y={calibrationAnchorY(symbolKey, top)} />;
 }
 
 function HelpLabels({ visible, clef, top }) {
@@ -282,7 +344,14 @@ function HelpLabels({ visible, clef, top }) {
   );
 }
 
-function LedgerLines({ step, x, top, wide = false }) {
+function LedgerLines({ step, x, top }) {
+  const settings = sharedSymbolConfig("ledgerLines");
+  const drawing = SHARED_CONFIG.drawing ?? {};
+  const baseWidth = GAP * (drawing.ledgerLineWidthScale ?? 1.8);
+  const width = baseWidth * (settings.widthScale ?? 1);
+  const thickness = GAP * (drawing.ledgerLineThicknessScale ?? 0.11) * (settings.heightScale ?? 1);
+  const xOffset = GAP * (settings.xOffsetScale ?? 0) + (settings.opticalXOffset ?? 0);
+  const yOffset = GAP * (settings.yOffsetScale ?? 0) + (settings.opticalYOffset ?? 0);
   const lines = [];
   if (step <= -2) lines.push(-2);
   if (step <= -4) lines.push(-4);
@@ -291,72 +360,25 @@ function LedgerLines({ step, x, top, wide = false }) {
   return (
     <g pointerEvents="none">
       {lines.map((s) => (
-        <line key={s} x1={x - (wide ? 26 : 12)} x2={x + (wide ? 26 : 12)} y1={noteY(s, top)} y2={noteY(s, top)} stroke="currentColor" strokeWidth="1.5" />
+        <line key={s} x1={x + xOffset - width / 2} x2={x + xOffset + width / 2} y1={noteY(s, top) + yOffset} y2={noteY(s, top) + yOffset} stroke="currentColor" strokeWidth={thickness} />
       ))}
     </g>
   );
 }
 
-function ScoreFilter({ id, values }) {
-  return (
-    <filter id={id} colorInterpolationFilters="sRGB">
-      <feColorMatrix type="matrix" values={values} />
-    </filter>
-  );
-}
-
-function filterForColour(colour) {
-  if (colour === COLOUR.green) return "url(#enharmonicNoteGreenFilter)";
-  if (colour === COLOUR.red) return "url(#enharmonicNoteRedFilter)";
-  if (colour === COLOUR.preview) return "url(#enharmonicNoteBlackFilter)";
-  return "url(#enharmonicNoteBlackFilter)";
-}
-
 function Accidental({ note, x, top, colour }) {
   if (!note?.accidental) return null;
-  const y = noteY(note.step, top);
-  const isSharp = note.accidental === "sharp";
-  const ledgerOffset = y < 95 || y > 285 ? -6 : 0;
-  const isLedgerLineNote = note.step <= -2 || note.step >= 10;
-  const flatLedgerLineOffset = !isSharp && isLedgerLineNote ? -3 : 0;
-  const sharpLedgerLineOffset = isSharp && isLedgerLineNote ? -3 : 0;
-  return (
-    <image
-      href={isSharp ? ASSET.sharp : ASSET.flat}
-      x={isSharp ? x - 44 + ledgerOffset + sharpLedgerLineOffset : x - 41 + ledgerOffset + flatLedgerLineOffset}
-      y={isSharp ? y - 27 : y - 35}
-      width="28"
-      height={isSharp ? 54 : 49}
-      preserveAspectRatio="xMidYMid meet"
-      pointerEvents="none"
-      filter={filterForColour(colour)}
-    />
-  );
+  return <CalibratedSymbol symbolKey={accidentalSymbolKey(note.accidental)} x={x - GAP * 1.35} y={noteY(note.step, top)} colour={colour} />;
 }
 
 function Note({ note, x, top, colour = COLOUR.black, opacity = 1, preview = false }) {
   if (!note) return null;
   const y = noteY(note.step, top);
-  const stemDown = note.step > 4;
-  const noteYAdjust = stemDown ? 0.1 : -2.25;
   return (
     <g opacity={opacity} pointerEvents="none">
-      <LedgerLines step={note.step} x={x} top={top} wide />
+      <LedgerLines step={note.step} x={x} top={top} />
       <Accidental note={note} x={x} top={top} colour={colour} />
-      <image
-        href={ASSET.crotchet}
-        x={preview ? x - 20.025 : x - 19.9625}
-        y={preview ? y - 62.915 + noteYAdjust : y - 62.8 + noteYAdjust}
-        width={preview ? "43.05" : "40.425"}
-        height={preview ? "80.43" : "75.6"}
-        preserveAspectRatio="xMidYMid meet"
-        filter={filterForColour(colour)}
-        style={{
-          transformBox: "fill-box",
-          transformOrigin: "center",
-          transform: stemDown ? "translateY(52px) rotate(180deg)" : "none",
-        }}
-      />
+      <CalibratedSymbol symbolKey={noteSymbolKey(note)} x={x} y={y} colour={colour} />
     </g>
   );
 }
@@ -385,9 +407,6 @@ function ScoreArea({ question, selectedAccidental, placed, hoverStep, touchPrevi
           <stop offset="86%" stopColor="#000" stopOpacity="1" />
           <stop offset="100%" stopColor="#000" stopOpacity="0" />
         </linearGradient>
-        <ScoreFilter id="enharmonicNoteBlackFilter" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" />
-        <ScoreFilter id="enharmonicNoteGreenFilter" values="0 0 0 0 0.086 0 0 0 0 0.639 0 0 0 0 0.290 0 0 0 1 0" />
-        <ScoreFilter id="enharmonicNoteRedFilter" values="0 0 0 0 0.863 0 0 0 0 0.149 0 0 0 0 0.149 0 0 0 1 0" />
       </defs>
       <rect width={W} height={H} fill="transparent" />
       <g>
@@ -456,10 +475,10 @@ function AccidentalButton({ type, selected, disabled, onClick }) {
 
 function MenuGlyph({ type }) {
   if (type === "abc") return <span className="inline-flex h-[18px] w-[22px] items-center justify-center text-[13px] font-black leading-none tracking-tight text-black">ABC</span>;
-  if (type === "treble") return <span className="music-symbol relative top-[4px] text-[20px] leading-none text-black">{GLYPH.trebleClef}</span>;
-  if (type === "bass") return <span className="music-symbol relative -top-[4px] text-[25px] leading-none text-black">{GLYPH.bassClef}</span>;
-  if (type === "sharp") return <span className="music-symbol relative top-[2px] text-[27px] leading-none text-black">{GLYPH.quarterUp}</span>;
-  return <span className="music-symbol relative top-[2px] text-[27px] leading-none text-black">{GLYPH.quarterDown}</span>;
+  if (type === "treble") return <span className="music-symbol relative top-[4px] text-[20px] leading-none text-black">{sharedSymbolForKey("gClef")}</span>;
+  if (type === "bass") return <span className="music-symbol relative -top-[4px] text-[25px] leading-none text-black">{sharedSymbolForKey("fClef")}</span>;
+  if (type === "sharp") return <span className="music-symbol relative top-[2px] text-[27px] leading-none text-black">{sharedSymbolForKey("quarterNoteStemUp")}</span>;
+  return <span className="music-symbol relative top-[2px] text-[27px] leading-none text-black">{sharedSymbolForKey("quarterNoteStemDown")}</span>;
 }
 
 function CustomiseRows({ options, onToggle, showNoteNames, setShowNoteNames }) {
