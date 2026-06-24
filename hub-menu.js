@@ -221,6 +221,16 @@
     );
   }
 
+  function MenuSubheading({ children }) {
+    return e(
+      "div",
+      {
+        className: "px-2 pb-1 pt-3 text-[11px] font-black uppercase tracking-[0.12em] text-stone-400 first:pt-0",
+      },
+      children,
+    );
+  }
+
   function LevelMenu({ activeLevel, onSelect, levels }) {
     return e(
       "div",
@@ -277,6 +287,7 @@
   MLH.runSkipQuestion = runSkipQuestion;
   MLH.resetLevelSessionProgress = resetLevelSessionProgress;
   MLH.MenuToggleRow = MenuToggleRow;
+  MLH.MenuSubheading = MenuSubheading;
   MLH.LevelMenu = LevelMenu;
   MLH.ConfirmButton = ConfirmButton;
   MLH.typedAnswerClass = typedAnswerClass;
