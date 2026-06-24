@@ -9,7 +9,7 @@ const SHARED_NOTATION_CONFIG = {
   "drawing": {
     "stemThicknessScale": 0.12,
     "beamThicknessScale": 0.42,
-    "ledgerLineWidthScale": 1.8,
+    "ledgerLineWidthScale": 2.4,
     "ledgerLineThicknessScale": 0.11
   },
   "symbols": {

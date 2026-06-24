@@ -15,6 +15,8 @@
   <script src="./hub-shell.js?v=1.3"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <script src="./hub-menu.js?v=2.1"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
@@ -33,13 +35,14 @@ const ASSET = {
   level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
   customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
   next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
-  sharp: "https://mrtennant-music.github.io/musicliteracy/sharp.svg?v=1.1",
-  flat: "https://mrtennant-music.github.io/musicliteracy/flat.svg?v=1.1",
   bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
   silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
   gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
   diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
 };
+
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
 
 const LEVELS = {
   N5: {
@@ -65,12 +68,6 @@ const STAFF = {
   gap: 21,
 };
 
-const NOTE = {
-  rx: 13.55,
-  ry: 9.69,
-  stemLength: 69,
-};
-
 const COLOUR = {
   green: "#16a34a",
   red: "#dc2626",
@@ -78,13 +75,9 @@ const COLOUR = {
   black: "#000000",
 };
 
-const GLYPH = {
-  trebleClef: "\uE050",
-  bassClef: String.fromCodePoint(0x1d122),
-  noteheadBlack: "\uE0A4",
-};
-
 const NOTES = [
+  { name: "A3", letter: "A", octave: 3, step: -4 },
+  { name: "B3", letter: "B", octave: 3, step: -3 },
   { name: "C4", letter: "C", octave: 4, step: -2 },
   { name: "D4", letter: "D", octave: 4, step: -1 },
   { name: "E4", letter: "E", octave: 4, step: 0 },
@@ -98,6 +91,8 @@ const NOTES = [
   { name: "F5", letter: "F", octave: 5, step: 8 },
   { name: "G5", letter: "G", octave: 5, step: 9 },
   { name: "A5", letter: "A", octave: 5, step: 10 },
+  { name: "B5", letter: "B", octave: 5, step: 11 },
+  { name: "C6", letter: "C", octave: 6, step: 12 },
 ];
 
 const INTERVALS = [
@@ -125,12 +120,12 @@ const KEY_SIGNATURES = {
 };
 
 const CHROMATIC_INTERVALS = [
-  { id: "tritone-f-b", startIndex: 3, endIndex: 6, key: "C" },
-  { id: "augmented-4th-c-fsharp", startIndex: 0, endIndex: 3, key: "C", targetAccidental: "sharp" },
-  { id: "augmented-4th-g-csharp", startIndex: 4, endIndex: 7, key: "D" },
-  { id: "diminished-5th-b-f", startIndex: 6, endIndex: 10, key: "C" },
-  { id: "diminished-5th-e-bflat", startIndex: 2, endIndex: 6, key: "F" },
-  { id: "diminished-5th-a-eflat", startIndex: 5, endIndex: 9, key: "Bb" },
+  { id: "tritone-f-b", startIndex: 5, endIndex: 8, key: "C" },
+  { id: "augmented-4th-c-fsharp", startIndex: 2, endIndex: 5, key: "C", targetAccidental: "sharp" },
+  { id: "augmented-4th-g-csharp", startIndex: 6, endIndex: 9, key: "D" },
+  { id: "diminished-5th-b-f", startIndex: 8, endIndex: 12, key: "C" },
+  { id: "diminished-5th-e-bflat", startIndex: 4, endIndex: 8, key: "F" },
+  { id: "diminished-5th-a-eflat", startIndex: 7, endIndex: 11, key: "Bb" },
 ];
 
 const CHROMATIC_INTERVAL_WEIGHTS = CHROMATIC_INTERVALS.flatMap((interval) =>
@@ -302,23 +297,33 @@ function yForStep(top, step) {
   return top + STAFF.gap * 4 - step * (STAFF.gap / 2);
 }
 
-function stepFromSvgY(y, top) {
-  return clamp(Math.round((top + STAFF.gap * 4 - y) / (STAFF.gap / 2)), NOTES[0].step, NOTES.at(-1).step);
-}
-
 function indexFromStep(step) {
   return NOTES.findIndex((note) => note.step === step);
 }
 
-function stemDown(step) {
-  return step > 4;
+function noteRangeForLevel(level) {
+  if (level === "AH") {
+    return { minStep: NOTES[0].step, maxStep: NOTES.at(-1).step };
+  }
+  return { minStep: -2, maxStep: 10 };
 }
 
-function getStem(x, y, step, forcedDown = null) {
-  const down = forcedDown ?? stemDown(step);
-  const stemX = down ? x - NOTE.rx + 2.5 : x + NOTE.rx - 2.5;
-  const stemEndY = down ? y + NOTE.stemLength : y - NOTE.stemLength;
-  return { down, stemX, stemEndY };
+function noteIndexesForLevel(level) {
+  const { minStep, maxStep } = noteRangeForLevel(level);
+  return NOTES
+    .map((note, index) => ({ note, index }))
+    .filter(({ note }) => note.step >= minStep && note.step <= maxStep)
+    .map(({ index }) => index);
+}
+
+function stepFromSvgYForLevel(y, top, level) {
+  const rawStep = Math.round((top + STAFF.gap * 4 - y) / (STAFF.gap / 2));
+  const { minStep, maxStep } = noteRangeForLevel(level);
+  return clamp(rawStep, minStep, maxStep);
+}
+
+function stemDown(step) {
+  return step > 4;
 }
 
 function isPlainIntervalQuestion(startIndex, endIndex) {
@@ -351,9 +356,10 @@ function makeIdentifyQuestion(level = "N5") {
   const interval = randomItem(intervalsForLevel(level));
   const distance = interval.size - 1;
   const direction = Math.random() < 0.5 ? "higher" : "lower";
-  const possibleStarts = NOTES.map((_, index) => index).filter((index) => {
+  const allowedIndexes = new Set(noteIndexesForLevel(level));
+  const possibleStarts = [...allowedIndexes].filter((index) => {
     const endIndex = direction === "higher" ? index + distance : index - distance;
-    return endIndex >= 0 && endIndex < NOTES.length && isPlainIntervalQuestion(index, endIndex);
+    return allowedIndexes.has(endIndex) && isPlainIntervalQuestion(index, endIndex);
   });
   const startIndex = randomItem(possibleStarts);
   const endIndex = direction === "higher" ? startIndex + distance : startIndex - distance;
@@ -372,14 +378,15 @@ function makeIdentifyQuestion(level = "N5") {
 
 function makeCreateQuestion(level = "N5") {
   const validQuestions = [];
+  const allowedIndexes = new Set(noteIndexesForLevel(level));
 
   intervalsForLevel(level).forEach((interval) => {
     const distance = interval.size - 1;
-    NOTES.forEach((_, startIndex) => {
-      if (startIndex + distance < NOTES.length) {
+    allowedIndexes.forEach((startIndex) => {
+      if (allowedIndexes.has(startIndex + distance)) {
         validQuestions.push({ type: "create", startIndex, targetIndex: startIndex + distance, intervalSize: interval.size, direction: "higher" });
       }
-      if (startIndex - distance >= 0) {
+      if (allowedIndexes.has(startIndex - distance)) {
         validQuestions.push({ type: "create", startIndex, targetIndex: startIndex - distance, intervalSize: interval.size, direction: "lower" });
       }
     });
@@ -401,27 +408,99 @@ function pickQuestionMode(enabledModes) {
 
 const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 
+function sharedSymbolConfig(key) {
+  return SHARED_CONFIG.symbols?.[key] ?? {};
+}
+
+function sharedSymbolForKey(key) {
+  return SHARED_SYMBOLS[key] ?? "";
+}
+
+function accidentalSymbolKey(type, context = "score") {
+  if (context === "keySignature") return type === "sharp" ? "sharpKeySignature" : "flatKeySignature";
+  if (type === "sharp") return "sharpInScore";
+  if (type === "flat") return "flatInScore";
+  return "naturalInScore";
+}
+
+function noteSymbolKey(step) {
+  return stemDown(step) ? "quarterNoteStemDown" : "quarterNoteStemUp";
+}
+
+function calibrationAnchorX(symbolKey, left = STAFF.left) {
+  if (symbolKey === "gClef") return left + STAFF.gap * 2.5;
+  return left;
+}
+
+function calibrationAnchorY(symbolKey, top = STAFF.trebleTop) {
+  if (symbolKey === "gClef") return yForStep(top, 2);
+  return yForStep(top, 4);
+}
+
+function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = STAFF.gap, settingOverrides = {} }) {
+  const actualKey = symbolKey === "sharpKeySignature" ? "sharp" : symbolKey === "flatKeySignature" ? "flat" : symbolKey;
+  const symbol = sharedSymbolForKey(actualKey);
+  const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+  const fontSize = lineGap * (settings.fontSizeScale ?? 1);
+  const xOffset = lineGap * (settings.xOffsetScale ?? 0) + (settings.opticalXOffset ?? 0);
+  const yOffset = lineGap * (settings.yOffsetScale ?? 0) + (settings.opticalYOffset ?? 0);
+  const widthScale = settings.widthScale ?? 1;
+  const heightScale = settings.heightScale ?? 1;
+
+  if (!symbol) return null;
+
+  return (
+    <text
+      className="music-symbol"
+      x={x + xOffset}
+      y={y + yOffset}
+      fontSize={fontSize}
+      textAnchor="middle"
+      fill={colour}
+      opacity={opacity}
+      transform={`translate(${x + xOffset} ${y + yOffset}) scale(${widthScale} ${heightScale}) translate(${-x - xOffset} ${-y - yOffset})`}
+    >
+      {symbol}
+    </text>
+  );
+}
+
 function LedgerLines({ x, step, colour = "currentColor" }) {
+  const settings = sharedSymbolConfig("ledgerLines");
+  const drawing = SHARED_CONFIG.drawing ?? {};
+  const halfWidth = (STAFF.gap * (drawing.ledgerLineWidthScale ?? 2.4) * (settings.widthScale ?? 1)) / 2;
+  const thickness = Math.max(1, STAFF.gap * (drawing.ledgerLineThicknessScale ?? 0.11) * (settings.heightScale ?? 1));
+  const xOffset = STAFF.gap * (settings.xOffsetScale ?? 0) + (settings.opticalXOffset ?? 0);
+  const yOffset = STAFF.gap * (settings.yOffsetScale ?? 0) + (settings.opticalYOffset ?? 0);
   const lines = [];
-  if (step <= -2) lines.push(yForStep(STAFF.trebleTop, -2));
-  if (step >= 10) lines.push(yForStep(STAFF.trebleTop, 10));
+  if (step <= -2) {
+    for (let ledgerStep = -2; ledgerStep >= step; ledgerStep -= 2) lines.push(ledgerStep);
+  }
+  if (step >= 10) {
+    for (let ledgerStep = 10; ledgerStep <= step; ledgerStep += 2) lines.push(ledgerStep);
+  }
 
   return (
     <g pointerEvents="none">
-      {lines.map((y) => (
-        <line key={y} x1={x - 22} x2={x + 22} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />
+      {lines.map((lineStep) => (
+        <line
+          key={lineStep}
+          x1={x + xOffset - halfWidth}
+          x2={x + xOffset + halfWidth}
+          y1={yForStep(STAFF.trebleTop, lineStep) + yOffset}
+          y2={yForStep(STAFF.trebleTop, lineStep) + yOffset}
+          stroke={colour}
+          strokeWidth={thickness}
+        />
       ))}
     </g>
   );
 }
 
 function RhythmNote({ x, y, step, colour = "currentColor", opacity = 1, preview = false, scale = 1 }) {
-  const stem = getStem(x, y, step);
-
   return (
     <g opacity={opacity} pointerEvents="none" transform={scale !== 1 ? `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})` : undefined}>
-      <text className="music-symbol" x={x} y={y} fontSize="82" textAnchor="middle" fill={colour}>{GLYPH.noteheadBlack}</text>
-      <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />
+      <CalibratedSymbol symbolKey={noteSymbolKey(step)} x={x} y={y} colour={colour} />
     </g>
   );
 }
@@ -439,33 +518,22 @@ function Staff({ gradientId = "intervalStaffFade" }) {
       {[0, 1, 2, 3, 4].map((line) => (
         <line key={line} x1={STAFF.left} x2={STAFF.right} y1={STAFF.trebleTop + line * STAFF.gap} y2={STAFF.trebleTop + line * STAFF.gap} stroke={`url(#${gradientId})`} strokeWidth="1.5" />
       ))}
-      <text className="music-symbol" x={STAFF.left + 45} y={STAFF.trebleTop + 63} fontSize="83.232" textAnchor="middle" fill="currentColor">{GLYPH.trebleClef}</text>
+      <CalibratedSymbol symbolKey="gClef" x={calibrationAnchorX("gClef")} y={calibrationAnchorY("gClef")} />
     </g>
   );
-}
-
-function accidentalSize(type) {
-  return type === "sharp" ? { width: 28, height: 54 } : { width: 28, height: 49 };
-}
-
-function accidentalY(type, step) {
-  return yForStep(STAFF.trebleTop, step) + (type === "sharp" ? -27 : -35);
 }
 
 function KeySignature({ signature = [] }) {
   return (
     <g pointerEvents="none">
       {signature.map((item, index) => {
-        const size = accidentalSize(item.type);
         const x = STAFF.left + 92 + index * 30;
         return (
-          <image
+          <CalibratedSymbol
             key={`${item.type}-${item.step}-${index}`}
-            href={item.type === "sharp" ? ASSET.sharp : ASSET.flat}
             x={x}
-            y={accidentalY(item.type, item.step)}
-            {...size}
-            preserveAspectRatio="xMidYMid meet"
+            y={yForStep(STAFF.trebleTop, item.step)}
+            symbolKey={accidentalSymbolKey(item.type, "keySignature")}
           />
         );
       })}
@@ -515,7 +583,7 @@ function Note({ x, note, colour = "currentColor", opacity = 1, preview = false, 
   return (
     <g>
       <LedgerLines x={x} step={note.step} colour={colour} />
-      {accidental && <image href={accidental === "sharp" ? ASSET.sharp : ASSET.flat} x={x - 42} y={accidentalY(accidental, note.step)} {...accidentalSize(accidental)} preserveAspectRatio="xMidYMid meet" pointerEvents="none" />}
+      {accidental && <CalibratedSymbol symbolKey={accidentalSymbolKey(accidental)} x={x - STAFF.gap * 2.1} y={y} colour={colour} />}
       <RhythmNote x={x} y={y} step={note.step} colour={colour} opacity={opacity} preview={preview} scale={scale} />
     </g>
   );
@@ -638,8 +706,8 @@ function MenuRows({ enabledModes, setEnabledModes, newQuestion, showHelp, setSho
     <>
       <window.MLH.MenuToggleRow
         glyph={
-          <span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center bg-transparent">
-            <img src="https://mrtennant-music.github.io/musicliteracy/trebleclef.svg?v=1.1" alt="" aria-hidden="true" className="h-[24px] w-[24px] object-contain" />
+          <span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center overflow-hidden bg-transparent">
+            <span className="music-symbol inline-block text-[13.8px] leading-none" style={{ transform: "translateY(3px)" }} aria-hidden="true">{sharedSymbolForKey("gClef")}</span>
           </span>
         }
         label="Identify"
@@ -647,7 +715,7 @@ function MenuRows({ enabledModes, setEnabledModes, newQuestion, showHelp, setSho
         onChange={() => toggleMode("identify")}
       />
       <window.MLH.MenuToggleRow
-        glyph={<span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center"><img src="https://mrtennant-music.github.io/musicliteracy/crotchet.svg?v=1.1" alt="" aria-hidden="true" className="h-[24px] w-[24px] object-contain" /></span>}
+        glyph={<span className="inline-flex h-[24px] w-[34px] shrink-0 items-center justify-center overflow-hidden"><span className="music-symbol inline-block text-[16.8px] leading-none" style={{ transform: "translateY(7px)" }} aria-hidden="true">{sharedSymbolForKey("quarterNoteStemUp")}</span></span>}
         label="Create"
         checked={enabledModes.create}
         onChange={() => toggleMode("create")}
@@ -901,7 +969,7 @@ function App() {
   function getPointerIndex(event) {
     const pointer = pointerToSvg(event);
     const touchOffset = event.pointerType === "touch" ? 64 : 0;
-    const step = stepFromSvgY(pointer.y - touchOffset, STAFF.trebleTop);
+    const step = stepFromSvgYForLevel(pointer.y - touchOffset, STAFF.trebleTop, activeLevel);
     const index = indexFromStep(step);
     return { pointer, step, index: index === -1 ? null : index };
   }
@@ -954,7 +1022,8 @@ function App() {
   function moveSelected(direction) {
     if (feedback || mode !== "create") return;
     const current = selectedIndex ?? hoverIndex ?? question.startIndex;
-    const next = clamp(current + direction, 0, NOTES.length - 1);
+    const allowedIndexes = noteIndexesForLevel(activeLevel);
+    const next = clamp(current + direction, allowedIndexes[0], allowedIndexes.at(-1));
     setSelectedIndex(next);
     setHoverIndex(next);
     setPrompt("");
@@ -1074,8 +1143,8 @@ function App() {
               {mode === "identify" && !question.typedMode && <IntervalOptions selectedAnswer={selectedAnswer} disabled={Boolean(feedback)} onSelect={selectInterval} feedback={feedback} question={question} level={activeLevel} />}
 
               {mode === "identify" && question.typedMode && (
-                <div className="relative flex min-h-[112px] w-full flex-col justify-end gap-3">
-                  <div className="relative flex min-w-0 w-full flex-col gap-2 sm:w-1/2 sm:flex-row sm:items-center">
+                <div className="relative flex w-full flex-col gap-2">
+                  <div className="relative mt-2 flex min-w-0 w-full flex-row items-center gap-2">
                     <input
                       type="text"
                       value={typedAnswer}
@@ -1089,14 +1158,12 @@ function App() {
                         }
                       }}
                       placeholder="Type your answer"
-                      className={`min-w-0 w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-[1.05rem] font-normal outline-none ${feedback ? feedback.correct ? "text-green-600" : "text-red-600" : "text-stone-900"}`}
+                      className={`min-w-0 w-1/2 rounded-xl border border-stone-300 bg-white px-4 py-3 text-[1.05rem] font-normal outline-none ${feedback ? feedback.correct ? "text-green-600" : "text-red-600" : "text-stone-900"}`}
                       disabled={Boolean(feedback)}
                     />
-                    {typedResult && <div className="shrink-0 whitespace-nowrap text-[1.05rem] font-semibold text-green-600 sm:ml-3">{typedResult}</div>}
+                    <button type="button" onClick={submitTypedAnswer} disabled={Boolean(feedback) || !typedAnswer.trim()} className="ml-auto shrink-0 rounded-xl border border-black bg-black px-[22px] py-[12px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>
                   </div>
-                  <div className="flex w-full justify-end">
-                    <button type="button" onClick={submitTypedAnswer} disabled={Boolean(feedback) || !typedAnswer.trim()} className="w-full rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60 sm:w-auto">Confirm</button>
-                  </div>
+                  {typedResult && <div className="shrink-0 whitespace-nowrap text-[1.05rem] font-semibold text-green-600 sm:ml-3">{typedResult}</div>}
                 </div>
               )}
 

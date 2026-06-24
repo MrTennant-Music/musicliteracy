@@ -166,7 +166,6 @@ function sharedActualSymbolKey(key) {
 }
 
 function sharedSettingsKey(key) {
-  if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return "flatInScore";
   return key;
 }
 
@@ -347,9 +346,8 @@ function HelpLabels({ visible, clef, top }) {
 function LedgerLines({ step, x, top }) {
   const settings = sharedSymbolConfig("ledgerLines");
   const drawing = SHARED_CONFIG.drawing ?? {};
-  const baseWidth = GAP * (drawing.ledgerLineWidthScale ?? 1.8);
-  const width = baseWidth * (settings.widthScale ?? 1);
-  const thickness = GAP * (drawing.ledgerLineThicknessScale ?? 0.11) * (settings.heightScale ?? 1);
+  const halfWidth = (GAP * (drawing.ledgerLineWidthScale ?? 1.8) * (settings.widthScale ?? 1) * 1.2) / 2;
+  const thickness = Math.max(1, GAP * (drawing.ledgerLineThicknessScale ?? 0.11) * (settings.heightScale ?? 1));
   const xOffset = GAP * (settings.xOffsetScale ?? 0) + (settings.opticalXOffset ?? 0);
   const yOffset = GAP * (settings.yOffsetScale ?? 0) + (settings.opticalYOffset ?? 0);
   const lines = [];
@@ -360,7 +358,7 @@ function LedgerLines({ step, x, top }) {
   return (
     <g pointerEvents="none">
       {lines.map((s) => (
-        <line key={s} x1={x + xOffset - width / 2} x2={x + xOffset + width / 2} y1={noteY(s, top) + yOffset} y2={noteY(s, top) + yOffset} stroke="currentColor" strokeWidth={thickness} />
+        <line key={s} x1={x + xOffset - halfWidth} x2={x + xOffset + halfWidth} y1={noteY(s, top) + yOffset} y2={noteY(s, top) + yOffset} stroke="currentColor" strokeWidth={thickness} />
       ))}
     </g>
   );
@@ -368,7 +366,7 @@ function LedgerLines({ step, x, top }) {
 
 function Accidental({ note, x, top, colour }) {
   if (!note?.accidental) return null;
-  return <CalibratedSymbol symbolKey={accidentalSymbolKey(note.accidental)} x={x - GAP * 1.35} y={noteY(note.step, top)} colour={colour} />;
+  return <CalibratedSymbol symbolKey={accidentalSymbolKey(note.accidental)} x={x - GAP * 2.1} y={noteY(note.step, top)} colour={colour} />;
 }
 
 function Note({ note, x, top, colour = COLOUR.black, opacity = 1, preview = false }) {
@@ -598,8 +596,10 @@ function App() {
       setStreak(0);
     }
     setFeedback({ correct: ok });
-    timers.current.push(setTimeout(() => setFeedbackFading(true), ok ? 1050 : 1450));
-    timers.current.push(setTimeout(nextQuestion, ok ? 1320 : 1720));
+    if (ok) {
+      timers.current.push(setTimeout(() => setFeedbackFading(true), 1050));
+      timers.current.push(setTimeout(nextQuestion, 1320));
+    }
   }
 
   function pointerToSvg(event) {
