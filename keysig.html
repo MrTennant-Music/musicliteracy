@@ -15,6 +15,8 @@
   <script src="./hub-shell.js?v=1.3"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <script src="./hub-menu.js?v=2.1"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
 </head>
 <body class="overflow-x-hidden bg-stone-50">
   <div id="root"></div>
@@ -32,26 +34,22 @@ const ASSET = {
   silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
   gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
   diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
-  trebleClef: "https://mrtennant-music.github.io/musicliteracy/trebleclef.svg?v=1.1",
-  sharp: "https://mrtennant-music.github.io/musicliteracy/sharp.svg?v=1.1",
-  flat: "https://mrtennant-music.github.io/musicliteracy/flat.svg?v=1.1",
-  time44: "https://mrtennant-music.github.io/musicliteracy/44.svg?v=1.1",
 };
 
 const SVG = { width: 1280, height: 560 };
 const STAFF = { left: 80, right: 1200, top: 182, gap: 22, clefX: 105, keyX: 180, timeX: 255, musicStartX: 320 };
-const NOTE = { rx: 13.33, stemLength: 67, head: 86.184, dot: 82.524, flag: 57.6 };
 const MOBILE_VIEWBOX = { x: 36, y: 116, width: 1188, height: 210 };
 const MOBILE_BUILD_VIEWBOX = { x: 24, y: 86, width: 300, height: 248 };
 const BAR_COUNT = 3;
 
-const MUSIC = {
-  whole: "\uE0A2",
-  half: "\uE0A3",
-  black: "\uE0A4",
-  flagUp: "\uE240",
-  flagDown: "\uE241",
-  dot: "\uE1E7",
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
+const TIME_SIGNATURE_SYMBOLS = {
+  "4/4": { top: ["timeSig4"], bottom: ["timeSig4"], key: "timeSig44" },
+};
+const CALIBRATION_ANCHORS = {
+  gClef: { xScale: 3.2, step: 2 },
+  timeSig44: { xScale: 12, step: 5.3 },
 };
 
 const LEVELS = {
@@ -117,36 +115,122 @@ const stemDown = (step) => step > 4;
 const keyList = (level) => (LEVELS[level]?.keyIds || LEVELS.N5.keyIds).map((id) => KEYS[id]);
 const identifyButtons = (level) => BUTTON_ORDER.filter((id) => (LEVELS[level]?.keyIds || LEVELS.N5.keyIds).includes(id)).map((id) => KEYS[id]);
 
-function accidentalAsset(type) {
-  return type === "sharp" ? ASSET.sharp : type === "flat" ? ASSET.flat : null;
+function sharedActualSymbolKey(key) {
+  if (key === "flatInScore" || key === "flatKeySignature") return "flat";
+  if (key === "naturalInScore") return "natural";
+  if (key === "sharpInScore" || key === "sharpKeySignature") return "sharp";
+  if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
+  if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
+  return key;
+}
+
+function sharedSettingsKey(key) {
+  if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return "flatInScore";
+  return key;
+}
+
+function sharedSymbolConfig(key) {
+  const symbols = SHARED_CONFIG.symbols ?? {};
+  const settingsKey = sharedSettingsKey(key);
+  return symbols[settingsKey] ?? symbols[sharedActualSymbolKey(settingsKey)] ?? {
+    fontSizeScale: 3.4,
+    xOffsetScale: 0,
+    yOffsetScale: 0,
+    widthScale: 1,
+    heightScale: 1,
+    opticalXOffset: 0,
+    opticalYOffset: 0,
+  };
+}
+
+function sharedSymbolForKey(key) {
+  return SHARED_SYMBOLS[sharedActualSymbolKey(key)] ?? "";
+}
+
+function accidentalSymbolKey(type, context = "score") {
+  if (context === "keySignature") return type === "sharp" ? "sharpKeySignature" : "flatKeySignature";
+  if (type === "sharp") return "sharpInScore";
+  if (type === "flat") return "flatInScore";
+  return "naturalInScore";
+}
+
+function noteSymbolKey(rhythm, down, beamed = false) {
+  if (rhythm === "semibreve") return "wholeNote";
+  if (beamed && rhythm === "quaver") return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
+  if (rhythm === "minim") return down ? "halfNoteStemDown" : "halfNoteStemUp";
+  if (rhythm === "quaver") return down ? "eighthNoteStemDown" : "eighthNoteStemUp";
+  return down ? "quarterNoteStemDown" : "quarterNoteStemUp";
+}
+
+function calibrationAnchorX(key, left = STAFF.left) {
+  const anchor = CALIBRATION_ANCHORS[key];
+  return anchor ? left + anchor.xScale * STAFF.gap : left;
+}
+
+function calibrationAnchorY(key) {
+  const anchor = CALIBRATION_ANCHORS[key];
+  return anchor ? yForStep(anchor.step) : yForStep(4);
+}
+
+function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = STAFF.gap, filter = null, settingOverrides = {} }) {
+  const glyph = sharedSymbolForKey(symbolKey);
+  if (!glyph) return null;
+  const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+  const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const fontSize = lineGap * Number(settings.fontSizeScale || 3.4);
+  const widthScale = Number(settings.widthScale || 1);
+  const heightScale = Number(settings.heightScale || 1);
+  return (
+    <text
+      className="music-symbol"
+      x={adjustedX}
+      y={adjustedY}
+      fill={colour}
+      opacity={opacity}
+      fontSize={fontSize}
+      textAnchor="middle"
+      style={filter ? { filter } : undefined}
+      transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`}
+      pointerEvents="none"
+    >
+      {glyph}
+    </text>
+  );
+}
+
+function CalibratedTimeSignature({ signature = "4/4", x, y, lineGap = STAFF.gap }) {
+  const parts = TIME_SIGNATURE_SYMBOLS[signature] ?? TIME_SIGNATURE_SYMBOLS["4/4"];
+  const key = parts.key || "timeSignature";
+  const settings = sharedSymbolConfig(key);
+  const topGlyph = parts.top.map((part) => sharedSymbolForKey(part)).join("");
+  const bottomGlyph = parts.bottom.map((part) => sharedSymbolForKey(part)).join("");
+  if (!topGlyph || !bottomGlyph) return null;
+  const fontSize = lineGap * Number(settings.fontSizeScale || 3.4);
+  const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const widthScale = Number(settings.widthScale || 1);
+  const heightScale = Number(settings.heightScale || 1);
+  const numberGap = lineGap * Number(SHARED_CONFIG.drawing?.timeSignatureNumberGapScale || 1.55);
+  return (
+    <g transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`} pointerEvents="none">
+      <text className="music-symbol" x={adjustedX} y={adjustedY - numberGap / 2} fontSize={fontSize} textAnchor="middle">{topGlyph}</text>
+      <text className="music-symbol" x={adjustedX} y={adjustedY + numberGap / 2} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text>
+    </g>
+  );
 }
 
 function accidentalX(type, index = 0) {
   const spacing = type === "flat" ? 30 : 32;
-  return (type === "flat" ? STAFF.keyX - 10 : STAFF.keyX - 13) + index * spacing + (index === 1 ? -7 : 0);
+  return (type === "flat" ? STAFF.keyX + 4 : STAFF.keyX + 1) + index * spacing + (index === 1 ? -7 : 0);
 }
 
-function accidentalY(type, step) {
-  return yForStep(step) + (type === "sharp" ? -27 : -35);
+function scoreAccidentalBaseX(x) {
+  return x - STAFF.gap * 2.1;
 }
 
-function accidentalSize(type) {
-  return type === "sharp" ? { width: 28, height: 54 } : { width: 28, height: 49 };
-}
-
-function Accidental({ item, index, opacity = 1, style = null }) {
-  return (
-    <image
-      href={accidentalAsset(item.type)}
-      x={accidentalX(item.type, index)}
-      y={accidentalY(item.type, item.step)}
-      {...accidentalSize(item.type)}
-      opacity={opacity}
-      style={style || undefined}
-      preserveAspectRatio="xMidYMid meet"
-      pointerEvents="none"
-    />
-  );
+function Accidental({ item, index, opacity = 1, style = null, context = "keySignature" }) {
+  return <CalibratedSymbol symbolKey={accidentalSymbolKey(item.type, context)} x={accidentalX(item.type, index)} y={yForStep(item.step)} opacity={opacity} filter={style?.filter || null} />;
 }
 
 const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
@@ -535,10 +619,6 @@ function useSession(initialLevel) {
   };
 }
 
-function Glyph({ x, y, glyph, size, rotate = 0 }) {
-  return <text className="music-symbol" x={x} y={y} fontSize={size} textAnchor="middle" fill="currentColor" transform={rotate ? `rotate(${rotate} ${x} ${y})` : undefined}>{glyph}</text>;
-}
-
 function Staff({ buildFocus }) {
   const fadeX = buildFocus ? STAFF.keyX + 108 : STAFF.right;
   return (
@@ -555,10 +635,10 @@ function Staff({ buildFocus }) {
       ))}
       {!buildFocus && [1, 2].map((bar) => {
         const x = STAFF.musicStartX + ((STAFF.right - STAFF.musicStartX) / BAR_COUNT) * bar - (bar === 1 ? 27 : 22);
-        return <line key={bar} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />;
+          return <line key={bar} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />;
       })}
-      <image href={ASSET.trebleClef} x={STAFF.clefX - 29} y={STAFF.top - 46} width="104" height="184" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />
-      {!buildFocus && <image href={ASSET.time44} x={STAFF.timeX - 47.41} y={STAFF.top - 17.25} width="84.41" height="128.07" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />}
+      <CalibratedSymbol symbolKey="gClef" x={calibrationAnchorX("gClef")} y={calibrationAnchorY("gClef")} />
+      {!buildFocus && <CalibratedTimeSignature signature="4/4" x={calibrationAnchorX("timeSig44")} y={calibrationAnchorY("timeSig44")} />}
     </g>
   );
 }
@@ -569,34 +649,61 @@ function KeySignature({ signature }) {
 
 function getStem(x, y, step, forcedDown = null, forcedEndY = null) {
   const down = forcedDown ?? stemDown(step);
+  const noteheadRadius = STAFF.gap * 0.62;
+  const stemLength = STAFF.gap * 3.05;
   return {
     down,
-    stemX: (down ? x - NOTE.rx : x + NOTE.rx) + (down ? 2 : -2),
+    stemX: (down ? x - noteheadRadius : x + noteheadRadius) + (down ? 2 : -2),
     startY: y + (down ? 7 : -7),
-    endY: (forcedEndY ?? (down ? y + NOTE.stemLength : y - NOTE.stemLength)) + (down ? 3 : -3),
+    endY: (forcedEndY ?? (down ? y + stemLength : y - stemLength)) + (down ? 3 : -3),
   };
+}
+
+function LedgerLines({ x, step, colour = "currentColor" }) {
+  if (step > -2 && step < 10) return null;
+  const settings = sharedSymbolConfig("ledgerLines");
+  const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const yOffset = STAFF.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const halfWidth = (STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineWidthScale || 2.4) * Number(settings.widthScale || 1)) / 2;
+  const thickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11) * Number(settings.heightScale || 1));
+  const lines = [];
+  if (step <= -2) {
+    for (let ledgerStep = -2; ledgerStep >= step; ledgerStep -= 2) lines.push(ledgerStep);
+  } else {
+    for (let ledgerStep = 10; ledgerStep <= step; ledgerStep += 2) lines.push(ledgerStep);
+  }
+  return (
+    <g pointerEvents="none">
+      {lines.map((ledgerStep) => {
+        const y = yForStep(ledgerStep) + yOffset;
+        return <line key={ledgerStep} x1={x - halfWidth + xOffset} x2={x + halfWidth + xOffset} y1={y} y2={y} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" />;
+      })}
+    </g>
+  );
+}
+
+function Dot({ x, y, step }) {
+  const dotKey = step % 2 === 0 ? "augmentationDotLine" : "augmentationDotSpace";
+  const dotY = step % 2 === 0 ? y - STAFF.gap * 0.25 : y;
+  return <CalibratedSymbol symbolKey={dotKey} x={x + STAFF.gap * 1.1} y={dotY} />;
 }
 
 function Note({ note, x, beamedDown = null, forcedEndY = null, showFlag = true, accidental = false }) {
   const step = noteStep(note.pitch);
   const y = yForStep(step);
-  const stem = getStem(x, y, step, beamedDown, forcedEndY);
+  const down = beamedDown ?? stemDown(step);
+  const beamed = note.rhythm === "quaver" && !showFlag;
+  const stem = beamed ? getStem(x, y, step, down, forcedEndY) : null;
   const dotted = note.rhythm === "dotted-crotchet";
+  const noteKey = noteSymbolKey(note.rhythm, down, beamed);
 
   return (
     <g pointerEvents="none">
-      {(step <= -2 || step >= 10) && <line x1={x - 21} x2={x + 21} y1={yForStep(step <= -2 ? -2 : 10)} y2={yForStep(step <= -2 ? -2 : 10)} stroke="currentColor" strokeWidth="1.4" />}
-      {accidental && <image href={ASSET.sharp} x={note.pitch.includes("G#") ? x - 44 : x - 42} y={y - 27} width="28" height="54" preserveAspectRatio="xMidYMid meet" pointerEvents="none" />}
-      {note.rhythm === "semibreve" ? (
-        <Glyph x={x} y={y} glyph={MUSIC.whole} size={NOTE.head} rotate={-3} />
-      ) : (
-        <>
-          <Glyph x={x} y={y} glyph={note.rhythm === "minim" ? MUSIC.half : MUSIC.black} size={NOTE.head} rotate={-3} />
-          <line x1={stem.stemX} x2={stem.stemX} y1={stem.startY} y2={stem.endY} stroke="currentColor" strokeWidth="1.8" />
-          {note.rhythm === "quaver" && showFlag && <Glyph x={stem.stemX + (stem.down ? 8 : 7)} y={stem.endY + 1} glyph={stem.down ? MUSIC.flagDown : MUSIC.flagUp} size={NOTE.flag} />}
-          {dotted && <Glyph x={x + 24} y={y - 2 + (stem.down ? (step % 2 === 0 ? -10 : 0) : (step % 2 === 0 ? -6 : 0))} glyph={MUSIC.dot} size={NOTE.dot} />}
-        </>
-      )}
+      <LedgerLines x={x} step={step} />
+      {accidental && <CalibratedSymbol symbolKey="sharpInScore" x={scoreAccidentalBaseX(x)} y={y} />}
+      <CalibratedSymbol symbolKey={noteKey} x={x} y={y} />
+      {stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.startY} y2={forcedEndY ?? stem.endY} stroke="currentColor" strokeWidth={Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12))} />}
+      {dotted && <Dot x={x} y={y} step={step} />}
     </g>
   );
 }
@@ -659,7 +766,14 @@ function Passage({ bars }) {
                 <g key={`${barIndex}-${noteIndex}`}>
                   <Note note={note} x={x} accidental={states[noteIndex].showAccidental} beamedDown={down} forcedEndY={forcedEndY} showFlag={!group} />
                   {beam && group.start === noteIndex && (
-                    <line x1={beam.start.x + (down ? -0.5 : -1.5)} x2={beam.end.x + (down ? 1.5 : 0.5)} y1={beam.start.y + (down ? 3 : -3)} y2={beam.end.y + (down ? 3 : -3)} stroke="currentColor" strokeWidth="7.2" />
+                    <line
+                      x1={beam.start.x + (down ? -0.5 : -1.5)}
+                      x2={beam.end.x + (down ? 1.5 : 0.5)}
+                      y1={beam.start.y + (down ? 3 : -3)}
+                      y2={beam.end.y + (down ? 3 : -3)}
+                      stroke="currentColor"
+                      strokeWidth={Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42) * Number(sharedSymbolConfig("quaverBeam").heightScale || 1))}
+                    />
                   )}
                 </g>
               );
@@ -706,7 +820,7 @@ function BuildLayer({ question, selectedAccidental, placed, setHover, hover, onP
     if (!selectedAccidental || showingFeedback) return null;
     const pointer = pointerToSvg(event);
     const rawStep = Math.round((STAFF.top + STAFF.gap * 4 - (pointer.y - (mobileBuild && event.pointerType === "touch" ? 44 : 0))) / (STAFF.gap / 2));
-    const centers = Array.from({ length: max }, (_, index) => accidentalX(selectedAccidental, index) + accidentalSize(selectedAccidental).width / 2);
+    const centers = Array.from({ length: max }, (_, index) => accidentalX(selectedAccidental, index));
     let index = centers.reduce((best, center, current) => Math.abs(center - pointer.x) < Math.abs(centers[best] - pointer.x) ? current : best, 0);
     if (index > 0 && !placed[0]) index = 0;
     return { type: selectedAccidental, step: clamp(rawStep, -2, 10), index };
@@ -770,7 +884,7 @@ function KeyName({ label, muted = false, inverted = false }) {
   return (
     <span className="inline-flex items-baseline gap-[2px] whitespace-nowrap">
       <span>B</span>
-      <img src={ASSET.flat} alt="flat" className={`relative -left-[2px] top-[1px] inline-block h-[1.05em] w-[0.56em] object-contain ${inverted ? "brightness-0 invert" : ""} ${muted ? "opacity-40 grayscale" : ""}`} />
+      <span className={`music-symbol relative -left-[2px] top-[2px] inline-block text-[1.15em] leading-none ${inverted ? "text-white" : ""} ${muted ? "opacity-40" : ""}`}>{sharedSymbolForKey("flat")}</span>
       <span>major</span>
     </span>
   );
@@ -833,6 +947,10 @@ function LocalLevelMenu({ activeLevel, onSelect, levels }) {
 }
 
 const LevelMenu = window.MLH?.LevelMenu || LocalLevelMenu;
+
+function BravuraGlyph({ symbolKey, className = "" }) {
+  return <span className={`music-symbol inline-block leading-none ${className}`}>{sharedSymbolForKey(symbolKey)}</span>;
+}
 
 function App() {
   useStyles();
@@ -911,8 +1029,8 @@ function App() {
                   onClick={() => setMenu(menu === "customise" ? null : "customise")}
                 />
                 {menu === "customise" && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel>
-                  <ToggleRow glyph={<img src={ASSET.trebleClef} alt="" className="h-[30px]" />} label="Identify" enabled={session.modes.identify} disabled={session.modes.identify && !session.modes.build} onToggle={session.toggleIdentify} />
-                  <ToggleRow glyph={<span className="flex"><img src={ASSET.sharp} alt="" className="h-[21px]" /><img src={ASSET.flat} alt="" className="relative left-[2px] h-[21px]" /></span>} label="Create" enabled={session.modes.build} disabled={session.modes.build && !session.modes.identify} onToggle={session.toggleBuild} />
+                  <ToggleRow glyph={<BravuraGlyph symbolKey="gClef" className="text-[30px]" />} label="Identify" enabled={session.modes.identify} disabled={session.modes.identify && !session.modes.build} onToggle={session.toggleIdentify} />
+                  <ToggleRow glyph={<span className="flex items-center gap-[2px]"><BravuraGlyph symbolKey="sharp" className="text-[24px]" /><BravuraGlyph symbolKey="flat" className="text-[24px]" /></span>} label="Create" enabled={session.modes.build} disabled={session.modes.build && !session.modes.identify} onToggle={session.toggleBuild} />
                 </window.MLH.MenuPanel>}
               </div>
             </div>
@@ -940,8 +1058,8 @@ function App() {
 
             {isBuild ? (
               <div className="mt-4 flex flex-wrap items-end gap-2">
-                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("sharp")} className={`flex h-[56px] w-[56px] items-center justify-center rounded-xl border ${session.selectedAccidental === "sharp" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}><img src={ASSET.sharp} alt="" className={`h-[36px] ${session.selectedAccidental === "sharp" ? "brightness-0 invert" : ""}`} /></button>
-                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("flat")} className={`flex h-[56px] w-[56px] items-center justify-center rounded-xl border ${session.selectedAccidental === "flat" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}><img src={ASSET.flat} alt="" className={`h-[36px] ${session.selectedAccidental === "flat" ? "brightness-0 invert" : ""}`} /></button>
+                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("sharp")} className={`flex h-[56px] w-[56px] items-center justify-center rounded-xl border ${session.selectedAccidental === "sharp" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}><BravuraGlyph symbolKey="sharp" className={`text-[42px] ${session.selectedAccidental === "sharp" ? "text-white" : "text-black"}`} /></button>
+                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("flat")} className={`flex h-[56px] w-[56px] items-center justify-center rounded-xl border ${session.selectedAccidental === "flat" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}><BravuraGlyph symbolKey="flat" className={`text-[42px] ${session.selectedAccidental === "flat" ? "text-white" : "text-black"}`} /></button>
                 <div className="ml-auto flex gap-2">
                   <button type="button" disabled={session.locked || session.placed.length === 0} onClick={session.clearPlaced} className="rounded-xl border border-stone-300 bg-white px-5 py-3 text-sm font-bold">Clear</button>
                   <button type="button" disabled={session.locked} onClick={session.submitBuild} className="rounded-xl border border-black bg-black px-5 py-3 text-sm font-bold text-white">Confirm</button>
