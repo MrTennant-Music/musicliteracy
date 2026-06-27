@@ -38,7 +38,6 @@
       bassClef: "https://mrtennant-music.github.io/musicliteracy/bassclef.svg?v=1.1",
       sharp: "https://mrtennant-music.github.io/musicliteracy/sharp.svg?v=1.1",
       flat: "https://mrtennant-music.github.io/musicliteracy/flat.svg?v=1.1",
-      crotchet: "https://mrtennant-music.github.io/musicliteracy/crotchet.svg?v=1.1",
     };
 
     const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
@@ -52,19 +51,6 @@
     const NOTE = { x: 468, rx: 12.2, stemLength: 62 };
     const LETTERS = ["A", "B", "C", "D", "E", "F", "G"];
     const COLOUR = { black: "#000000", green: "#16a34a", red: "#dc2626" };
-    const rgbaFromHex = (hex, alpha) => {
-      const clean = hex.replace("#", "");
-      const r = parseInt(clean.slice(0, 2), 16);
-      const g = parseInt(clean.slice(2, 4), 16);
-      const b = parseInt(clean.slice(4, 6), 16);
-      return `rgba(${r},${g},${b},${alpha})`;
-    };
-    // Feedback SVG recolour filters
-    const SVG_FILTER = {
-      black: "",
-      green: "url(#noteGreenFilter)",
-      red: "url(#noteRedFilter)",
-    };
     const SITE_THEME_KEY = "mlh-theme";
     const SITE_ACCESSIBILITY_KEY = "mlh-accessibility";
 
@@ -291,6 +277,9 @@
         const style = document.createElement("style");
         style.id = "note-identification-clean-styles";
         style.textContent = `
+          @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+          .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
+
           /* Buttons */
           button {
             -webkit-tap-highlight-color: transparent;
@@ -616,15 +605,7 @@
           {[0, 1, 2, 3, 4].map((line) => (
             <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="url(#staffLineFade)" strokeWidth="1.5" />
           ))}
-          <image
-            href={isTreble ? ASSET.trebleClef : ASSET.bassClef}
-            x={STAFF.left + 12}
-            y={top + (isTreble ? -37 : -2)}
-            width={isTreble ? 86 : 65.5}
-            height={isTreble ? 155 : 70}
-            preserveAspectRatio="xMidYMid meet"
-            pointerEvents="none"
-          />
+          <CalibratedSymbol symbolKey={isTreble ? "gClef" : "fClef"} x={STAFF.left + 52} y={yForStep(top, isTreble ? 2 : 6)} />
         </g>
       );
     }
@@ -640,10 +621,17 @@
 
       return (
         <g pointerEvents="none">
-          {lines.map((step) => {
-            const y = yForStep(top, step);
-            return <line key={step} x1={NOTE.x - 24} x2={NOTE.x + 24} y1={y} y2={y} stroke={colour} strokeWidth="1.5" />;
-          })}
+          {(() => {
+            const settings = sharedSymbolConfig("ledgerLines");
+            const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+            const yOffset = STAFF.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+            const halfWidth = (STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineWidthScale || 2.4) * Number(settings.widthScale || 1)) / 2;
+            const thickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11) * Number(settings.heightScale || 1));
+            return lines.map((step) => {
+              const y = yForStep(top, step) + yOffset;
+              return <line key={step} x1={NOTE.x - halfWidth + xOffset} x2={NOTE.x + halfWidth + xOffset} y1={y} y2={y} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" />;
+            });
+          })()}
         </g>
       );
     }
@@ -657,19 +645,10 @@
       const isLedgerLineNote = note.step <= -2 || note.step >= 10;
       const flatLedgerLineOffset = !isSharp && isLedgerLineNote ? -3 : 0;
       const sharpLedgerLineOffset = isSharp && isLedgerLineNote ? -3 : 0;
-      const filter = colour === COLOUR.green ? SVG_FILTER.green : colour === COLOUR.red ? SVG_FILTER.red : SVG_FILTER.black;
+      const x = isSharp ? NOTE.x - 44 + ledgerOffset + sharpLedgerLineOffset : NOTE.x - 41 + ledgerOffset + flatLedgerLineOffset;
 
       return (
-        <image
-          href={isSharp ? ASSET.sharp : ASSET.flat}
-          x={isSharp ? NOTE.x - 41 + ledgerOffset + sharpLedgerLineOffset : NOTE.x - 38 + ledgerOffset + flatLedgerLineOffset}
-          y={isSharp ? y - 27 : y - 35}
-          width="28"
-          height={isSharp ? 54 : 49}
-          preserveAspectRatio="xMidYMid meet"
-          pointerEvents="none"
-          filter={filter || undefined}
-        />
+        <CalibratedSymbol symbolKey={isSharp ? "sharpInScore" : "flatInScore"} x={x} y={y} colour={colour} />
       );
     }
 
@@ -678,26 +657,12 @@
       const top = note.clef === "treble" ? STAFF.trebleTop : STAFF.bassTop;
       const y = yForStep(top, note.step);
       const down = stemDown(note.step);
-      const filter = colour === COLOUR.green ? SVG_FILTER.green : colour === COLOUR.red ? SVG_FILTER.red : SVG_FILTER.black;
 
       return (
         <g pointerEvents="none">
           <LedgerLines note={note} colour={colour} enabled={ledgerEnabled} />
           <Accidental note={note} colour={colour} />
-          <image
-            href={ASSET.crotchet}
-            x={NOTE.x - 19}
-            y={y - 62}
-            width="38.5"
-            height="72"
-            preserveAspectRatio="xMidYMid meet"
-            filter={filter || undefined}
-            style={{
-              transformBox: "fill-box",
-              transformOrigin: "center",
-              transform: down ? "translateY(52px) rotate(180deg)" : "none",
-            }}
-          />
+          <CalibratedSymbol symbolKey={down ? "quarterNoteStemDown" : "quarterNoteStemUp"} x={NOTE.x} y={y} colour={colour} />
         </g>
       );
     }
@@ -743,12 +708,6 @@
               <stop offset="84%" stopColor="currentColor" stopOpacity="1" />
               <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
             </linearGradient>
-            <filter id="noteGreenFilter" colorInterpolationFilters="sRGB">
-              <feColorMatrix type="matrix" values="0 0 0 0 0.086 0 0 0 0 0.639 0 0 0 0 0.290 0 0 0 1 0" />
-            </filter>
-            <filter id="noteRedFilter" colorInterpolationFilters="sRGB">
-              <feColorMatrix type="matrix" values="0 0 0 0 0.863 0 0 0 0 0.149 0 0 0 0 0.149 0 0 0 1 0" />
-            </filter>
           </defs>
           <rect width={SVG.width} height={SVG.height} fill="white" />
           <g
@@ -769,6 +728,10 @@
 
     function ToggleRow({ label, icon, checked, onChange }) {
       return <window.MLH.MenuToggleRow glyph={icon} label={label} checked={checked} onChange={onChange} />;
+    }
+
+    function MenuGlyph({ symbolKey, className = "" }) {
+      return <span className="flex h-[28px] w-[28px] items-center justify-center"><span className={`music-symbol inline-block leading-none ${className}`}>{sharedSymbolForKey(symbolKey)}</span></span>;
     }
 
     function LedgerIcon() {
@@ -798,14 +761,14 @@
         <div className="flex w-full min-w-0 flex-col sm:inline-flex sm:w-max sm:min-w-[260px]">
           <ToggleRow
             label="Treble Clef"
-            icon={<img src={ASSET.trebleClef} alt="" aria-hidden="true" className="h-[29.9px] w-[25.3px] object-contain" />}
+            icon={<MenuGlyph symbolKey="gClef" className="relative top-[4px] text-[21px]" />}
             checked={settings.treble}
             onChange={() => toggle("treble")}
           />
 
           <ToggleRow
             label="Bass Clef"
-            icon={<img src={ASSET.bassClef} alt="" aria-hidden="true" className="h-[22.1px] w-[18.7px] object-contain" />}
+            icon={<MenuGlyph symbolKey="fClef" className="relative -top-[4px] text-[27px]" />}
             checked={settings.bass}
             onChange={() => toggle("bass")}
           />
@@ -819,12 +782,7 @@
 
           <ToggleRow
             label="Accidentals"
-            icon={
-              <span className="flex items-center justify-center gap-[1px]">
-                <img src={ASSET.sharp} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" />
-                <img src={ASSET.flat} alt="" aria-hidden="true" className="h-[21px] w-[12px] object-contain" />
-              </span>
-            }
+            icon={<MenuGlyph symbolKey="sharp" className="text-[25px]" />}
             checked={settings.accidentals}
             onChange={() => toggle("accidentals")}
           />
@@ -892,9 +850,9 @@
             onChoose(value);
           }} className={`flex min-h-[48px] items-center justify-center rounded-xl border px-1 text-[1rem] font-bold sm:min-h-[46px] sm:px-3 sm:text-[1.05rem] ${stateClass}`}>
           {value.includes("#") ? (
-            <span className="flex items-center justify-center gap-[1px]"><span>{value.replace("#", "")}</span><img src={ASSET.sharp} alt="" aria-hidden="true" className="h-[15px] w-[8px] object-contain brightness-0 invert" /></span>
+            <span className="flex items-center justify-center gap-[3px]"><span>{value.replace("#", "")}</span><span className="music-symbol relative top-[1px] inline-block text-[1.1em] leading-none">{sharedSymbolForKey("sharp")}</span></span>
           ) : value.includes("b") ? (
-            <span className="flex items-center justify-center gap-[1px]"><span>{value.replace("b", "")}</span><img src={ASSET.flat} alt="" aria-hidden="true" className="h-[15px] w-[8px] object-contain brightness-0 invert" /></span>
+            <span className="flex items-center justify-center gap-[3px]"><span>{value.replace("b", "")}</span><span className="music-symbol relative top-[2px] inline-block text-[1.15em] leading-none">{sharedSymbolForKey("flat")}</span></span>
           ) : value}
         </button>
       );
