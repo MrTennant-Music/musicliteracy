@@ -15,6 +15,8 @@
   <script src="./hub-shell.js?v=1.3"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <script src="./hub-menu.js?v=2.1"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
@@ -101,6 +103,8 @@ const ASSET = {
   diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
 };
 
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
 const INITIAL_LEVEL = new URLSearchParams(window.location.search).get("level") === "AH" ? "AH" : "H";
 
 const SVG = { width: 920, height: 500 };
@@ -157,6 +161,64 @@ const GLYPH = {
   ottavaAlta: "\uE512",
   ottavaBassa: "\uE51C",
 };
+
+function sharedActualSymbolKey(key) {
+  if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
+  if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
+  return key;
+}
+
+function sharedSymbolConfig(key) {
+  const symbols = SHARED_CONFIG.symbols ?? {};
+  return symbols[key] ?? symbols[sharedActualSymbolKey(key)] ?? {
+    fontSizeScale: 3.4,
+    xOffsetScale: 0,
+    yOffsetScale: 0,
+    widthScale: 1,
+    heightScale: 1,
+    opticalXOffset: 0,
+    opticalYOffset: 0,
+  };
+}
+
+function sharedSymbolForKey(key) {
+  return SHARED_SYMBOLS[sharedActualSymbolKey(key)] ?? "";
+}
+
+function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = STAFF.gap, filter = null, settingOverrides = {} }) {
+  const glyph = sharedSymbolForKey(symbolKey);
+  if (!glyph) return null;
+  const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+  const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const fontSize = lineGap * Number(settings.fontSizeScale || 3.4);
+  const widthScale = Number(settings.widthScale || 1);
+  const heightScale = Number(settings.heightScale || 1);
+  return (
+    <text
+      className="music-symbol"
+      x={adjustedX}
+      y={adjustedY}
+      fill={colour}
+      opacity={opacity}
+      fontSize={fontSize}
+      textAnchor="middle"
+      style={filter ? { filter } : undefined}
+      transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`}
+      pointerEvents="none"
+    >
+      {glyph}
+    </text>
+  );
+}
+
+function noteSymbolKey(rhythm, down, beamed = false) {
+  if (rhythm === "semibreve") return "wholeNote";
+  if (rhythm === "minim") return down ? "halfNoteStemDown" : "halfNoteStemUp";
+  if (rhythm === "quaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
+  if (rhythm === "quaver") return down ? "eighthNoteStemDown" : "eighthNoteStemUp";
+  return down ? "quarterNoteStemDown" : "quarterNoteStemUp";
+}
 
 const LETTER_INDEX = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
 const INDEX_LETTER = ["C", "D", "E", "F", "G", "A", "B"];
@@ -552,18 +614,31 @@ function findGroup(groups, index) {
   return groups.find((group) => index >= group.start && index <= group.end) ?? null;
 }
 
-function getBeam(items, positions, top) {
-  const averageStep = items.reduce((sum, item) => sum + item.step, 0) / items.length;
-  const down = averageStep > 4;
+function groupHasDownStems(items) {
+  let down = 0;
+  let up = 0;
+  items.forEach((item) => {
+    stemDown(item.step) ? down += 1 : up += 1;
+  });
+  return down > up;
+}
+
+function getBeam(items, positions, top, forcedDown = null) {
+  const down = forcedDown ?? groupHasDownStems(items);
+  const settings = sharedSymbolConfig("quaverBeam");
+  const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0);
+  const yOffset = STAFF.gap * Number(settings.yOffsetScale || 0);
+  const stemLength = NOTE.stemLength * Number(settings.heightScale || 1);
+  const beamWidthAdjust = STAFF.gap * 0.6 * (Number(settings.widthScale || 1) - 1);
   const firstY = yForStep(top, items[0].step);
   const lastY = yForStep(top, items.at(-1).step);
-  const firstStem = getStem(positions[0], firstY, items[0].step, items[0].rhythm, down);
-  const lastStem = getStem(positions.at(-1), lastY, items.at(-1).step, items.at(-1).rhythm, down);
+  const firstStem = getStem(positions[0] + xOffset, firstY + yOffset, items[0].step, items[0].rhythm, down, down ? firstY + yOffset + stemLength : firstY + yOffset - stemLength);
+  const lastStem = getStem(positions.at(-1) + xOffset, lastY + yOffset, items.at(-1).step, items.at(-1).rhythm, down, down ? lastY + yOffset + stemLength : lastY + yOffset - stemLength);
 
   return {
     down,
-    start: { x: firstStem.stemX, y: firstStem.stemEndY },
-    end: { x: lastStem.stemX, y: lastStem.stemEndY },
+    start: { x: firstStem.stemX - beamWidthAdjust, y: firstStem.stemEndY },
+    end: { x: lastStem.stemX + beamWidthAdjust, y: lastStem.stemEndY },
   };
 }
 
@@ -572,16 +647,31 @@ function beamYAtX(x, beam) {
   return beam.start.y + ratio * (beam.end.y - beam.start.y);
 }
 
+function beamPolygonPoints(x1, y1, x2, y2, thickness) {
+  const halfThickness = thickness / 2;
+  return [`${x1},${y1 - halfThickness}`, `${x2},${y2 - halfThickness}`, `${x2},${y2 + halfThickness}`, `${x1},${y1 + halfThickness}`].join(" ");
+}
+
+function BeamShape({ beam, colour = "currentColor", opacity = 1 }) {
+  const thickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42));
+  return <polygon points={beamPolygonPoints(beam.start.x - 0.5, beam.start.y, beam.end.x + 0.5, beam.end.y, thickness)} fill={colour} opacity={opacity} />;
+}
+
 function LedgerLines({ x, step, clef, top: staffTop = null, colour = "currentColor", opacity = 1 }) {
   const top = staffTop ?? (clef === "treble" ? STAFF.trebleTop : STAFF.bassTop);
-  const lines = [];
-  for (let lineStep = -2; lineStep >= step; lineStep -= 2) lines.push(yForStep(top, lineStep));
-  for (let lineStep = 10; lineStep <= step; lineStep += 2) lines.push(yForStep(top, lineStep));
+  const ledgerSteps = [];
+  for (let lineStep = -2; lineStep >= step; lineStep -= 2) ledgerSteps.push(lineStep);
+  for (let lineStep = 10; lineStep <= step; lineStep += 2) ledgerSteps.push(lineStep);
+  const settings = sharedSymbolConfig("ledgerLines");
+  const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const yOffset = STAFF.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const halfWidth = (STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineWidthScale || 2.4) * Number(settings.widthScale || 1)) / 2;
+  const thickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11) * Number(settings.heightScale || 1));
 
   return (
     <g pointerEvents="none">
-      {lines.map((y) => (
-        <line key={y} x1={x - 22} x2={x + 22} y1={y} y2={y} stroke={colour} strokeWidth="1.5" opacity={opacity} />
+      {ledgerSteps.map((lineStep) => (
+        <line key={lineStep} x1={x - halfWidth + xOffset} x2={x + halfWidth + xOffset} y1={yForStep(top, lineStep) + yOffset} y2={yForStep(top, lineStep) + yOffset} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" opacity={opacity} />
       ))}
     </g>
   );
@@ -602,20 +692,17 @@ function RhythmNote({
 }) {
   const hasStem = ["minim", "crotchet", "dotted-crotchet", "quaver"].includes(rhythm);
   const stem = getStem(x, y, step, rhythm, forcedDown, forcedStemEndY);
-  const headGlyph = rhythm === "minim" ? GLYPH.half : GLYPH.black;
+  const beamed = rhythm === "quaver" && !showFlag;
+  const symbolKey = noteSymbolKey(rhythm, stem.down, beamed);
+  const dotKey = step % 2 === 0 ? "augmentationDotLine" : "augmentationDotSpace";
+  const dotY = step % 2 === 0 ? y - STAFF.gap * 0.25 : y;
+  const stemThickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12));
 
   return (
     <g opacity={opacity} pointerEvents="none" transform={scale !== 1 ? `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})` : undefined}>
-      <text className="music-symbol" x={x} y={y} fontSize="86" textAnchor="middle" fill={colour}>
-        {headGlyph}
-      </text>
-      {hasStem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.stemStartY} y2={stem.stemEndY} stroke={colour} strokeWidth="2" />}
-      {rhythm === "dotted-crotchet" && <circle cx={x + 26} cy={y - 3 - (step % 2 === 0 ? 4 : 0)} r="3.4" fill={colour} />}
-      {rhythm === "quaver" && showFlag && (
-        <text className="music-symbol" x={stem.stemX + (stem.down ? 8 : 7)} y={stem.stemEndY} fontSize="59" textAnchor="middle" fill={colour}>
-          {stem.down ? GLYPH.flagDown : GLYPH.flagUp}
-        </text>
-      )}
+      <CalibratedSymbol symbolKey={symbolKey} x={x} y={y} colour={colour} />
+      {hasStem && beamed && <line x1={stem.stemX} x2={stem.stemX} y1={stem.stemStartY} y2={stem.stemEndY} stroke={colour} strokeWidth={stemThickness} />}
+      {rhythm === "dotted-crotchet" && <CalibratedSymbol symbolKey={dotKey} x={x + STAFF.gap * 1.3} y={dotY} colour={colour} />}
     </g>
   );
 }
@@ -641,15 +728,7 @@ function Staff({ top, clef }) {
           <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
         ))}
       </g>
-      <text
-        x={STAFF.left + (isTreble ? 18 : 15)}
-        y={top + (isTreble ? 63 : 21.5)}
-        fontSize={isTreble ? 84 : 86}
-        className="music-symbol"
-        dominantBaseline="middle"
-      >
-        {isTreble ? GLYPH.trebleClef : GLYPH.bassClef}
-      </text>
+      <CalibratedSymbol symbolKey={isTreble ? "gClef" : "fClef"} x={STAFF.left + 52} y={yForStep(top, isTreble ? 2 : 6)} />
     </g>
   );
 }
@@ -690,6 +769,7 @@ function Tie({ x1, y1, x2, y2, step1, step2, colour = "currentColor", opacity = 
   const stemsUp = !stemDown(step1) && !stemDown(step2);
   const y = stemsUp ? Math.max(y1, y2) + 6 : Math.min(y1, y2) - 5;
   const stretch = clamp(Math.abs(x2 - x1) / 22, 1.4, 5.2);
+  const tieGlyph = sharedSymbolForKey("tie") || GLYPH.tie;
 
   return (
     <text
@@ -703,14 +783,14 @@ function Tie({ x1, y1, x2, y2, step1, step2, colour = "currentColor", opacity = 
       pointerEvents="none"
       transform={`translate(${midX} ${y}) scale(${stretch} 1)${stemsUp ? "" : " rotate(180)"}`}
     >
-      {GLYPH.tie}
+      {tieGlyph}
     </text>
   );
 }
 
 function OttavaMark({ marking, top }) {
   if (!marking) return null;
-  const label = marking === "8vb" ? GLYPH.ottavaBassa : GLYPH.ottavaAlta;
+  const label = marking === "8vb" ? sharedSymbolForKey("ottavaBassa") || GLYPH.ottavaBassa : sharedSymbolForKey("ottavaAlta") || GLYPH.ottavaAlta;
   const above = marking !== "8vb";
   const labelX = STAFF.left + 26;
   const labelY = top + (above ? -33 : STAFF.gap * 4 + 37);
@@ -796,8 +876,9 @@ function RenderPassage({ passage, top, clef, answerItems = null, feedbackDetails
         const group = findGroup(quaverGroups, index);
         const groupItems = group ? source.slice(group.start, group.end + 1) : [];
         const groupPositions = group ? positions.slice(group.start, group.end + 1) : [];
-        const beam = group && groupItems.every((note) => note?.step != null) ? getBeam(groupItems, groupPositions, top) : null;
-        const stemX = beam ? (beam.down ? x - NOTE.rx + 0.5 : x + NOTE.rx - 0.5) : null;
+        const down = group ? groupHasDownStems(groupItems) : null;
+        const beam = group && groupItems.every((note) => note?.step != null) ? getBeam(groupItems, groupPositions, top, down) : null;
+        const stem = beam ? getStem(x, y, item.step, item.rhythm, down) : null;
 
         return (
           <g key={`${clef}-${index}-${overlayOffset}`}>
@@ -811,11 +892,11 @@ function RenderPassage({ passage, top, clef, answerItems = null, feedbackDetails
               opacity={item.isHover ? 0.55 : opacity}
               preview={item.isHover}
               showFlag={!beam}
-              forcedDown={beam?.down ?? null}
-              forcedStemEndY={beam && stemX ? beamYAtX(stemX, beam) : null}
+              forcedDown={down}
+              forcedStemEndY={beam && stem ? beamYAtX(stem.stemX, beam) : null}
             />
             {beam && group.start === index && (
-              <line x1={beam.start.x - 1} x2={beam.end.x + 1} y1={beam.start.y} y2={beam.end.y} stroke={colour} strokeWidth="6.75" opacity={opacity} />
+              <BeamShape beam={beam} colour={colour} opacity={opacity} />
             )}
           </g>
         );
