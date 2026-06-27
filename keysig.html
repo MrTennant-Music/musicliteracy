@@ -36,20 +36,24 @@ const ASSET = {
   diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
 };
 
-const SVG = { width: 1280, height: 560 };
-const STAFF = { left: 80, right: 1200, top: 182, gap: 22, clefX: 105, keyX: 180, timeX: 255, musicStartX: 320 };
-const MOBILE_VIEWBOX = { x: 36, y: 116, width: 1188, height: 210 };
-const MOBILE_BUILD_VIEWBOX = { x: 24, y: 86, width: 300, height: 248 };
-const BAR_COUNT = 3;
-
 const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
 const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
+const SVG = { width: 980, height: 360 };
+const STAFF = { left: 72, right: 848, top: 90, gap: 10 };
+const CALIBRATION_PREVIEW_GAP = 10;
+const BAR_COUNT = 4;
+
 const TIME_SIGNATURE_SYMBOLS = {
   "4/4": { top: ["timeSig4"], bottom: ["timeSig4"], key: "timeSig44" },
 };
 const CALIBRATION_ANCHORS = {
-  gClef: { xScale: 3.2, step: 2 },
-  timeSig44: { xScale: 12, step: 5.3 },
+  gClef: { xScale: 6.4, step: 2 },
+  timeSig44: { xScale: 12.4, step: 5.3 },
+};
+const CALIBRATION_LAYOUT_OFFSETS = {
+  keySignature: 54,
+  timeSignature: 82,
+  musicStart: 118,
 };
 
 const LEVELS = {
@@ -125,7 +129,12 @@ function sharedActualSymbolKey(key) {
 }
 
 function sharedSettingsKey(key) {
-  if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return "flatInScore";
+  if (key === "flatKeySignature" || key === "sharpKeySignature") {
+    return SHARED_CONFIG.symbols?.keySignatureAccidentals ? "keySignatureAccidentals" : key;
+  }
+  if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") {
+    return SHARED_CONFIG.symbols?.scoreAccidentals ? "scoreAccidentals" : key;
+  }
   return key;
 }
 
@@ -211,18 +220,40 @@ function CalibratedTimeSignature({ signature = "4/4", x, y, lineGap = STAFF.gap 
   const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
   const widthScale = Number(settings.widthScale || 1);
   const heightScale = Number(settings.heightScale || 1);
-  const numberGap = lineGap * Number(SHARED_CONFIG.drawing?.timeSignatureNumberGapScale || 1.55);
   return (
     <g transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`} pointerEvents="none">
-      <text className="music-symbol" x={adjustedX} y={adjustedY - numberGap / 2} fontSize={fontSize} textAnchor="middle">{topGlyph}</text>
-      <text className="music-symbol" x={adjustedX} y={adjustedY + numberGap / 2} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text>
+      <text className="music-symbol" x={adjustedX} y={adjustedY - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{topGlyph}</text>
+      <text className="music-symbol" x={adjustedX} y={adjustedY + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text>
     </g>
   );
 }
 
+function calibrationOffset(value) {
+  return STAFF.gap * (value / CALIBRATION_PREVIEW_GAP);
+}
+
+function calibrationLayoutX(name) {
+  return STAFF.left + calibrationOffset(CALIBRATION_LAYOUT_OFFSETS[name] || 0);
+}
+
+function passageMusicStart() {
+  return calibrationLayoutX("musicStart");
+}
+
+function passageBarWidth() {
+  return (STAFF.right - passageMusicStart()) / BAR_COUNT;
+}
+
+function passageBarStart(index) {
+  return passageMusicStart() + passageBarWidth() * index;
+}
+
+function passageBarEnd(index) {
+  return passageBarStart(index + 1);
+}
+
 function accidentalX(type, index = 0) {
-  const spacing = type === "flat" ? 30 : 32;
-  return (type === "flat" ? STAFF.keyX + 4 : STAFF.keyX + 1) + index * spacing + (index === 1 ? -7 : 0);
+  return calibrationLayoutX("keySignature") + index * STAFF.gap;
 }
 
 function scoreAccidentalBaseX(x) {
@@ -620,7 +651,7 @@ function useSession(initialLevel) {
 }
 
 function Staff({ buildFocus }) {
-  const fadeX = buildFocus ? STAFF.keyX + 108 : STAFF.right;
+  const fadeX = buildFocus ? calibrationLayoutX("keySignature") + STAFF.gap * 4.5 : STAFF.right;
   return (
     <g>
       <defs>
@@ -633,12 +664,12 @@ function Staff({ buildFocus }) {
       {[0, 1, 2, 3, 4].map((line) => (
         <line key={line} x1={STAFF.left} x2={fadeX} y1={STAFF.top + line * STAFF.gap} y2={STAFF.top + line * STAFF.gap} stroke="url(#staffFadeV2)" strokeWidth="1.5" />
       ))}
-      {!buildFocus && [1, 2].map((bar) => {
-        const x = STAFF.musicStartX + ((STAFF.right - STAFF.musicStartX) / BAR_COUNT) * bar - (bar === 1 ? 27 : 22);
-          return <line key={bar} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />;
+      {!buildFocus && Array.from({ length: BAR_COUNT - 1 }, (_, index) => {
+        const x = passageBarEnd(index);
+        return <line key={index} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />;
       })}
       <CalibratedSymbol symbolKey="gClef" x={calibrationAnchorX("gClef")} y={calibrationAnchorY("gClef")} />
-      {!buildFocus && <CalibratedTimeSignature signature="4/4" x={calibrationAnchorX("timeSig44")} y={calibrationAnchorY("timeSig44")} />}
+      {!buildFocus && <CalibratedTimeSignature signature="4/4" x={calibrationLayoutX("timeSignature")} y={calibrationAnchorY("timeSig44")} />}
     </g>
   );
 }
@@ -649,13 +680,14 @@ function KeySignature({ signature }) {
 
 function getStem(x, y, step, forcedDown = null, forcedEndY = null) {
   const down = forcedDown ?? stemDown(step);
-  const noteheadRadius = STAFF.gap * 0.62;
-  const stemLength = STAFF.gap * 3.05;
+  const stemLength = calibrationOffset(31);
+  const stemXOffset = calibrationOffset(6);
+  const stemStartOffset = calibrationOffset(0.5);
   return {
     down,
-    stemX: (down ? x - noteheadRadius : x + noteheadRadius) + (down ? 2 : -2),
-    startY: y + (down ? 7 : -7),
-    endY: (forcedEndY ?? (down ? y + stemLength : y - stemLength)) + (down ? 3 : -3),
+    stemX: x + (down ? -stemXOffset : stemXOffset),
+    startY: y + (down ? stemStartOffset : -stemStartOffset),
+    endY: forcedEndY ?? (down ? y + stemLength : y - stemLength),
   };
 }
 
@@ -685,7 +717,7 @@ function LedgerLines({ x, step, colour = "currentColor" }) {
 function Dot({ x, y, step }) {
   const dotKey = step % 2 === 0 ? "augmentationDotLine" : "augmentationDotSpace";
   const dotY = step % 2 === 0 ? y - STAFF.gap * 0.25 : y;
-  return <CalibratedSymbol symbolKey={dotKey} x={x + STAFF.gap * 1.1} y={dotY} />;
+  return <CalibratedSymbol symbolKey={dotKey} x={x + calibrationOffset(13)} y={dotY} />;
 }
 
 function Note({ note, x, beamedDown = null, forcedEndY = null, showFlag = true, accidental = false }) {
@@ -702,7 +734,7 @@ function Note({ note, x, beamedDown = null, forcedEndY = null, showFlag = true, 
       <LedgerLines x={x} step={step} />
       {accidental && <CalibratedSymbol symbolKey="sharpInScore" x={scoreAccidentalBaseX(x)} y={y} />}
       <CalibratedSymbol symbolKey={noteKey} x={x} y={y} />
-      {stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.startY} y2={forcedEndY ?? stem.endY} stroke="currentColor" strokeWidth={Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12))} />}
+      {stem && forcedEndY !== null && <line x1={stem.stemX} x2={stem.stemX} y1={stem.startY} y2={forcedEndY} stroke="currentColor" strokeWidth={Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12))} />}
       {dotted && <Dot x={x} y={y} step={step} />}
     </g>
   );
@@ -724,10 +756,14 @@ function quaverGroups(bar) {
   return groups;
 }
 
-function barPositions(bar, startX, endX) {
+function barPositions(bar, startX, endX, barIndex = 0) {
   const total = bar.reduce((sum, note) => sum + RHYTHM_UNITS[note.rhythm], 0);
-  const unit = (endX - startX) / total;
-  let x = startX;
+  const startPad = calibrationOffset(barIndex === 0 ? 4 : 15);
+  const endPad = calibrationOffset(barIndex === BAR_COUNT - 1 ? 24 : 4);
+  const availableStart = startX + startPad;
+  const availableEnd = endX - endPad;
+  const unit = (availableEnd - availableStart) / total;
+  let x = availableStart + unit * 0.38;
   return bar.map((note) => {
     const current = x;
     x += RHYTHM_UNITS[note.rhythm] * unit;
@@ -736,19 +772,17 @@ function barPositions(bar, startX, endX) {
 }
 
 function Passage({ bars }) {
-  const barWidth = (STAFF.right - STAFF.musicStartX) / BAR_COUNT;
   return (
     <g>
       {bars.map((bar, barIndex) => {
-        const positions = barPositions(bar, STAFF.musicStartX + barIndex * barWidth + (barIndex === 0 ? 2 : 15), STAFF.musicStartX + (barIndex + 1) * barWidth - 5);
+        const positions = barPositions(bar, passageBarStart(barIndex), passageBarEnd(barIndex), barIndex);
         const groups = quaverGroups(bar);
         const altered = new Set();
         const states = bar.map((note, noteIndex) => {
           const letter = note.pitch.includes("#") ? noteBase(note.pitch)[0] : null;
           const showAccidental = Boolean(letter) && !altered.has(letter);
           if (letter) altered.add(letter);
-          const exemptShift = note.rhythm === "quaver" && bar[noteIndex - 1]?.rhythm === "dotted-crotchet";
-          return { showAccidental, x: positions[noteIndex] + (showAccidental && !exemptShift ? 12 : 0) };
+          return { showAccidental, x: positions[noteIndex] };
         });
 
         return (
@@ -761,20 +795,11 @@ function Passage({ bars }) {
               const step = noteStep(note.pitch);
               const y = yForStep(step);
               const stem = beam ? getStem(x, y, step, down) : null;
-              const forcedEndY = beam ? beam.start.y + ((stem.stemX - beam.start.x) / (beam.end.x - beam.start.x || 1)) * (beam.end.y - beam.start.y) : null;
+              const forcedEndY = beam ? beamYAtX(stem.stemX, beam) : null;
               return (
                 <g key={`${barIndex}-${noteIndex}`}>
                   <Note note={note} x={x} accidental={states[noteIndex].showAccidental} beamedDown={down} forcedEndY={forcedEndY} showFlag={!group} />
-                  {beam && group.start === noteIndex && (
-                    <line
-                      x1={beam.start.x + (down ? -0.5 : -1.5)}
-                      x2={beam.end.x + (down ? 1.5 : 0.5)}
-                      y1={beam.start.y + (down ? 3 : -3)}
-                      y2={beam.end.y + (down ? 3 : -3)}
-                      stroke="currentColor"
-                      strokeWidth={Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42) * Number(sharedSymbolConfig("quaverBeam").heightScale || 1))}
-                    />
-                  )}
+                  {beam && group.start === noteIndex && <BeamShape beam={beam} />}
                 </g>
               );
             })}
@@ -793,11 +818,42 @@ function groupHasDownStems(bar, group) {
 }
 
 function beamForGroup(bar, group, positions, down) {
+  const settings = sharedSymbolConfig("quaverBeam");
+  const xOffset = calibrationOffset(Number(settings.xOffsetScale || 0) * CALIBRATION_PREVIEW_GAP);
+  const yOffset = calibrationOffset(Number(settings.yOffsetScale || 0) * CALIBRATION_PREVIEW_GAP);
+  const stemLength = calibrationOffset(31) * Number(settings.heightScale || 1);
+  const beamWidthAdjust = calibrationOffset(6) * (Number(settings.widthScale || 1) - 1);
+  const stemXOffset = calibrationOffset(6);
   const startStep = noteStep(bar[group.start].pitch);
   const endStep = noteStep(bar[group.end].pitch);
-  const start = getStem(positions[group.start], yForStep(startStep), startStep, down);
-  const end = getStem(positions[group.end], yForStep(endStep), endStep, down);
-  return { start: { x: start.stemX, y: start.endY }, end: { x: end.stemX, y: end.endY } };
+  const startStemX = positions[group.start] + xOffset + (down ? -stemXOffset : stemXOffset);
+  const endStemX = positions[group.end] + xOffset + (down ? -stemXOffset : stemXOffset);
+  return {
+    start: {
+      x: startStemX - beamWidthAdjust,
+      y: yForStep(startStep) + yOffset + (down ? stemLength : -stemLength),
+    },
+    end: {
+      x: endStemX + beamWidthAdjust,
+      y: yForStep(endStep) + yOffset + (down ? stemLength : -stemLength),
+    },
+  };
+}
+
+function beamYAtX(x, beam) {
+  const progress = (x - beam.start.x) / (beam.end.x - beam.start.x || 1);
+  return beam.start.y + progress * (beam.end.y - beam.start.y);
+}
+
+function beamPolygonPoints(x1, y1, x2, y2, thickness) {
+  const halfThickness = thickness / 2;
+  return [`${x1},${y1 - halfThickness}`, `${x2},${y2 - halfThickness}`, `${x2},${y2 + halfThickness}`, `${x1},${y1 + halfThickness}`].join(" ");
+}
+
+function BeamShape({ beam, colour = "currentColor" }) {
+  const settings = sharedSymbolConfig("quaverBeam");
+  const thickness = Math.max(1, calibrationOffset(4) * Number(settings.fontSizeScale || 1));
+  return <polygon points={beamPolygonPoints(beam.start.x, beam.start.y, beam.end.x, beam.end.y, thickness)} fill={colour} />;
 }
 
 function BuildLayer({ question, selectedAccidental, placed, setHover, hover, onPlace, feedback, mobileBuild }) {
@@ -857,7 +913,7 @@ function BuildLayer({ question, selectedAccidental, placed, setHover, hover, onP
       {preview && !showingFeedback && <Accidental item={preview} index={preview.index} opacity={drag ? 0.82 : 0.45} />}
       {placed.map((item, index) => <Accidental key={`${item.type}-${item.step}-${index}`} item={item} index={index} opacity={showingFeedback && !feedback.correct ? 0.4 : 1} style={showingFeedback ? feedbackStyle(feedback.correct) : null} />)}
       {showingFeedback && !feedback.correct && expected.map((item, index) => <Accidental key={`expected-${index}`} item={item} index={index} style={feedbackStyle(true)} />)}
-      <rect x={STAFF.keyX - 58} y={STAFF.top - 34} width="158" height={STAFF.gap * 4 + 68} fill="transparent" pointerEvents="all" style={{ touchAction: "none", cursor: selectedAccidental && !showingFeedback ? "pointer" : "default" }} onPointerMove={move} onPointerLeave={() => !drag && setHover(null)} onPointerDown={down} onPointerUp={up} onPointerCancel={() => { setDrag(null); setHover(null); }} />
+      <rect x={calibrationLayoutX("keySignature") - 58} y={STAFF.top - 34} width="158" height={STAFF.gap * 4 + 68} fill="transparent" pointerEvents="all" style={{ touchAction: "none", cursor: selectedAccidental && !showingFeedback ? "pointer" : "default" }} onPointerMove={move} onPointerLeave={() => !drag && setHover(null)} onPointerDown={down} onPointerUp={up} onPointerCancel={() => { setDrag(null); setHover(null); }} />
     </g>
   );
 }
@@ -1029,8 +1085,8 @@ function App() {
                   onClick={() => setMenu(menu === "customise" ? null : "customise")}
                 />
                 {menu === "customise" && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel>
-                  <ToggleRow glyph={<BravuraGlyph symbolKey="gClef" className="text-[30px]" />} label="Identify" enabled={session.modes.identify} disabled={session.modes.identify && !session.modes.build} onToggle={session.toggleIdentify} />
-                  <ToggleRow glyph={<span className="flex items-center gap-[2px]"><BravuraGlyph symbolKey="sharp" className="text-[24px]" /><BravuraGlyph symbolKey="flat" className="text-[24px]" /></span>} label="Create" enabled={session.modes.build} disabled={session.modes.build && !session.modes.identify} onToggle={session.toggleBuild} />
+                  <ToggleRow glyph={<BravuraGlyph symbolKey="gClef" className="relative top-[5px] text-[18px]" />} label="Identify" enabled={session.modes.identify} disabled={session.modes.identify && !session.modes.build} onToggle={session.toggleIdentify} />
+                  <ToggleRow glyph={<span className="relative -left-[3px] flex items-center gap-[2px]"><BravuraGlyph symbolKey="sharp" className="text-[24px]" /><BravuraGlyph symbolKey="flat" className="relative left-[4px] text-[24px]" /></span>} label="Create" enabled={session.modes.build} disabled={session.modes.build && !session.modes.identify} onToggle={session.toggleBuild} />
                 </window.MLH.MenuPanel>}
               </div>
             </div>
@@ -1059,7 +1115,7 @@ function App() {
             {isBuild ? (
               <div className="mt-4 flex flex-wrap items-end gap-2">
                 <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("sharp")} className={`flex h-[56px] w-[56px] items-center justify-center rounded-xl border ${session.selectedAccidental === "sharp" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}><BravuraGlyph symbolKey="sharp" className={`text-[42px] ${session.selectedAccidental === "sharp" ? "text-white" : "text-black"}`} /></button>
-                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("flat")} className={`flex h-[56px] w-[56px] items-center justify-center rounded-xl border ${session.selectedAccidental === "flat" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}><BravuraGlyph symbolKey="flat" className={`text-[42px] ${session.selectedAccidental === "flat" ? "text-white" : "text-black"}`} /></button>
+                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("flat")} className={`flex h-[56px] w-[56px] items-center justify-center rounded-xl border ${session.selectedAccidental === "flat" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}><BravuraGlyph symbolKey="flat" className={`relative top-[5px] text-[42px] ${session.selectedAccidental === "flat" ? "text-white" : "text-black"}`} /></button>
                 <div className="ml-auto flex gap-2">
                   <button type="button" disabled={session.locked || session.placed.length === 0} onClick={session.clearPlaced} className="rounded-xl border border-stone-300 bg-white px-5 py-3 text-sm font-bold">Clear</button>
                   <button type="button" disabled={session.locked} onClick={session.submitBuild} className="rounded-xl border border-black bg-black px-5 py-3 text-sm font-bold text-white">Confirm</button>
