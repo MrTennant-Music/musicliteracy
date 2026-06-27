@@ -39,10 +39,10 @@
     };
 
     const LEVELS = {
-      N3: { label: "National 3", description: "Repetition · Steps" },
+      N3: { label: "National 3", description: "Repetition" },
       N4: { label: "National 4", description: "Sequences" },
-      N5: { label: "National 5", description: "Leaps" },
-      H: { label: "Higher", description: "3rd, 4th, 5th, 6th, 7th" },
+      N5: { label: "National 5", description: "Repetition • Sequences" },
+      H: { label: "Higher", description: "Repetition • Sequences" },
     };
 
     const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
@@ -77,6 +77,7 @@
       "2/4": [
         ["crotchet", "crotchet"],
         ["minim"],
+        ["dottedCrotchet", "quaver"],
         ["quaver", "quaver", "crotchet"],
         ["crotchet", "quaver", "quaver"],
       ],
@@ -85,6 +86,8 @@
         ["minim", "crotchet"],
         ["crotchet", "minim"],
         ["dottedMinim"],
+        ["dottedCrotchet", "quaver", "crotchet"],
+        ["crotchet", "dottedCrotchet", "quaver"],
         ["quaver", "quaver", "crotchet", "crotchet"],
         ["crotchet", "quaver", "quaver", "crotchet"],
       ],
@@ -92,24 +95,21 @@
         ["crotchet", "crotchet", "crotchet", "crotchet"],
         ["minim", "crotchet", "crotchet"],
         ["crotchet", "crotchet", "minim"],
+        ["dottedMinim", "crotchet"],
+        ["crotchet", "dottedMinim"],
+        ["dottedCrotchet", "quaver", "minim"],
+        ["minim", "dottedCrotchet", "quaver"],
         ["quaver", "quaver", "crotchet", "crotchet", "crotchet"],
         ["crotchet", "quaver", "quaver", "crotchet", "crotchet"],
         ["crotchet", "crotchet", "quaver", "quaver", "crotchet"],
         ["minim", "minim"],
       ],
       "6/8": [
+        ["dottedMinim"],
         ["dottedCrotchet", "dottedCrotchet"],
+        ["dottedCrotchet", "quaver", "crotchet"],
         ["crotchet", "quaver", "crotchet", "quaver"],
-        ["quaver", "quaver", "quaver", "dottedCrotchet"],
-        ["dottedCrotchet", "quaver", "quaver", "quaver"],
-        ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
       ],
-    };
-    const FINAL_PATTERNS = {
-      "2/4": [["minim"], ["crotchet", "crotchet"]],
-      "3/4": [["dottedMinim"], ["minim", "crotchet"]],
-      "4/4": [["semibreve"], ["dottedMinim", "crotchet"]],
-      "6/8": [["dottedMinim"], ["dottedCrotchet", "dottedCrotchet"]],
     };
     const NOTE_POOL = [
       { letter: "C", octave: 4, step: -2, midi: 60 },
@@ -138,7 +138,6 @@
     const rhythmInfo = (rhythm) => RHYTHMS[rhythm] ?? RHYTHMS.crotchet;
     const timeSignaturesForLevel = (level) => TIME_SIGNATURES.filter((signature) => signature.id !== "6/8" || level === "H");
     const barPatternsForSignature = (signature) => BAR_PATTERNS[signature.id] ?? BAR_PATTERNS["4/4"];
-    const finalPatternsForSignature = (signature) => FINAL_PATTERNS[signature.id] ?? FINAL_PATTERNS["4/4"];
     const noteBaseIndex = (note) => NOTE_POOL.findIndex((item) => item.letter === note?.letter && item.octave === note?.octave);
     const yForStep = (step, top) => top + STAFF.gap * 4 - step * (STAFF.gap / 2);
     const stemDown = (step) => step > 4;
@@ -146,6 +145,19 @@
     const noteByLetter = (letter, preferredIndex = 6) => {
       const options = NOTE_POOL.map((note, index) => ({ ...note, index })).filter((note) => note.letter === letter);
       return options.reduce((best, item) => Math.abs(item.index - preferredIndex) < Math.abs(best.index - preferredIndex) ? item : best, options[0]);
+    };
+    const keyAccidentalForLetter = (key, letter) => {
+      if (key?.id === "F" && letter === "B") return -1;
+      if (key?.id === "G" && letter === "F") return 1;
+      return 0;
+    };
+    const chordAccidentalForLetter = (key, chordSymbol, letter) => key?.raised?.[chordSymbol]?.[letter] ?? null;
+    const melodicAccidentalForLetter = (key, letter) => key?.id === "Am" && letter === "G" ? 1 : null;
+    const effectiveMidiForNote = (question, bar, note) => note.midi + keyAccidentalForLetter(question.key, note.letter) + (note.writtenAccidental ?? 0);
+    const pitchForChordLetter = (question, bar, letter, preferredIndex = 4) => {
+      const base = noteByLetter(letter, preferredIndex);
+      const raised = chordAccidentalForLetter(question.key, bar.chordSymbol, letter);
+      return base.midi + keyAccidentalForLetter(question.key, letter) + (raised ?? 0);
     };
     const cloneNotesForBar = (notes, barIndex) => notes.map((note, noteIndex) => ({
       ...note,
@@ -159,6 +171,27 @@
       ...NOTE_POOL[clamp(noteBaseIndex(note) + offset, 0, NOTE_POOL.length - 1)],
       writtenAccidental: null,
     }));
+    const finalRhythmForSignature = (signature) => ({
+      "2/4": "minim",
+      "3/4": "dottedMinim",
+      "4/4": "semibreve",
+      "6/8": "dottedMinim",
+    }[signature.id] ?? "semibreve");
+
+    function makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol) {
+      const melodicAccidental = melodicAccidentalForLetter(key, base.letter);
+      const chordAccidental = chordAccidentalForLetter(key, chordSymbol, base.letter);
+      return {
+        ...base,
+        id: `${barIndex}-${noteIndex}`,
+        rhythm,
+        beats: rhythmInfo(rhythm).beats,
+        beat,
+        barIndex,
+        noteIndex,
+        writtenAccidental: melodicAccidental ?? chordAccidental,
+      };
+    }
 
     function sharedActualSymbolKey(key) {
       if (key === "flatInScore" || key === "flatKeySignature") return "flat";
@@ -230,35 +263,57 @@
     function levelMode(level) {
       if (level === "N3") return "repetition";
       if (level === "N4") return "sequence";
-      if (level === "N5") return randomItem(["repetition", "sequence", "octave"]);
-      return "higher";
+      if (level === "H") return randomItem(["repetition", "sequence", "repetition", "sequence", "free"]);
+      return randomItem(["repetition", "sequence"]);
     }
 
     function maxStepForLevel(level, mode) {
-      if (level === "N3" || level === "N4") return 1;
-      if (level === "N5" && mode !== "octave") return 4;
-      if (level === "H") return 6;
+      if (level === "H") return 4;
+      if (level === "N3" || level === "N4" || level === "N5") return 1;
       return 2;
     }
 
-    function barCountForLevel(level) {
-      return level === "N3" || level === "N4" ? 4 : BAR_COUNT;
+    function noteAllowedForLevel(level, note) {
+      return level !== "N3" || (note.step >= 0 && note.step <= 8);
     }
 
-    function makeOctaveBar(source, barIndex) {
-      const notes = cloneNotesForBar(source.notes, barIndex);
-      const movable = notes
-        .map((note, index) => ({ note, index, target: NOTE_POOL[noteBaseIndex(note) + 7] || NOTE_POOL[noteBaseIndex(note) - 7] }))
-        .filter((item) => item.target);
-      if (!movable.length) return transposeNotesForBar(source.notes, barIndex, 1);
-      const chosen = randomItem(movable);
-      notes[chosen.index] = { ...notes[chosen.index], ...chosen.target };
-      return notes;
+    function barCountForLevel(level) {
+      return 4;
+    }
+
+    function tonicStartNoteForLevel(level, key) {
+      if (level === "N3" || level === "N4") return randomItem(NOTE_POOL.filter((note) => note.letter === "C" && (note.octave === 4 || note.octave === 5)));
+      return noteByLetter(key.tonic, 6);
     }
 
     function hasSamePitchPattern(first, second) {
       if (!first?.notes || !second?.notes || first.notes.length !== second.notes.length) return false;
       return first.notes.every((note, index) => note.step === second.notes[index]?.step);
+    }
+
+    function hasSequencePitchPattern(first, second) {
+      if (!first?.notes || !second?.notes || first.notes.length !== second.notes.length) return false;
+      const offset = second.notes[0].step - first.notes[0].step;
+      if (offset === 0) return false;
+      return first.notes.every((note, index) => second.notes[index]?.step - note.step === offset);
+    }
+
+    function canTransposeBarByStep(bar, offset, level) {
+      if (!bar?.notes?.length) return false;
+      return bar.notes.every((note) => {
+        const target = NOTE_POOL[noteBaseIndex(note) + offset];
+        return target && noteAllowedForLevel(level, target);
+      });
+    }
+
+    function targetHasSourcePattern(bars, targetBar, matcher) {
+      const target = bars[targetBar];
+      return bars.some((bar) => bar.barIndex !== targetBar && matcher(bar, target));
+    }
+
+    function targetHasAnySourcePattern(bars, targetBar) {
+      return targetHasSourcePattern(bars, targetBar, hasSamePitchPattern)
+        || targetHasSourcePattern(bars, targetBar, hasSequencePitchPattern);
     }
 
     function avoidExactRepetition(bar) {
@@ -270,99 +325,373 @@
       return { ...bar, notes };
     }
 
-    function makeQuestion(level = "N5") {
+    function chooseNextNote({ key, chordLetters, previous, currentIndex, strongBeat, rhythm, maxLeap, level, forceDirection = 0, preferLeap = false }) {
+      const previousIndex = noteBaseIndex(previous) >= 0 ? noteBaseIndex(previous) : currentIndex;
+      const previousMidi = previous?.midi ?? NOTE_POOL[previousIndex]?.midi ?? 72;
+      const candidates = [];
+
+      NOTE_POOL.forEach((candidate, candidateIndex) => {
+        const distance = candidateIndex - previousIndex;
+        const absDistance = Math.abs(distance);
+        const isChordTone = chordLetters.includes(candidate.letter);
+        const pitchDistance = Math.abs((candidate.midi + keyAccidentalForLetter(key, candidate.letter)) - previousMidi);
+
+        if (!noteAllowedForLevel(level, candidate)) return;
+        if (pitchDistance > 12) return;
+        if (absDistance > maxLeap) return;
+        if (strongBeat && !isChordTone) return;
+        if (forceDirection > 0 && distance < 0) return;
+        if (forceDirection < 0 && distance > 0) return;
+        if (rhythm === "quaver" && absDistance > 2) return;
+
+        let weight = isChordTone ? 8 : 2;
+        if (strongBeat) weight *= 2.8;
+        if (absDistance === 0) weight *= 0.6;
+        if (absDistance === 1) weight *= 5;
+        if (absDistance === 2) weight *= level === "H" ? 0.75 : 3;
+        if (absDistance >= 3) weight *= level === "H" ? 0.25 : (preferLeap ? 4 : 0.7);
+        if (candidateIndex < 1 || candidateIndex > NOTE_POOL.length - 2) weight *= 0.35;
+        if (key.id === "Am" && candidate.letter === "G") weight *= 0.8;
+        candidates.push({ candidate, weight });
+      });
+
+      if (!candidates.length) {
+        const fallback = NOTE_POOL
+          .map((note, index) => ({ ...note, index }))
+          .filter((note) => {
+            const distance = note.index - previousIndex;
+            const absDistance = Math.abs(distance);
+            if (!noteAllowedForLevel(level, note)) return false;
+            if (absDistance > maxLeap) return false;
+            if (forceDirection > 0 && distance < 0) return false;
+            if (forceDirection < 0 && distance > 0) return false;
+            if (rhythm === "quaver" && absDistance > 1) return false;
+            return true;
+          });
+        return randomItem(fallback.length ? fallback : [previous]);
+      }
+      let roll = Math.random() * candidates.reduce((sum, item) => sum + item.weight, 0);
+      for (const item of candidates) {
+        roll -= item.weight;
+        if (roll <= 0) return item.candidate;
+      }
+      return candidates.at(-1).candidate;
+    }
+
+    function buildNotesFromPattern({ key, chordSymbol, pattern, barIndex, previousIndex, level, mode }) {
+      const chordLetters = key.chords[chordSymbol] ?? key.chords.I;
+      let currentIndex = previousIndex;
+      let previous = NOTE_POOL[currentIndex] ?? noteByLetter(key.tonic, 6);
+      let beat = 0;
+      const notes = [];
+      const direction = level === "N3" || level === "N4" ? randomItem([-1, 1]) : 0;
+      const maxLeap = maxStepForLevel(level, mode);
+
+      pattern.forEach((rhythm, noteIndex) => {
+        const strongBeat = beat === 0 || beat === 2 || (beat === 1.5 && rhythmInfo(rhythm).beats >= 1);
+        const preferLeap = false;
+        let base = chooseNextNote({
+          key,
+          chordLetters,
+          previous,
+          currentIndex,
+          strongBeat,
+          rhythm,
+          maxLeap,
+          level,
+          forceDirection: direction,
+          preferLeap,
+        });
+        if (barIndex === 0 && noteIndex === 0) base = tonicStartNoteForLevel(level, key);
+        const note = makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol);
+        notes.push(note);
+        currentIndex = noteBaseIndex(base) >= 0 ? noteBaseIndex(base) : currentIndex;
+        previous = base;
+        beat += rhythmInfo(rhythm).beats;
+      });
+
+      return { notes, lastIndex: currentIndex };
+    }
+
+    function buildFinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars, level }) {
+      const rhythm = finalRhythmForSignature(timeSignature);
+      const previous = NOTE_POOL[previousIndex] ?? noteByLetter(key.tonic, 6);
+      const tonicOptions = level === "N3" || level === "N4"
+        ? NOTE_POOL.filter((note) => note.letter === "C" && (note.octave === 4 || note.octave === 5))
+        : NOTE_POOL.filter((note) => note.letter === key.tonic && noteAllowedForLevel(level, note));
+      const base = tonicOptions.reduce((best, note) => Math.abs(note.midi - previous.midi) < Math.abs(best.midi - previous.midi) ? note : best, tonicOptions[0] ?? noteByLetter(key.tonic, previousIndex));
+      return {
+        barIndex,
+        chordSymbol,
+        notes: [makeNote(base, rhythm, barIndex, 0, 0, key, chordSymbol)],
+        totalBars,
+        pattern: [rhythm],
+      };
+    }
+
+    function applyMelodicAccidentals(notes, key) {
+      return notes.map((note) => {
+        const accidental = melodicAccidentalForLetter(key, note.letter);
+        return accidental === null ? note : { ...note, writtenAccidental: accidental };
+      });
+    }
+
+    function targetOnlyMovesByStep(bars, targetBar) {
+      const target = bars[targetBar];
+      if (!target?.notes?.length) return false;
+      for (let index = 1; index < target.notes.length; index += 1) {
+        if (Math.abs(target.notes[index].step - target.notes[index - 1].step) > 1) return false;
+      }
+      return true;
+    }
+
+    function targetMovesWithinInterval(bars, targetBar, maximumInterval) {
+      const target = bars[targetBar];
+      if (!target?.notes?.length) return false;
+      for (let index = 1; index < target.notes.length; index += 1) {
+        if (Math.abs(target.notes[index].step - target.notes[index - 1].step) > maximumInterval) return false;
+      }
+      return true;
+    }
+
+    function melodyHasOctaveLeap(bars) {
+      const notes = bars.flatMap((bar) => bar.notes ?? []);
+      return notes.some((note, index) => index > 0 && Math.abs(note.step - notes[index - 1].step) >= 7);
+    }
+
+    function hasEnoughPitchVariety(bars, minimum = 3) {
+      const pitches = new Set(bars.flatMap((bar) => bar.notes ?? []).map((note) => `${note.letter}${note.octave}`));
+      return pitches.size >= minimum;
+    }
+
+    function melodyNotes(bars) {
+      return bars.flatMap((bar) => bar.notes ?? []);
+    }
+
+    function dominantLetterForKey(key) {
+      return key?.chords?.V?.[0] ?? "G";
+    }
+
+    function levelMaximumInterval(level) {
+      if (level === "N3") return 2;
+      if (level === "H") return 4;
+      if (level === "N4" || level === "N5") return 3;
+      return 3;
+    }
+
+    function levelMaximumRange(level) {
+      if (level === "N3" || level === "N4") return 5;
+      if (level === "N5" || level === "H") return 7;
+      return 7;
+    }
+
+    function longestRepeatedPitchRun(notes) {
+      let longest = 1;
+      let current = 1;
+      for (let index = 1; index < notes.length; index += 1) {
+        if (notes[index].step === notes[index - 1].step) {
+          current += 1;
+          longest = Math.max(longest, current);
+        } else {
+          current = 1;
+        }
+      }
+      return longest;
+    }
+
+    function hasAwkwardBarlineLeap(bars, level) {
+      const maximum = levelMaximumInterval(level);
+      return bars.some((bar, index) => {
+        const nextBar = bars[index + 1];
+        if (!bar?.notes?.length || !nextBar?.notes?.length) return false;
+        return Math.abs(nextBar.notes[0].step - bar.notes.at(-1).step) > maximum;
+      });
+    }
+
+    function hasBalancedContour(notes) {
+      let rises = 0;
+      let falls = 0;
+      for (let index = 1; index < notes.length; index += 1) {
+        const interval = notes[index].step - notes[index - 1].step;
+        if (interval > 0) rises += 1;
+        if (interval < 0) falls += 1;
+      }
+      return rises > 0 && falls > 0;
+    }
+
+    function leapsRecoverByStep(notes, level) {
+      const recoveryLimit = 1;
+      const leapThreshold = level === "H" ? 3 : 2;
+      for (let index = 1; index < notes.length - 1; index += 1) {
+        const leap = notes[index].step - notes[index - 1].step;
+        if (Math.abs(leap) < leapThreshold) continue;
+        const recovery = notes[index + 1].step - notes[index].step;
+        if (recovery === 0) continue;
+        if (Math.sign(recovery) === Math.sign(leap) || Math.abs(recovery) > recoveryLimit) return false;
+      }
+      return true;
+    }
+
+    function melodyPassesQualityRules(question) {
+      const notes = melodyNotes(question.bars);
+      if (notes.length < 2) return false;
+      const intervals = notes.slice(1).map((note, index) => Math.abs(note.step - notes[index].step));
+      const range = Math.max(...notes.map((note) => note.step)) - Math.min(...notes.map((note) => note.step));
+      const first = notes[0];
+      const last = notes.at(-1);
+      const tonic = question.key.tonic;
+      const dominant = dominantLetterForKey(question.key);
+      const maximumRepeatedRun = question.level === "N3" ? 3 : 2;
+
+      if (![tonic, dominant].includes(first.letter)) return false;
+      if (last.letter !== tonic) return false;
+      if (range > levelMaximumRange(question.level)) return false;
+      if (Math.max(...intervals) > levelMaximumInterval(question.level)) return false;
+      if (hasAwkwardBarlineLeap(question.bars, question.level)) return false;
+      if (!hasBalancedContour(notes)) return false;
+      if (!leapsRecoverByStep(notes, question.level)) return false;
+      if (longestRepeatedPitchRun(notes) > maximumRepeatedRun) return false;
+      return true;
+    }
+
+    function makeChordProgression() {
+      const bar2 = randomItem(["I", "IV", "V", "VI"]);
+      const bar3 = randomItem(["IV", "V"]);
+      return ["I", bar2, bar3, "I"];
+    }
+
+    function allowedChordsForBar(barIndex) {
+      if (barIndex === 0 || barIndex === 3) return ["I"];
+      if (barIndex === 1) return ["I", "IV", "V", "VI"];
+      return ["IV", "V"];
+    }
+
+    function chordFitScore(key, bar, chordSymbol) {
+      const chordLetters = key.chords[chordSymbol] ?? [];
+      return (bar.notes ?? []).reduce((score, note) => {
+        const isChordTone = chordLetters.includes(note.letter);
+        const weight = note.beat === 0 || note.beat === 2 ? 3 : 1;
+        return score + (isChordTone ? weight : -weight);
+      }, 0);
+    }
+
+    function fitChordsToMelody(key, bars) {
+      return bars.map((bar) => {
+        const allowed = allowedChordsForBar(bar.barIndex);
+        const bestChord = allowed.reduce((best, chordSymbol) => (
+          chordFitScore(key, bar, chordSymbol) > chordFitScore(key, bar, best) ? chordSymbol : best
+        ), allowed[0]);
+        return { ...bar, chordSymbol: bestChord };
+      });
+    }
+
+    function sequenceSourceCandidates(bars, targetBar, level) {
+      if (level !== "N4") return bars.filter((bar) => bar.barIndex !== targetBar && bar.notes?.length);
+      return bars.filter((bar) => bar.barIndex === targetBar - 1 && bar.notes?.length);
+    }
+
+    function makeQuestion(level = "N5", attempt = 0) {
       const activeBarCount = barCountForLevel(level);
       const timeSignature = randomItem(timeSignaturesForLevel(level));
       const majorKeys = KEYS.filter((key) => key.id !== "Am");
-      const key = Math.random() < 0.82 ? randomItem(majorKeys) : KEYS.find((item) => item.id === "Am");
-      const progression = ["I"];
-      const chordChoices = ["I", "IV", "V", "VI"];
-      for (let index = 1; index < activeBarCount - 1; index += 1) {
-        progression.push(randomItem(chordChoices.filter((symbol) => symbol !== progression[index - 1])));
-      }
-      progression.push(randomItem(["I", "V"]));
+      const key = level === "N3" || level === "N4"
+        ? KEYS.find((item) => item.id === "C")
+        : Math.random() < 0.82 ? randomItem(majorKeys) : KEYS.find((item) => item.id === "Am");
+      const progression = makeChordProgression();
 
-      const targetBar = activeBarCount === 4 ? randomItem([1, 2]) : randomItem([2, 3, 4, 5]);
+      const targetBar = level === "N4" || level === "N5" || level === "H"
+        ? randomItem([1, 2])
+        : randomItem(Array.from({ length: activeBarCount }, (_, index) => index));
       const bars = [];
-      let previousIndex = noteBaseIndex(noteByLetter(key.tonic, 6));
-      let sequenceSource = null;
+      let previousIndex = noteBaseIndex(tonicStartNoteForLevel(level, key));
       const mode = levelMode(level);
-      const maxLeap = maxStepForLevel(level, mode);
 
       for (let barIndex = 0; barIndex < activeBarCount; barIndex += 1) {
         const chordSymbol = progression[barIndex];
-        const chordLetters = key.chords[chordSymbol];
-        const pattern = barIndex === activeBarCount - 1 ? randomItem(finalPatternsForSignature(timeSignature)) : randomItem(barPatternsForSignature(timeSignature));
-        const notes = [];
-        let beat = 0;
-        const direction = Math.random() < 0.5 ? -1 : 1;
-
-        pattern.forEach((rhythm, noteIndex) => {
-          let base;
-          if (barIndex === 0 && noteIndex === 0) {
-            base = noteByLetter(key.tonic, 6);
-          } else if (barIndex === targetBar && mode === "sequence" && sequenceSource?.notes?.[noteIndex]) {
-            const source = sequenceSource.notes[noteIndex];
-            base = NOTE_POOL[clamp(noteBaseIndex(source) + direction, 0, NOTE_POOL.length - 1)] ?? source;
-          } else {
-            const previous = NOTE_POOL[previousIndex] ?? noteByLetter(key.tonic, 6);
-            const chordOptions = chordLetters.map((letter) => noteByLetter(letter, previousIndex)).filter(Boolean);
-            const near = NOTE_POOL
-              .map((note, index) => ({ ...note, index }))
-              .filter((note) => {
-                const distance = Math.abs(note.index - previousIndex);
-                if (level === "H" && barIndex === targetBar && noteIndex > 0) return distance >= 2 && distance <= maxLeap;
-                return distance <= maxLeap;
-              })
-              .filter((note) => level !== "H" || barIndex !== targetBar || noteIndex === 0 || chordLetters.includes(note.letter) || Math.random() < 0.45);
-            base = randomItem(near.length ? near : chordOptions.length ? chordOptions : NOTE_POOL);
-          }
-
-          const raised = key.raised?.[chordSymbol]?.[base.letter] ?? null;
-          const note = {
-            ...base,
-            id: `${barIndex}-${noteIndex}`,
-            rhythm,
-            beats: rhythmInfo(rhythm).beats,
-            beat,
-            barIndex,
-            noteIndex,
-            writtenAccidental: raised,
-          };
-          previousIndex = noteBaseIndex(base) >= 0 ? noteBaseIndex(base) : previousIndex;
-          beat += note.beats;
-          notes.push(note);
-        });
-
-        const bar = { barIndex, chordSymbol, notes, totalBars: activeBarCount };
-        if (barIndex === targetBar - 1) sequenceSource = bar;
+        let bar;
+        if (barIndex === activeBarCount - 1) {
+          bar = buildFinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars: activeBarCount, level });
+          previousIndex = noteBaseIndex(bar.notes[0]);
+        } else {
+          const availablePatterns = barPatternsForSignature(timeSignature);
+          const pattern = randomItem(availablePatterns);
+          const built = buildNotesFromPattern({ key, chordSymbol, pattern, barIndex, previousIndex, level, mode });
+          previousIndex = built.lastIndex;
+          bar = { barIndex, chordSymbol, notes: built.notes, totalBars: activeBarCount, pattern };
+        }
         bars.push(bar);
       }
 
-      if (sequenceSource?.notes?.length) {
+      if (bars[targetBar]?.notes?.length) {
         if (mode === "repetition") {
-          bars[targetBar] = { ...bars[targetBar], notes: cloneNotesForBar(sequenceSource.notes, targetBar) };
+          let repetitionCandidates = bars.filter((bar) => bar.barIndex !== targetBar && bar.notes?.length);
+          const repetitionSource = randomItem(repetitionCandidates.length ? repetitionCandidates : bars.filter((bar) => bar.barIndex !== targetBar && bar.notes?.length));
+          bars[targetBar] = { ...bars[targetBar], notes: cloneNotesForBar(repetitionSource.notes, targetBar) };
         } else if (mode === "sequence") {
-          bars[targetBar] = { ...bars[targetBar], notes: transposeNotesForBar(sequenceSource.notes, targetBar, randomItem([-1, 1])) };
-        } else if (mode === "octave") {
-          bars[targetBar] = { ...bars[targetBar], notes: makeOctaveBar(sequenceSource, targetBar) };
+          let possibleSources = sequenceSourceCandidates(bars, targetBar, level);
+          const sequenceOptions = possibleSources.flatMap((source) => [-1, 1]
+            .filter((offset) => canTransposeBarByStep(source, offset, level))
+            .map((offset) => ({ source, offset })));
+          const selectedSequence = randomItem(sequenceOptions);
+          if (selectedSequence) {
+            bars[targetBar] = { ...bars[targetBar], notes: transposeNotesForBar(selectedSequence.source.notes, targetBar, selectedSequence.offset) };
+          }
         }
+        bars[targetBar] = { ...bars[targetBar], notes: applyMelodicAccidentals(bars[targetBar].notes, key), pattern: bars[targetBar].notes.map((note) => note.rhythm) };
       }
 
-      if (level === "H" && hasSamePitchPattern(sequenceSource, bars[targetBar])) {
-        bars[targetBar] = avoidExactRepetition(bars[targetBar]);
-      }
+      const fittedBars = fitChordsToMelody(key, bars);
 
-      return {
+      const question = {
         id: Math.random().toString(36).slice(2),
         key,
         timeSignature,
-        bars,
+        bars: fittedBars,
         targetBar,
         level,
         mode,
         barCount: activeBarCount,
       };
+
+      const targetMaximumInterval = level === "H" && mode === "free" ? 1 : maxStepForLevel(level, mode);
+
+      if ((level === "N3" || level === "N4" || level === "N5" || level === "H") && !targetMovesWithinInterval(bars, targetBar, targetMaximumInterval) && attempt < 160) {
+        return makeQuestion(level, attempt + 1);
+      }
+
+      if ((level === "N3" || level === "N4") && !hasEnoughPitchVariety(bars) && attempt < 160) {
+        return makeQuestion(level, attempt + 1);
+      }
+
+      if ((level === "N5" || level === "H") && (bars[targetBar]?.notes?.length ?? 0) < 3 && attempt < 160) {
+        return makeQuestion(level, attempt + 1);
+      }
+
+      if (level === "N3" && melodyHasOctaveLeap(bars) && attempt < 160) {
+        return makeQuestion(level, attempt + 1);
+      }
+
+      if (level === "N4" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
+        return makeQuestion(level, attempt + 1);
+      }
+
+      if (level === "N5" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
+        return makeQuestion(level, attempt + 1);
+      }
+
+      if (level === "H" && mode !== "free" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
+        return makeQuestion(level, attempt + 1);
+      }
+
+      if (level === "H" && mode === "free" && targetHasAnySourcePattern(bars, targetBar) && attempt < 160) {
+        return makeQuestion(level, attempt + 1);
+      }
+
+      if (!melodyPassesQualityRules(question) && attempt < 160) {
+        return makeQuestion(level, attempt + 1);
+      }
+
+      return question;
     }
 
     function barStart(barIndex) {
@@ -396,7 +725,7 @@
       });
     }
 
-    function getQuaverGroups(notes) {
+    function getQuaverGroups(notes, timeSignature = null) {
       const groups = [];
       let index = 0;
       while (index < notes.length) {
@@ -405,7 +734,14 @@
           continue;
         }
         const start = index;
-        while (notes[index + 1]?.rhythm === "quaver") index += 1;
+        while (notes[index + 1]?.rhythm === "quaver") {
+          if (timeSignature?.id === "6/8") {
+            const currentGroup = Math.floor((notes[index].beat + 0.001) / 1.5);
+            const nextGroup = Math.floor((notes[index + 1].beat + 0.001) / 1.5);
+            if (currentGroup !== nextGroup) break;
+          }
+          index += 1;
+        }
         if (index > start) groups.push({ start, end: index });
         index += 1;
       }
@@ -533,26 +869,32 @@
       return <g pointerEvents="none"><text className="music-symbol" x={x} y={y - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{topGlyph}</text><text className="music-symbol" x={x} y={y + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text></g>;
     }
 
-    function BarNotes({ bar, notes, positions, top, colour = "currentColor", feedback = null, hidden = false, activeNoteId = null }) {
-      const groups = getQuaverGroups(hidden ? bar.notes : notes);
+    function BarNotes({ bar, notes, positions, top, colour = "currentColor", feedback = null, hidden = false, activeNoteId = null, forceStemUp = false, timeSignature = null }) {
+      const groups = getQuaverGroups(hidden ? bar.notes : notes, timeSignature);
+      const shownAccidentals = new Set();
       return (
         <g>
           {notes.map((note, index) => {
             if (!note) return null;
+            const accidentalKey = `${note.letter}:${note.writtenAccidental}`;
+            const showAccidental = Boolean(note.writtenAccidental) && !shownAccidentals.has(accidentalKey);
+            if (note.writtenAccidental) shownAccidentals.add(accidentalKey);
+            const displayNote = showAccidental ? note : { ...note, writtenAccidental: null };
             const group = groupContaining(groups, index);
             const groupNotes = group ? notes.slice(group.start, group.end + 1) : [];
             const groupPositions = group ? positions.slice(group.start, group.end + 1) : [];
-            const beam = group && groupNotes.every(Boolean) ? getBeam(groupNotes, groupPositions, top) : null;
+            const beam = group && groupNotes.every(Boolean) ? getBeam(groupNotes, groupPositions, top, forceStemUp ? false : null) : null;
+            const noteStemDown = forceStemUp ? false : beam?.down ?? null;
             const stem = beam ? getStem(positions[index], yForStep(note.step, top), note.step, beam.down) : null;
             const forcedEndY = beam && stem ? beamYAtX(stem.stemX, beam) : null;
             const expected = bar.notes[index];
             const resultColour = feedback && hidden ? (note.step === expected?.step ? COLOUR.green : COLOUR.red) : colour;
-            return <Note key={note.id ?? `${bar.barIndex}-${index}`} note={note} x={positions[index]} top={top} colour={resultColour} active={activeNoteId === note.id} showFlag={!beam} forcedDown={beam?.down ?? null} forcedEndY={forcedEndY} opacity={feedback && hidden && note.step !== expected?.step ? 0.58 : 1} />;
+            return <Note key={note.id ?? `${bar.barIndex}-${index}`} note={displayNote} x={positions[index]} top={top} colour={resultColour} active={activeNoteId === note.id} showFlag={!beam} forcedDown={noteStemDown} forcedEndY={forcedEndY} opacity={feedback && hidden && note.step !== expected?.step ? 0.58 : 1} />;
           })}
           {groups.map((group, index) => {
             const groupNotes = notes.slice(group.start, group.end + 1);
             if (!groupNotes.every(Boolean)) return null;
-            const beam = getBeam(groupNotes, positions.slice(group.start, group.end + 1), top);
+            const beam = getBeam(groupNotes, positions.slice(group.start, group.end + 1), top, forceStemUp ? false : null);
             const groupCorrect = groupNotes.every((note, noteIndex) => note?.step === bar.notes[group.start + noteIndex]?.step);
             const beamColour = feedback && hidden ? (groupCorrect ? COLOUR.green : COLOUR.red) : colour;
             return <BeamShape key={`beam-${bar.barIndex}-${index}`} beam={beam} colour={beamColour} />;
@@ -561,23 +903,25 @@
       );
     }
 
-    function RhythmGuide({ bar, positions, top, activeNoteId }) {
+    function RhythmGuide({ bar, positions, top, activeNoteId, timeSignature }) {
       const guideTop = top - 48;
       const guideNotes = bar.notes.map((note) => ({ ...note, step: 5, writtenAccidental: null }));
-      return <g opacity="0.72"><BarNotes bar={{ ...bar, notes: guideNotes }} notes={guideNotes} positions={positions} top={guideTop} colour={COLOUR.guide} activeNoteId={activeNoteId} /></g>;
+      return <g opacity="0.72"><BarNotes bar={{ ...bar, notes: guideNotes }} notes={guideNotes} positions={positions} top={guideTop} colour={COLOUR.guide} activeNoteId={activeNoteId} forceStemUp timeSignature={timeSignature} /></g>;
     }
 
-    function CorrectionLayer({ bar, userNotes, positions, top }) {
+    function CorrectionLayer({ bar, userNotes, positions, top, timeSignature }) {
       const correctionNotes = bar.notes.map((note, index) => userNotes[index]?.step === note.step ? null : { ...note, id: `correct-${index}` });
       const shiftedPositions = positions.map((x) => x + 20);
-      return <BarNotes bar={bar} notes={correctionNotes} positions={shiftedPositions} top={top} colour={COLOUR.green} />;
+      return <BarNotes bar={bar} notes={correctionNotes} positions={shiftedPositions} top={top} colour={COLOUR.green} timeSignature={timeSignature} />;
     }
 
     function Score({ question, userNotes, setUserNotes, feedback, activeNoteId, hoverNote, setHoverNote }) {
       const [draggingNote, setDraggingNote] = useState(null);
       const targetInputRef = useRef(null);
-      const systems = question.bars.length <= BARS_PER_SYSTEM ? [STAFF.topA] : [STAFF.topA, STAFF.topB];
-      const scoreHeight = question.bars.length <= BARS_PER_SYSTEM ? 188 : SVG.height;
+      const isOneSystem = question.bars.length <= BARS_PER_SYSTEM;
+      const systems = isOneSystem ? [STAFF.topA] : [STAFF.topA, STAFF.topB];
+      const scoreHeight = isOneSystem ? 154 : SVG.height;
+      const scoreOffsetY = isOneSystem ? -30 : 0;
 
       useEffect(() => {
         const element = targetInputRef.current;
@@ -595,6 +939,14 @@
       }, [question.id, question.targetBar]);
 
       function pointerToSvg(event) {
+        const matrix = event.currentTarget.getScreenCTM?.();
+        if (matrix) {
+          const point = event.currentTarget.ownerSVGElement.createSVGPoint();
+          point.x = event.clientX;
+          point.y = event.clientY;
+          const local = point.matrixTransform(matrix.inverse());
+          return { x: local.x, y: local.y };
+        }
         const svg = event.currentTarget.ownerSVGElement ?? event.currentTarget;
         const rect = svg.getBoundingClientRect();
         return {
@@ -617,7 +969,8 @@
         if (lockedIndex === null && (Math.abs(pointer.x - positions[noteIndex]) > 48 || pointer.y < top - 28 || pointer.y > top + 92)) return null;
         const step = clamp(Math.round((top + STAFF.gap * 4 - effectiveY) / (STAFF.gap / 2)), NOTE_POOL[0].step, NOTE_POOL.at(-1).step);
         const base = NOTE_POOL.find((note) => note.step === step) ?? NOTE_POOL[0];
-        return { ...base, id: `user-${noteIndex}`, rhythm: targetNote.rhythm, beats: targetNote.beats, barIndex: targetBar.barIndex, noteIndex, writtenAccidental: null };
+        const writtenAccidental = melodicAccidentalForLetter(question.key, base.letter);
+        return { ...base, id: `user-${noteIndex}`, rhythm: targetNote.rhythm, beats: targetNote.beats, barIndex: targetBar.barIndex, noteIndex, writtenAccidental };
       }
 
       function handleMove(event) {
@@ -656,6 +1009,7 @@
       return (
         <svg viewBox={`0 0 ${SVG.width} ${scoreHeight}`} className="h-auto w-full select-none overflow-visible">
           <rect width={SVG.width} height={scoreHeight} fill="white" />
+          <g transform={scoreOffsetY ? `translate(0 ${scoreOffsetY})` : undefined}>
           {systems.map((top, systemIndex) => <Staff key={systemIndex} top={top} systemIndex={systemIndex} question={question} />)}
           {question.bars.map((bar) => {
             const top = systemTop(bar.barIndex);
@@ -668,17 +1022,17 @@
               <g key={bar.barIndex}>
                 <text x={(bar.barIndex === 0 || bar.barIndex === 4) ? start - 15 : start + 5} y={top - 17} fontSize="12" fontWeight="700">{bar.barIndex + 1}</text>
                 {isTarget && <rect ref={targetInputRef} x={start} y={top - 62} width={end - start} height="122" fill="transparent" pointerEvents="all" className="touch-none" style={{ touchAction: "none", WebkitUserSelect: "none", userSelect: "none", overscrollBehavior: "contain" }} onPointerMove={handleMove} onPointerLeave={() => { if (!draggingNote) setHoverNote(null); }} onPointerDown={handlePointerDown} onPointerUp={handlePointerUp} onPointerCancel={() => { setDraggingNote(null); setHoverNote(null); }} />}
-                {isTarget && <RhythmGuide bar={bar} positions={positions} top={top} activeNoteId={activeNoteId} />}
+                {isTarget && <RhythmGuide bar={bar} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} />}
                 {isTarget
-                  ? <BarNotes bar={bar} notes={targetUserNotes} positions={positions} top={top} hidden feedback={feedback} />
-                  : <BarNotes bar={bar} notes={bar.notes} positions={positions} top={top} activeNoteId={activeNoteId} />}
+                  ? <BarNotes bar={bar} notes={targetUserNotes} positions={positions} top={top} hidden feedback={feedback} timeSignature={question.timeSignature} />
+                  : <BarNotes bar={bar} notes={bar.notes} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} />}
                 {isTarget && hoverNote && !feedback && (
                   <>
                     {draggingNote && <Note note={{ ...hoverNote, id: `ghost-${hoverNote.id}` }} x={positions[hoverNote.noteIndex]} top={top} colour="#666" faint />}
                     <Note note={hoverNote} x={positions[hoverNote.noteIndex]} top={top} colour="#444" faint={!draggingNote} scale={draggingNote ? 1.6 : 1} />
                   </>
                 )}
-                {feedback && isTarget && <CorrectionLayer bar={bar} userNotes={userNotes} positions={positions} top={top} />}
+                {feedback && isTarget && <CorrectionLayer bar={bar} userNotes={userNotes} positions={positions} top={top} timeSignature={question.timeSignature} />}
                 {bar.barIndex === question.bars.length - 1 ? (
                   <g>
                     <line x1={end - 5} x2={end - 5} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="1.4" />
@@ -690,6 +1044,7 @@
               </g>
             );
           })}
+          </g>
         </svg>
       );
     }
@@ -770,6 +1125,127 @@
       window.MLH?.playFeedbackSound?.(correct, celebration, medal);
     }
 
+    const MISSING_NOTES_MEDALS = [
+      { tier: "bronze", value: 2, icon: ASSET.bronze, className: "text-amber-700", sound: "bronze" },
+      { tier: "silver", value: 4, icon: ASSET.silver, className: "text-slate-500", sound: "silver" },
+      { tier: "gold", value: 6, icon: ASSET.gold, className: "text-yellow-500", sound: "gold" },
+      { tier: "diamond", value: 10, icon: ASSET.diamond, className: "text-cyan-500", sound: "platinum" },
+    ];
+
+    function missingNotesStreakMedal(streak) {
+      return [...MISSING_NOTES_MEDALS].reverse().find((item) => streak >= item.value) ?? null;
+    }
+
+    function medalStyleForStreak(streak) {
+      if (streak >= 10) return { backgroundColor: "rgba(34, 211, 238, .25)", color: "#06b6d4" };
+      if (streak >= 6) return { backgroundColor: "rgba(250, 204, 21, .25)", color: "#eab308" };
+      if (streak >= 4) return { backgroundColor: "rgba(203, 213, 225, .3)", color: "#64748b" };
+      if (streak >= 2) return { backgroundColor: "rgba(180, 83, 9, .2)", color: "#b45309" };
+      return { backgroundColor: "#fafaf9", color: "#000000" };
+    }
+
+    function MissingNotesScoreStreakPanel({
+      correct,
+      attempted,
+      accuracy,
+      streak,
+      bestStreak,
+      resetScore,
+      confettiKey = 0,
+      autoShowMedals = false,
+    }) {
+      const [popover, setPopover] = useState(null);
+      const ref = useRef(null);
+      window.MLH.useClickAway(ref, () => setPopover(null));
+
+      const scoreFill = clamp(accuracy || 0, 0, 100);
+      const scoreColour = scoreFill < 50 ? "rgba(220,38,38,.38)" : scoreFill < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)";
+      const medal = missingNotesStreakMedal(streak);
+      const medalStyle = medalStyleForStreak(streak);
+      const tile = window.MLH?.shell?.scoreTileClass ?? "relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm sm:h-[64px]";
+      const active = window.MLH?.shell?.scoreTileActiveClass ?? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg";
+
+      return (
+        <div ref={ref} className="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-[112px_98px] lg:grid-cols-[124px_108px]">
+          <section
+            role="button"
+            tabIndex="0"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setPopover((value) => value === "score" ? null : "score")}
+            className={`${tile} ${popover === "score" ? active : ""}`}
+          >
+            <div className="absolute inset-0 overflow-hidden rounded-xl">
+              <div className="absolute bottom-0 -left-[2px] right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreColour }} />
+            </div>
+            <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
+              <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Score</div>
+              <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{correct}/{attempted}</div>
+              <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Accuracy: {accuracy}%</div>
+            </div>
+            {popover === "score" && (
+              <button
+                type="button"
+                onClick={(event) => { event.stopPropagation(); resetScore(); setPopover(null); }}
+                className="fixed-popover-button score-reset-button absolute left-1/2 top-full z-[120] mt-2 flex min-w-[112px] w-full -translate-x-1/2 items-center justify-center rounded-xl border border-[#dc2626] bg-[#dc2626] px-3 py-2 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(0,0,0,0.28)] sm:w-auto"
+                style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
+              >
+                Reset
+              </button>
+            )}
+          </section>
+          <section
+            role="button"
+            tabIndex="0"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setPopover((value) => value === "streak" ? null : "streak")}
+            className={`${tile} overflow-visible ${popover === "streak" ? active : ""}`}
+            style={{ backgroundColor: medalStyle.backgroundColor }}
+          >
+            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
+              <div className="absolute inset-0 rounded-xl transition-colors duration-700" style={{ backgroundColor: medalStyle.backgroundColor }} />
+            </div>
+            {confettiKey > 0 && (
+              <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
+                {Array.from({ length: 18 }).map((_, index) => (
+                  <span
+                    key={index}
+                    className="absolute block h-1.5 w-1 rounded-sm"
+                    style={{
+                      left: `${8 + ((index * 19) % 84)}%`,
+                      top: "-8px",
+                      backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5],
+                      animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`,
+                      animationDelay: `${(index % 6) * 0.035}s`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
+              <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
+              <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px]" style={{ color: medalStyle.color }}>{streak}</div>
+              <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
+            </div>
+            {(popover === "streak" || autoShowMedals) && (
+              <div
+                className="fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-3 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]"
+                style={{ animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
+              >
+                <div className="flex items-end justify-center gap-3">
+                  {MISSING_NOTES_MEDALS.map((item) => (
+                    <div key={item.value} className={`flex flex-col items-center justify-end ${medal?.tier === item.tier ? "medal-threshold-active" : ""}`}>
+                      <img src={item.icon} alt="" aria-hidden="true" className="h-[22.8px] w-[22.8px] object-contain" />
+                      <span className={`mt-1 text-[11px] font-semibold leading-none ${item.className}`}>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      );
+    }
+
     function App() {
       useStyles();
       const initialLevel = useMemo(() => {
@@ -796,6 +1272,8 @@
       const [activeNoteId, setActiveNoteId] = useState(null);
       const audioRef = useRef(null);
       const timersRef = useRef([]);
+      const playbackBarRef = useRef(null);
+      const scrubWasPlayingRef = useRef(false);
       const nextTimer = useRef(null);
       const fadeTimer = useRef(null);
       const menuRef = useRef(null);
@@ -814,14 +1292,19 @@
         window.clearTimeout(fadeTimer.current);
       }
 
-      function stopAudio() {
+      function clearFeedbackTimers() {
+        window.clearTimeout(nextTimer.current);
+        window.clearTimeout(fadeTimer.current);
+      }
+
+      function stopAudio(resetElapsed = true) {
         clearTimers();
         if (audioRef.current) {
           try { audioRef.current.close(); } catch {}
         }
         audioRef.current = null;
         setIsPlaying(false);
-        setPlaybackElapsed(0);
+        if (resetElapsed) setPlaybackElapsed(0);
         setActiveNoteId(null);
       }
 
@@ -837,6 +1320,13 @@
           setPrompt("");
           setVisible(true);
         }, 220);
+      }
+
+      function advanceAfterFeedback() {
+        if (!feedback) return;
+        clearFeedbackTimers();
+        setFeedbackFading(true);
+        nextTimer.current = window.setTimeout(() => newQuestion(), 180);
       }
 
       function applyLevel(level) {
@@ -875,7 +1365,6 @@
         if (feedback) return;
         const target = question.bars[question.targetBar];
         if (target.notes.some((_, index) => !userNotes[index])) {
-          setPrompt("Complete the full bar before pressing Confirm.");
           return;
         }
         stopAudio();
@@ -883,7 +1372,7 @@
         setScore((current) => {
           const streak = correct ? current.streak + 1 : 0;
           if (correct && [2, 4, 6, 10].includes(streak)) {
-            const medal = window.MLH?.getStreakMedal?.(streak);
+            const medal = missingNotesStreakMedal(streak);
             setConfetti((value) => value + 1);
             setAutoShowMedals(true);
             window.setTimeout(() => setAutoShowMedals(false), 2000);
@@ -898,34 +1387,102 @@
         });
         playSound(correct);
         setFeedback({ correct });
+        setFeedbackFading(false);
         setPrompt("");
         if (correct) {
-          setFeedbackFading(false);
           fadeTimer.current = window.setTimeout(() => setFeedbackFading(true), 1700);
           nextTimer.current = window.setTimeout(() => newQuestion(), 2050);
         }
       }
 
-      function oscillator(ctx, gainNode, frequency, start, duration, volume = 0.035, type = "sine") {
+      function oscillator(ctx, gainNode, frequency, start, duration, volume = 0.035, type = "sine", release = 0.08) {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = type;
         osc.frequency.setValueAtTime(frequency, start);
         gain.gain.setValueAtTime(0.0001, start);
         gain.gain.exponentialRampToValueAtTime(volume, start + 0.03);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + 0.08);
+        gain.gain.setValueAtTime(volume * 0.92, start + Math.max(0.04, duration));
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + release);
         osc.connect(gain);
         gain.connect(gainNode);
         osc.start(start);
-        osc.stop(start + duration + 0.1);
+        osc.stop(start + duration + release + 0.02);
       }
 
       function playMetronome(ctx, gainNode, start, accented) {
         oscillator(ctx, gainNode, accented ? 1100 : 760, start, 0.04, accented ? 0.045 : 0.03, "square");
       }
 
-      function playQuestionAudio() {
-        if (isPlaying) {
+      function playAccompaniment(ctx, gainNode, question, bar, barStart, offset, startTime) {
+        if (barStart + barSeconds <= offset) return;
+        const chordLetters = question.key.chords[bar.chordSymbol] ?? [];
+        if (!chordLetters.length) return;
+
+        if (bar.barIndex === question.bars.length - 1) {
+          const chordStart = Math.max(barStart, offset);
+          const chordDuration = Math.max(0.04, barStart + barSeconds * 0.96 - chordStart);
+          chordLetters.forEach((letter, index) => {
+            const chordMidi = pitchForChordLetter(question, bar, letter, 3 + index);
+            oscillator(ctx, gainNode, midiToFrequency(chordMidi), startTime + chordStart, chordDuration, 0.026, "triangle", 0.08);
+            if (index === 0) oscillator(ctx, gainNode, midiToFrequency(chordMidi - 12), startTime + chordStart, chordDuration, 0.02, "sine", 0.08);
+          });
+          return;
+        }
+
+        const bassMidi = pitchForChordLetter(question, bar, chordLetters[0], 2) - 12;
+        const bassStart = Math.max(barStart, offset);
+        const bassDuration = Math.max(0.04, barStart + beatSeconds * 0.88 - bassStart);
+        oscillator(ctx, gainNode, midiToFrequency(bassMidi), startTime + bassStart, bassDuration, 0.024, "sine", 0.06);
+
+        if (question.timeSignature.id === "4/4") {
+          const events = [
+            { beat: 1, type: "chord" },
+            { beat: 2, type: "bass5" },
+            { beat: 3, type: "chord" },
+          ];
+          events.forEach((event) => {
+            const pulseStart = barStart + event.beat * beatSeconds;
+            const pulseDuration = beatSeconds * 0.42;
+            if (pulseStart + pulseDuration <= offset) return;
+            const audibleStart = Math.max(pulseStart, offset);
+            const audibleDuration = Math.max(0.04, pulseStart + pulseDuration - audibleStart);
+            if (event.type === "bass5") {
+              const fifthMidi = pitchForChordLetter(question, bar, chordLetters[1] ?? chordLetters[0], 2) - 12;
+              oscillator(ctx, gainNode, midiToFrequency(fifthMidi), startTime + audibleStart, audibleDuration, 0.024, "sine", 0.06);
+              return;
+            }
+            chordLetters.forEach((letter, index) => {
+              const chordMidi = pitchForChordLetter(question, bar, letter, 3 + index);
+              oscillator(ctx, gainNode, midiToFrequency(chordMidi), startTime + audibleStart, audibleDuration, 0.018, "triangle", 0.05);
+            });
+          });
+          return;
+        }
+
+        const pulseBeats = question.timeSignature.id === "6/8"
+          ? [1.5]
+          : Array.from({ length: Math.max(0, question.timeSignature.beats - 1) }, (_, beat) => beat + 1);
+        pulseBeats.forEach((beat) => {
+          const pulseStart = barStart + beat * beatSeconds;
+          const pulseDuration = beatSeconds * (question.timeSignature.id === "6/8" ? 0.72 : 0.42);
+          if (pulseStart + pulseDuration <= offset) return;
+          const audibleStart = Math.max(pulseStart, offset);
+          const audibleDuration = Math.max(0.04, pulseStart + pulseDuration - audibleStart);
+          chordLetters.forEach((letter, index) => {
+            const chordMidi = pitchForChordLetter(question, bar, letter, 3 + index);
+            oscillator(ctx, gainNode, midiToFrequency(chordMidi), startTime + audibleStart, audibleDuration, 0.018, "triangle", 0.05);
+          });
+        });
+      }
+
+      function playMelodyNote(ctx, gainNode, frequency, start, duration) {
+        oscillator(ctx, gainNode, frequency, start, duration, 0.078, "triangle", 0.1);
+        oscillator(ctx, gainNode, frequency * 2, start, duration * 0.94, 0.012, "sine", 0.08);
+      }
+
+      function playQuestionAudio(startAt = 0, restart = false) {
+        if (isPlaying && !restart) {
           stopAudio();
           return;
         }
@@ -934,32 +1491,42 @@
           setPrompt("Audio playback is not supported in this browser.");
           return;
         }
-        stopAudio();
+        const offset = clamp(Number(startAt) || 0, 0, totalDuration);
+        stopAudio(false);
+        if (offset >= totalDuration) {
+          setPlaybackElapsed(totalDuration);
+          return;
+        }
         const ctx = new AudioContextClass();
         const master = ctx.createGain();
-        master.gain.setValueAtTime(0.85, ctx.currentTime);
+        master.gain.setValueAtTime(1.25, ctx.currentTime);
         master.connect(ctx.destination);
         audioRef.current = ctx;
-        const startTime = ctx.currentTime + 0.12;
+        const startTime = ctx.currentTime + 0.12 - offset;
         setIsPlaying(true);
         setPrompt("");
-        setPlaybackElapsed(0);
+        setPlaybackElapsed(offset);
 
         question.bars.forEach((bar) => {
           const barStart = bar.barIndex * barSeconds;
           if (metronomeOn) {
             for (let beat = 0; beat < question.timeSignature.beats; beat += 1) {
-              playMetronome(ctx, master, startTime + barStart + beat * beatSeconds, beat === 0);
+              const beatStart = barStart + beat * beatSeconds;
+              if (beatStart >= offset) playMetronome(ctx, master, startTime + beatStart, beat === 0);
             }
           }
+          playAccompaniment(ctx, master, question, bar, barStart, offset, startTime);
           bar.notes.forEach((note) => {
             const noteStart = barStart + note.beat * beatSeconds;
-            const duration = note.beats * beatSeconds * 0.88;
-            oscillator(ctx, master, midiToFrequency(note.midi + (note.writtenAccidental ?? 0)), startTime + noteStart, duration);
+            const duration = note.beats * beatSeconds * 0.96;
+            if (noteStart + duration <= offset) return;
+            const audibleStart = Math.max(noteStart, offset);
+            const audibleDuration = Math.max(0.04, noteStart + duration - audibleStart);
+            playMelodyNote(ctx, master, midiToFrequency(effectiveMidiForNote(question, bar, note)), startTime + audibleStart, audibleDuration);
             const highlightTimer = window.setTimeout(() => {
               if (followPlayback) setActiveNoteId(note.id);
-            }, Math.max(0, (startTime + noteStart - ctx.currentTime) * 1000));
-            const clearTimer = window.setTimeout(() => setActiveNoteId(null), Math.max(0, (startTime + noteStart - ctx.currentTime + duration) * 1000));
+            }, Math.max(0, (startTime + audibleStart - ctx.currentTime) * 1000));
+            const clearTimer = window.setTimeout(() => setActiveNoteId(null), Math.max(0, (startTime + audibleStart - ctx.currentTime + audibleDuration) * 1000));
             timersRef.current.push(highlightTimer, clearTimer);
           });
         });
@@ -972,20 +1539,52 @@
         const stopTimer = window.setTimeout(() => {
           window.clearInterval(tick);
           stopAudio();
-        }, totalDuration * 1000 + 260);
+        }, Math.max(0, (totalDuration - offset) * 1000) + 260);
         timersRef.current.push(tick, stopTimer);
+      }
+
+      function secondsFromScrubEvent(event) {
+        const rect = playbackBarRef.current?.getBoundingClientRect();
+        if (!rect || totalDuration <= 0) return 0;
+        return clamp(((event.clientX - rect.left) / rect.width) * totalDuration, 0, totalDuration);
+      }
+
+      function beginScrub(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        const seconds = secondsFromScrubEvent(event);
+        scrubWasPlayingRef.current = isPlaying;
+        if (isPlaying) stopAudio(false);
+        setPlaybackElapsed(seconds);
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      }
+
+      function moveScrub(event) {
+        if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+        event.preventDefault();
+        setPlaybackElapsed(secondsFromScrubEvent(event));
+      }
+
+      function endScrub(event) {
+        if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+        event.preventDefault();
+        const seconds = secondsFromScrubEvent(event);
+        setPlaybackElapsed(seconds);
+        event.currentTarget.releasePointerCapture?.(event.pointerId);
+        if (scrubWasPlayingRef.current) playQuestionAudio(seconds, true);
+        scrubWasPlayingRef.current = false;
       }
 
       useEffect(() => () => stopAudio(), []);
 
       const progress = totalDuration > 0 ? clamp((playbackElapsed / totalDuration) * 100, 0, 100) : 0;
-      const medal = window.MLH?.getStreakMedal?.(score.streak);
+      const targetBar = question.bars[question.targetBar];
+      const allRequiredNotesPlaced = Boolean(targetBar?.notes?.length) && targetBar.notes.every((_, index) => Boolean(userNotes[index]));
 
       return (
         <div className="overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12">
           <window.MLH.AppHeader icon={ASSET.appIcon} title="Melody Completion" subtitle="Identify and complete melodic patterns.">
-            <window.MLH.ScoreStreakPanel
-              assets={ASSET}
+            <MissingNotesScoreStreakPanel
               correct={score.correct}
               attempted={score.attempted}
               accuracy={accuracy}
@@ -998,7 +1597,14 @@
           </window.MLH.AppHeader>
 
           <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]">
-            <main className="relative flex min-h-[560px] flex-col overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-3 pt-[10px] shadow-sm sm:px-4 md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => { if (feedback && !feedback.correct) newQuestion(); }}>
+            <main
+              className="relative flex min-h-[560px] flex-col overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-3 pt-[10px] shadow-sm sm:px-4 md:px-6 md:pb-6 md:pt-[14px]"
+              onPointerDown={(event) => {
+                if (!feedback) return;
+                if (event.target.closest("button,[data-menu-trigger],[data-menu-panel]")) return;
+                advanceAfterFeedback();
+              }}
+            >
               <div className="relative z-[90] mb-2.5 grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
                 <div className="relative flex items-center gap-2" ref={menuRef}>
                   <div className="hub-menu-anchor relative">
@@ -1060,9 +1666,34 @@
                       <span>{isPlaying ? "Stop" : "Play"}</span>
                     </button>
                     <div className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3">
-                      <div className="relative h-[8.8px] flex-1 rounded-full bg-stone-200">
-                        <div className="absolute top-0 h-2 rounded-full bg-stone-900" style={{ left: "2px", width: `max(0px, calc(${progress}% - 2px))` }} />
-                        <div className="absolute top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-stone-950 shadow-sm" style={{ left: `calc(${progress}% + 2px)` }} />
+                      <div
+                        ref={playbackBarRef}
+                        role="slider"
+                        tabIndex="0"
+                        aria-label="Playback position"
+                        aria-valuemin="0"
+                        aria-valuemax={Math.round(totalDuration)}
+                        aria-valuenow={Math.round(playbackElapsed)}
+                        className="relative h-[18px] flex-1 cursor-pointer touch-none rounded-full"
+                        onPointerDown={beginScrub}
+                        onPointerMove={moveScrub}
+                        onPointerUp={endScrub}
+                        onPointerCancel={endScrub}
+                        onKeyDown={(event) => {
+                          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                          event.preventDefault();
+                          const change = event.key === "ArrowRight" ? 1 : -1;
+                          const nextPosition = clamp(playbackElapsed + change, 0, totalDuration);
+                          if (isPlaying) {
+                            playQuestionAudio(nextPosition, true);
+                          } else {
+                            setPlaybackElapsed(nextPosition);
+                          }
+                        }}
+                      >
+                        <div className="absolute left-0 right-0 top-1/2 h-[8.8px] -translate-y-1/2 rounded-full bg-stone-200" />
+                        <div className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-stone-900" style={{ left: "2px", width: `max(0px, calc(${progress}% - 2px))` }} />
+                        <div className="absolute top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-stone-950 shadow-sm transition-transform active:scale-110" style={{ left: `calc(${progress}% + 2px)` }} />
                       </div>
                       <div className="w-[72px] text-right text-xs font-semibold tabular-nums text-stone-600">{formatTime(playbackElapsed)} / {formatTime(totalDuration)}</div>
                     </div>
@@ -1072,7 +1703,7 @@
                       <span className="-translate-y-[1px] text-xl leading-none">↺</span>
                       <span>Undo</span>
                     </button>
-                    <button type="button" disabled={Boolean(feedback)} onClick={confirmAnswer} className="rounded-xl bg-stone-950 px-[22px] py-[10px] text-sm font-bold text-white">
+                    <button type="button" disabled={Boolean(feedback) || !allRequiredNotesPlaced} onClick={confirmAnswer} className="rounded-xl bg-stone-950 px-[22px] py-[10px] text-sm font-bold text-white disabled:bg-stone-400 disabled:text-white disabled:opacity-70">
                       Confirm
                     </button>
                   </div>
