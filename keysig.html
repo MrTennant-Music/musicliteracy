@@ -39,16 +39,18 @@ const ASSET = {
 const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
 const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
 const SVG = { width: 980, height: 360 };
+const SCORE_VIEWBOX = { x: 20, y: 36, width: 890, height: 210 };
 const STAFF = { left: 72, right: 848, top: 90, gap: 10 };
 const CALIBRATION_PREVIEW_GAP = 10;
 const BAR_COUNT = 4;
+const KEY_SIGNATURE_SPACING = 14;
 
 const TIME_SIGNATURE_SYMBOLS = {
   "4/4": { top: ["timeSig4"], bottom: ["timeSig4"], key: "timeSig44" },
 };
 const CALIBRATION_ANCHORS = {
-  gClef: { xScale: 6.4, step: 2 },
-  timeSig44: { xScale: 12.4, step: 5.3 },
+  gClef: { xScale: 3.2, step: 2 },
+  timeSig44: { xScale: 12, step: 5.3 },
 };
 const CALIBRATION_LAYOUT_OFFSETS = {
   keySignature: 54,
@@ -253,7 +255,7 @@ function passageBarEnd(index) {
 }
 
 function accidentalX(type, index = 0) {
-  return calibrationLayoutX("keySignature") + index * STAFF.gap;
+  return calibrationLayoutX("keySignature") + index * KEY_SIGNATURE_SPACING;
 }
 
 function scoreAccidentalBaseX(x) {
@@ -447,17 +449,6 @@ function useStyles() {
 
 const useClickAway = window.MLH.useClickAway;
 
-function useMobileFlag() {
-  const [mobile, setMobile] = useState(window.innerWidth < 640);
-  useEffect(() => {
-    const update = () => setMobile(window.innerWidth < 640);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-  return mobile;
-}
-
 function useTouchDevice() {
   const isTouch = () => window.MLH?.isTouchDevice?.() ?? (window.matchMedia("(hover: none) and (pointer: coarse)").matches || window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0 || "ontouchstart" in window);
   const [touchDevice, setTouchDevice] = useState(isTouch);
@@ -650,26 +641,19 @@ function useSession(initialLevel) {
   };
 }
 
-function Staff({ buildFocus }) {
-  const fadeX = buildFocus ? calibrationLayoutX("keySignature") + STAFF.gap * 4.5 : STAFF.right;
+function Staff() {
   return (
     <g>
-      <defs>
-        <linearGradient id="staffFadeV2" x1={STAFF.left} y1="0" x2={fadeX} y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#000" stopOpacity="1" />
-          <stop offset="94%" stopColor="#000" stopOpacity="1" />
-          <stop offset="100%" stopColor="#000" stopOpacity="0" />
-        </linearGradient>
-      </defs>
       {[0, 1, 2, 3, 4].map((line) => (
-        <line key={line} x1={STAFF.left} x2={fadeX} y1={STAFF.top + line * STAFF.gap} y2={STAFF.top + line * STAFF.gap} stroke="url(#staffFadeV2)" strokeWidth="1.5" />
+        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={STAFF.top + line * STAFF.gap} y2={STAFF.top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
       ))}
-      {!buildFocus && Array.from({ length: BAR_COUNT - 1 }, (_, index) => {
+      {Array.from({ length: BAR_COUNT - 1 }, (_, index) => {
         const x = passageBarEnd(index);
         return <line key={index} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />;
       })}
       <CalibratedSymbol symbolKey="gClef" x={calibrationAnchorX("gClef")} y={calibrationAnchorY("gClef")} />
-      {!buildFocus && <CalibratedTimeSignature signature="4/4" x={calibrationLayoutX("timeSignature")} y={calibrationAnchorY("timeSig44")} />}
+      <CalibratedTimeSignature signature="4/4" x={calibrationAnchorX("timeSig44")} y={calibrationAnchorY("timeSig44")} />
+      <CalibratedSymbol symbolKey="barlineFinal" x={STAFF.right} y={yForStep(4)} />
     </g>
   );
 }
@@ -757,13 +741,11 @@ function quaverGroups(bar) {
 }
 
 function barPositions(bar, startX, endX, barIndex = 0) {
-  const total = bar.reduce((sum, note) => sum + RHYTHM_UNITS[note.rhythm], 0);
-  const startPad = calibrationOffset(barIndex === 0 ? 4 : 15);
-  const endPad = calibrationOffset(barIndex === BAR_COUNT - 1 ? 24 : 4);
-  const availableStart = startX + startPad;
-  const availableEnd = endX - endPad;
-  const unit = (availableEnd - availableStart) / total;
-  let x = availableStart + unit * 0.38;
+  const scoreStart = startX + (barIndex === 0 ? 4 : 15);
+  const scoreEnd = barIndex === BAR_COUNT - 1 ? endX - 24 : endX - 4;
+  const units = bar.reduce((sum, note) => sum + RHYTHM_UNITS[note.rhythm], 0);
+  const unit = Math.max(1, scoreEnd - scoreStart) / Math.max(1, units);
+  let x = scoreStart + unit * 0.38;
   return bar.map((note) => {
     const current = x;
     x += RHYTHM_UNITS[note.rhythm] * unit;
@@ -856,7 +838,7 @@ function BeamShape({ beam, colour = "currentColor" }) {
   return <polygon points={beamPolygonPoints(beam.start.x, beam.start.y, beam.end.x, beam.end.y, thickness)} fill={colour} />;
 }
 
-function BuildLayer({ question, selectedAccidental, placed, setHover, hover, onPlace, feedback, mobileBuild }) {
+function BuildLayer({ question, selectedAccidental, placed, setHover, hover, onPlace, feedback }) {
   const [drag, setDrag] = useState(null);
   const max = question.maxBuildAccidentals || 1;
   const expected = question.key.signature;
@@ -875,7 +857,7 @@ function BuildLayer({ question, selectedAccidental, placed, setHover, hover, onP
   function accidentalFromPointer(event) {
     if (!selectedAccidental || showingFeedback) return null;
     const pointer = pointerToSvg(event);
-    const rawStep = Math.round((STAFF.top + STAFF.gap * 4 - (pointer.y - (mobileBuild && event.pointerType === "touch" ? 44 : 0))) / (STAFF.gap / 2));
+    const rawStep = Math.round((STAFF.top + STAFF.gap * 4 - pointer.y) / (STAFF.gap / 2));
     const centers = Array.from({ length: max }, (_, index) => accidentalX(selectedAccidental, index));
     let index = centers.reduce((best, center, current) => Math.abs(center - pointer.x) < Math.abs(centers[best] - pointer.x) ? current : best, 0);
     if (index > 0 && !placed[0]) index = 0;
@@ -918,19 +900,18 @@ function BuildLayer({ question, selectedAccidental, placed, setHover, hover, onP
   );
 }
 
-function Score({ question, session, mobile }) {
-  const mobileBuild = mobile && question.type === "build-key";
-  const viewBox = mobileBuild ? MOBILE_BUILD_VIEWBOX : mobile ? MOBILE_VIEWBOX : { x: 0, y: 0, width: SVG.width, height: SVG.height };
+function Score({ question, session }) {
+  const viewBox = SCORE_VIEWBOX;
   return (
-    <svg viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`} className={`h-auto select-none overflow-hidden sm:overflow-visible ${mobileBuild ? "mx-auto block w-full max-w-[340px] translate-y-[-10px]" : "w-full"}`}>
-      <rect width={SVG.width} height={360} fill="white" />
-      <Staff buildFocus={mobileBuild} />
+      <svg viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`} className="h-auto w-full select-none overflow-hidden">
+      <rect width={SVG.width} height={SVG.height} fill="white" />
+      <Staff />
       {question.type === "build-key" ? (
-        <BuildLayer question={question} selectedAccidental={session.selectedAccidental} placed={session.placed} hover={session.hover} setHover={session.setHover} onPlace={session.placeAccidental} feedback={session.feedback} mobileBuild={mobileBuild} />
+        <BuildLayer question={question} selectedAccidental={session.selectedAccidental} placed={session.placed} hover={session.hover} setHover={session.setHover} onPlace={session.placeAccidental} feedback={session.feedback} />
       ) : (
         <KeySignature signature={question.key.signature} />
       )}
-      {!mobileBuild && <Passage bars={question.bars} />}
+      <Passage bars={question.bars} />
     </svg>
   );
 }
@@ -940,7 +921,7 @@ function KeyName({ label, muted = false, inverted = false }) {
   return (
     <span className="inline-flex items-baseline gap-[2px] whitespace-nowrap">
       <span>B</span>
-      <span className={`music-symbol relative -left-[2px] top-[2px] inline-block text-[1.15em] leading-none ${inverted ? "text-white" : ""} ${muted ? "opacity-40" : ""}`}>{sharedSymbolForKey("flat")}</span>
+      <span className={`music-symbol relative -left-[1px] -top-[4px] inline-block text-[1.15em] leading-none ${inverted ? "text-white" : ""} ${muted ? "opacity-40" : ""}`}>{sharedSymbolForKey("flat")}</span>
       <span>major</span>
     </span>
   );
@@ -1013,7 +994,6 @@ function App() {
   useLandscapeLock();
   const requestedLevel = useMemo(() => new URLSearchParams(window.location.search).get("level"), []);
   const session = useSession(LEVELS[requestedLevel] ? requestedLevel : "N5");
-  const mobile = useMobileFlag();
   const touchDevice = useTouchDevice();
   const keyboard = window.MLH.useKeyboardReset();
   const menuRef = useRef(null);
@@ -1021,7 +1001,6 @@ function App() {
   window.MLH.useClickAway(menuRef, () => setMenu(null));
 
   const isBuild = session.question.type === "build-key";
-  const mobileBuild = mobile && isBuild;
   const showNoAccidentals = isBuild && session.feedback && !session.feedback.correct && session.expected.length === 0;
   const skipCorrectFeedback = () => {
     if (!session.feedback || !session.feedback.correct || session.feedbackFading) return;
@@ -1086,7 +1065,7 @@ function App() {
                 />
                 {menu === "customise" && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel>
                   <ToggleRow glyph={<BravuraGlyph symbolKey="gClef" className="relative top-[5px] text-[18px]" />} label="Identify" enabled={session.modes.identify} disabled={session.modes.identify && !session.modes.build} onToggle={session.toggleIdentify} />
-                  <ToggleRow glyph={<span className="relative -left-[3px] flex items-center gap-[2px]"><BravuraGlyph symbolKey="sharp" className="text-[24px]" /><BravuraGlyph symbolKey="flat" className="relative left-[4px] text-[24px]" /></span>} label="Create" enabled={session.modes.build} disabled={session.modes.build && !session.modes.identify} onToggle={session.toggleBuild} />
+              <ToggleRow glyph={<span className="relative left-[2px] flex items-center gap-[2px]"><BravuraGlyph symbolKey="sharp" className="text-[24px]" /><BravuraGlyph symbolKey="flat" className="relative left-[4px] text-[24px]" /></span>} label="Create" enabled={session.modes.build} disabled={session.modes.build && !session.modes.identify} onToggle={session.toggleBuild} />
                 </window.MLH.MenuPanel>}
               </div>
             </div>
@@ -1104,9 +1083,9 @@ function App() {
             </p>
           )}
 
-          <div className={`mx-auto flex w-full flex-1 items-center justify-center transition-opacity duration-300 sm:flex-none ${mobile ? "relative -top-[4px]" : "relative top-[24px]"} ${session.visible ? "opacity-100" : "opacity-0"}`}>
-            <Score question={session.question} session={session} mobile={mobile} />
-          </div>
+              <div className={`mx-auto flex w-full flex-1 items-center justify-center transition-opacity duration-300 sm:flex-none ${session.visible ? "opacity-100" : "opacity-0"}`}>
+                <Score question={session.question} session={session} />
+              </div>
 
           <div className="relative z-10 mt-auto overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:mt-[-63px] sm:p-4 md:mx-3 md:-mt-[81px]">
             <p className="text-base font-semibold leading-tight">{instruction}</p>
