@@ -15,6 +15,8 @@
   <script src="./hub-shell.js?v=1.3"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <script src="./hub-menu.js?v=2.1"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
 </head>
 <body class="overflow-x-hidden bg-stone-50">
   <div id="root"></div>
@@ -39,6 +41,8 @@
       crotchet: "https://mrtennant-music.github.io/musicliteracy/crotchet.svg?v=1.1",
     };
 
+    const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
+    const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
     const SVG = { width: 920, height: 420 };
     const MOBILE_SVG_VIEWBOX = {
       treble: { x: 220, y: 37, width: 520, height: 240 },
@@ -157,6 +161,57 @@
     const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
     const yForStep = (top, step) => top + STAFF.gap * 4 - step * (STAFF.gap / 2);
     const stemDown = (step) => step > 4;
+
+    function sharedActualSymbolKey(key) {
+      if (key === "flatInScore") return "flat";
+      if (key === "naturalInScore") return "natural";
+      if (key === "sharpInScore") return "sharp";
+      return key;
+    }
+
+    function sharedSymbolConfig(key) {
+      const symbols = SHARED_CONFIG.symbols ?? {};
+      return symbols[key] ?? symbols[sharedActualSymbolKey(key)] ?? {
+        fontSizeScale: 3.4,
+        xOffsetScale: 0,
+        yOffsetScale: 0,
+        widthScale: 1,
+        heightScale: 1,
+        opticalXOffset: 0,
+        opticalYOffset: 0,
+      };
+    }
+
+    function sharedSymbolForKey(key) {
+      return SHARED_SYMBOLS[sharedActualSymbolKey(key)] ?? "";
+    }
+
+    function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = STAFF.gap, filter = null, settingOverrides = {} }) {
+      const glyph = sharedSymbolForKey(symbolKey);
+      if (!glyph) return null;
+      const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+      const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+      const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+      const fontSize = lineGap * Number(settings.fontSizeScale || 3.4);
+      const widthScale = Number(settings.widthScale || 1);
+      const heightScale = Number(settings.heightScale || 1);
+      return (
+        <text
+          className="music-symbol"
+          x={adjustedX}
+          y={adjustedY}
+          fill={colour}
+          opacity={opacity}
+          fontSize={fontSize}
+          textAnchor="middle"
+          style={filter ? { filter } : undefined}
+          transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`}
+          pointerEvents="none"
+        >
+          {glyph}
+        </text>
+      );
+    }
 
     function readSiteTheme() {
       return localStorage.getItem(SITE_THEME_KEY) || "light";
