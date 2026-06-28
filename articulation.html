@@ -14,7 +14,21 @@
   <script src="./hub-audio.js?v=1.4"></script>
   <script src="./hub-shell.js?v=1.3"></script>
   <script src="./hub-menu.js?v=2.1"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+    @font-face {
+      font-family: "Bravura";
+      src: url("./Bravura.otf") format("opentype");
+      font-display: block;
+    }
+    .music-symbol {
+      font-family: "Bravura", serif;
+      dominant-baseline: alphabetic;
+      text-rendering: geometricPrecision;
+    }
+  </style>
 </head>
 <body>
 <div id="root"></div>
@@ -25,10 +39,13 @@ const { useEffect, useRef, useState } = React;
 const W = 920, H = 430;
 const STAFF_LEFT = 24, STAFF_RIGHT = 896, MUSIC_START = 125;
 const SYSTEM_TOPS = [62, 187], AURAL_TOPS = [122];
-const GAP = 10, NOTE_RX = 6.3, NOTE_RY = 4.6, STEM = 32;
+const GAP = 10, NOTE_RX = 6.3, STEM = 32;
 const BAR_COUNT = 8, AURAL_BAR_COUNT = 4, BARS_PER_SYSTEM = 4;
-const TREBLE = String.fromCodePoint(0x1d11e);
-const COLOUR = { blue:"#2563eb", green:"#16a34a", red:"#dc2626", black:"#000" };
+const MAX_MELODIC_LEAP_STEPS = 7;
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS || {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || { drawing: {}, symbols: {} };
+const COLOUR = { yellow:"#facc15", green:"#16a34a", red:"#dc2626", black:"#000" };
+const HIGHLIGHT_TEXT_STYLE = { textShadow:"0 0 3px #facc15, 0 0 6px #eab308" };
 
 const MARKINGS = [
   { id:"staccato", label:"Staccato", plural:"staccato markings", performance:"Short and detached", accepted:["staccato","staccato marking","staccato markings","staccato dots","dots"] },
@@ -37,13 +54,40 @@ const MARKINGS = [
   { id:"accent", label:"Accent", plural:"accents", performance:"With extra emphasis", accepted:["accent","accents","accented","accent marking","accent markings"] },
 ];
 
-const QUESTION_TYPES = ["identify-choice","identify-text","apply","performance","aural-articulation"];
+const LEVELS = {
+  H: { label:"Higher", description:"Accents • Slurs • Staccato • Phrase mark" },
+};
+
+const ASSET = {
+  appIcon:"https://mrtennant-music.github.io/musicliteracy/articulation-markings-icon.svg",
+  customise:"https://mrtennant-music.github.io/musicliteracy/customise.svg",
+  levels:"https://mrtennant-music.github.io/musicliteracy/levels.svg",
+  next:"https://mrtennant-music.github.io/musicliteracy/next.svg",
+  eye:"./eye.svg",
+  metronome:"./metronome.svg",
+  tempo:"./tempo.svg",
+  bronze:"https://mrtennant-music.github.io/musicliteracy/bronze.svg",
+  silver:"https://mrtennant-music.github.io/musicliteracy/silver.svg",
+  gold:"https://mrtennant-music.github.io/musicliteracy/gold.svg",
+  diamond:"https://mrtennant-music.github.io/musicliteracy/diamond.svg",
+};
+
+const QUESTION_TYPES = ["identify-choice","identify-text","apply","aural-articulation"];
 const QUESTION_LABELS = {
   "identify-choice":"Multiple Choice",
-  "identify-text":"Type Answer",
+  "identify-text":"Definition",
   apply:"Apply to Score",
-  performance:"Give the Definition",
-  "aural-articulation":"Audio",
+  "aural-articulation":"Audio Question",
+};
+const MENU_MARKING_LABELS = {
+  staccato:"Staccato",
+  slur:"Slurs",
+  phrase:"Phrase mark",
+  accent:"Accents",
+};
+const ANSWER_MARKING_LABELS = {
+  slur:"Slurs",
+  phrase:"Phrase mark",
 };
 
 const NOTES = [
@@ -77,26 +121,105 @@ function clean(v){ return v.trim().toLowerCase().replace(/[.,!?]/g,"").split(/\s
 function sameSet(a,b){ return a.length === b.length && b.every(x => new Set(a).has(x)); }
 function letter(step){ return (NOTES.find(n => n.step === step) || NOTES[5]).name[0]; }
 function stemDown(step){ return step > 4; }
-function nextIndex(prev){
-  let moves = [-2,-1,0,1,2];
-  if (prev >= NOTES.length - 2) moves = [-2,-1,-1,0];
-  if (prev <= 1) moves = [0,1,1,2];
-  return clamp(prev + r(moves), 0, NOTES.length - 1);
+function levelFromUrl() {
+  const raw = new URLSearchParams(window.location.search).get("level") || "H";
+  return LEVELS[raw] ? raw : "H";
+}
+function sharedActualSymbolKey(key) {
+  if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
+  if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
+  return key;
+}
+function sharedSymbolConfig(key) {
+  const symbols = SHARED_CONFIG.symbols || {};
+  return symbols[key] || symbols[sharedActualSymbolKey(key)] || {
+    fontSizeScale: 3.4,
+    xOffsetScale: 0,
+    yOffsetScale: 0,
+    widthScale: 1,
+    heightScale: 1,
+    opticalXOffset: 0,
+    opticalYOffset: 0,
+  };
+}
+function sharedSymbolForKey(key) { return SHARED_SYMBOLS[sharedActualSymbolKey(key)] || ""; }
+function CalibratedSymbol({ symbolKey, x, y: yy, colour = "currentColor", opacity = 1, lineGap = GAP, settingOverrides = {} }) {
+  const glyph = sharedSymbolForKey(symbolKey);
+  if (!glyph) return null;
+  const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+  const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const adjustedY = yy + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const fontSize = lineGap * Number(settings.fontSizeScale || 3.4);
+  const widthScale = Number(settings.widthScale || 1);
+  const heightScale = Number(settings.heightScale || 1);
+  return <text className="music-symbol" x={adjustedX} y={adjustedY} fill={colour} opacity={opacity} fontSize={fontSize} textAnchor="middle" transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`} pointerEvents="none">{glyph}</text>;
+}
+function noteSymbolKey(rhythmId, down, beamed = false) {
+  if (rhythmId === "minim") return down ? "halfNoteStemDown" : "halfNoteStemUp";
+  if (rhythmId === "quaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
+  if (rhythmId === "quaver") return down ? "eighthNoteStemDown" : "eighthNoteStemUp";
+  return down ? "quarterNoteStemDown" : "quarterNoteStemUp";
+}
+function calibrationAnchorX(symbolKey) {
+  if (symbolKey?.startsWith("timeSig")) return STAFF_LEFT + 12 * GAP;
+  return STAFF_LEFT;
+}
+function calibrationAnchorY(symbolKey, top) {
+  if (symbolKey?.startsWith("timeSig")) return y(5.3, top);
+  return top;
 }
 function hasSameLetter(notes){
   for(let i=1;i<notes.length;i++) if(letter(notes[i-1].pitch.step) === letter(notes[i].pitch.step)) return true;
   return false;
 }
 
+function weighted(items) {
+  const total = items.reduce((sum, item) => sum + item.weight, 0);
+  let roll = Math.random() * total;
+  for (const item of items) {
+    roll -= item.weight;
+    if (roll <= 0) return item.value;
+  }
+  return items.at(-1)?.value;
+}
+function noteIndexFromStep(step){ return NOTES.findIndex(n => n.step === step); }
+function nearestTonicIndex(previousIndex){
+  const tonicIndexes = NOTES.map((note,index) => ({note,index})).filter(item => item.note.name.startsWith("C"));
+  return tonicIndexes.reduce((best,item) => Math.abs(item.index - previousIndex) < Math.abs(best.index - previousIndex) ? item : best, tonicIndexes[0]).index;
+}
+function chooseNextIndex({ previousIndex, rhythm, beat, forceDirection = 0 }) {
+  const strongBeat = beat === 0 || beat === 2;
+  const chordLetters = strongBeat ? ["C","E","G"] : ["C","D","E","F","G","A","B"];
+  const candidates = NOTES.map((note,index) => {
+    const distance = index - previousIndex;
+    const absDistance = Math.abs(distance);
+    if (absDistance > 3) return null;
+    if (rhythm === "quaver" && absDistance > 1) return null;
+    if (forceDirection > 0 && distance < 0) return null;
+    if (forceDirection < 0 && distance > 0) return null;
+    const isChordTone = chordLetters.includes(note.name[0]);
+    let weight = isChordTone ? 6 : 2;
+    if (strongBeat && isChordTone) weight *= 2.2;
+    if (absDistance === 0) weight *= 0.35;
+    if (absDistance === 1) weight *= 5;
+    if (absDistance === 2) weight *= 2;
+    if (absDistance === 3) weight *= 0.45;
+    if (index < 1 || index > NOTES.length - 2) weight *= 0.35;
+    return { value:index, weight };
+  }).filter(Boolean);
+  return weighted(candidates.length ? candidates : [{ value:previousIndex, weight:1 }]);
+}
 function makeBar(ts, prev, barIndex){
   const pattern = r(PATTERNS[ts.beats]);
   const notes = [];
   let idx = prev, beam = 0, active = null;
+  const forceDirection = Math.random() < 0.55 ? r([-1,1]) : 0;
+  let beat = 0;
   pattern.forEach((rhythm, noteIndex) => {
     let tries = 0, candidateIndex, note;
     do {
-      candidateIndex = nextIndex(idx);
-      note = { id:`${barIndex}-${noteIndex}`, rhythm, pitch:NOTES[candidateIndex], beamGroupId:null };
+      candidateIndex = chooseNextIndex({ previousIndex:idx, rhythm, beat, forceDirection });
+      note = { id:`${barIndex}-${noteIndex}`, rhythm, pitch:NOTES[candidateIndex], beat, beamGroupId:null };
       tries++;
     } while(tries < 20 && rhythm === "quaver" && notes.length && notes[notes.length - 1].rhythm === "quaver" && letter(notes[notes.length - 1].pitch.step) === letter(note.pitch.step));
     if(rhythm === "quaver"){
@@ -105,18 +228,86 @@ function makeBar(ts, prev, barIndex){
     } else active = null;
     idx = candidateIndex;
     notes.push(note);
+    beat += RH[rhythm]?.beats || 1;
   });
   return { notes, next:idx };
 }
 
-function makeBars(ts, count){
-  let prev = r([2,3,4,5,6]);
+function melodyNotes(bars){ return bars.flatMap(bar => bar.notes ?? []).map(note => note.pitch); }
+function longestRepeatedPitchRun(notes){
+  let longest = 1, current = 1;
+  for(let i=1;i<notes.length;i++){
+    if(notes[i].step === notes[i-1].step){ current++; longest = Math.max(longest,current); }
+    else current = 1;
+  }
+  return longest;
+}
+function hasBalancedContour(notes){
+  let rises = 0, falls = 0;
+  for(let i=1;i<notes.length;i++){
+    const interval = notes[i].step - notes[i-1].step;
+    if(interval > 0) rises++;
+    if(interval < 0) falls++;
+  }
+  return rises > 0 && falls > 0;
+}
+function hasAwkwardBarlineLeap(bars){
+  return bars.some((bar,index) => {
+    const nextBar = bars[index + 1];
+    if(!bar?.notes?.length || !nextBar?.notes?.length) return false;
+    return Math.abs(nextBar.notes[0].pitch.step - bar.notes.at(-1).pitch.step) > 3;
+  });
+}
+function leapsRecoverByStep(notes){
+  for(let i=1;i<notes.length-1;i++){
+    const leap = notes[i].step - notes[i-1].step;
+    if(Math.abs(leap) < 2) continue;
+    const recovery = notes[i+1].step - notes[i].step;
+    if(recovery === 0) continue;
+    if(Math.sign(recovery) === Math.sign(leap) || Math.abs(recovery) > 1) return false;
+  }
+  return true;
+}
+function melodyPassesQualityRules(bars){
+  const notes = melodyNotes(bars);
+  if(notes.length < 2) return false;
+  const intervals = notes.slice(1).map((note,index) => Math.abs(note.step - notes[index].step));
+  const range = Math.max(...notes.map(note => note.step)) - Math.min(...notes.map(note => note.step));
+  const pitchVariety = new Set(notes.map(note => note.name)).size;
+  if(!notes[0].name.startsWith("C")) return false;
+  if(!notes.at(-1).name.startsWith("C")) return false;
+  if(range > 7) return false;
+  if(intervals.some(interval => interval > MAX_MELODIC_LEAP_STEPS)) return false;
+  if(Math.max(...intervals) > 3) return false;
+  if(hasAwkwardBarlineLeap(bars)) return false;
+  if(!hasBalancedContour(notes)) return false;
+  if(!leapsRecoverByStep(notes)) return false;
+  if(longestRepeatedPitchRun(notes) > 2) return false;
+  if(pitchVariety < 3) return false;
+  return true;
+}
+function hasOversizedLeap(bars){
+  const notes = melodyNotes(bars);
+  return notes.slice(1).some((note,index) => Math.abs(note.step - notes[index].step) > MAX_MELODIC_LEAP_STEPS);
+}
+function makeBars(ts, count, attempt = 0, tonicStep = 5){
+  let prev = noteIndexFromStep(tonicStep);
   const bars = [];
   for(let i=0;i<count;i++){
     const bar = makeBar(ts, prev, i);
+    if(i === 0 && bar.notes[0]){
+      bar.notes[0].pitch = NOTES[noteIndexFromStep(tonicStep)];
+    }
+    if(i === count - 1 && bar.notes.length){
+      const finalIndex = noteIndexFromStep(tonicStep);
+      bar.notes[bar.notes.length - 1].pitch = NOTES[finalIndex];
+      bar.next = finalIndex;
+    }
     bars.push({ barIndex:i, notes:bar.notes });
     prev = bar.next;
   }
+  const mustRegenerate = hasOversizedLeap(bars) || !melodyPassesQualityRules(bars);
+  if(mustRegenerate && attempt < 320) return makeBars(ts, count, attempt + 1, tonicStep);
   return bars;
 }
 
@@ -158,16 +349,11 @@ function identifyTarget(id, bars){
 
 function makeQuestion(enabledTypes=QUESTION_TYPES, enabledMarkings=MARKINGS.map(x => x.id)){
   const type = r(enabledTypes.length ? enabledTypes : QUESTION_TYPES);
+  const choiceMode = type === "identify-choice" && Math.random() < 0.5 ? "performance" : "name";
   const isAural = type === "aural-articulation";
   const ts = r(TIME_SIGNATURES);
   const barCount = isAural ? AURAL_BAR_COUNT : BAR_COUNT;
-  const bars = makeBars(ts, barCount);
-
-  if(isAural){
-    const anchor = r([-2,5]);
-    bars[0].notes[0].pitch = NOTES.find(n => n.step === anchor);
-    bars[bars.length - 1].notes[notes.length - 1].pitch = NOTES.find(n => n.step === anchor);
-  }
+  const bars = makeBars(ts, barCount, 0, isAural ? r([-2,5]) : 5);
 
   const markingPool = MARKINGS.filter(x => enabledMarkings.includes(x.id));
   const auralPool = ["staccato","slur"].filter(id => enabledMarkings.includes(id));
@@ -185,56 +371,117 @@ function makeQuestion(enabledTypes=QUESTION_TYPES, enabledMarkings=MARKINGS.map(
     : identifyTarget(marking.id, bars);
 
   let prompt = null;
-  if(type === "identify-choice") prompt = <>Identify the marking used on the notes in <span className="text-blue-600">blue</span>.</>;
-  if(type === "identify-text") prompt = <>Type the name of the marking used on the notes in <span className="text-blue-600">blue</span>.</>;
-  if(type === "apply") prompt = target.prompt;
-  if(type === "performance"){
+  if(type === "identify-choice" && choiceMode === "performance"){
     const loc = target.barIndex !== undefined ? `${target.barIndex + 1}` : `${target.startBar + 1}–${target.endBar + 1}`;
-    prompt = <>How should the <span className="text-blue-600">blue</span> notes in <strong>bar {loc}</strong> be performed?</>;
-  }
+    prompt = <>How should the <strong><span style={HIGHLIGHT_TEXT_STYLE}>highlighted</span></strong> notes in <strong>bar {loc}</strong> be performed?</>;
+  } else if(type === "identify-choice") prompt = <>Identify the marking used on the <strong><span style={HIGHLIGHT_TEXT_STYLE}>highlighted</span></strong> notes.</>;
+  if(type === "identify-text") prompt = <>Type the name of the marking used on the <strong><span style={HIGHLIGHT_TEXT_STYLE}>highlighted</span></strong> notes.</>;
+  if(type === "apply") prompt = target.prompt;
   if(type === "aural-articulation") prompt = <>Listen to the excerpt and identify which articulation marking has been applied to the notes.</>;
   if(type === "aural-articulation" && marking.id === "accent") prompt = <>Listen to the excerpt and apply an <strong>accent</strong> to the note where it occurs.</>;
 
-  return { id:Math.random().toString(36).slice(2), timeSignature:ts, bars, type, marking, target, prompt, barCount };
+  return { id:Math.random().toString(36).slice(2), timeSignature:ts, bars, type, choiceMode, marking, target, prompt, barCount };
 }
 
 function StaffLines({top}){ return <g>{[0,1,2,3,4].map(i => <line key={i} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={top+i*GAP} y2={top+i*GAP} stroke="currentColor" strokeWidth="1.2" />)}</g>; }
-function Ledger({x, step, top, colour}){ const lines=[]; if(step<=-2) lines.push(y(-2,top)); if(step>=10) lines.push(y(10,top)); return <g>{lines.map(yy => <line key={yy} x1={x-10.5} x2={x+10.5} y1={yy} y2={yy} stroke={colour} strokeWidth="1.2" />)}</g>; }
-function Flag({stemX, stemEndY, down, colour}){ const d = down ? `M ${stemX} ${stemEndY} C ${stemX+10} ${stemEndY-4}, ${stemX+10} ${stemEndY-12}, ${stemX+2} ${stemEndY-16}` : `M ${stemX} ${stemEndY} C ${stemX+10} ${stemEndY+4}, ${stemX+10} ${stemEndY+12}, ${stemX+2} ${stemEndY+16}`; return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />; }
+function Ledger({x, step, top, colour}){ const lines=[]; if(step<=-2) lines.push(y(-2,top)); if(step>=10) lines.push(y(10,top)); const width = GAP * (SHARED_CONFIG.drawing?.ledgerLineWidthScale || 2.4); const thickness = GAP * (SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11); return <g>{lines.map(yy => <line key={yy} x1={x-width/2} x2={x+width/2} y1={yy} y2={yy} stroke={colour} strokeWidth={thickness} />)}</g>; }
 function stemData(note, x, top, override=null){ const step=note.pitch.step, yy=y(step,top), down=override===null?stemDown(step):override, sx=down?x-NOTE_RX:x+NOTE_RX, ey=down?yy+STEM:yy-STEM; return { step, y:yy, down, sx, ey }; }
-function Note({note, x, top, colour="currentColor", override=null, forced=null, showFlag=true, onClick=null}){
+function OpenNoteGlow({ x, y: yy, inner = false }) {
+  return <ellipse cx={x} cy={yy} rx={inner ? NOTE_RX - 2.4 : NOTE_RX + 2.2} ry={inner ? 2.6 : 6.4} transform={`rotate(-18 ${x} ${yy})`} fill={COLOUR.yellow} opacity={inner ? "0.24" : "0.22"} />;
+}
+function Note({note, x, top, colour="currentColor", override=null, forced=null, beamed=false, onClick=null, highlight=false}){
   const info = RH[note.rhythm] || RH.crotchet;
   const st = stemData(note,x,top,override);
   const ey = forced === null ? st.ey : forced;
+  const stemThickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12));
   return <g onClick={onClick} className={onClick ? "cursor-pointer" : ""}>
     <circle cx={x} cy={st.y} r="18" fill="transparent" />
-    <Ledger x={x} step={st.step} top={top} colour={colour} />
-    <ellipse cx={x} cy={st.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${st.y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.7" />
-    {info.stem && <line x1={st.sx} x2={st.sx} y1={st.y} y2={ey} stroke={colour} strokeWidth="1.5" />}
-    {info.flag && showFlag && <Flag stemX={st.sx} stemEndY={ey} down={st.down} colour={colour} />}
+    <g filter={highlight ? "url(#noteGlowPulse)" : undefined}>
+      <Ledger x={x} step={st.step} top={top} colour={colour} />
+      {highlight && info.open && <OpenNoteGlow x={x} y={st.y} />}
+      <CalibratedSymbol symbolKey={noteSymbolKey(note.rhythm, st.down, beamed)} x={x} y={st.y} colour={colour} />
+      {beamed && info.stem && <line x1={st.sx} x2={st.sx} y1={st.y} y2={ey} stroke={colour} strokeWidth={stemThickness} />}
+      {highlight && info.open && <OpenNoteGlow x={x} y={st.y} inner />}
+    </g>
   </g>;
 }
 function positions(notes,start,end){ const inner=start+10, units=notes.reduce((s,n)=>s+(RH[n.rhythm]?.spacing||2.2),0), unit=Math.max(1,end-inner)/Math.max(1,units); let c=inner+unit*.35; return notes.map(n => { const x=c; c += (RH[n.rhythm]?.spacing||2.2)*unit; return x; }); }
 function groups(notes){ const out=[]; let i=0; while(i<notes.length){ if(notes[i].rhythm !== "quaver" || notes[i].beamGroupId === null){ i++; continue; } const s=i,id=notes[i].beamGroupId; while(i<notes.length && notes[i].rhythm==="quaver" && notes[i].beamGroupId===id) i++; if(i-1>s) out.push({start:s,end:i-1}); } return out; }
 function groupFor(gs,i){ return gs.find(g => i>=g.start && i<=g.end) || null; }
 function beamY(x,a,b){ if(!a || !b || a.x===b.x) return a ? a.y : 0; const p=(x-a.x)/(b.x-a.x); return a.y+p*(b.y-a.y); }
-function beamData(notes,xs,top){ const avg=notes.reduce((s,n)=>s+n.pitch.step,0)/notes.length, down=avg>4, a=stemData(notes[0],xs[0],top,down), b=stemData(notes[notes.length - 1],xs[xs.length - 1],top,down); return {down,start:{x:a.sx,y:a.ey},end:{x:b.sx,y:b.ey}}; }
+function beamData(notes,xs,top){
+  const avg=notes.reduce((s,n)=>s+n.pitch.step,0)/notes.length;
+  const down=avg>4;
+  const settings = sharedSymbolConfig("quaverBeam");
+  const xOffset = GAP * Number(settings.xOffsetScale || 0);
+  const yOffset = GAP * Number(settings.yOffsetScale || 0);
+  const stemLength = STEM * Number(settings.heightScale || 1);
+  const beamWidthAdjust = GAP * 0.6 * (Number(settings.widthScale || 1) - 1);
+  const firstY = y(notes[0].pitch.step, top);
+  const lastY = y(notes[notes.length - 1].pitch.step, top);
+  const a=stemData(notes[0],xs[0]+xOffset,top+yOffset,down);
+  const b=stemData(notes[notes.length - 1],xs[xs.length - 1]+xOffset,top+yOffset,down);
+  a.ey = down ? firstY + yOffset + stemLength : firstY + yOffset - stemLength;
+  b.ey = down ? lastY + yOffset + stemLength : lastY + yOffset - stemLength;
+  return {down,start:{x:a.sx-beamWidthAdjust,y:a.ey},end:{x:b.sx+beamWidthAdjust,y:b.ey}};
+}
+function beamPolygonPoints(x1, y1, x2, y2, thickness) {
+  const half = thickness / 2;
+  return [`${x1},${y1 - half}`, `${x2},${y2 - half}`, `${x2},${y2 + half}`, `${x1},${y1 + half}`].join(" ");
+}
+function BeamShape({ beam, colour = "currentColor" }) {
+  const thickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42));
+  return <polygon points={beamPolygonPoints(beam.start.x - 0.5, beam.start.y, beam.end.x + 0.5, beam.end.y, thickness)} fill={colour} />;
+}
+function TimeSignature({ signature, top }) {
+  const key = `timeSig${signature.top}${signature.bottom}`;
+  const settings = sharedSymbolConfig(key);
+  const topGlyph = sharedSymbolForKey(`timeSig${signature.top}`);
+  const bottomGlyph = sharedSymbolForKey(`timeSig${signature.bottom}`);
+  const x = calibrationAnchorX(key) + GAP * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const yy = calibrationAnchorY(key, top) + GAP * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const fontSize = GAP * Number(settings.fontSizeScale || 3.4);
+  return <g pointerEvents="none"><text className="music-symbol" x={x} y={yy - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{topGlyph}</text><text className="music-symbol" x={x} y={yy + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text></g>;
+}
 function layouts(question){ const tops = question.type === "aural-articulation" ? AURAL_TOPS : SYSTEM_TOPS; const out=[]; tops.forEach((top,si)=>{ const bw=(STAFF_RIGHT-MUSIC_START)/BARS_PER_SYSTEM; for(let li=0; li<BARS_PER_SYSTEM; li++){ const bi=si*BARS_PER_SYSTEM+li; if(bi>=question.barCount) continue; const start=MUSIC_START+li*bw, end=MUSIC_START+(li+1)*bw, bar=question.bars[bi]; out.push({barIndex:bi,bar,top,start,end,pos:positions(bar.notes,start+7,end-8)}); } }); return out; }
 function posOf(ls,id){ for(const l of ls){ const i=l.bar.notes.findIndex(n=>n.id===id); if(i>=0){ const note=l.bar.notes[i]; return {layout:l,index:i,note,x:l.pos[i],y:y(note.pitch.step,l.top)}; } } return null; }
 function actualDown(p){ const g=groupFor(groups(p.layout.bar.notes),p.index); if(!g) return stemDown(p.note.pitch.step); return beamData(p.layout.bar.notes.slice(g.start,g.end+1),p.layout.pos.slice(g.start,g.end+1),p.layout.top).down; }
-
-function Mark({id,noteIds,ls,colour=COLOUR.blue}){
-  const ps = noteIds.map(n => posOf(ls,n)).filter(Boolean);
-  if(!ps.length) return null;
-  if(id==="staccato") return <g>{ps.map(p => <circle key={p.note.id} cx={p.x} cy={p.y+(actualDown(p)?-13:13)} r="2.4" fill={colour} />)}</g>;
-  if(id==="accent") return <g>{ps.map(p => { const d=actualDown(p), y1=p.y+(d?-19:19), y2=p.y+(d?-14:14), y3=p.y+(d?-9:9); return <path key={p.note.id} d={`M${p.x-8.1} ${y1} L${p.x+8.1} ${y2} L${p.x-8.1} ${y3}`} fill="none" stroke={colour} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />; })}</g>;
-  const first=ps[0], last=ps[ps.length - 1], down=actualDown(first), phrase=id==="phrase";
-  const off=phrase?(down?-19:19):(down?-9:9), dep=phrase?36:12;
-  const x1=first.x-1, x2=last.x+1, y1=first.y+off, y2=last.y+off, c1=x1+(x2-x1)*.28, c2=x1+(x2-x1)*.72;
-  return <path d={`M${x1} ${y1} C${c1} ${y1+(down?-dep:dep)}, ${c2} ${y2+(down?-dep:dep)}, ${x2} ${y2}`} fill="none" stroke={colour} strokeWidth="2" strokeLinecap="round" />;
+function articulationSymbolKey(id, down) {
+  if(id === "staccato") return down ? "staccatoBelow" : "staccatoAbove";
+  if(id === "accent") return down ? "accentBelow" : "accentAbove";
+  return null;
+}
+function articulationYOffsetTowardNote(symbolKey) {
+  if(symbolKey === "staccatoAbove") return -6;
+  if(symbolKey === "staccatoBelow") return 2;
+  if(symbolKey === "accentAbove") return -5;
+  if(symbolKey === "accentBelow") return 1;
+  return 0;
 }
 
-function Bar({layout,question,selectedNotes,selectedMarking,feedback,onNoteClick}){
+function Mark({id,noteIds,ls,colour=COLOUR.black,highlight=false}){
+  const ps = noteIds.map(n => posOf(ls,n)).filter(Boolean);
+  if(!ps.length) return null;
+  if(id==="staccato" || id==="accent") return <g filter={highlight ? "url(#noteGlowPulse)" : undefined}>{ps.map(p => { const symbolKey=articulationSymbolKey(id, actualDown(p)); return <CalibratedSymbol key={p.note.id} symbolKey={symbolKey} x={p.x} y={p.y} colour={colour} settingOverrides={{opticalYOffset:articulationYOffsetTowardNote(symbolKey)}} />; })}</g>;
+  const first=ps[0], last=ps[ps.length - 1], down=actualDown(first), phrase=id==="phrase";
+  const settings = sharedSymbolConfig(phrase ? "phraseMarking" : (down ? "slurStemDown" : "slurStemUp"));
+  const direction = down ? -1 : 1;
+  const xOffset = GAP * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const yOffset = GAP * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const fontScale = Number(settings.fontSizeScale || 5);
+  const widthScale = Number(settings.widthScale || 1);
+  const heightScale = Number(settings.heightScale || 1);
+  const sizeRatio = clamp(fontScale / 5.3, 0.55, 1.8);
+  const endpointGap = GAP * (phrase ? 1.4 : 1.05) * sizeRatio;
+  const x1=first.x+xOffset, x2=last.x+xOffset, y1=first.y+direction*endpointGap+yOffset, y2=last.y+direction*endpointGap+yOffset;
+  const span = Math.max(GAP * 1.4, Math.abs(x2 - x1));
+  const handleWidth = span * 0.28 * clamp(widthScale, 0.35, 2.5);
+  const dep = direction * GAP * (phrase ? 2.1 : 1) * clamp(heightScale, 0.35, 2.5) * sizeRatio;
+  const strokeWidth = Math.max(1.1, GAP * 0.13 * sizeRatio);
+  return <path d={`M${x1} ${y1} C${x1+handleWidth} ${y1+dep}, ${x2-handleWidth} ${y2+dep}, ${x2} ${y2}`} fill="none" stroke={colour} strokeWidth={strokeWidth} strokeLinecap="round" filter={highlight ? "url(#noteGlowPulse)" : undefined} />;
+}
+
+function Bar({layout,question,selectedNotes,selectedMarking,feedback,onNoteClick,activeNoteId=null}){
   const gs = groups(layout.bar.notes);
   const showTarget = question.type !== "apply" && question.type !== "aural-articulation";
   return <g>
@@ -243,26 +490,38 @@ function Bar({layout,question,selectedNotes,selectedMarking,feedback,onNoteClick
       if(g){ const ns=layout.bar.notes.slice(g.start,g.end+1), xs=layout.pos.slice(g.start,g.end+1), bd=beamData(ns,xs,layout.top), st=stemData(note,layout.pos[i],layout.top,bd.down); over=bd.down; forced=beamY(st.sx,bd.start,bd.end); }
       const selected=selectedNotes.includes(note.id);
       const target=question.target.noteIds.includes(note.id) && question.type !== "aural-articulation";
-      const colour=selected ? COLOUR.blue : showTarget && target ? COLOUR.blue : COLOUR.black;
+      const highlight=selected || (showTarget && target) || activeNoteId===note.id;
       const clickable=((question.type==="apply" && selectedMarking) || (question.type==="aural-articulation" && question.marking.id==="accent")) && !feedback;
-      return <Note key={note.id} note={note} x={layout.pos[i]} top={layout.top} colour={colour} override={over} forced={forced} showFlag={!g} onClick={clickable ? () => onNoteClick(note.id) : null} />;
+      return <Note key={note.id} note={note} x={layout.pos[i]} top={layout.top} colour={COLOUR.black} override={over} forced={forced} beamed={Boolean(g)} onClick={clickable ? () => onNoteClick(note.id) : null} highlight={highlight} />;
     })}
-    {gs.map((g,i) => { const ns=layout.bar.notes.slice(g.start,g.end+1), xs=layout.pos.slice(g.start,g.end+1), bd=beamData(ns,xs,layout.top), ids=ns.map(n=>n.id), hi=question.type==="aural-articulation"?false:ids.every(id=>selectedNotes.includes(id)||(showTarget&&question.target.noteIds.includes(id))); return <line key={i} x1={bd.start.x-.5} y1={bd.start.y} x2={bd.end.x+.5} y2={bd.end.y} stroke={hi?COLOUR.blue:COLOUR.black} strokeWidth="4" strokeLinecap="butt" />; })}
+    {gs.map((g,i) => { const ns=layout.bar.notes.slice(g.start,g.end+1), xs=layout.pos.slice(g.start,g.end+1), bd=beamData(ns,xs,layout.top); return <BeamShape key={i} beam={bd} colour={COLOUR.black} />; })}
     {layout.barIndex === question.barCount-1 ? <g><line x1={layout.end-5} x2={layout.end-5} y1={layout.top} y2={layout.top+GAP*4} stroke="currentColor" strokeWidth="1.4" /><line x1={layout.end} x2={layout.end} y1={layout.top-.75} y2={layout.top+GAP*4+.75} stroke="currentColor" strokeWidth="4" /></g> : <line x1={layout.end} x2={layout.end} y1={layout.top} y2={layout.top+GAP*4} stroke="currentColor" strokeWidth="1.4" />}
     <g style={{pointerEvents:"none"}}><rect x={layout.start-8} y={layout.top-31} width="22" height="18" fill="white" /><text x={layout.start+4} y={layout.top-18} fontSize="13" fontWeight={(question.target.barIndex===layout.barIndex || (question.target.startBar!==undefined && layout.barIndex>=question.target.startBar && layout.barIndex<=question.target.endBar)) ? 700 : 400}>{layout.barIndex+1}</text></g>
   </g>;
 }
 
-function Score({question,selectedNotes,selectedMarking,feedback,onNoteClick}){
+function Score({question,selectedNotes,selectedMarking,feedback,onNoteClick,activeNoteId=null}){
   const ls=layouts(question), tops=question.type==="aural-articulation"?AURAL_TOPS:SYSTEM_TOPS, isAudioAccent=question.type==="aural-articulation"&&question.marking.id==="accent";
   const showCorrect=(question.type!=="apply" && question.type!=="aural-articulation") || (feedback && (question.type==="apply" || isAudioAccent));
   return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none overflow-visible">
     <rect width={W} height={H} fill="transparent" />
-    {tops.map((top,i)=><g key={i}><StaffLines top={top}/><text x={STAFF_LEFT+8} y={top+28} fontSize="92" fontFamily="serif" dominantBaseline="middle">{TREBLE}</text>{i===0&&<g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle"><text x={STAFF_LEFT+58} y={top+20}>{question.timeSignature.top}</text><text x={STAFF_LEFT+58} y={top+40.6}>{question.timeSignature.bottom}</text></g>}</g>)}
-    {ls.map(l => <Bar key={l.barIndex} layout={l} question={question} selectedNotes={selectedNotes} selectedMarking={selectedMarking} feedback={feedback} onNoteClick={onNoteClick} />)}
-    {showCorrect && <Mark id={question.marking.id} noteIds={question.target.noteIds} ls={ls} colour={COLOUR.blue}/>}
-    {question.type==="apply" && selectedMarking && selectedNotes.length>0 && !feedback && <Mark id={selectedMarking} noteIds={selectedNotes} ls={ls} colour={COLOUR.blue}/>}
-    {isAudioAccent && selectedNotes.length>0 && !feedback && <Mark id="accent" noteIds={selectedNotes} ls={ls} colour={COLOUR.blue}/>}
+    <defs>
+      <filter id="noteGlowPulse" x="-150%" y="-150%" width="400%" height="400%">
+        <feDropShadow dx="0" dy="0" stdDeviation="3.6" floodColor="#facc15" floodOpacity="1">
+          <animate attributeName="stdDeviation" values="3.6;5.8;3.6" dur="1.55s" repeatCount="indefinite" />
+          <animate attributeName="flood-opacity" values="1;1;1" dur="1.55s" repeatCount="indefinite" />
+        </feDropShadow>
+        <feDropShadow dx="0" dy="0" stdDeviation="7.5" floodColor="#eab308" floodOpacity="0.9">
+          <animate attributeName="stdDeviation" values="7.5;11.5;7.5" dur="1.55s" repeatCount="indefinite" />
+          <animate attributeName="flood-opacity" values="0.9;1;0.9" dur="1.55s" repeatCount="indefinite" />
+        </feDropShadow>
+      </filter>
+    </defs>
+    {tops.map((top,i)=><g key={i}><StaffLines top={top}/><CalibratedSymbol symbolKey="gClef" x={STAFF_LEFT+31} y={y(2,top)} />{i===0&&<TimeSignature signature={question.timeSignature} top={top} />}</g>)}
+    {ls.map(l => <Bar key={l.barIndex} layout={l} question={question} selectedNotes={selectedNotes} selectedMarking={selectedMarking} feedback={feedback} onNoteClick={onNoteClick} activeNoteId={activeNoteId} />)}
+    {showCorrect && <Mark id={question.marking.id} noteIds={question.target.noteIds} ls={ls} colour={COLOUR.black} highlight={question.type!=="apply" && question.type!=="aural-articulation"}/>}
+    {question.type==="apply" && selectedMarking && selectedNotes.length>0 && !feedback && <Mark id={selectedMarking} noteIds={selectedNotes} ls={ls} colour={COLOUR.black}/>}
+    {isAudioAccent && selectedNotes.length>0 && !feedback && <Mark id="accent" noteIds={selectedNotes} ls={ls} colour={COLOUR.black}/>}
     {question.type==="apply" && feedback && !feedback.correct && <><Mark id={question.marking.id} noteIds={question.target.noteIds} ls={ls} colour={COLOUR.green}/><Mark id={selectedMarking} noteIds={selectedNotes} ls={ls} colour={COLOUR.red}/></>}
     {isAudioAccent && feedback && !feedback.correct && <><Mark id="accent" noteIds={question.target.noteIds} ls={ls} colour={COLOUR.green}/><Mark id="accent" noteIds={selectedNotes} ls={ls} colour={COLOUR.red}/></>}
   </svg>;
@@ -271,22 +530,59 @@ function Score({question,selectedNotes,selectedMarking,feedback,onNoteClick}){
 function ArticulationGlyph({id}){
   if(id==="phrase") return <svg viewBox="0 0 120 58" className="h-10 w-16 overflow-visible"><g transform="translate(0,5)">{[0,1,2,3,4].map(line=><line key={line} x1="8" x2="112" y1={12+line*4} y2={12+line*4} stroke="currentColor" strokeWidth="1"/>)}{[16,36,56,76,96].map((x,i)=><circle key={x} cx={x} cy={24+(i%2?-4:3)} r="2.8" fill="currentColor"/>)}<path d="M10 39 Q60 54 110 39" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></g></svg>;
   if(id==="slur") return <svg viewBox="0 0 90 58" className="h-10 w-16 overflow-visible translate-y-[5px]"><g fill="currentColor" stroke="currentColor"><ellipse cx="25" cy="34" rx="6.3" ry="4.6" transform="rotate(-18 25 34)" fill="currentColor" stroke="currentColor" strokeWidth="1.7"/><line x1="31.3" y1="34" x2="31.3" y2="8" stroke="currentColor" strokeWidth="1.5"/><ellipse cx="64" cy="41" rx="6.3" ry="4.6" transform="rotate(-18 64 41)" fill="currentColor" stroke="currentColor" strokeWidth="1.7"/><line x1="70.3" y1="41" x2="70.3" y2="15" stroke="currentColor" strokeWidth="1.5"/><path d="M25 48 C38 56, 52 56, 64 50" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" transform="rotate(10 44 49)"/></g></svg>;
+  if(id==="staccato" || id==="accent"){
+    const fake=[{id:"a",rhythm:"crotchet",pitch:{step:2}}];
+    const noteX=42, noteTop=12;
+    return <svg viewBox="0 0 90 58" className="h-10 w-16 overflow-visible"><Note note={fake[0]} x={noteX} top={noteTop} colour="currentColor"/><CalibratedSymbol symbolKey={id==="staccato"?"staccatoBelow":"accentBelow"} x={noteX} y={id==="staccato"?52:54} colour="currentColor" settingOverrides={{xOffsetScale:0,yOffsetScale:0,fontSizeScale:id==="staccato"?2.5:2.75,widthScale:1,heightScale:1,opticalXOffset:0,opticalYOffset:0}} /></svg>;
+  }
   const fake=[{id:"a",rhythm:"crotchet",pitch:{step:2}}], l={barIndex:0,top:22,start:0,end:90,pos:[42],bar:{notes:fake}};
   return <svg viewBox="0 0 90 58" className="h-10 w-16 overflow-visible"><Note note={fake[0]} x={42} top={22} colour="currentColor"/><Mark id={id} noteIds={["a"]} ls={[l]} colour="currentColor"/></svg>;
 }
 
-function AppIcon() {
-  return (
-    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
-      <img src="https://mrtennant-music.github.io/musicliteracy/articulation-markings-icon.svg" alt="" aria-hidden="true" className="block h-full w-full object-contain" />
-    </div>
-  );
+function QuestionTypeGlyph({ type }) {
+  const map = {
+    "identify-choice":"📝",
+    "identify-text":"💬",
+    apply:"🎼",
+    "aural-articulation":"🎧",
+  };
+  return <div className="flex h-9 w-9 items-center justify-center text-[21px] leading-none" aria-hidden="true">{map[type] || "•"}</div>;
 }
-function Toggle({active}){ return <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active?"bg-green-600":"bg-stone-400"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${active?"translate-x-5":"translate-x-0"}`}/></span>; }
 
+function MenuSvgGlyph({ src, alt = "" }) {
+  return <img src={src} alt={alt} className="h-[20px] w-[20px] object-contain" />;
+}
 
-function MenuRows({enabledMarkings,setEnabledMarkings,enabledTypes,setEnabledTypes,resetScore,newQuestion}){
-  const row="mb-2 flex h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[7px]";
+function TempoDropdownRow({ tempo, setTempo, stopAudio }) {
+  const tempos = [
+    { id: "adagio", label: "Adagio" },
+    { id: "andante", label: "Andante" },
+    { id: "allegro", label: "Allegro" },
+  ];
+  const selectedTempo = tempos.find(speed => speed.id === tempo) || tempos[1];
+  function cycleTempo() {
+    const currentIndex = tempos.findIndex(speed => speed.id === selectedTempo.id);
+    setTempo(tempos[(currentIndex + 1) % tempos.length].id);
+    stopAudio();
+  }
+  return <div className="hub-toggle-row relative min-h-[44px] overflow-visible">
+    <span className="hub-toggle-label min-w-[145px]">
+      <span className="hub-toggle-glyph">
+        <MenuSvgGlyph src={ASSET.tempo} alt="" />
+      </span>
+      <span className="leading-none">Tempo</span>
+    </span>
+    <button
+      type="button"
+      onClick={cycleTempo}
+      className="flex h-7 w-[86px] items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-bold text-stone-950 shadow-sm"
+    >
+      <span>{selectedTempo.label}</span>
+    </button>
+  </div>;
+}
+
+function MenuRows({enabledMarkings,setEnabledMarkings,enabledTypes,setEnabledTypes,newQuestion,followPlayback,setFollowPlayback,tempo,setTempo,metronomeEnabled,setMetronomeEnabled,stopAudio}){
   function toggleMarking(id){
     setEnabledMarkings(cur=>{
       if(cur.includes(id)&&cur.length===1) return cur;
@@ -305,28 +601,74 @@ function MenuRows({enabledMarkings,setEnabledMarkings,enabledTypes,setEnabledTyp
       return next;
     });
   }
-  const icons={"identify-choice":"🔘","identify-text":"⌨️",apply:"✍️",performance:"💬","aural-articulation":"▶️"};
-  return <><h3 className="mb-2 mt-1 text-sm font-bold text-stone-700">Articulations</h3>{MARKINGS.map(mark=><button key={mark.id} onClick={()=>toggleMarking(mark.id)} className={row}><span className="flex min-w-[30px] items-center gap-2 text-sm font-semibold"><span className="flex h-8 w-[54px] items-center justify-center overflow-hidden"><span className={mark.id==="phrase"?"scale-[0.78]":mark.id==="staccato"?"-translate-y-[7px] scale-[0.78]":"-translate-y-[8px] scale-[0.78]"}><ArticulationGlyph id={mark.id}/></span></span><span>{mark.label}</span></span><Toggle active={enabledMarkings.includes(mark.id)}/></button>)}<h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Question Types</h3>{QUESTION_TYPES.map(type=><button key={type} onClick={()=>toggleType(type)} className={row}><span className="flex items-center gap-2 text-left text-sm font-semibold"><span className="w-6 text-center text-base leading-none">{icons[type]}</span><span>{QUESTION_LABELS[type]}</span></span><Toggle active={enabledTypes.includes(type)}/></button>)}<button onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button></>;
+  return <>
+    <window.MLH.MenuSubheading>Articulations</window.MLH.MenuSubheading>
+    {MARKINGS.map(mark=><window.MLH.MenuToggleRow
+      key={mark.id}
+      glyph={<span className={mark.id==="phrase"?"scale-[0.66]":mark.id==="slur"?"-translate-y-[5px] scale-[0.66]":mark.id==="staccato"||mark.id==="accent"?"-translate-y-[3px] scale-[0.78]":"scale-[0.78]"}><ArticulationGlyph id={mark.id}/></span>}
+      label={MENU_MARKING_LABELS[mark.id] || mark.label}
+      checked={enabledMarkings.includes(mark.id)}
+      onChange={()=>toggleMarking(mark.id)}
+    />)}
+    <window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>
+    {QUESTION_TYPES.map(type=><window.MLH.MenuToggleRow
+      key={type}
+      glyph={<QuestionTypeGlyph type={type} />}
+      label={QUESTION_LABELS[type]}
+      checked={enabledTypes.includes(type)}
+      onChange={()=>toggleType(type)}
+    />)}
+    <window.MLH.MenuSubheading>Audio</window.MLH.MenuSubheading>
+    <TempoDropdownRow tempo={tempo} setTempo={setTempo} stopAudio={stopAudio} />
+    <window.MLH.MenuToggleRow
+      glyph={<MenuSvgGlyph src={ASSET.metronome} alt="" />}
+      label="Metronome"
+      checked={metronomeEnabled}
+      onChange={() => { setMetronomeEnabled(v => !v); stopAudio(); }}
+    />
+    <window.MLH.MenuToggleRow
+      glyph={<MenuSvgGlyph src={ASSET.eye} alt="" />}
+      label="Follow Playback"
+      checked={followPlayback}
+      onChange={() => setFollowPlayback(v => !v)}
+    />
+  </>;
 }
 
-const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
-function StatCard({label,value,footer,progress=null,medal=null,variant="default"}){
-  const isStreak=variant==="streak", safe=progress===null?null:clamp(progress,0,100), fill=safe===null||safe<=0?0:safe, fillColour=safe===null?"transparent":safe<50?"rgba(220,38,38,.38)":safe<70?"rgba(255,120,0,.42)":"rgba(22,163,74,.38)";
-  return <div className={isStreak?"relative overflow-visible bg-transparent p-3":`relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal?medal.bg:"bg-stone-50"}`}>{safe!==null&&<div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{height:`${fill}%`,background:fillColour}}/>}<div className="relative z-10 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className={`text-xl font-semibold leading-tight ${isStreak&&medal?medal.text:""}`}>{value}</div>{footer&&<div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}</div>{isStreak&&<div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal&&medal.emoji?{animation:"medalShine 1.4s ease-in-out infinite"}:{opacity:.16,filter:"grayscale(1) brightness(.7)"}}>{medal&&medal.emoji?medal.emoji:"🥉"}</div>}</div>;
+function FeedbackBanner({feedback,fading=false}){ return <window.MLH.FeedbackBadge feedback={feedback} fading={fading} animationPrefix="note" />; }
+function MultipleChoice({question,selected,feedback,onSelect}){
+  const options=question.type==="aural-articulation"?["staccato","slur"]:MARKINGS.map(x=>x.id);
+  const isPerformanceChoice=question.choiceMode==="performance";
+  const labels=isPerformanceChoice
+    ? MARKINGS.map(x=>({id:x.id,label:x.performance}))
+    : options.map(id=>({id,label:ANSWER_MARKING_LABELS[id] || m(id).label}));
+  const gridClass=question.type==="aural-articulation"
+    ? "grid w-full grid-cols-2 gap-1"
+    : `grid gap-2 ${isPerformanceChoice?"grid-cols-1 md:grid-cols-2":"grid-cols-2 md:grid-cols-4"}`;
+  return <div className={gridClass}>{labels.map(o=>{
+    const correct=feedback&&o.id===question.marking.id, wrong=feedback&&selected===o.id&&o.id!==question.marking.id;
+    let cls="border-stone-300 bg-white text-stone-900";
+    if(correct)cls="border-green-700 bg-green-600 text-white";
+    else if(wrong)cls="border-red-700 bg-red-600 text-white";
+    else if(feedback)cls="border-stone-300 bg-white text-stone-900 opacity-60";
+    return <button key={o.id} disabled={Boolean(feedback)} onClick={()=>onSelect(o.id)} className={`min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm font-bold transition ${cls}`}>{o.label}</button>;
+  })}</div>;
 }
-function FeedbackBanner({feedback,fading=false}){ if(!feedback)return null; return <div className="relative flex w-full items-center justify-center text-center"><div className={`flex w-[300px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${feedback.correct?"text-green-600":"text-red-600"}`} style={{animation:fading?"feedbackFadeOut .28s ease-out forwards":feedback.correct?"correctFade .55s ease-out forwards":"incorrectDropShake .55s ease-out forwards"}}><span>{feedback.correct?"Correct":"Incorrect"}</span>{!feedback.correct&&<span className="mt-2 text-sm font-semibold text-black">Click or tap anywhere to continue</span>}</div></div>; }
-function MultipleChoice({question,selected,feedback,onSelect}){ const options=question.type==="aural-articulation"?["staccato","slur"]:MARKINGS.map(x=>x.id); const labels=question.type==="performance"?MARKINGS.map(x=>({id:x.id,label:x.performance})):options.map(id=>({id,label:m(id).label})); return <div className={question.type==="aural-articulation"?"flex flex-wrap justify-start gap-2":`grid gap-2 ${question.type==="performance"?"grid-cols-1 md:grid-cols-2":"grid-cols-2 md:grid-cols-4"}`}>{labels.map(o=>{ const correct=feedback&&o.id===question.marking.id, wrong=feedback&&selected===o.id&&o.id!==question.marking.id; let cls="border-stone-300 bg-white text-stone-900"; if(correct)cls="border-green-700 bg-green-600 text-white"; else if(wrong)cls="border-red-700 bg-red-600 text-white"; else if(feedback)cls="border-stone-300 bg-white text-stone-900 opacity-60"; return <button key={o.id} disabled={Boolean(feedback)} onClick={()=>onSelect(o.id)} className={`${question.type==="aural-articulation"?"w-[150px] flex-none":""} min-h-[48px] rounded-xl border px-3 py-2 text-sm font-bold transition ${cls}`}>{o.label}</button>; })}</div>; }
-function ApplyAnswers({selectedMarking,setSelectedMarking,setSelectedNotes,feedback}){ return <div className="flex flex-wrap justify-start gap-2">{MARKINGS.map(mark=><button key={mark.id} disabled={Boolean(feedback)} onClick={()=>{setSelectedMarking(mark.id);setSelectedNotes([]);}} className={`relative flex h-[58px] w-[120px] items-center justify-center rounded-xl border px-2 py-2 font-bold transition ${selectedMarking===mark.id?"border-stone-950 bg-stone-950 text-white":"border-stone-300 bg-white text-stone-900"}`}>{selectedMarking===mark.id&&(mark.id==="slur"||mark.id==="phrase")&&<div className="absolute -top-9 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg bg-stone-950 px-3 py-1 text-xs font-semibold text-white shadow-lg">{mark.id==="slur"?"Slur":"Phrase marking"}</div>}<span className={mark.id==="phrase"?"":mark.id==="accent"?"-translate-y-[12px]":mark.id==="slur"?"-translate-y-[8px]":"-translate-y-[10px]"}><ArticulationGlyph id={mark.id}/></span></button>)}</div>; }
+function ApplyAnswers({selectedMarking,setSelectedMarking,setSelectedNotes,feedback}){ return <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:flex-wrap md:justify-start">{MARKINGS.map(mark=><button key={mark.id} disabled={Boolean(feedback)} onClick={()=>{setSelectedMarking(mark.id);setSelectedNotes([]);}} className={`relative flex h-[58px] w-full items-center justify-center rounded-xl border px-2 py-2 font-bold transition md:w-[120px] ${selectedMarking===mark.id?"border-stone-950 bg-stone-950 text-white":"border-stone-300 bg-white text-stone-900"}`}>{selectedMarking===mark.id&&(mark.id==="slur"||mark.id==="phrase")&&<div className="absolute -top-9 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg bg-stone-950 px-3 py-1 text-xs font-semibold text-white shadow-lg">{mark.id==="slur"?"Slurs":"Phrase mark"}</div>}<span className={mark.id==="phrase"?"":mark.id==="slur"?"-translate-y-[8px]":""}><ArticulationGlyph id={mark.id}/></span></button>)}</div>; }
 
 function useStyles(){ useEffect(()=>{ if(document.getElementById("golden-style"))return; const s=document.createElement("style"); s.id="golden-style"; s.innerHTML=`button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:brightness(1.08);box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}@keyframes medalShine{0%,100%{transform:scale(1) rotate(-4deg);filter:drop-shadow(0 0 0 rgba(250,204,21,0))}50%{transform:scale(1.16) rotate(4deg);filter:drop-shadow(0 0 10px rgba(250,204,21,.9))}}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}`; document.head.appendChild(s); },[]); }
 const useClickOutside = window.MLH.useClickOutside;
+const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
+const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 
 function App(){
   useStyles();
+  const [activeLevel,setActiveLevel]=useState(levelFromUrl);
   const [enabledMarkings,setEnabledMarkings]=useState(MARKINGS.map(x=>x.id));
   const [enabledTypes,setEnabledTypes]=useState(QUESTION_TYPES);
   const [question,setQuestion]=useState(()=>makeQuestion());
   const [questionVisible,setQuestionVisible]=useState(true);
+  const [levelOpen,setLevelOpen]=useState(false);
   const [customiseOpen,setCustomiseOpen]=useState(false);
   const [selectedAnswer,setSelectedAnswer]=useState(null);
   const [typedAnswer,setTypedAnswer]=useState("");
@@ -340,13 +682,28 @@ function App(){
   const [streak,setStreak]=useState(0);
   const [best,setBest]=useState(0);
   const [playing,setPlaying]=useState(false);
-  const customiseRef=useRef(null), audioRef=useRef(null), timerRef=useRef(null), masterRef=useRef(null);
-  useClickOutside([customiseRef],[()=>customiseOpen&&setCustomiseOpen(false)]);
-  const acc=attempted===0?0:Math.round(correct/attempted*100), medal=getStreakMedal(streak);
-  const showMC=["identify-choice","performance"].includes(question.type)||(question.type==="aural-articulation"&&question.marking.id!=="accent");
+  const [followPlayback,setFollowPlayback]=useState(false);
+  const [tempo,setTempo]=useState("andante");
+  const [metronomeEnabled,setMetronomeEnabled]=useState(false);
+  const [activeNoteId,setActiveNoteId]=useState(null);
+  const levelRef=useRef(null), customiseRef=useRef(null), audioRef=useRef(null), timerRef=useRef(null), masterRef=useRef(null), feedbackTimersRef=useRef([]), highlightTimersRef=useRef([]);
+  useClickOutside([levelRef,customiseRef],[()=>levelOpen&&setLevelOpen(false),()=>customiseOpen&&setCustomiseOpen(false)]);
+  const acc=attempted===0?0:Math.round(correct/attempted*100);
+  const showMC=question.type==="identify-choice"||(question.type==="aural-articulation"&&question.marking.id!=="accent");
+  const textCanConfirm=clean(typedAnswer).length>0;
+  const applyNeedsRange=selectedMarking==="slur"||selectedMarking==="phrase";
+  const applyCanConfirm=Boolean(selectedMarking)&&(applyNeedsRange?selectedNotes.length>=2:selectedNotes.length>0);
+  const auralAccentCanConfirm=question.type==="aural-articulation"&&question.marking.id==="accent"&&selectedNotes.length>0;
+  const canClearApply=selectedNotes.length>0;
+  const textAnswerFeedbackClass=feedback&&question.type==="identify-text"
+    ? feedback.correct
+      ? "border-green-600 text-green-700"
+      : "border-red-600 text-red-600"
+    : "border-stone-300";
 
   function stopAudio(fade=false){
     clearTimeout(timerRef.current); timerRef.current=null;
+    highlightTimersRef.current.forEach(id=>clearTimeout(id)); highlightTimersRef.current=[]; setActiveNoteId(null);
     const ctx=audioRef.current;
     if(!ctx){ setPlaying(false); return; }
     if(fade && masterRef.current){
@@ -356,17 +713,28 @@ function App(){
     } else try{ctx.close()}catch{}
     audioRef.current=null; setPlaying(false);
   }
-  function resetTask(q){ stopAudio(); setQuestion(q); setSelectedAnswer(null); setTypedAnswer(""); setSelectedMarking(null); setSelectedNotes([]); setPromptMessage(""); setFeedback(null); setFeedbackFading(false); }
+  function clearFeedbackTimers(){ feedbackTimersRef.current.forEach(id=>clearTimeout(id)); feedbackTimersRef.current=[]; }
+  function resetTask(q){ stopAudio(); clearFeedbackTimers(); setQuestion(q); setSelectedAnswer(null); setTypedAnswer(""); setSelectedMarking(null); setSelectedNotes([]); setPromptMessage(""); setFeedback(null); setFeedbackFading(false); }
   function newQuestion(types=enabledTypes, marks=enabledMarkings){ setQuestionVisible(false); setTimeout(()=>{ resetTask(makeQuestion(types,marks)); setQuestionVisible(true); },260); }
   function resetScore(){ setCorrect(0); setAttempted(0); setStreak(0); setBest(0); newQuestion(); }
-  function fadeToNext(){ if(!feedback||feedback.correct||feedbackFading)return; setFeedbackFading(true); setTimeout(()=>newQuestion(),280); }
-  function score(ok){ const ns=ok?streak+1:0; playFeedbackSound(ok); setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){ setTimeout(()=>setFeedbackFading(true),1700); setTimeout(()=>newQuestion(),2000); } }
+  function applyLevel(level){
+    if(!LEVELS[level]) return;
+    setActiveLevel(level);
+    setLevelOpen(false);
+    setCustomiseOpen(false);
+    const url=new URL(window.location.href);
+    url.searchParams.set("level",level);
+    window.history.replaceState({},"",url);
+    newQuestion();
+  }
+  function fadeToNext(){ if(!feedback||feedbackFading)return; clearFeedbackTimers(); setFeedbackFading(true); feedbackTimersRef.current.push(setTimeout(()=>newQuestion(),280)); }
+  function score(ok){ clearFeedbackTimers(); const ns=ok?streak+1:0; const medalBefore=getStreakMedal(streak); const medalAfter=getStreakMedal(ns); playFeedbackSound(ok); if(ok&&medalAfter&&(!medalBefore||medalBefore.sound!==medalAfter.sound)){ setTimeout(()=>playFeedbackSound(true,true,medalAfter.sound),420); } setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){ feedbackTimersRef.current.push(setTimeout(()=>setFeedbackFading(true),1700)); feedbackTimersRef.current.push(setTimeout(()=>newQuestion(),2000)); } }
   function selectAnswer(id){ if(feedback)return; stopAudio(true); setSelectedAnswer(id); score(id===question.marking.id); }
   function confirmAnswer(){
-    if(feedback)return; stopAudio(true);
-    if(question.type==="identify-text"){ const ans=clean(typedAnswer); if(!ans){setPromptMessage("Type an answer before pressing Confirm.");return;} score(question.marking.accepted.includes(ans)); return; }
-    if(question.type==="apply"){ if(!selectedMarking){setPromptMessage("Choose a marking first.");return;} if(!selectedNotes.length){setPromptMessage("Select the notes in the score before pressing Confirm.");return;} score(selectedMarking===question.marking.id && sameSet(selectedNotes,question.target.noteIds)); return; }
-    if(question.type==="aural-articulation"&&question.marking.id==="accent"){ if(!selectedNotes.length){setPromptMessage("Select the accented note before pressing Confirm.");return;} score(sameSet(selectedNotes,question.target.noteIds)); }
+    if(feedback)return;
+    if(question.type==="identify-text"){ const ans=clean(typedAnswer); if(!ans)return; stopAudio(true); score(question.marking.accepted.includes(ans)); return; }
+    if(question.type==="apply"){ if(!applyCanConfirm)return; stopAudio(true); score(selectedMarking===question.marking.id && sameSet(selectedNotes,question.target.noteIds)); return; }
+    if(question.type==="aural-articulation"&&question.marking.id==="accent"){ if(!auralAccentCanConfirm)return; stopAudio(true); score(sameSet(selectedNotes,question.target.noteIds)); }
   }
   function onNoteClick(id){
     if(question.type==="aural-articulation"&&question.marking.id==="accent"){ if(!feedback)setSelectedNotes([id]); return; }
@@ -381,10 +749,29 @@ function App(){
     stopAudio();
     const ctx=new AC(); audioRef.current=ctx; setPlaying(true);
     const master=ctx.createGain(); master.gain.value=1; master.connect(ctx.destination); masterRef.current=master;
-    const beat=.6, articulation=question.marking.id==="accent"?"slur":question.marking.id;
+    const tempoBpm = tempo === "adagio" ? 66 : tempo === "allegro" ? 120 : 88;
+    const beat = 60 / tempoBpm, articulation=question.marking.id==="accent"?"slur":question.marking.id;
     let t=ctx.currentTime+.08;
-    question.bars.forEach(bar=>bar.notes.forEach(note=>{
+    question.bars.forEach(bar=>{
+      if(metronomeEnabled){
+        const barBeats = question.timeSignature?.beats || 4;
+        for(let beatIndex=0; beatIndex<barBeats; beatIndex++){
+          const clickTime=t+beatIndex*beat;
+          const osc=ctx.createOscillator(), gain=ctx.createGain();
+          osc.type="square"; osc.frequency.setValueAtTime(beatIndex===0?1400:1000,clickTime);
+          gain.gain.setValueAtTime(.0001,clickTime);
+          gain.gain.exponentialRampToValueAtTime(.09,clickTime+.002);
+          gain.gain.exponentialRampToValueAtTime(.0001,clickTime+.06);
+          osc.connect(gain); gain.connect(master); osc.start(clickTime); osc.stop(clickTime+.07);
+        }
+      }
+      bar.notes.forEach(note=>{
       const dur=(RH[note.rhythm]?.beats||1)*beat, sound=articulation==="staccato"?dur*.42:dur*.96;
+      if(followPlayback){
+        const startMs=Math.max(0,(t-ctx.currentTime)*1000);
+        highlightTimersRef.current.push(setTimeout(()=>setActiveNoteId(note.id),startMs));
+        highlightTimersRef.current.push(setTimeout(()=>setActiveNoteId(null),startMs+dur*1000));
+      }
       const o=ctx.createOscillator(), g=ctx.createGain(), o2=ctx.createOscillator(), g2=ctx.createGain();
       o.type="triangle"; o.frequency.setValueAtTime(freq(note.pitch.step),t);
       o2.type="sine"; o2.frequency.setValueAtTime(freq(note.pitch.step)*2,t);
@@ -397,22 +784,39 @@ function App(){
       g.gain.exponentialRampToValueAtTime(.0001,t+dur);
       o.connect(g); o2.connect(g2); g2.connect(g); g.connect(master);
       o.start(t); o2.start(t); o.stop(t+dur); o2.stop(t+dur); t+=dur;
-    }));
+      });
+    });
     timerRef.current=setTimeout(()=>{setPlaying(false);audioRef.current=null;try{ctx.close()}catch{}},Math.max(0,(t-ctx.currentTime)*1000)+120);
   }
 
-  return <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2"><div className="mx-auto max-w-6xl">
-    <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-4"><AppIcon/><div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Articulation Markings</h1><p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Identify and apply staccatos, slurs, accents and phrase markings.</p></div></div><div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end"><StatCard label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${acc}%`} progress={acc}/><div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${medal?medal.bg:"bg-stone-50"}`}><StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${best}`} medal={medal}/><div className="relative z-0 flex min-h-[52px] min-w-[30px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700"><div>💎 <span className="text-cyan-500">30</span></div><div className="mt-1">🥇 <span className="text-yellow-500">20</span></div><div className="mt-1">🥈 <span className="text-slate-500">15</span></div><div className="mt-1">🥉 <span className="text-amber-700">10</span></div></div></div></div></div></header>
-    <main className="relative -mt-[10px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-8 pt-[10px] shadow-sm md:h-auto md:overflow-visible md:px-6 md:pb-10 md:pt-[14px]" onPointerDown={()=>{if(feedback&&!feedback.correct)fadeToNext();}}>
-      <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><div className="relative" ref={customiseRef}><button onClick={()=>setCustomiseOpen(v=>!v)} className="flex h-11 min-w-[30px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>{customiseOpen&&<div className="absolute left-0 z-[100] mt-2 max-h-[72vh] w-[min(400px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><h2 className="mb-3 text-center text-base font-semibold">Customise</h2><MenuRows enabledMarkings={enabledMarkings} setEnabledMarkings={setEnabledMarkings} enabledTypes={enabledTypes} setEnabledTypes={setEnabledTypes} resetScore={resetScore} newQuestion={newQuestion}/></div>}</div></div><button onClick={()=>newQuestion()} className="flex h-11 min-w-[30px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button><div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading}/></div></div>
-      <div className={`relative -top-[18px] transition-opacity duration-300 ${questionVisible?"opacity-100":"opacity-0"}`}><Score question={question} selectedNotes={selectedNotes} selectedMarking={selectedMarking} feedback={feedback} onNoteClick={onNoteClick}/></div>
-      <div className={`relative z-10 mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[190px] md:mx-3 ${question.type==="identify-choice"?"min-h-[138px] flex flex-col justify-between":question.type==="identify-text"?"min-h-[132px] flex flex-col justify-between":question.type==="aural-articulation"?"min-h-[138px] flex flex-col justify-between":question.type==="apply"?"min-h-[92px]":"min-h-[142px]"}`}>
+  return <div className={window.MLH.shell.pageShellClass}>
+    <window.MLH.AppHeader icon={ASSET.appIcon} title="Articulation Markings" subtitle="Identify and apply staccatos, slurs, accents and phrase markings.">
+      <window.MLH.ScoreStreakPanel
+        assets={ASSET}
+        correct={correct}
+        attempted={attempted}
+        accuracy={acc}
+        streak={streak}
+        bestStreak={best}
+        resetScore={resetScore}
+      />
+    </window.MLH.AppHeader>
+
+    <div className={window.MLH.shell.pageContentClass}>
+    <main className="relative overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-8 pt-[10px] shadow-sm md:h-auto md:overflow-visible md:px-6 md:pb-10 md:pt-[14px]" onPointerDown={()=>{if(feedback)fadeToNext();}}>
+      <window.MLH.AppToolbar
+        left={<><div className="hub-menu-anchor relative" ref={levelRef}><window.MLH.LevelButton icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} activeLevel={activeLevel} activeLabel={LEVELS[activeLevel].label} onClick={()=>{setCustomiseOpen(false);setLevelOpen(v=>!v);}} dataMenuTrigger={true}/>{levelOpen&&<window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS}/></window.MLH.MenuPanel>}</div><div className="hub-menu-anchor relative" ref={customiseRef}><window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} onClick={()=>{setLevelOpen(false);setCustomiseOpen(v=>!v);}} dataMenuTrigger={true}/>{customiseOpen&&<window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}><MenuRows enabledMarkings={enabledMarkings} setEnabledMarkings={setEnabledMarkings} enabledTypes={enabledTypes} setEnabledTypes={setEnabledTypes} newQuestion={newQuestion} followPlayback={followPlayback} setFollowPlayback={setFollowPlayback} tempo={tempo} setTempo={setTempo} metronomeEnabled={metronomeEnabled} setMetronomeEnabled={setMetronomeEnabled} stopAudio={stopAudio}/></window.MLH.MenuPanel>}</div></>}
+        feedback={<FeedbackBanner feedback={feedback} fading={feedbackFading}/>}
+        right={<window.MLH.SkipButton onClick={()=>newQuestion()} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />}/>}
+      />
+      <div className={`relative top-[18px] transition-opacity duration-300 md:-top-[18px] ${questionVisible?"opacity-100":"opacity-0"}`}><Score question={question} selectedNotes={selectedNotes} selectedMarking={selectedMarking} feedback={feedback} onNoteClick={onNoteClick} activeNoteId={followPlayback ? activeNoteId : null}/></div>
+      <div className={`relative z-10 mt-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[190px] md:mx-3 ${question.type==="identify-choice"?"min-h-[138px] flex flex-col justify-between":question.type==="identify-text"?"min-h-[132px] flex flex-col justify-between":question.type==="aural-articulation"?"flex flex-col justify-between md:min-h-[138px]":question.type==="apply"?"min-h-[92px]":"min-h-[142px]"}`}>
         <div className="text-stone-900"><p className="text-base font-semibold leading-tight">{question.prompt}</p>{promptMessage&&<p className="mt-2 text-sm font-bold text-red-600">{promptMessage}</p>}{feedback&&!feedback.correct&&question.type==="identify-text"&&<p className="mt-2 text-sm font-bold text-green-700">Correct answer: {question.marking.label}</p>}</div>
         <div className={`${question.type==="aural-articulation"?"mt-4":"mt-3"} flex flex-wrap items-end justify-between gap-3 pb-[0px]`}>
-          {showMC&&<div className={question.type==="aural-articulation"?"flex flex-wrap gap-2":"w-full"}><MultipleChoice question={question} selected={selectedAnswer} feedback={feedback} onSelect={selectAnswer}/></div>}
-          {question.type==="aural-articulation"&&<div className={question.marking.id==="accent"?"mt-3 flex w-full items-center justify-between gap-2":"ml-auto flex items-center gap-2"}><button onClick={playAural} disabled={playing||Boolean(feedback)} className="flex h-11 w-[150px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-950 bg-stone-950 px-4 text-sm font-semibold text-white"><span className="text-lg leading-none">▶</span><span>Play</span></button>{question.marking.id==="accent"&&<button disabled={Boolean(feedback)} onClick={confirmAnswer} className="flex h-11 items-center justify-center rounded-xl border border-green-700 bg-green-600 px-4 text-sm font-semibold text-white hover:bg-green-700">Confirm</button>}</div>}
-          {question.type==="identify-text"&&<div className="mt-auto flex w-full items-end justify-between gap-3"><input className="min-h-[48px] w-full max-w-[520px] rounded-xl border border-stone-300 bg-white px-3 py-2 text-base" value={typedAnswer} disabled={Boolean(feedback)} placeholder="Type answer" onChange={e=>setTypedAnswer(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmAnswer();}}/><button disabled={Boolean(feedback)} onClick={confirmAnswer} className="ml-auto flex h-11 items-center justify-center rounded-xl border border-green-700 bg-green-600 px-4 text-sm font-semibold text-white hover:bg-green-700">Confirm</button></div>}
-          {question.type==="apply"&&<div className="mt-auto flex w-full items-end justify-between gap-3"><ApplyAnswers selectedMarking={selectedMarking} setSelectedMarking={setSelectedMarking} setSelectedNotes={setSelectedNotes} feedback={feedback}/><div className="flex items-center gap-2"><button disabled={Boolean(feedback)} onClick={()=>setSelectedNotes([])} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-black hover:bg-stone-100">Clear</button><button disabled={Boolean(feedback)} onClick={confirmAnswer} className="flex h-11 items-center justify-center rounded-xl border border-green-700 bg-green-600 px-4 text-sm font-semibold text-white hover:bg-green-700">Confirm</button></div></div>}
+          {showMC&&<div className="w-full"><MultipleChoice question={question} selected={selectedAnswer} feedback={feedback} onSelect={selectAnswer}/></div>}
+          {question.type==="aural-articulation"&&<div className={question.marking.id==="accent"?"flex w-full flex-col items-stretch gap-2 md:mt-3 md:flex-row md:items-center md:justify-between":"flex w-full items-center gap-2 md:mt-3"}><button onClick={playAural} disabled={playing||Boolean(feedback)} className="flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-950 bg-stone-950 px-4 text-sm font-semibold text-white md:w-[120px]"><span className="text-lg leading-none">▶</span><span>Play</span></button>{question.marking.id==="accent"&&<button disabled={Boolean(feedback)||!auralAccentCanConfirm} onClick={confirmAnswer} className="flex h-11 w-full items-center justify-center rounded-xl border border-stone-950 bg-stone-950 px-4 text-sm font-semibold text-white hover:bg-stone-800 md:w-[120px]">Confirm</button>}</div>}
+          {question.type==="identify-text"&&<div className="mt-auto flex w-full flex-col items-stretch justify-between gap-3 md:flex-row md:items-end"><input className={`min-h-[48px] w-full rounded-xl border bg-white px-3 py-2 text-base outline-none focus:border-stone-500 focus:ring-0 md:max-w-[520px] ${textAnswerFeedbackClass}`} value={typedAnswer} disabled={Boolean(feedback)} placeholder="Type answer" onChange={e=>setTypedAnswer(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmAnswer();}}/><button disabled={Boolean(feedback)||!textCanConfirm} onClick={confirmAnswer} className="flex h-11 w-full items-center justify-center rounded-xl border border-stone-950 bg-stone-950 px-4 text-sm font-semibold text-white hover:bg-stone-800 md:ml-auto md:w-auto">Confirm</button></div>}
+          {question.type==="apply"&&<div className="mt-auto flex w-full flex-col gap-3 md:flex-row md:items-end md:justify-between"><ApplyAnswers selectedMarking={selectedMarking} setSelectedMarking={setSelectedMarking} setSelectedNotes={setSelectedNotes} feedback={feedback}/><div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto md:items-center"><button disabled={Boolean(feedback)||!canClearApply} onClick={()=>setSelectedNotes([])} className="flex h-11 w-full items-center justify-center rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-black hover:bg-stone-100 md:w-auto">Clear</button><button disabled={Boolean(feedback)||!applyCanConfirm} onClick={confirmAnswer} className="flex h-11 w-full items-center justify-center rounded-xl border border-stone-950 bg-stone-950 px-4 text-sm font-semibold text-white hover:bg-stone-800 md:w-auto">Confirm</button></div></div>}
         </div>
       </div>
     </main>
