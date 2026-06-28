@@ -14,7 +14,21 @@
   <script src="./hub-audio.js?v=1.4"></script>
   <script src="./hub-shell.js?v=1.3"></script>
   <script src="./hub-menu.js?v=2.1"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+    @font-face {
+      font-family: "Bravura";
+      src: url("./Bravura.otf") format("opentype");
+      font-display: block;
+    }
+    .music-symbol {
+      font-family: "Bravura", serif;
+      dominant-baseline: alphabetic;
+      text-rendering: geometricPrecision;
+    }
+  </style>
 </head>
 <body>
 <div id="root"></div>
@@ -30,13 +44,25 @@ const MUSIC_START = 125;
 const SYSTEM_TOPS = [62, 187];
 const GAP = 10;
 const NOTE_RX = 6.3;
-const NOTE_RY = 4.6;
 const STEM = 32;
 const BAR_COUNT = 8;
 const BARS_PER_SYSTEM = 4;
-const TREBLE = String.fromCodePoint(0x1d11e);
-const TICK = String.fromCodePoint(0x2714);
-const CROSS = String.fromCodePoint(0x2716);
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS || {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || { drawing: {}, symbols: {} };
+
+const ASSET = {
+  appIcon: "https://mrtennant-music.github.io/musicliteracy/repeat-signs-icon.svg",
+  customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
+  levels: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
+  next: "https://mrtennant-music.github.io/musicliteracy/next.svg",
+  eye: "./eye.svg",
+  metronome: "./metronome.svg",
+  tempo: "./tempo.svg",
+  bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
+  silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
+  gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
+  diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
+};
 
 const COLOUR = {
   blue: "#2563eb",
@@ -51,13 +77,23 @@ const SYMBOLS = [
   { id: "first-time", label: "1st Time Bar" },
   { id: "second-time", label: "2nd Time Bar" },
   { id: "dc", label: "Da Capo" },
+  { id: "segno", label: "Segno" },
+  { id: "fine", label: "Fine" },
+  { id: "ds", label: "Dal Segno" },
 ];
 
-const QUESTION_TYPES = ["dc", "straight-repeat", "first-second"];
-const QUESTION_LABELS = {
-  dc: "Da Capo",
-  "straight-repeat": "Repeat Signs",
-  "first-second": "1st and 2nd Time Bars",
+const LEVELS = {
+  N4: { label: "National 4", description: "Repeat signs", types: ["straight-repeat"] },
+  N5: { label: "National 5", description: "1st and 2nd time bars", types: ["straight-repeat", "first-second"] },
+  H: { label: "Higher", description: "Da capo (D.C.)", types: ["straight-repeat", "first-second", "dc"] },
+  AH: { label: "Advanced Higher", description: "Dal segno (D.S.) • Fine", types: ["straight-repeat", "first-second", "dc", "ds-fine"] },
+};
+
+const QUESTION_TYPE_LABELS = {
+  "straight-repeat": "Repeat signs",
+  "first-second": "1st and 2nd time bars",
+  dc: "D.C.",
+  "ds-fine": "D.S. al Fine",
 };
 
 const TIME_SIGNATURES = [
@@ -74,12 +110,12 @@ const NOTES = [
 ].map(([name, step, freq]) => ({ name, step, freq }));
 
 const RH = {
-  semibreve: { beats: 4, spacing: 4.4, open: true, stem: false, flag: false },
-  dottedMinim: { beats: 3, spacing: 3.4, open: true, stem: true, flag: false, dotted: true },
-  minim: { beats: 2, spacing: 2.6, open: true, stem: true, flag: false },
-  dottedCrotchet: { beats: 1.5, spacing: 2.15, open: false, stem: true, flag: false, dotted: true },
-  crotchet: { beats: 1, spacing: 1.65, open: false, stem: true, flag: false },
-  quaver: { beats: 0.5, spacing: 0.95, open: false, stem: true, flag: true },
+  semibreve: { beats: 4, spacing: 4.4 },
+  dottedMinim: { beats: 3, spacing: 3.4, dotted: true },
+  minim: { beats: 2, spacing: 2.6 },
+  dottedCrotchet: { beats: 1.5, spacing: 2.15, dotted: true },
+  crotchet: { beats: 1, spacing: 1.65 },
+  quaver: { beats: 0.5, spacing: 0.95 },
 };
 
 const SIMPLE_PATTERNS = {
@@ -113,6 +149,10 @@ const PROGRESSIONS = [
   ["C", "F", "C", "G", "Am", "F", "G", "C"],
 ];
 
+const MAX_MELODIC_LEAP_STEPS = 7;
+const MAX_MELODIC_RANGE_STEPS = 8;
+const MAX_REPEATED_PITCH_RUN = 2;
+
 function r(items) { return items[Math.floor(Math.random() * items.length)]; }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function rhythm(id) { return RH[id] || RH.crotchet; }
@@ -121,10 +161,107 @@ function stemDown(step) { return step > 4; }
 function freqForStep(step) { return (NOTES.find(n => n.step === step) || NOTES[5]).freq; }
 function barWidth() { return (STAFF_RIGHT - MUSIC_START) / BARS_PER_SYSTEM; }
 function placeKey(p) { return `${p.symbolId}:${p.barIndex}:${p.anchor}`; }
+function levelFromUrl() {
+  const raw = new URLSearchParams(window.location.search).get("level") || "N4";
+  return LEVELS[raw] ? raw : "N4";
+}
+
+function sharedActualSymbolKey(key) {
+  if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
+  if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
+  return key;
+}
+
+function sharedSymbolConfig(key) {
+  const symbols = SHARED_CONFIG.symbols || {};
+  return symbols[key] || symbols[sharedActualSymbolKey(key)] || {
+    fontSizeScale: 3.4,
+    xOffsetScale: 0,
+    yOffsetScale: 0,
+    widthScale: 1,
+    heightScale: 1,
+    opticalXOffset: 0,
+    opticalYOffset: 0,
+  };
+}
+
+function sharedSymbolForKey(key) {
+  return SHARED_SYMBOLS[sharedActualSymbolKey(key)] || "";
+}
+
+function CalibratedSymbol({ symbolKey, x, y: yy, colour = "currentColor", opacity = 1, lineGap = GAP, settingOverrides = {} }) {
+  const glyph = sharedSymbolForKey(symbolKey);
+  if (!glyph) return null;
+  const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+  const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const adjustedY = yy + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const fontSize = lineGap * Number(settings.fontSizeScale || 3.4);
+  const widthScale = Number(settings.widthScale || 1);
+  const heightScale = Number(settings.heightScale || 1);
+  return (
+    <text className="music-symbol" x={adjustedX} y={adjustedY} fill={colour} opacity={opacity} fontSize={fontSize} textAnchor="middle" transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`} pointerEvents="none">
+      {glyph}
+    </text>
+  );
+}
+
+function noteSymbolKey(rhythmId, down, beamed = false) {
+  if (rhythmId === "semibreve") return "wholeNote";
+  if (rhythmId === "minim" || rhythmId === "dottedMinim") return down ? "halfNoteStemDown" : "halfNoteStemUp";
+  if (rhythmId === "quaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
+  if (rhythmId === "quaver") return down ? "eighthNoteStemDown" : "eighthNoteStemUp";
+  return down ? "quarterNoteStemDown" : "quarterNoteStemUp";
+}
+
+function calibrationAnchorX(symbolKey) {
+  if (symbolKey?.startsWith("timeSig")) return STAFF_LEFT + 12 * GAP;
+  return STAFF_LEFT;
+}
+
+function calibrationAnchorY(symbolKey, top) {
+  if (symbolKey?.startsWith("timeSig")) return y(5.3, top);
+  return top;
+}
 
 function noteIndexFromLetter(letter, preferred = 7) {
   const candidates = NOTES.map((note, index) => ({ ...note, index })).filter(note => note.name[0] === letter);
   return candidates.reduce((best, item) => Math.abs(item.index - preferred) < Math.abs(best.index - preferred) ? item : best, candidates[0]).index;
+}
+
+function noteMeta(index) {
+  const clampedIndex = clamp(index, 0, NOTES.length - 1);
+  const note = NOTES[clampedIndex] || NOTES[7];
+  return {
+    index: clampedIndex,
+    name: note.name,
+    letter: note.name[0],
+    step: note.step,
+    freq: note.freq,
+  };
+}
+
+function makeMelodyNote(index, { id, barIndex, noteIndex, rhythm: rhythmId, beat, chord }) {
+  const meta = noteMeta(index);
+  return {
+    id,
+    barIndex,
+    noteIndex,
+    rhythm: rhythmId,
+    beat,
+    chord,
+    index: meta.index,
+    name: meta.name,
+    letter: meta.letter,
+    step: meta.step,
+  };
+}
+
+function setMelodyNotePitch(note, index) {
+  const meta = noteMeta(index);
+  note.index = meta.index;
+  note.name = meta.name;
+  note.letter = meta.letter;
+  note.step = meta.step;
 }
 
 function weighted(items) {
@@ -186,6 +323,7 @@ function chooseNoteIndex({ previousIndex, previousMove, chordLetters, isStrong, 
 
     const distance = index - previousIndex;
     const abs = Math.abs(distance);
+    if (abs > MAX_MELODIC_LEAP_STEPS) return;
     if (forceStepwise && abs !== 1) return;
 
     let weight = 1;
@@ -209,7 +347,102 @@ function chooseNoteIndex({ previousIndex, previousMove, chordLetters, isStrong, 
   return weighted(candidates.length ? candidates : [{ value: previousIndex, weight: 1 }]);
 }
 
-function makeBars(ts) {
+function melodyNotes(bars) {
+  return bars.flatMap(bar => bar.notes || []);
+}
+
+function longestRepeatedPitchRun(notes) {
+  let longest = 1;
+  let current = 1;
+  for (let index = 1; index < notes.length; index += 1) {
+    if (notes[index].step === notes[index - 1].step) {
+      current += 1;
+      longest = Math.max(longest, current);
+    } else {
+      current = 1;
+    }
+  }
+  return longest;
+}
+
+function hasAwkwardBarlineLeap(bars) {
+  return bars.some((bar, index) => {
+    const nextBar = bars[index + 1];
+    if (!bar?.notes?.length || !nextBar?.notes?.length) return false;
+    return Math.abs(nextBar.notes[0].step - bar.notes.at(-1).step) > MAX_MELODIC_LEAP_STEPS;
+  });
+}
+
+function hasBalancedContour(notes) {
+  let rises = 0;
+  let falls = 0;
+  for (let index = 1; index < notes.length; index += 1) {
+    const interval = notes[index].step - notes[index - 1].step;
+    if (interval > 0) rises += 1;
+    if (interval < 0) falls += 1;
+  }
+  return rises > 0 && falls > 0;
+}
+
+function leapsRecoverByStep(notes) {
+  const leapThreshold = 3;
+  for (let index = 1; index < notes.length - 1; index += 1) {
+    const leap = notes[index].step - notes[index - 1].step;
+    if (Math.abs(leap) < leapThreshold) continue;
+    const recovery = notes[index + 1].step - notes[index].step;
+    if (recovery === 0) continue;
+    if (Math.sign(recovery) === Math.sign(leap) || Math.abs(recovery) > 1) return false;
+  }
+  return true;
+}
+
+function melodyPassesQualityRules(bars) {
+  const notes = melodyNotes(bars);
+  if (notes.length < 2) return false;
+  const intervals = notes.slice(1).map((note, index) => Math.abs(note.step - notes[index].step));
+  const range = Math.max(...notes.map(note => note.step)) - Math.min(...notes.map(note => note.step));
+  if (notes[0].letter !== "C") return false;
+  if (notes.at(-1).letter !== "C") return false;
+  if (range > MAX_MELODIC_RANGE_STEPS) return false;
+  if (Math.max(...intervals) > MAX_MELODIC_LEAP_STEPS) return false;
+  if (hasAwkwardBarlineLeap(bars)) return false;
+  if (!hasBalancedContour(notes)) return false;
+  if (!leapsRecoverByStep(notes)) return false;
+  if (longestRepeatedPitchRun(notes) > MAX_REPEATED_PITCH_RUN) return false;
+  if (new Set(notes.map(note => note.step)).size < 3) return false;
+  return true;
+}
+
+function chordFitScore(bar, chord) {
+  const chordLetters = CHORDS[chord] || CHORDS.C;
+  return (bar.notes || []).reduce((score, note) => {
+    const isChordTone = chordLetters.includes(note.letter);
+    const weight = note.beat === 0 || note.beat === 2 || note.beat === 3 ? 3 : 1;
+    return score + (isChordTone ? weight : -weight);
+  }, 0);
+}
+
+function allowedChordsForBar(barIndex) {
+  if (barIndex === 0 || barIndex === BAR_COUNT - 1) return ["C"];
+  if (barIndex === 3 || barIndex === 6) return ["F", "G", "C"];
+  return ["C", "F", "G", "Am", "Dm"];
+}
+
+function fitChordsToMelody(bars) {
+  return bars.map(bar => {
+    const allowed = allowedChordsForBar(bar.barIndex);
+    const best = allowed.reduce((bestChord, chord) => (
+      chordFitScore(bar, chord) > chordFitScore(bar, bestChord) ? chord : bestChord
+    ), allowed[0]);
+    return {
+      ...bar,
+      chord: best,
+      notes: bar.notes.map(note => ({ ...note, chord: best })),
+    };
+  });
+}
+
+function makeBars(ts, attempt = 0) {
   const bars = [];
   const motifs = {};
   const progression = [...r(PROGRESSIONS)];
@@ -238,7 +471,7 @@ function makeBars(ts) {
         noteIndex,
         noteCount: pattern.length,
       });
-      const note = { id: `${barIndex}-${noteIndex}`, barIndex, noteIndex, rhythm: rhythmId, step: NOTES[next].step, chord };
+      const note = makeMelodyNote(next, { id: `${barIndex}-${noteIndex}`, barIndex, noteIndex, rhythm: rhythmId, beat: starts[noteIndex], chord });
       previousMove = next - previousIndex;
       previousIndex = next;
       return note;
@@ -252,27 +485,34 @@ function makeBars(ts) {
   const bar8FirstIndex = NOTES.findIndex(note => note.step === bar8First?.step);
   if (bar7Last && bar8FirstIndex >= 0) {
     const candidates = [bar8FirstIndex - 1, bar8FirstIndex + 1].filter(i => i >= 0 && i < NOTES.length);
-    bar7Last.step = NOTES[r(candidates)].step;
+    setMelodyNotePitch(bar7Last, r(candidates));
   }
 
-  return bars;
+  const fittedBars = fitChordsToMelody(bars);
+  if (!melodyPassesQualityRules(fittedBars) && attempt < 100) return makeBars(ts, attempt + 1);
+  return fittedBars;
 }
 
-function makeQuestion(enabledTypes = QUESTION_TYPES) {
-  const active = enabledTypes.length ? enabledTypes : QUESTION_TYPES;
-  const type = r(active);
+function makeQuestion(level = "N4", enabledTypes = null) {
+  const activeLevel = LEVELS[level] ? level : "N4";
+  const availableTypes = LEVELS[activeLevel].types || ["straight-repeat"];
+  const pool = availableTypes.filter(type => !enabledTypes || enabledTypes.includes(type));
+  const type = r(pool.length ? pool : availableTypes);
   const ts = r(TIME_SIGNATURES);
   const bars = makeBars(ts);
   let performedOrder = [];
   let required = [];
 
   if (type === "dc") {
-    performedOrder = [0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7];
-    required = [{ symbolId: "dc", barIndex: 7, anchor: "above" }];
+    const dcBar = r([3, 7]);
+    performedOrder = dcBar === 3
+      ? [0,1,2,3,0,1,2,3,4,5,6,7]
+      : [0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7];
+    required = [{ symbolId: "dc", barIndex: dcBar, anchor: "above" }];
   }
 
   if (type === "straight-repeat") {
-    const repeat = r([{ start: 0, end: 3 }, { start: 4, end: 7 }]);
+    const repeat = r([{ start: 0, end: 3 }, { start: 4, end: 7 }, { start: 6, end: 7 }, { start: 0, end: 7 }]);
     performedOrder = [
       ...Array.from({ length: repeat.end + 1 }, (_, i) => i),
       ...Array.from({ length: repeat.end - repeat.start + 1 }, (_, i) => repeat.start + i),
@@ -285,24 +525,59 @@ function makeQuestion(enabledTypes = QUESTION_TYPES) {
   }
 
   if (type === "first-second") {
-    performedOrder = [0,1,2,3,4,5,6,4,5,7];
+    const repeatStart = r([0, 4]);
+    performedOrder = repeatStart === 0
+      ? [0,1,2,3,4,5,6,0,1,2,3,4,5,7]
+      : [0,1,2,3,4,5,6,4,5,7];
     required = [
-      { symbolId: "start-repeat", barIndex: 4, anchor: "start" },
+      { symbolId: "start-repeat", barIndex: repeatStart, anchor: "start", optional: repeatStart === 0 },
       { symbolId: "end-repeat", barIndex: 6, anchor: "end" },
       { symbolId: "first-time", barIndex: 6, anchor: "above" },
       { symbolId: "second-time", barIndex: 7, anchor: "above" },
     ];
   }
 
+  if (type === "ds-fine") {
+    const dsOption = r(["start-to-four", "five-to-seven"]);
+    performedOrder = dsOption === "start-to-four"
+      ? [0,1,2,3,4,5,6,7,0,1,2,3]
+      : [0,1,2,3,4,5,6,7,4,5,6];
+    required = [
+      { symbolId: "segno", barIndex: dsOption === "start-to-four" ? 0 : 4, anchor: "above" },
+      { symbolId: "fine", barIndex: dsOption === "start-to-four" ? 3 : 6, anchor: "above" },
+      { symbolId: "ds", barIndex: 7, anchor: "above" },
+    ];
+  }
+
   return {
     id: Math.random().toString(36).slice(2),
+    level: activeLevel,
     type,
     timeSignature: ts,
     bars,
     performedOrder,
     required,
-    prompt: "Listen to the music and insert the appropriate repeat symbol(s) so that the written music matches what you hear.",
+    prompt: questionPrompt(type, required),
   };
+}
+
+function answerSymbolsForQuestion(question) {
+  const ids = new Set((question.required || []).filter(item => !item.optional).map(item => item.symbolId));
+  return SYMBOLS.filter(symbol => ids.has(symbol.id));
+}
+
+function questionPrompt(type, required) {
+  const requiredIds = new Set((required || []).filter(item => !item.optional).map(item => item.symbolId));
+  if (type === "straight-repeat") {
+    if (requiredIds.has("start-repeat") && requiredIds.has("end-repeat")) {
+      return "Listen to the music and apply the start and end repeat signs in the appropriate places.";
+    }
+    return "Listen to the music and apply the end repeat sign in the appropriate place.";
+  }
+  if (type === "first-second") return "Listen to the music and apply the 1st and 2nd time bars with the required repeat signs.";
+  if (type === "dc") return "Listen to the music and apply the D.C. sign in the appropriate place.";
+  if (type === "ds-fine") return "Listen to the music and apply the Segno, Fine and D.S. al Fine markings in the appropriate places.";
+  return "Listen to the music and apply the appropriate repeat marking.";
 }
 
 function barGeo(barIndex) {
@@ -349,16 +624,16 @@ function quaverGroups(notes, ts) {
   while (i < notes.length) {
     if (notes[i].rhythm !== "quaver") { i++; continue; }
     const start = i;
-    while (i < notes.length && notes[i].rhythm === "quaver") i++;
-    const end = i - 1;
-    if (end > start) {
-      if (ts.id === "6/8") {
-        for (let groupStart = start; groupStart <= end; groupStart += 3) {
-          const groupEnd = Math.min(groupStart + 2, end);
-          if (groupEnd > groupStart) out.push({ start: groupStart, end: groupEnd });
-        }
-      } else out.push({ start, end });
+    while (notes[i + 1]?.rhythm === "quaver") {
+      if (ts?.id === "6/8") {
+        const currentGroup = Math.floor((notes[i].beat + 0.001) / 1.5);
+        const nextGroup = Math.floor((notes[i + 1].beat + 0.001) / 1.5);
+        if (currentGroup !== nextGroup) break;
+      }
+      i++;
     }
+    if (i > start) out.push({ start, end: i });
+    i++;
   }
   return out;
 }
@@ -372,9 +647,28 @@ function beamY(x, a, b) {
 function beamData(notes, xs, top) {
   const avg = notes.reduce((sum, note) => sum + note.step, 0) / notes.length;
   const down = avg > 4;
-  const first = stemData(notes[0], xs[0], top, down);
-  const last = stemData(notes[notes.length - 1], xs[xs.length - 1], top, down);
-  return { down, start: { x: first.sx, y: first.ey }, end: { x: last.sx, y: last.ey } };
+  const settings = sharedSymbolConfig("quaverBeam");
+  const xOffset = GAP * Number(settings.xOffsetScale || 0);
+  const yOffset = GAP * Number(settings.yOffsetScale || 0);
+  const stemLength = STEM * Number(settings.heightScale || 1);
+  const beamWidthAdjust = GAP * 0.6 * (Number(settings.widthScale || 1) - 1);
+  const firstY = y(notes[0].step, top);
+  const lastY = y(notes[notes.length - 1].step, top);
+  const first = stemData({ ...notes[0], step: notes[0].step }, xs[0] + xOffset, top + yOffset, down);
+  const last = stemData({ ...notes[notes.length - 1], step: notes[notes.length - 1].step }, xs[xs.length - 1] + xOffset, top + yOffset, down);
+  first.ey = down ? firstY + yOffset + stemLength : firstY + yOffset - stemLength;
+  last.ey = down ? lastY + yOffset + stemLength : lastY + yOffset - stemLength;
+  return { down, start: { x: first.sx - beamWidthAdjust, y: first.ey }, end: { x: last.sx + beamWidthAdjust, y: last.ey } };
+}
+
+function beamPolygonPoints(x1, y1, x2, y2, thickness) {
+  const half = thickness / 2;
+  return [`${x1},${y1 - half}`, `${x2},${y2 - half}`, `${x2},${y2 + half}`, `${x1},${y1 + half}`].join(" ");
+}
+
+function BeamShape({ beam, colour = "currentColor", opacity = 1 }) {
+  const thickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42));
+  return <polygon points={beamPolygonPoints(beam.start.x - 0.5, beam.start.y, beam.end.x + 0.5, beam.end.y, thickness)} fill={colour} opacity={opacity} />;
 }
 
 function placementPos(placement) {
@@ -385,7 +679,8 @@ function placementPos(placement) {
   }
   if (placement.anchor === "end") return { x: geo.end + (placement.barIndex === BAR_COUNT - 1 ? 6 : 4), y: geo.top, ...geo };
   if (placement.anchor === "below") return { x: geo.end - 30, y: geo.top + 74, ...geo };
-  if (placement.symbolId === "dc") return { x: geo.end - 30, y: geo.top - 35, ...geo };
+  if (placement.symbolId === "dc" || placement.symbolId === "ds" || placement.symbolId === "fine") return { x: geo.end - 30, y: geo.top - 35, ...geo };
+  if (placement.symbolId === "segno") return { x: geo.start + 18, y: geo.top - 24, ...geo };
   return { x: geo.start + 10, y: geo.top - 38, ...geo };
 }
 
@@ -395,10 +690,10 @@ function requiredMatches(required, placements) {
 
 function placementsMatch(question, placements) {
   if (question.type === "dc") {
-    const hasDc = placements.some(p => p.symbolId === "dc" && p.barIndex === 7 && p.anchor === "above");
-    const hasEndRepeat = placements.some(p => p.symbolId === "end-repeat" && p.barIndex === 7 && p.anchor === "end");
+    const dcTarget = question.required.find(item => item.symbolId === "dc");
+    const hasDc = dcTarget && placements.some(p => placeKey(p) === placeKey(dcTarget));
     const badDcBelow = placements.some(p => p.symbolId === "dc" && p.anchor === "below");
-    return (hasDc || hasEndRepeat) && !badDcBelow;
+    return hasDc && !badDcBelow;
   }
 
   if (question.type === "straight-repeat") {
@@ -407,9 +702,7 @@ function placementsMatch(question, placements) {
 
     if (optionalStart && endTarget) {
       const hasEndRepeat = placements.some(p => p.symbolId === "end-repeat" && p.barIndex === endTarget.barIndex && p.anchor === "end");
-      const hasDc = placements.some(p => p.symbolId === "dc" && p.barIndex === endTarget.barIndex && p.anchor === "above");
-      const badDcBelow = placements.some(p => p.symbolId === "dc" && p.anchor === "below");
-      return (hasEndRepeat || hasDc) && !badDcBelow;
+      return hasEndRepeat;
     }
   }
 
@@ -424,11 +717,11 @@ function missingRequired(question, placements) {
 
 function wrongPlacements(question, placements) {
   if (question.type === "dc") {
-    const accepted = placements.some(p => p.symbolId === "dc" && p.barIndex === 7 && p.anchor === "above") || placements.some(p => p.symbolId === "end-repeat" && p.barIndex === 7 && p.anchor === "end");
+    const dcTarget = question.required.find(item => item.symbolId === "dc");
+    const accepted = dcTarget && placements.some(p => placeKey(p) === placeKey(dcTarget));
     if (accepted) {
       return placements.filter(p =>
-        !(p.symbolId === "dc" && p.barIndex === 7 && p.anchor === "above") &&
-        !(p.symbolId === "end-repeat" && p.barIndex === 7 && p.anchor === "end") &&
+        placeKey(p) !== placeKey(dcTarget) &&
         !(p.symbolId === "start-repeat" && p.barIndex === 0 && p.anchor === "start")
       );
     }
@@ -439,13 +732,11 @@ function wrongPlacements(question, placements) {
     const endTarget = question.required.find(item => item.symbolId === "end-repeat");
 
     if (optionalStart && endTarget) {
-      const accepted = placements.some(p => p.symbolId === "end-repeat" && p.barIndex === endTarget.barIndex && p.anchor === "end") ||
-        placements.some(p => p.symbolId === "dc" && p.barIndex === endTarget.barIndex && p.anchor === "above");
+      const accepted = placements.some(p => p.symbolId === "end-repeat" && p.barIndex === endTarget.barIndex && p.anchor === "end");
 
       if (accepted) {
         return placements.filter(p =>
           !(p.symbolId === "end-repeat" && p.barIndex === endTarget.barIndex && p.anchor === "end") &&
-          !(p.symbolId === "dc" && p.barIndex === endTarget.barIndex && p.anchor === "above") &&
           !(p.symbolId === "start-repeat" && p.barIndex === 0 && p.anchor === "start")
         );
       }
@@ -468,7 +759,7 @@ function snap(pointer, selectedSymbolId) {
   if (selectedSymbolId === "start-repeat") return { symbolId: selectedSymbolId, barIndex, anchor: "start" };
   if (selectedSymbolId === "end-repeat") return { symbolId: selectedSymbolId, barIndex, anchor: "end" };
   if (selectedSymbolId === "first-time" || selectedSymbolId === "second-time") return { symbolId: selectedSymbolId, barIndex, anchor: "above" };
-  if (selectedSymbolId === "dc") return { symbolId: selectedSymbolId, barIndex, anchor: pointer.y > top + GAP * 4 + 18 ? "below" : "above" };
+  if (selectedSymbolId === "dc" || selectedSymbolId === "ds" || selectedSymbolId === "fine" || selectedSymbolId === "segno") return { symbolId: selectedSymbolId, barIndex, anchor: pointer.y > top + GAP * 4 + 18 ? "below" : "above" };
   return null;
 }
 
@@ -476,49 +767,37 @@ function Ledger({ x, step, top, colour }) {
   const lines = [];
   if (step <= -2) lines.push(y(-2, top));
   if (step >= 10) lines.push(y(10, top));
-  return <g>{lines.map(yy => <line key={yy} x1={x - 12} x2={x + 12} y1={yy} y2={yy} stroke={colour} strokeWidth="1.2" />)}</g>;
-}
-
-function Flag({ stemX, stemEndY, down, colour }) {
-  const d = down
-    ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 4}, ${stemX + 10} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 16}`
-    : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 4}, ${stemX + 10} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 16}`;
-  return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />;
+  const settings = sharedSymbolConfig("ledgerLines");
+  const xOffset = GAP * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const yOffset = GAP * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const halfWidth = (GAP * Number(SHARED_CONFIG.drawing?.ledgerLineWidthScale || 2.4) * Number(settings.widthScale || 1)) / 2;
+  const thickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11) * Number(settings.heightScale || 1));
+  return <g>{lines.map(yy => <line key={yy} x1={x - halfWidth + xOffset} x2={x + halfWidth + xOffset} y1={yy + yOffset} y2={yy + yOffset} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" />)}</g>;
 }
 
 function Note({ note, x, top, colour = "currentColor", override = null, forced = null, showFlag = true }) {
   const info = rhythm(note.rhythm);
   const st = stemData(note, x, top, override);
   const ey = forced === null ? st.ey : forced;
-  const isLineNote = note.step % 2 === 0;
-  const dotOffset = note.step % 2 !== 0 ? 0 : -4;
+  const beamed = note.rhythm === "quaver" && !showFlag;
+  const dotKey = note.step % 2 === 0 ? "augmentationDotLine" : "augmentationDotSpace";
+  const dotY = note.step % 2 === 0 ? st.y - GAP * 0.25 : st.y;
+  const stemThickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12));
 
   return <g>
     <Ledger x={x} step={note.step} top={top} colour={colour} />
-    <ellipse cx={x} cy={st.y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${st.y})`} fill={info.open ? "white" : colour} stroke={colour} strokeWidth="1.7" />
-    {info.dotted && <circle cx={x + 12} cy={st.y + dotOffset} r="1.7" fill={colour} />}
-    {isLineNote && <line x1={x - 8} x2={x + 8} y1={st.y} y2={st.y} stroke={colour} strokeWidth="1.2" />}
-    {info.stem && <line x1={st.sx} x2={st.sx} y1={st.y} y2={ey} stroke={colour} strokeWidth="1.5" />}
-    {info.flag && showFlag && <Flag stemX={st.sx} stemEndY={ey} down={st.down} colour={colour} />}
+    <CalibratedSymbol symbolKey={noteSymbolKey(note.rhythm, st.down, beamed)} x={x} y={st.y} colour={colour} />
+    {info.dotted && <CalibratedSymbol symbolKey={dotKey} x={x + GAP * 1.3} y={dotY} colour={colour} />}
+    {beamed && <line x1={st.sx} x2={st.sx} y1={st.y} y2={ey} stroke={colour} strokeWidth={stemThickness} />}
   </g>;
 }
 
 function StartRepeatGlyph({ x, y, colour = "currentColor", opacity = 1 }) {
-  return <g opacity={opacity} stroke={colour} fill={colour}>
-    <line x1={x + 5} x2={x + 5} y1={y} y2={y + GAP * 4} strokeWidth="4" />
-    <line x1={x + 11} x2={x + 11} y1={y} y2={y + GAP * 4} strokeWidth="1.5" />
-    <circle cx={x + 18} cy={y + 15} r="2.55" />
-    <circle cx={x + 18} cy={y + 25} r="2.55" />
-  </g>;
+  return <CalibratedSymbol symbolKey="repeatLeft" x={x + GAP * 1.1 - 7} y={y + GAP * 2.9} colour={colour} opacity={opacity} />;
 }
 
 function EndRepeatGlyph({ x, y, colour = "currentColor", opacity = 1 }) {
-  return <g opacity={opacity} stroke={colour} fill={colour}>
-    <line x1={x - 11} x2={x - 11} y1={y} y2={y + GAP * 4} strokeWidth="1.5" />
-    <line x1={x - 5} x2={x - 5} y1={y} y2={y + GAP * 4} strokeWidth="4" />
-    <circle cx={x - 18} cy={y + 15} r="2.55" />
-    <circle cx={x - 18} cy={y + 25} r="2.55" />
-  </g>;
+  return <CalibratedSymbol symbolKey="repeatRight" x={x - GAP * 1.1 + 3} y={y + GAP * 2.9} colour={colour} opacity={opacity} />;
 }
 
 function TimeBarGlyph({ placement, colour = "currentColor", opacity = 1 }) {
@@ -533,7 +812,22 @@ function TimeBarGlyph({ placement, colour = "currentColor", opacity = 1 }) {
 
 function DcGlyph({ placement, colour = "currentColor", opacity = 1 }) {
   const pos = placementPos(placement);
-  return <text x={pos.x} y={pos.y} opacity={opacity} fill={colour} fontFamily="serif" fontSize="24" fontWeight="900" textAnchor="middle" style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 6, strokeLinejoin: "round" }}>D.C.</text>;
+  return <CalibratedSymbol symbolKey="daCapo" x={pos.x} y={pos.y} colour={colour} opacity={opacity} settingOverrides={{ fontSizeScale: 2.65 }} />;
+}
+
+function DsGlyph({ placement, colour = "currentColor", opacity = 1 }) {
+  const pos = placementPos(placement);
+  return <text x={pos.x} y={pos.y} opacity={opacity} fill={colour} fontFamily="Georgia, serif" fontSize="21" fontStyle="italic" fontWeight="700" textAnchor="middle" style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 6, strokeLinejoin: "round" }}>D.S. al Fine</text>;
+}
+
+function FineGlyph({ placement, colour = "currentColor", opacity = 1 }) {
+  const pos = placementPos(placement);
+  return <text x={pos.x} y={pos.y} opacity={opacity} fill={colour} fontFamily="Georgia, serif" fontSize="18" fontStyle="italic" fontWeight="700" textAnchor="middle" style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 6, strokeLinejoin: "round" }}>Fine</text>;
+}
+
+function SegnoGlyph({ placement, colour = "currentColor", opacity = 1 }) {
+  const pos = placementPos(placement);
+  return <CalibratedSymbol symbolKey="segno" x={pos.x} y={pos.y} colour={colour} opacity={opacity} settingOverrides={{ fontSizeScale: 2.6 }} />;
 }
 
 function PlacementGlyph({ placement, colour = "currentColor", opacity = 1 }) {
@@ -543,31 +837,40 @@ function PlacementGlyph({ placement, colour = "currentColor", opacity = 1 }) {
   if (placement.symbolId === "end-repeat") return <EndRepeatGlyph x={pos.x} y={pos.y} colour={colour} opacity={opacity} />;
   if (placement.symbolId === "first-time" || placement.symbolId === "second-time") return <TimeBarGlyph placement={placement} colour={colour} opacity={opacity} />;
   if (placement.symbolId === "dc") return <DcGlyph placement={placement} colour={colour} opacity={opacity} />;
+  if (placement.symbolId === "ds") return <DsGlyph placement={placement} colour={colour} opacity={opacity} />;
+  if (placement.symbolId === "fine") return <FineGlyph placement={placement} colour={colour} opacity={opacity} />;
+  if (placement.symbolId === "segno") return <SegnoGlyph placement={placement} colour={colour} opacity={opacity} />;
   return null;
 }
 
+function TimeSignature({ signature, top }) {
+  const key = `timeSig${signature.top}${signature.bottom}`;
+  const settings = sharedSymbolConfig(key);
+  const topGlyph = sharedSymbolForKey(`timeSig${signature.top}`);
+  const bottomGlyph = sharedSymbolForKey(`timeSig${signature.bottom}`);
+  const x = calibrationAnchorX(key) + GAP * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const yy = calibrationAnchorY(key, top) + GAP * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const fontSize = GAP * Number(settings.fontSizeScale || 3.4);
+  return <g pointerEvents="none"><text className="music-symbol" x={x} y={yy - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{topGlyph}</text><text className="music-symbol" x={x} y={yy + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text></g>;
+}
+
 function SymbolGlyph({ id }) {
-  return <svg viewBox="0 0 100 54" className="h-[50px] w-20 overflow-visible" aria-hidden="true">
-    {id === "start-repeat" && <g transform="translate(-1 0)"><StartRepeatGlyph x={34} y={8} /></g>}
-    {id === "end-repeat" && <g transform="translate(1 0)"><EndRepeatGlyph x={66} y={8} /></g>}
-    {id === "first-time" && <g transform="translate(0 15)" stroke="currentColor" fill="none" strokeWidth="2"><path d="M 20 18 L 20 4 L 76 4" /><text x="28" y="-3" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">1.</text></g>}
-    {id === "second-time" && <g transform="translate(0 15)" stroke="currentColor" fill="none" strokeWidth="2"><path d="M 20 18 L 20 4 L 76 4" /><text x="28" y="-3" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">2.</text></g>}
-    {id === "repeat-pair" && <g transform="translate(0 0)"><StartRepeatGlyph x={21} y={8} /><EndRepeatGlyph x={79} y={8} /></g>}
+  return <svg viewBox="0 0 100 54" className="h-full w-full overflow-visible" aria-hidden="true">
+    {id === "start-repeat" && <g transform="translate(12 1)"><StartRepeatGlyph x={34} y={8} /></g>}
+    {id === "end-repeat" && <g transform="translate(-12 1)"><EndRepeatGlyph x={66} y={8} /></g>}
+    {id === "first-time" && <g transform="translate(1 15)" stroke="currentColor" fill="none" strokeWidth="2"><path d="M 20 18 L 20 4 L 76 4" /><text x="28" y="-3" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">1.</text></g>}
+    {id === "second-time" && <g transform="translate(1 15)" stroke="currentColor" fill="none" strokeWidth="2"><path d="M 20 18 L 20 4 L 76 4" /><text x="28" y="-3" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">2.</text></g>}
+    {id === "repeat-pair" && <g transform="translate(0 1)"><StartRepeatGlyph x={21} y={8} /><EndRepeatGlyph x={79} y={8} /></g>}
     {id === "time-bars-pair" && <g stroke="currentColor" fill="none" strokeWidth="2">
       <path d="M 22 31.5 L 22 17.5 L 78 17.5" />
       <text x="30" y="14" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">1.</text>
       <path d="M 22 63 L 22 49 L 78 49" />
       <text x="30" y="46" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">2.</text>
     </g>}
-    {id === "dc" && <text x="50" y="32" fill="currentColor" fontFamily="serif" fontSize="24" fontWeight="900" textAnchor="middle" textLength="46" lengthAdjust="spacingAndGlyphs">D.C.</text>}
-  </svg>;
-}
-
-function QuestionTypeGlyph({ type }) {
-  return <svg viewBox="0 0 100 78" className="h-12 w-16 overflow-visible" aria-hidden="true">
-    {type === "dc" && <text x="50" y="43" fill="currentColor" fontFamily="serif" fontSize="24" fontWeight="900" textAnchor="middle" textLength="46" lengthAdjust="spacingAndGlyphs">D.C.</text>}
-    {type === "straight-repeat" && <g transform="translate(0 8)"><StartRepeatGlyph x={16} y={6} /><EndRepeatGlyph x={84} y={6} /></g>}
-    {type === "first-second" && <g stroke="currentColor" fill="none" strokeWidth="2"><path d="M 20 30 L 20 16 L 76 16" /><text x="28" y="13" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">1.</text><path d="M 20 67 L 20 53 L 76 53" /><text x="28" y="50" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">2.</text></g>}
+    {id === "dc" && <CalibratedSymbol symbolKey="daCapo" x={50} y={34} settingOverrides={{ fontSizeScale: 2.45 }} />}
+    {id === "ds" && <text x="50" y="32" fill="currentColor" fontFamily="Georgia, serif" fontSize="17" fontStyle="italic" fontWeight="800" textAnchor="middle">D.S. al Fine</text>}
+    {id === "fine" && <text x="50" y="33" fill="currentColor" fontFamily="Georgia, serif" fontSize="22" fontStyle="italic" fontWeight="700" textAnchor="middle">Fine</text>}
+    {id === "segno" && <CalibratedSymbol symbolKey="segno" x={50} y={33} settingOverrides={{ fontSizeScale: 2.45 }} />}
   </svg>;
 }
 
@@ -585,8 +888,8 @@ function Score({ question, selectedSymbolId, placements, hoverPlacement, feedbac
     <rect width={W} height={H} fill="transparent" />
     {SYSTEM_TOPS.map((top, i) => <g key={i}>
       {[0,1,2,3,4].map(line => <line key={line} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={top + line * GAP} y2={top + line * GAP} stroke="currentColor" strokeWidth="1.2" />)}
-      <text x={STAFF_LEFT + 8} y={top + 28} fontSize="92" fontFamily="serif" dominantBaseline="middle">{TREBLE}</text>
-      {i === 0 && <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle"><text x={STAFF_LEFT + 58} y={top + 20}>{question.timeSignature.top}</text><text x={STAFF_LEFT + 58} y={top + 40.6}>{question.timeSignature.bottom}</text></g>}
+      <CalibratedSymbol symbolKey="gClef" x={STAFF_LEFT + 31} y={y(2, top)} />
+      {i === 0 && <TimeSignature signature={question.timeSignature} top={top} />}
     </g>)}
 
     {ls.map(layout => {
@@ -616,7 +919,7 @@ function Score({ question, selectedSymbolId, placements, hoverPlacement, feedbac
           const ns = layout.bar.notes.slice(g.start, g.end + 1);
           const xs = layout.pos.slice(g.start, g.end + 1);
           const bd = beamData(ns, xs, layout.top);
-          return <line key={i} x1={bd.start.x - .5} y1={bd.start.y} x2={bd.end.x + .5} y2={bd.end.y} stroke="currentColor" strokeWidth="4" strokeLinecap="butt" />;
+          return <BeamShape key={i} beam={bd} />;
         })}
 
         {layout.barIndex === BAR_COUNT - 1
@@ -634,63 +937,119 @@ function Score({ question, selectedSymbolId, placements, hoverPlacement, feedbac
   </svg>;
 }
 
-function AppIcon() {
-  return (
-    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
-      <img src="https://mrtennant-music.github.io/musicliteracy/repeat-signs-icon.svg" alt="" aria-hidden="true" className="block h-full w-full object-contain" />
-    </div>
-  );
+function MenuSvgGlyph({ src, alt = "" }) {
+  return <img src={src} alt={alt} className="h-[20px] w-[20px] object-contain" />;
 }
 
-function Toggle({ active }) {
-  return <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active ? "bg-green-600" : "bg-stone-400"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : "translate-x-0"}`} /></span>;
-}
-
-
-function MenuRows({ enabledTypes, setEnabledTypes, resetScore, newQuestion, followPlayback, setFollowPlayback, tempo, setTempo, metronomeEnabled, setMetronomeEnabled }) {
-  const row = "mb-2 flex h-[58px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[7px]";
-  function toggleType(id) {
-    setEnabledTypes(cur => {
-      if (cur.includes(id) && cur.length === 1) return cur;
-      const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
-      setTimeout(() => newQuestion(next), 0);
-      return next;
-    });
+function TempoDropdownRow({ tempo, setTempo, stopAudio }) {
+  const tempos = [
+    { id: "adagio", label: "Adagio" },
+    { id: "andante", label: "Andante" },
+    { id: "allegro", label: "Allegro" },
+  ];
+  const selectedTempo = tempos.find(speed => speed.id === tempo) || tempos[1];
+  function cycleTempo() {
+    const currentIndex = tempos.findIndex(speed => speed.id === selectedTempo.id);
+    setTempo(tempos[(currentIndex + 1) % tempos.length].id);
+    stopAudio();
   }
+  return <div className="hub-toggle-row relative min-h-[44px] overflow-visible">
+    <span className="hub-toggle-label min-w-[145px]">
+      <span className="hub-toggle-glyph">
+        <MenuSvgGlyph src={ASSET.tempo} alt="" />
+      </span>
+      <span className="leading-none">Tempo</span>
+    </span>
+    <button
+      type="button"
+      onClick={cycleTempo}
+      className="flex h-7 w-[86px] items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-bold text-stone-950 shadow-sm"
+    >
+      <span>{selectedTempo.label}</span>
+    </button>
+  </div>;
+}
+
+function QuestionTypeGlyph({ type }) {
+  const symbolClass = "music-symbol";
+  if (type === "straight-repeat") {
+    return <svg viewBox="0 0 40 28" className="h-[22px] w-[22px] overflow-visible" aria-hidden="true">
+      <text className={symbolClass} x="12" y="24" fontSize="24" textAnchor="middle">{sharedSymbolForKey("repeatLeft")}</text>
+      <text className={symbolClass} x="28" y="24" fontSize="24" textAnchor="middle">{sharedSymbolForKey("repeatRight")}</text>
+    </svg>;
+  }
+  if (type === "first-second") {
+    return <svg viewBox="0 0 40 28" className="h-[22px] w-[22px] overflow-visible" aria-hidden="true">
+      <g transform="translate(-6 7) scale(0.52)" stroke="currentColor" fill="none" strokeWidth="2">
+        <path d="M 20 18 L 20 4 L 76 4" />
+        <text x="28" y="-3" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">1.</text>
+      </g>
+    </svg>;
+  }
+  if (type === "dc") {
+    return <svg viewBox="0 0 40 28" className="h-[22px] w-[22px] overflow-visible" aria-hidden="true">
+      <text className={symbolClass} x="20" y="20" fontSize="25" textAnchor="middle">{sharedSymbolForKey("daCapo")}</text>
+    </svg>;
+  }
+  if (type === "ds-fine") {
+    return <svg viewBox="0 0 40 28" className="h-[22px] w-[22px] overflow-visible" aria-hidden="true">
+      <text className={symbolClass} x="20" y="20" fontSize="25" textAnchor="middle">{sharedSymbolForKey("dalSegno")}</text>
+    </svg>;
+  }
+  return null;
+}
+
+function QuestionTypeToggleRows({ activeLevel, enabledQuestionTypes, toggleQuestionType }) {
+  const types = LEVELS[activeLevel]?.types || ["straight-repeat"];
   return <>
-    <h3 className="mb-2 mt-1 text-sm font-bold text-stone-700">Question Types</h3>
-    {QUESTION_TYPES.map(type => <button key={type} onClick={() => toggleType(type)} className={row}>
-      <span className="ml-[-6px] flex items-center gap-3 text-left text-sm font-semibold"><span className="translate-y-[2px]"><QuestionTypeGlyph type={type} /></span><span>{QUESTION_LABELS[type]}</span></span>
-      <Toggle active={enabledTypes.includes(type)} />
-    </button>)}
-    <h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Playback</h3>
-    <div className="mb-2 flex min-h-[58px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 px-[14px] py-[7px]">
-      <span className="ml-[-14px] flex items-center gap-3 text-left text-sm font-semibold"><span className="flex h-12 w-12 translate-y-[2px] items-center justify-center text-[24px]" aria-hidden="true">♫</span><span>Tempo</span></span>
-      <div className="relative -top-[34px] flex items-center gap-2">
-        {[["adagio", "Adagio"], ["andante", "Andante"], ["allegro", "Allegro"]].map(([id, label]) => <button key={id} type="button" onClick={() => setTempo(id)} className={`h-9 rounded-xl border px-2.5 text-[13px] font-bold ${tempo === id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}>{label}</button>)}
-      </div>
-    </div>
-    <button onClick={() => setMetronomeEnabled(v => !v)} className={row}>
-      <span className="ml-[-14px] flex items-center gap-3 text-left text-sm font-semibold"><span className="flex h-12 w-12 translate-y-[1px] items-center justify-center" aria-hidden="true"><svg viewBox="0 0 64 64" className="h-[26px] w-[26px]" aria-hidden="true"><path d="M20 54 L30 10 L40 10 L50 54 Z" fill="currentColor" /><path d="M32 18 L39 45" stroke="white" strokeWidth="3" strokeLinecap="round" /><circle cx="35" cy="34" r="2.4" fill="white" /><rect x="27" y="47" width="16" height="3" rx="1.5" fill="white" opacity="0.9" /></svg></span><span>Metronome</span></span>
-      <Toggle active={metronomeEnabled} />
-    </button>
-    <button onClick={() => setFollowPlayback(v => !v)} className={row}>
-      <span className="ml-[-14px] flex items-center gap-3 text-left text-sm font-semibold"><span className="flex h-12 w-12 items-center justify-center" aria-hidden="true"><svg viewBox="0 0 24 24" className="h-[22px] w-[22px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg></span><span>Follow Playback</span></span>
-      <Toggle active={followPlayback} />
-    </button>
-    <button onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button>
+    <window.MLH.MenuSubheading>Questions</window.MLH.MenuSubheading>
+    {types.map(type => {
+      const checked = enabledQuestionTypes.includes(type);
+      const locked = checked && enabledQuestionTypes.length <= 1;
+      return <window.MLH.MenuToggleRow
+        key={type}
+        glyph={<QuestionTypeGlyph type={type} />}
+        label={QUESTION_TYPE_LABELS[type] || type}
+        checked={checked}
+        onChange={() => { if (!locked) toggleQuestionType(type); }}
+      />;
+    })}
   </>;
 }
 
-const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
+function MenuRows({ activeLevel, enabledQuestionTypes, toggleQuestionType, followPlayback, setFollowPlayback, tempo, setTempo, metronomeEnabled, setMetronomeEnabled, stopAudio }) {
+  return <>
+    <QuestionTypeToggleRows activeLevel={activeLevel} enabledQuestionTypes={enabledQuestionTypes} toggleQuestionType={toggleQuestionType} />
+    <window.MLH.MenuSubheading>Audio</window.MLH.MenuSubheading>
+    <TempoDropdownRow tempo={tempo} setTempo={setTempo} stopAudio={stopAudio} />
+    <window.MLH.MenuToggleRow
+      glyph={<MenuSvgGlyph src={ASSET.metronome} alt="" />}
+      label="Metronome"
+      checked={metronomeEnabled}
+      onChange={() => { setMetronomeEnabled(v => !v); stopAudio(); }}
+    />
+    <window.MLH.MenuToggleRow
+      glyph={<MenuSvgGlyph src={ASSET.eye} alt="" />}
+      label="Follow Playback"
+      checked={followPlayback}
+      onChange={() => setFollowPlayback(v => !v)}
+    />
+  </>;
+}
 
-function StatCard({ label, value, footer, progress = null, medal = null, variant = "default" }) { const isStreak = variant === "streak"; const safe = progress === null ? null : clamp(progress, 0, 100); const fill = safe === null || safe <= 0 ? 0 : safe; const fillColour = safe === null ? "transparent" : safe < 50 ? "rgba(220,38,38,.38)" : safe < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)"; return <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>{safe !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fill}%`, background: fillColour }} />}<div className="relative z-10 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>{footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}</div>{isStreak && <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal && medal.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: .16, filter: "grayscale(1) brightness(.7)" }}>{medal && medal.emoji ? medal.emoji : "🥉"}</div>}</div>; }
+function FeedbackBanner({ feedback, fading = false }) {
+  return <window.MLH.FeedbackBadge feedback={feedback} fading={fading} animationPrefix="note" />;
+}
 
-function FeedbackBanner({ feedback, fading = false }) { if (!feedback) return null; return <div className="relative flex w-full items-center justify-center text-center"><div className={`flex w-[300px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${feedback.correct ? "text-green-600" : "text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}><span>{feedback.correct ? "Correct" : "Incorrect"}</span>{!feedback.correct && <span className="mt-2 text-sm font-semibold text-black">👆 Click or tap anywhere to continue</span>}</div></div>; }
+function RepeatAnswers({ question, selectedSymbolId, setSelectedSymbolId, feedback }) {
+  const symbols = answerSymbolsForQuestion(question);
+  const compact = symbols.length > 4;
+  return <div className={`flex min-w-0 flex-nowrap justify-start ${compact ? "gap-1" : "gap-2"} overflow-visible pb-1`}>
+    {symbols.map(symbol => <button key={symbol.id} disabled={Boolean(feedback)} onClick={() => setSelectedSymbolId(symbol.id)} className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border font-bold transition ${compact ? "h-[58px] w-[92px] px-2 py-1 text-[0.95em]" : "h-[72px] w-[132px] px-3 py-2 text-[1.1em]"} ${selectedSymbolId === symbol.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}><span className={`flex items-center justify-center ${compact ? "h-[42px] w-[78px]" : "h-[50px] w-[96px]"} overflow-hidden`}><SymbolGlyph id={symbol.id} /></span></button>)}
+  </div>;
+}
 
-function RepeatAnswers({ selectedSymbolId, setSelectedSymbolId, feedback }) { return <div className="flex flex-nowrap justify-start gap-2 overflow-visible pb-1">{SYMBOLS.map(symbol => <button key={symbol.id} disabled={Boolean(feedback)} onClick={() => setSelectedSymbolId(symbol.id)} className={`relative flex h-[73px] w-[165px] shrink-0 items-center justify-center overflow-visible rounded-xl border px-3 py-3 text-[1.25em] font-bold transition ${selectedSymbolId === symbol.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}><span className="overflow-visible"><SymbolGlyph id={symbol.id} /></span></button>)}</div>; }
-
-function useStyles() { useEffect(() => { if (document.getElementById("golden-style")) return; const s = document.createElement("style"); s.id = "golden-style"; s.innerHTML = `button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:none;box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}@keyframes medalShine{0%,100%{transform:scale(1) rotate(-4deg);filter:drop-shadow(0 0 0 rgba(250,204,21,0))}50%{transform:scale(1.16) rotate(4deg);filter:drop-shadow(0 0 10px rgba(250,204,21,.9))}}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}`; document.head.appendChild(s); }, []); }
+function useStyles() { useEffect(() => { if (document.getElementById("golden-style")) return; const s = document.createElement("style"); s.id = "golden-style"; s.innerHTML = `button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:none;box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}.chords-customise-panel{z-index:900;max-height:calc(100dvh - 170px);overflow-y:auto}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}`; document.head.appendChild(s); }, []); }
 const useClickOutside = window.MLH.useClickOutside;
 const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 function frequencyForLetter(letter, octave = 3) { const semitone = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 }; return 440 * Math.pow(2, (semitone[letter] + (octave - 4) * 12) / 12); }
@@ -700,9 +1059,11 @@ function barDuration(bar, beatSeconds) { return bar.notes.reduce((sum, note) => 
 function App() {
   useStyles();
 
-  const [enabledTypes, setEnabledTypes] = useState(QUESTION_TYPES);
-  const [question, setQuestion] = useState(() => makeQuestion());
+  const [activeLevel, setActiveLevel] = useState(levelFromUrl);
+  const [question, setQuestion] = useState(() => makeQuestion(levelFromUrl()));
+  const [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => [...(LEVELS[levelFromUrl()]?.types || LEVELS.N4.types)]);
   const [questionVisible, setQuestionVisible] = useState(true);
+  const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
   const [selectedSymbolId, setSelectedSymbolId] = useState(null);
   const [placements, setPlacements] = useState([]);
@@ -722,17 +1083,19 @@ function App() {
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
   const [activeNoteId, setActiveNoteId] = useState(null);
 
+  const levelRef = useRef(null);
   const customiseRef = useRef(null);
   const audioRef = useRef(null);
   const masterRef = useRef(null);
   const endTimerRef = useRef(null);
   const highlightTimersRef = useRef([]);
+  const feedbackFadeTimerRef = useRef(null);
+  const feedbackNextTimerRef = useRef(null);
 
-  useClickOutside([customiseRef], [() => customiseOpen && setCustomiseOpen(false)]);
+  useClickOutside([levelRef, customiseRef], [() => levelOpen && setLevelOpen(false), () => customiseOpen && setCustomiseOpen(false)]);
   useEffect(() => () => stopAudio(), []);
 
   const acc = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const medal = getStreakMedal(streak);
 
   function stopAudio(fade = false) {
     clearTimeout(endTimerRef.current);
@@ -759,6 +1122,7 @@ function App() {
 
   function resetTask(q) {
     stopAudio();
+    clearFeedbackTimers();
     setQuestion(q);
     setSelectedSymbolId(null);
     setPlacements([]);
@@ -770,12 +1134,38 @@ function App() {
     setMissing([]);
   }
 
-  function newQuestion(types = enabledTypes) {
+  function newQuestion(level = activeLevel, types = enabledQuestionTypes) {
+    clearFeedbackTimers();
     setQuestionVisible(false);
     setTimeout(() => {
-      resetTask(makeQuestion(types));
+      resetTask(makeQuestion(level, types));
       setQuestionVisible(true);
     }, 260);
+  }
+
+  function applyLevel(level) {
+    if (!LEVELS[level]) return;
+    const levelTypes = [...LEVELS[level].types];
+    setActiveLevel(level);
+    setEnabledQuestionTypes(levelTypes);
+    setLevelOpen(false);
+    setCustomiseOpen(false);
+    const url = new URL(window.location.href);
+    url.searchParams.set("level", level);
+    window.history.replaceState({}, "", url);
+    newQuestion(level, levelTypes);
+  }
+
+  function toggleQuestionType(type) {
+    const availableTypes = LEVELS[activeLevel]?.types || LEVELS.N4.types;
+    const currentAvailable = enabledQuestionTypes.filter(item => availableTypes.includes(item));
+    const checked = currentAvailable.includes(type);
+    const next = checked
+      ? currentAvailable.filter(item => item !== type)
+      : [...currentAvailable, type].filter(item => availableTypes.includes(item));
+    const safeNext = next.length ? next : currentAvailable;
+    setEnabledQuestionTypes(safeNext);
+    if (!safeNext.includes(question.type)) newQuestion(activeLevel, safeNext);
   }
 
   function resetScore() {
@@ -783,11 +1173,19 @@ function App() {
     setAttempted(0);
     setStreak(0);
     setBest(0);
-    newQuestion();
+    newQuestion(activeLevel);
+  }
+
+  function clearFeedbackTimers() {
+    clearTimeout(feedbackFadeTimerRef.current);
+    clearTimeout(feedbackNextTimerRef.current);
+    feedbackFadeTimerRef.current = null;
+    feedbackNextTimerRef.current = null;
   }
 
   function fadeToNext() {
-    if (!feedback || feedback.correct || feedbackFading) return;
+    if (!feedback || feedbackFading) return;
+    clearFeedbackTimers();
     setFeedbackFading(true);
     setTimeout(() => newQuestion(), 280);
   }
@@ -801,8 +1199,8 @@ function App() {
     setBest(v => Math.max(v, ns));
     setFeedback({ correct: ok });
     if (ok) {
-      setTimeout(() => setFeedbackFading(true), 1700);
-      setTimeout(() => newQuestion(), 2000);
+      feedbackFadeTimerRef.current = setTimeout(() => setFeedbackFading(true), 1700);
+      feedbackNextTimerRef.current = setTimeout(() => newQuestion(), 2000);
     }
   }
 
@@ -822,13 +1220,13 @@ function App() {
     const newPlacement = { ...hoverPlacement, localId: Math.random().toString(36).slice(2) };
     setPlacements(current => {
       const isTimeBar = newPlacement.symbolId === "first-time" || newPlacement.symbolId === "second-time";
-      const isDc = newPlacement.symbolId === "dc";
+      const isNavigation = ["dc", "ds", "fine", "segno"].includes(newPlacement.symbolId);
       return [
         ...current.filter(p => {
           if (placeKey(p) === placeKey(newPlacement)) return false;
           if (p.symbolId === newPlacement.symbolId) return false;
           if (isTimeBar && (p.symbolId === "first-time" || p.symbolId === "second-time") && p.barIndex === newPlacement.barIndex && p.anchor === newPlacement.anchor) return false;
-          if (isDc && p.symbolId === "dc") return false;
+          if (isNavigation && p.symbolId === newPlacement.symbolId) return false;
           return true;
         }),
         newPlacement,
@@ -861,6 +1259,7 @@ function App() {
       if (!hasFirst && hasSecond) setPromptMessage("A 2nd time bar needs a matching 1st time bar.");
     }
     if (question.type === "dc" && placements.some(p => p.symbolId === "dc" && p.anchor === "below")) setPromptMessage("D.C. must be placed above the stave.");
+    if (question.type === "ds-fine" && placements.some(p => ["ds", "fine", "segno"].includes(p.symbolId) && p.anchor === "below")) setPromptMessage("D.S., Segno and Fine should be placed above the stave.");
 
     score(placementsMatch(question, placements) && wrongs.length === 0 && miss.length === 0);
   }
@@ -961,16 +1360,49 @@ function App() {
     }, Math.max(0, (t - ctx.currentTime) * 1000) + 120);
   }
 
-  return <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2"><div className="mx-auto max-w-6xl">
-    <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-4"><AppIcon/><div><h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Repeat Signs</h1><p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Identify repeat signs and navigation marks.</p></div></div><div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end"><StatCard label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${acc}%`} progress={acc}/><div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}><StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${best}`} medal={medal}/><div className="relative z-0 flex min-h-[52px] min-w-[30px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700"><div>💎 <span className="text-cyan-500">30</span></div><div className="mt-1">🥇 <span className="text-yellow-500">20</span></div><div className="mt-1">🥈 <span className="text-slate-500">15</span></div><div className="mt-1">🥉 <span className="text-amber-700">10</span></div></div></div></div></div></header>
+  return <div className={window.MLH.shell.pageShellClass}>
+    <window.MLH.AppHeader icon={ASSET.appIcon} title="Repeat Signs" subtitle="Identify repeat signs and navigation marks.">
+      <window.MLH.ScoreStreakPanel
+        assets={ASSET}
+        correct={correct}
+        attempted={attempted}
+        accuracy={acc}
+        streak={streak}
+        bestStreak={best}
+        resetScore={resetScore}
+      />
+    </window.MLH.AppHeader>
 
-    <main className="relative -mt-[10px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-8 pt-[10px] shadow-sm md:h-auto md:overflow-visible md:px-6 md:pb-10 md:pt-[14px]" onPointerDown={() => { if (feedback && !feedback.correct) fadeToNext(); }}>
+    <div className={window.MLH.shell.pageContentClass}>
+
+    <main className="relative overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-8 pt-[10px] shadow-sm md:h-auto md:overflow-visible md:px-6 md:pb-10 md:pt-[14px]" onPointerDown={() => { if (feedback) fadeToNext(); }}>
       <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="relative" ref={customiseRef}><button onClick={() => setCustomiseOpen(v => !v)} className="flex h-11 min-w-[30px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>{customiseOpen && <div className="absolute left-0 z-[100] mt-2 max-h-[72vh] w-[min(400px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-lg"><h2 className="mb-3 text-center text-base font-semibold">Customise</h2><MenuRows enabledTypes={enabledTypes} setEnabledTypes={setEnabledTypes} resetScore={resetScore} newQuestion={newQuestion} followPlayback={followPlayback} setFollowPlayback={setFollowPlayback} tempo={tempo} setTempo={setTempo} metronomeEnabled={metronomeEnabled} setMetronomeEnabled={setMetronomeEnabled}/></div>}</div>
+          <div className="hub-menu-anchor relative" ref={levelRef}>
+            <window.MLH.LevelButton
+              icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
+              activeLevel={activeLevel}
+              activeLabel={LEVELS[activeLevel].label}
+              onClick={() => { setCustomiseOpen(false); setLevelOpen(v => !v); }}
+              dataMenuTrigger={true}
+            />
+            {levelOpen && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}>
+              <window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS} />
+            </window.MLH.MenuPanel>}
+          </div>
+          <div className="hub-menu-anchor relative" ref={customiseRef}>
+            <window.MLH.CustomiseButton
+              icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
+              onClick={() => { setLevelOpen(false); setCustomiseOpen(v => !v); }}
+              dataMenuTrigger={true}
+            />
+            {customiseOpen && <window.MLH.MenuPanel title="Customise" position="chords-customise-panel -left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}>
+              <MenuRows activeLevel={activeLevel} enabledQuestionTypes={enabledQuestionTypes} toggleQuestionType={toggleQuestionType} followPlayback={followPlayback} setFollowPlayback={setFollowPlayback} tempo={tempo} setTempo={setTempo} metronomeEnabled={metronomeEnabled} setMetronomeEnabled={setMetronomeEnabled} stopAudio={stopAudio}/>
+            </window.MLH.MenuPanel>}
+          </div>
 
         </div>
-        <button onClick={() => newQuestion()} className="flex h-11 min-w-[30px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
+        <window.MLH.SkipButton onClick={() => newQuestion()} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
         <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading}/></div>
       </div>
 
@@ -978,24 +1410,23 @@ function App() {
         <Score question={question} selectedSymbolId={selectedSymbolId} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} activeNoteId={followPlayback ? activeNoteId : null} onPointerMove={handlePointerMove} onPointerLeave={() => setHoverPlacement(null)} onLockPlacement={handleLockPlacement}/>
       </div>
 
-      <div className="relative z-10 mt-3 min-h-[184px] overflow-visible rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[190px] md:mx-3">
-        <div className="pr-[140px] text-stone-900"><p className="text-base font-semibold leading-tight whitespace-nowrap">{question.prompt}</p>{promptMessage && <p className="mt-2 text-sm font-bold text-red-600">{promptMessage}</p>}</div>
+      <div className="relative z-10 mt-3 min-h-[132px] overflow-visible rounded-xl border border-stone-200 bg-stone-50 px-4 py-4 shadow-md md:-mt-[190px] md:mx-3">
+        <div className="pr-[140px] text-stone-900"><p className="text-base font-semibold leading-tight">{question.prompt}</p>{promptMessage && <p className="mt-2 text-sm font-bold text-red-600">{promptMessage}</p>}</div>
 
-        <button onClick={() => playing ? stopAudio(true) : playExcerpt()} disabled={Boolean(feedback)} className={`absolute right-4 top-3 flex h-11 w-[120px] shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold ${Boolean(feedback) ? "border-stone-300 bg-stone-200 text-stone-500" : "border-stone-950 bg-stone-950 text-white"}`}><span className="text-lg leading-none">{playing ? "■" : "▶"}</span><span>{playing ? "Stop" : "Play"}</span></button>
+        <button onClick={() => playing ? stopAudio(true) : playExcerpt()} disabled={Boolean(feedback)} className={`absolute right-4 top-4 flex h-11 w-[120px] shrink-0 items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold ${Boolean(feedback) ? "border-stone-300 bg-stone-200 text-stone-500" : "border-stone-950 bg-stone-950 text-white"}`}><span className="text-lg leading-none">{playing ? "■" : "▶"}</span><span>{playing ? "Stop" : "Play"}</span></button>
 
-        <div className="mt-4 flex flex-nowrap items-center justify-start gap-3 overflow-visible pb-[2px] pr-0">
-          <RepeatAnswers selectedSymbolId={selectedSymbolId} setSelectedSymbolId={(id) => { setSelectedSymbolId(id); setPromptMessage(""); }} feedback={feedback}/>
+        <div className="mt-5 flex min-w-0 flex-nowrap items-start justify-start gap-3 overflow-visible pr-[218px]">
+          <RepeatAnswers question={question} selectedSymbolId={selectedSymbolId} setSelectedSymbolId={(id) => { setSelectedSymbolId(id); setPromptMessage(""); }} feedback={feedback}/>
         </div>
 
-        <p className="absolute bottom-3 left-4 max-w-[calc(100%-250px)] text-sm text-stone-700">Choose a symbol, hover over the score to preview it, then click or tap to lock it in place.</p>
-
         <div className="absolute bottom-4 right-4 flex items-center gap-2">
-          <button disabled={Boolean(feedback) || placements.length === 0} onClick={clearPlacements} className={`flex h-11 items-center justify-center rounded-xl border px-4 text-sm font-semibold ${Boolean(feedback) || placements.length === 0 ? "border-stone-300 bg-stone-200 text-stone-500" : "border-stone-300 bg-white text-black "}`}>Clear</button>
-          <button disabled={Boolean(feedback) || placements.length === 0} onClick={confirmAnswer} className={`flex h-11 items-center justify-center rounded-xl border px-4 text-sm font-semibold ${Boolean(feedback) || placements.length === 0 ? "border-stone-300 bg-stone-200 text-stone-500" : "border-green-700 bg-green-600 text-white hover:bg-green-700"}`}>Confirm</button>
+          <button disabled={Boolean(feedback) || placements.length === 0} onClick={clearPlacements} className={`flex h-11 min-w-[78px] items-center justify-center rounded-xl border px-4 text-sm font-semibold ${Boolean(feedback) || placements.length === 0 ? "border-stone-300 bg-stone-200 text-stone-500" : "border-stone-300 bg-white text-black "}`}>Clear</button>
+          <button disabled={Boolean(feedback) || placements.length === 0} onClick={confirmAnswer} className={`flex h-11 min-w-[96px] items-center justify-center rounded-xl border px-4 text-sm font-semibold ${Boolean(feedback) || placements.length === 0 ? "border-stone-300 bg-stone-200 text-stone-500" : "border-stone-950 bg-stone-950 text-white hover:bg-stone-800"}`}>Confirm</button>
         </div>
       </div>
     </main>
-  </div></div>;
+    </div>
+  </div>;
 }
 
 const root = document.getElementById("root");
