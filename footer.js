@@ -88,7 +88,7 @@ document.body.insertAdjacentHTML("beforeend", `
     </p>
 
     <p>
-      This website was built using ChatGPT.
+      This website was built using Codex.
     </p>
   </div>
 </div>
@@ -96,12 +96,24 @@ document.body.insertAdjacentHTML("beforeend", `
 
 const footerStyle = document.createElement("style");
 footerStyle.textContent = `
+  .footer .footer-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .footer .footer-brand {
+    justify-content: center;
+  }
+
   .footer .footer-wordmark {
     width: 187px !important;
     transform: translateX(-7px);
   }
 
   @media (max-width: 980px) {
+    .footer .footer-grid {
+      grid-template-columns: 1fr !important;
+    }
+
     .footer .footer-wordmark {
       transform: translateX(11px);
     }

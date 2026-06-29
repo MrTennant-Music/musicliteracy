@@ -73,6 +73,14 @@ const ASSET = {
   diamond: "diamond.svg",
 };
 
+function barCountForSignature(timeSignature) {
+  return ["9/8", "12/8"].includes(timeSignature?.id) ? 4 : BAR_COUNT;
+}
+function barsPerSystemForQuestion(question) {
+  if (question?.questionType === "time-change") return BARS_PER_SYSTEM;
+  return ["9/8", "12/8"].includes(question?.timeSignature?.id) ? 2 : BARS_PER_SYSTEM;
+}
+
 const NOTES = [
   { name: "C4", letter: "C", step: -2 }, { name: "D4", letter: "D", step: -1 }, { name: "E4", letter: "E", step: 0 },
   { name: "F4", letter: "F", step: 1 }, { name: "G4", letter: "G", step: 2 }, { name: "A4", letter: "A", step: 3 },
@@ -353,8 +361,8 @@ function nearestMelodicIndex(previousIndex, stepwiseNoRepeat = false) {
   return previousIndex + randomItem([-1, 1]);
 }
 
-function makeCompoundRhythms(timeSignature, barIndex, restsEnabled = true, enabledRhythms = levelEnabledMap("H")) {
-  if (barIndex === BAR_COUNT - 1 && timeSignature.id === "6/8" && Math.random() < 0.45) return ["dotted-minim"];
+function makeCompoundRhythms(timeSignature, barIndex, restsEnabled = true, enabledRhythms = levelEnabledMap("H"), totalBars = BAR_COUNT) {
+  if (barIndex === totalBars - 1 && timeSignature.id === "6/8" && Math.random() < 0.45) return ["dotted-minim"];
   const groups = Array.from({ length: timeSignature.compoundGroups }, () => "dotted-crotchet");
   if (restsEnabled && patternAllowed(["dotted-crotchet-rest"], enabledRhythms, restsEnabled) && Math.random() < 0.22) groups[randomIndex(groups.length)] = "dotted-crotchet-rest";
   if (patternAllowed(["quaver-group-3"], enabledRhythms, restsEnabled) && Math.random() < 0.5) {
@@ -389,23 +397,23 @@ function applyRareSimpleRests(pattern, restsEnabled = true) {
   return result;
 }
 
-function makeSimpleRhythms(timeSignature, barIndex, restsEnabled = true, enabledRhythms = levelEnabledMap("N3")) {
+function makeSimpleRhythms(timeSignature, barIndex, restsEnabled = true, enabledRhythms = levelEnabledMap("N3"), totalBars = BAR_COUNT) {
   const patterns = (SIMPLE_PATTERNS_BY_LENGTH[timeSignature.beatsPerBar] ?? [["crotchet"]]).filter((pattern) => patternAllowed(pattern, enabledRhythms, restsEnabled));
   const safePatterns = patterns.length ? patterns : [["crotchet"]];
   const semiquaverPatterns = patterns.filter((pattern) => pattern.some((rhythm) => rhythm.includes("semiquaver")));
   const regularPatterns = safePatterns.filter((pattern) => !pattern.some((rhythm) => rhythm.includes("semiquaver")));
   const pool = semiquaverPatterns.length && Math.random() < 0.16 ? semiquaverPatterns : regularPatterns;
-  const finalPool = timeSignature.beatsPerBar === 4 && barIndex === BAR_COUNT - 1 && patternAllowed(["semibreve"], enabledRhythms, restsEnabled) ? [["semibreve"], ...pool] : pool;
+  const finalPool = timeSignature.beatsPerBar === 4 && barIndex === totalBars - 1 && patternAllowed(["semibreve"], enabledRhythms, restsEnabled) ? [["semibreve"], ...pool] : pool;
   const chosen = randomItem(finalPool.length ? finalPool : safePatterns);
   return applyRareSimpleRests(chosen, restsEnabled);
 }
 
-function makeBarRhythms(timeSignature, barIndex, restsEnabled = true, enabledRhythms = levelEnabledMap("N3")) {
-  return timeSignature.type === "compound" ? makeCompoundRhythms(timeSignature, barIndex, restsEnabled, enabledRhythms) : makeSimpleRhythms(timeSignature, barIndex, restsEnabled, enabledRhythms);
+function makeBarRhythms(timeSignature, barIndex, restsEnabled = true, enabledRhythms = levelEnabledMap("N3"), totalBars = BAR_COUNT) {
+  return timeSignature.type === "compound" ? makeCompoundRhythms(timeSignature, barIndex, restsEnabled, enabledRhythms, totalBars) : makeSimpleRhythms(timeSignature, barIndex, restsEnabled, enabledRhythms, totalBars);
 }
 
-function makeBar(timeSignature, previousIndex, barIndex, restsEnabled = true, enabledRhythms = levelEnabledMap("N3"), key = KEYS.C) {
-  const rhythms = makeBarRhythms(timeSignature, barIndex, restsEnabled, enabledRhythms);
+function makeBar(timeSignature, previousIndex, barIndex, restsEnabled = true, enabledRhythms = levelEnabledMap("N3"), key = KEYS.C, totalBars = BAR_COUNT) {
+  const rhythms = makeBarRhythms(timeSignature, barIndex, restsEnabled, enabledRhythms, totalBars);
   const notes = [];
   let noteIndex = previousIndex;
   let beamGroupCounter = 0;
@@ -496,10 +504,11 @@ function makeQuestion(activeLevel = "N3", enabledRhythms = levelEnabledMap("N3")
   }
   const availableSignatures = availableTimeSignatures(level, enabledRhythms);
   const timeSignature = randomItem(availableSignatures.length ? availableSignatures : TIME_SIGNATURES.filter((signature) => level.timeSignatureIds.includes(signature.id)));
+  const barCount = barCountForSignature(timeSignature);
   const bars = [];
   let previousIndex = randomIndex(NOTES.length);
-  for (let index = 0; index < BAR_COUNT; index += 1) {
-    const bar = makeBar(timeSignature, previousIndex, index, restsEnabled, enabledRhythms, key);
+  for (let index = 0; index < barCount; index += 1) {
+    const bar = makeBar(timeSignature, previousIndex, index, restsEnabled, enabledRhythms, key, barCount);
     bars.push(bar);
     previousIndex = bar.nextIndex;
   }
@@ -840,12 +849,15 @@ function Score({ question, feedback }) {
   const showCorrectSignature = Boolean(feedback);
   const timeSignatureX = question.activeLevel === "AH" ? TIME_SIG_X + 8 : TIME_SIG_X;
   const isTimeChangeQuestion = question.questionType === "time-change";
+  const barsPerSystem = barsPerSystemForQuestion(question);
+  const systemCount = Math.ceil(question.bars.length / barsPerSystem);
   return (
     <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="h-auto w-full select-none overflow-visible" aria-label="Time signature exercise">
       <rect x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} fill="white" />
-      {SYSTEM_TOPS.map((systemTop, systemIndex) => {
+      {SYSTEM_TOPS.slice(0, systemCount).map((systemTop, systemIndex) => {
         const systemStartX = systemIndex === 0 || isTimeChangeQuestion ? FIRST_SYSTEM_MUSIC_START_X : OTHER_SYSTEM_MUSIC_START_X;
-        const barWidth = (STAFF_RIGHT - systemStartX) / BARS_PER_SYSTEM;
+        const barWidth = (STAFF_RIGHT - systemStartX) / barsPerSystem;
+        const barsOnSystem = Math.min(barsPerSystem, question.bars.length - systemIndex * barsPerSystem);
         return (
           <g key={systemIndex}>
             <StaffLines systemTop={systemTop} />
@@ -855,8 +867,8 @@ function Score({ question, feedback }) {
             {isTimeChangeQuestion && systemIndex === 1 && <TimeSignaturePlaceholder signature={question.timeSignature} x={timeSignatureX} systemTop={systemTop} />}
             {isTimeChangeQuestion && systemIndex === 1 && showCorrectSignature && <TimeSignatureGlyph signature={question.timeSignature} x={timeSignatureX} systemTop={systemTop} colour="#000" />}
             {!isTimeChangeQuestion && systemIndex === 0 && showCorrectSignature && <TimeSignatureGlyph signature={question.timeSignature} x={timeSignatureX} systemTop={systemTop} colour="#000" />}
-            {Array.from({ length: BARS_PER_SYSTEM }, (_, localBarIndex) => {
-              const globalBarIndex = systemIndex * BARS_PER_SYSTEM + localBarIndex;
+            {Array.from({ length: barsOnSystem }, (_, localBarIndex) => {
+              const globalBarIndex = systemIndex * barsPerSystem + localBarIndex;
               const startX = systemStartX + localBarIndex * barWidth;
               const endX = systemStartX + (localBarIndex + 1) * barWidth;
               return (
@@ -867,7 +879,7 @@ function Score({ question, feedback }) {
                       <text x={startX + 4} y={systemTop - 18} fontSize="13" fontWeight="500">{globalBarIndex + 1}</text>
                     </>
                   )}
-                  <Bar bar={question.bars[globalBarIndex]} barIndex={globalBarIndex} systemTop={systemTop} startX={startX} endX={endX} isFinalBar={globalBarIndex === BAR_COUNT - 1} />
+                  <Bar bar={question.bars[globalBarIndex]} barIndex={globalBarIndex} systemTop={systemTop} startX={startX} endX={endX} isFinalBar={globalBarIndex === question.bars.length - 1} />
                 </g>
               );
             })}
