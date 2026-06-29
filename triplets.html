@@ -8,13 +8,28 @@
   <link rel="apple-touch-icon" href="https://mrtennant-music.github.io/musicliteracy/triplets-icon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="./hub-ui.css?v=1.5" />
-  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="./hub-mobile.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=1.4"></script>
-  <script src="./hub-shell.js?v=1.3"></script>
-  <script src="./hub-menu.js?v=2.1"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="./bravura-symbols.js?v=20260629"></script>
+  <script src="./shared-notation-config.js?v=20260629"></script>
+  <script src="./hub-mobile.js?v=20260629"></script>
+  <script src="./hub-audio.js?v=20260629"></script>
+  <script src="./hub-shell.js?v=20260629"></script>
+  <script src="./hub-menu.js?v=20260629"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+    @font-face {
+      font-family: "Bravura";
+      src: url("./Bravura.otf") format("opentype");
+      font-display: block;
+    }
+
+    .music-symbol {
+      font-family: "Bravura", serif;
+      dominant-baseline: alphabetic;
+      text-rendering: geometricPrecision;
+    }
+  </style>
 </head>
 <body>
   <div id="root"></div>
@@ -34,8 +49,10 @@ const STAFF = {
 const BAR_COUNT = 8;
 const BARS_PER_SYSTEM = 4;
 const CLEF_X = STAFF.left + 8;
-const TIME_SIG_X = STAFF.left + 54;
-const MUSIC_START_X = STAFF.left + 76;
+const KEY_SIGNATURE_X = STAFF.left + 56;
+const KEY_SIGNATURE_SPACING = 14;
+const TIME_SIG_X = STAFF.left + 112;
+const MUSIC_START_X = STAFF.left + 152;
 
 const NOTE = {
   rx: 6.3,
@@ -49,8 +66,19 @@ const COLOUR = {
   black: "#000000",
 };
 
-const GLYPH = {
-  trebleClef: String.fromCodePoint(0x1d11e),
+const ASSET = {
+  appIcon: "triplets-icon.svg",
+  levels: "levels.svg",
+  customise: "customise.svg",
+  next: "next.svg",
+  bronze: "bronze.svg",
+  silver: "silver.svg",
+  gold: "gold.svg",
+  diamond: "diamond.svg",
+};
+
+const LEVELS = {
+  H: { label: "Higher", shortLabel: "H", description: "Triplet quavers, triplet crotchets" },
 };
 
 const NOTE_POOL = [
@@ -73,6 +101,13 @@ const TIME_SIGNATURES = [
   { id: "2/4", top: "2", bottom: "4", beats: 2 },
   { id: "3/4", top: "3", bottom: "4", beats: 3 },
   { id: "4/4", top: "4", bottom: "4", beats: 4 },
+];
+
+const KEYS = [
+  { id: "C", label: "C major", signature: [] },
+  { id: "G", label: "G major", signature: [{ type: "sharp", step: 8 }] },
+  { id: "Am", label: "A minor", signature: [] },
+  { id: "F", label: "F major", signature: [{ type: "flat", step: 4 }] },
 ];
 
 const TRIPLET_TYPES = [
@@ -150,6 +185,26 @@ function stepForIndex(index) {
   return NOTE_POOL[clamp(index, 0, NOTE_POOL.length - 1)].step;
 }
 
+function noteLetterForIndex(index) {
+  return NOTE_POOL[clamp(index, 0, NOTE_POOL.length - 1)].name[0];
+}
+
+function melodicAccidentalForLetter(key, letter) {
+  return key?.id === "Am" && letter === "G" ? 1 : null;
+}
+
+function applyWrittenAccidentals(notes, key) {
+  const shownAccidentals = new Set();
+  return notes.map((note) => {
+    const accidental = melodicAccidentalForLetter(key, note.letter);
+    if (accidental === null) return { ...note, writtenAccidental: null };
+    const accidentalKey = `${note.letter}:${accidental}`;
+    const writtenAccidental = shownAccidentals.has(accidentalKey) ? null : accidental;
+    shownAccidentals.add(accidentalKey);
+    return { ...note, writtenAccidental };
+  });
+}
+
 function stemGoesDown(step) {
   return step > 4;
 }
@@ -167,7 +222,7 @@ function getFillPattern(beats, texture) {
   return randomItem(pool);
 }
 
-function makeNotesFromRhythms(rhythms, previousIndex, barIndex, targetGroupId = null, targetRhythm = null) {
+function makeNotesFromRhythms(rhythms, previousIndex, barIndex, targetGroupId = null, targetRhythm = null, key = null) {
   let index = previousIndex;
   const notes = rhythms.map((rhythm, noteIndex) => {
     const isStepwise = rhythm.includes("triplet") || rhythm === "quaver";
@@ -175,32 +230,35 @@ function makeNotesFromRhythms(rhythms, previousIndex, barIndex, targetGroupId = 
     return {
       id: `${barIndex}-${noteIndex}`,
       rhythm,
+      letter: noteLetterForIndex(index),
       step: stepForIndex(index),
+      writtenAccidental: null,
       targetGroupId: rhythm === targetRhythm ? targetGroupId : null,
     };
   });
-  return { notes, nextIndex: index };
+  return { notes: applyWrittenAccidentals(notes, key), nextIndex: index };
 }
 
-function makeTargetBar(timeSignature, tripletType, previousIndex, barIndex) {
+function makeTargetBar(timeSignature, tripletType, previousIndex, barIndex, key) {
   const remainingBeats = timeSignature.beats - tripletType.beats;
   const texture = tripletType.id === "quaver-triplet" ? "quaver" : "crotchet";
   const fillPattern = getFillPattern(remainingBeats, texture);
   const tripletPattern = [tripletType.rhythm, tripletType.rhythm, tripletType.rhythm];
   const rhythms = Math.random() < 0.5 ? [...tripletPattern, ...fillPattern] : [...fillPattern, ...tripletPattern];
   const targetGroupId = `target-${barIndex}`;
-  const made = makeNotesFromRhythms(rhythms, previousIndex, barIndex, targetGroupId, tripletType.rhythm);
+  const made = makeNotesFromRhythms(rhythms, previousIndex, barIndex, targetGroupId, tripletType.rhythm, key);
   return { notes: made.notes, nextIndex: made.nextIndex, targetGroupId };
 }
 
-function makeNormalBar(timeSignature, previousIndex, texture, barIndex) {
+function makeNormalBar(timeSignature, previousIndex, texture, barIndex, key) {
   const fillPattern = getFillPattern(timeSignature.beats, texture);
-  const made = makeNotesFromRhythms(fillPattern, previousIndex, barIndex);
+  const made = makeNotesFromRhythms(fillPattern, previousIndex, barIndex, null, null, key);
   return { notes: made.notes, nextIndex: made.nextIndex, targetGroupId: null };
 }
 
 function createQuestion() {
   const timeSignature = randomItem(TIME_SIGNATURES);
+  const key = randomItem(KEYS);
   const tripletType = randomItem(TRIPLET_TYPES.filter((type) => type.beats <= timeSignature.beats));
   const targetBarIndex = randomIndex(BAR_COUNT);
   const texture = tripletType.id === "quaver-triplet" ? "quaver" : "crotchet";
@@ -209,8 +267,8 @@ function createQuestion() {
 
   for (let barIndex = 0; barIndex < BAR_COUNT; barIndex += 1) {
     const bar = barIndex === targetBarIndex
-      ? makeTargetBar(timeSignature, tripletType, previousIndex, barIndex)
-      : makeNormalBar(timeSignature, previousIndex, texture, barIndex);
+      ? makeTargetBar(timeSignature, tripletType, previousIndex, barIndex, key)
+      : makeNormalBar(timeSignature, previousIndex, texture, barIndex, key);
     bars.push(bar);
     previousIndex = bar.nextIndex;
   }
@@ -222,6 +280,7 @@ function createQuestion() {
 
   return {
     id: Math.random().toString(36).slice(2),
+    key,
     timeSignature,
     tripletType,
     targetBarIndex,
@@ -337,7 +396,7 @@ function beamYAtX(x, beam) {
 function noteColour(noteId, selectedNoteIds, feedback, targetNoteIds) {
   const selected = selectedNoteIds.includes(noteId);
   const target = targetNoteIds.includes(noteId);
-  if (!feedback) return selected ? COLOUR.green : "currentColor";
+  if (!feedback) return "currentColor";
   if (target) return COLOUR.green;
   if (selected) return COLOUR.red;
   return "currentColor";
@@ -353,7 +412,7 @@ function findNoteGroup(layouts, noteIds) {
       const notes = indexes.map((index) => layout.bar.notes[index]);
       const positions = indexes.map((index) => layout.positions[index]);
       if (notes.length === 3 && positions.every((value) => Number.isFinite(value))) {
-        return { notes, positions, systemTop: layout.systemTop };
+        return { notes, positions, indexes, systemTop: layout.systemTop };
       }
     }
   }
@@ -372,7 +431,87 @@ function isValidTripletGroup(group) {
   );
 }
 
+function tripletTypeFromGroup(group) {
+  if (!isValidTripletGroup(group)) return null;
+  if (Array.isArray(group.indexes) && group.indexes.some((index, itemIndex) => itemIndex > 0 && index !== group.indexes[itemIndex - 1] + 1)) return null;
+  const rhythm = group.notes[0]?.rhythm;
+  if (!group.notes.every((note) => note.rhythm === rhythm)) return null;
+  if (rhythm === "quaver" || rhythm === "triplet-quaver") return TRIPLET_TYPES.find((type) => type.id === "quaver-triplet") || null;
+  if (rhythm === "crotchet" || rhythm === "triplet-crotchet") return TRIPLET_TYPES.find((type) => type.id === "crotchet-triplet") || null;
+  return null;
+}
+
 const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
+
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS || {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || { drawing: {}, symbols: {} };
+
+const TIME_SIGNATURE_SYMBOLS = {
+  "2/4": { top: ["timeSig2"], bottom: ["timeSig4"], key: "timeSig24" },
+  "3/4": { top: ["timeSig3"], bottom: ["timeSig4"], key: "timeSig34" },
+  "4/4": { top: ["timeSig4"], bottom: ["timeSig4"], key: "timeSig44" },
+  "6/8": { top: ["timeSig6"], bottom: ["timeSig8"], key: "timeSig68" },
+  "9/8": { top: ["timeSig9"], bottom: ["timeSig8"], key: "timeSig98" },
+  "12/8": { top: ["timeSig1", "timeSig2"], bottom: ["timeSig8"], key: "timeSig128" },
+};
+
+function sharedActualSymbolKey(key) {
+  const aliases = {
+    augmentationDotSpace: "augmentationDot",
+    augmentationDotLine: "augmentationDot",
+    noteheadBlackStemUp: "noteheadBlack",
+    noteheadBlackStemDown: "noteheadBlack",
+    sharpKeySignature: "sharp",
+    flatKeySignature: "flat",
+    sharpInScore: "sharp",
+    flatInScore: "flat",
+  };
+  return aliases[key] || key;
+}
+
+function sharedSymbolConfig(key) {
+  const symbols = SHARED_CONFIG.symbols || {};
+  return symbols[key] || symbols[sharedActualSymbolKey(key)] || {
+    fontSizeScale: 3.4,
+    xOffsetScale: 0,
+    yOffsetScale: 0,
+    widthScale: 1,
+    heightScale: 1,
+    opticalXOffset: 0,
+    opticalYOffset: 0,
+  };
+}
+
+function sharedSymbolForKey(key) {
+  return SHARED_SYMBOLS[sharedActualSymbolKey(key)] || "";
+}
+
+function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = STAFF.gap, settingOverrides = {} }) {
+  const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+  const fontSize = lineGap * Number(settings.fontSizeScale || 1);
+  const xOffset = lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const yOffset = lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const adjustedX = x + xOffset;
+  const adjustedY = y + yOffset;
+  const symbol = sharedSymbolForKey(symbolKey);
+  if (!symbol) return null;
+
+  return (
+    <text
+      x={adjustedX}
+      y={adjustedY}
+      className="music-symbol"
+      fontSize={fontSize}
+      textAnchor="middle"
+      fill={colour}
+      opacity={opacity}
+      transform={`translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale || 1} ${settings.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`}
+      pointerEvents="none"
+    >
+      {symbol}
+    </text>
+  );
+}
 
 function StaffLines({ systemTop }) {
   return (
@@ -385,60 +524,102 @@ function StaffLines({ systemTop }) {
 }
 
 function TrebleClef({ systemTop }) {
-  return <text x={CLEF_X} y={systemTop + 28} fontSize="80" fontFamily="serif" dominantBaseline="middle">{GLYPH.trebleClef}</text>;
+  return <CalibratedSymbol symbolKey="gClef" x={CLEF_X + STAFF.gap * 2.3} y={yForStep(systemTop, 2)} />;
 }
 
-function TimeSignature({ signature, systemTop }) {
+function KeySignature({ keySignature, systemTop }) {
   return (
-    <g fontFamily="serif" fontWeight="900" fontSize="30" textAnchor="middle" fill="currentColor">
-      <text x={TIME_SIG_X} y={systemTop + 20}>{signature.top}</text>
-      <text x={TIME_SIG_X} y={systemTop + 39}>{signature.bottom}</text>
+    <g pointerEvents="none">
+      {(keySignature?.signature || []).map((item, index) => (
+        <CalibratedSymbol
+          key={`${item.type}-${index}`}
+          symbolKey={item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature"}
+          x={KEY_SIGNATURE_X + index * KEY_SIGNATURE_SPACING}
+          y={yForStep(systemTop, item.step)}
+        />
+      ))}
     </g>
   );
 }
 
+function TimeSignature({ signature, systemTop, colour = "currentColor" }) {
+  const definition = TIME_SIGNATURE_SYMBOLS[signature.id] || { top: [`timeSig${signature.top}`], bottom: [`timeSig${signature.bottom}`], key: `timeSig${signature.top}${signature.bottom}` };
+  const settings = sharedSymbolConfig(definition.key);
+  const fontSize = STAFF.gap * Number(settings.fontSizeScale || 3.5);
+  const anchorY = yForStep(systemTop, 5.3);
+  const adjustedX = TIME_SIG_X + STAFF.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  const adjustedY = anchorY + STAFF.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+  const topText = definition.top.map((symbolKey) => sharedSymbolForKey(symbolKey)).join("");
+  const bottomText = definition.bottom.map((symbolKey) => sharedSymbolForKey(symbolKey)).join("");
+
+  return (
+    <g transform={`translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale || 1} ${settings.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`} fill={colour} pointerEvents="none">
+      <text className="music-symbol" x={adjustedX} y={adjustedY - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{topText}</text>
+      <text className="music-symbol" x={adjustedX} y={adjustedY + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{bottomText}</text>
+    </g>
+  );
+}
+
+function Accidental({ value, x, y, colour = "currentColor" }) {
+  if (!value) return null;
+  return <CalibratedSymbol symbolKey={value === 1 ? "sharpInScore" : "flatInScore"} x={x} y={y} colour={colour} />;
+}
+
 function LedgerLines({ x, step, systemTop, colour }) {
+  const settings = sharedSymbolConfig("ledgerLines");
+  const lineWidth = STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineWidthScale || 2.4) * Number(settings.widthScale || 1);
+  const thickness = STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11) * Number(settings.heightScale || 1);
   const lines = [];
   if (step <= -2) lines.push(yForStep(systemTop, -2));
   if (step >= 10) lines.push(yForStep(systemTop, 10));
   return (
     <g>
-      {lines.map((y) => <line key={y} x1={x - 12} x2={x + 12} y1={y} y2={y} stroke={colour} strokeWidth="1.2" />)}
+      {lines.map((y) => <line key={y} x1={x - lineWidth / 2} x2={x + lineWidth / 2} y1={y} y2={y} stroke={colour} strokeWidth={thickness} strokeLinecap="round" />)}
     </g>
   );
 }
 
-function Flag({ stemX, stemEndY, down, colour }) {
-  const d = down
-    ? `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY - 4}, ${stemX + 10} ${stemEndY - 12}, ${stemX + 2} ${stemEndY - 16}`
-    : `M ${stemX} ${stemEndY} C ${stemX + 10} ${stemEndY + 4}, ${stemX + 10} ${stemEndY + 12}, ${stemX + 2} ${stemEndY + 16}`;
-  return <path d={d} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />;
+function noteSymbolKey(note, stemDown, beamed) {
+  if (note.rhythm === "semibreve") return "wholeNote";
+  if (note.rhythm === "minim" || note.rhythm === "dotted-minim") return stemDown ? "halfNoteStemDown" : "halfNoteStemUp";
+  if (beamed) return stemDown ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
+  if (note.rhythm === "quaver" || note.rhythm === "triplet-quaver") return stemDown ? "eighthNoteStemDown" : "eighthNoteStemUp";
+  return stemDown ? "quarterNoteStemDown" : "quarterNoteStemUp";
 }
 
-function NoteHead({ note, x, systemTop, colour, forcedStemDown = null, forcedStemEndY = null, showFlag = true, onPointerDown }) {
+function NoteHead({ note, x, systemTop, colour, selected = false, forcedStemDown = null, forcedStemEndY = null, showFlag = true, onPointerDown }) {
   const info = rhythmInfo(note.rhythm);
   const stem = getStemData(note, x, systemTop, forcedStemDown);
   const stemEndY = forcedStemEndY === null ? stem.stemEndY : forcedStemEndY;
-  const dotY = Math.abs(note.step % 2) === 1 ? stem.y : stem.y - 5;
+  const beamed = info.flag && !showFlag;
+  const symbolKey = noteSymbolKey(note, stem.down, beamed);
+  const dotKey = Math.abs(note.step % 2) === 1 ? "augmentationDotSpace" : "augmentationDotLine";
+  const dotY = Math.abs(note.step % 2) === 1 ? stem.y : stem.y - STAFF.gap * 0.25;
+  const stemThickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12));
 
   return (
-    <g onPointerDown={onPointerDown} className="cursor-pointer">
+    <g onPointerDown={onPointerDown} className="cursor-pointer" filter={selected ? "url(#selectedNoteGlow)" : undefined}>
       <circle cx={x} cy={stem.y} r="17" fill="transparent" />
       <LedgerLines x={x} step={note.step} systemTop={systemTop} colour={colour} />
-      <ellipse cx={x} cy={stem.y} rx={NOTE.rx} ry={NOTE.ry} transform={`rotate(-18 ${x} ${stem.y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.7" />
-      {info.stem && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={stemEndY} stroke={colour} strokeWidth="1.5" />}
-      {info.dot && <circle cx={x + 12} cy={dotY} r="2.1" fill={colour} />}
-      {info.flag && showFlag && <Flag stemX={stem.stemX} stemEndY={stemEndY} down={stem.down} colour={colour} />}
+      <Accidental value={note.writtenAccidental} x={x - STAFF.gap * 2.2} y={stem.y} colour={colour} />
+      <CalibratedSymbol symbolKey={symbolKey} x={x} y={stem.y} colour={colour} />
+      {beamed && <line x1={stem.stemX} x2={stem.stemX} y1={stem.y} y2={stemEndY} stroke={colour} strokeWidth={stemThickness} strokeLinecap="butt" />}
+      {info.dot && <CalibratedSymbol symbolKey={dotKey} x={x + STAFF.gap * 1.3} y={dotY} colour={colour} />}
     </g>
   );
 }
 
-function Beam({ beam, colour }) {
-  return <line x1={beam.start.x - 1} y1={beam.start.y} x2={beam.end.x + 1} y2={beam.end.y} stroke={colour} strokeWidth="3.5" strokeLinecap="butt" />;
+function Beam({ beam, colour, glow = false }) {
+  const settings = sharedSymbolConfig("quaverBeam");
+  const thickness = STAFF.gap * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42) * Number(settings.heightScale || 1);
+  const widthScale = Number(settings.widthScale || 1);
+  const xExtend = Math.max(1, STAFF.gap * (widthScale - 1));
+  return <line x1={beam.start.x - xExtend} y1={beam.start.y} x2={beam.end.x + xExtend} y2={beam.end.y} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" filter={glow ? "url(#selectedNoteGlow)" : undefined} />;
 }
 
-function TripletMark({ group, tripletType, colour = COLOUR.green }) {
+function TripletMark({ group, tripletType, colour = COLOUR.green, glow = false }) {
   if (!isValidTripletGroup(group) || !tripletType) return null;
+  const filter = glow ? "url(#selectedNoteGlow)" : undefined;
 
   if (tripletType.id === "quaver-triplet") {
     const centreX = group.positions[1];
@@ -446,7 +627,7 @@ function TripletMark({ group, tripletType, colour = COLOUR.green }) {
     const yOnBeam = beamYAtX(centreX, beam);
     const y = beam.down ? yOnBeam + 24 : yOnBeam - 6;
     const x = beam.down ? centreX - 5 : centreX + 4;
-    return <text x={x} y={y} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="24" fill={colour}>3</text>;
+    return <text x={x} y={y} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="24" fill={colour} filter={filter}>3</text>;
   }
 
   const x1 = group.positions[0] - 10;
@@ -454,7 +635,7 @@ function TripletMark({ group, tripletType, colour = COLOUR.green }) {
   const y = group.systemTop - 24;
   const centreX = (x1 + x2) / 2;
   return (
-    <g stroke={colour} fill={colour}>
+    <g stroke={colour} fill={colour} filter={filter}>
       <g stroke={colour} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round">
         <path d={`M ${x1} ${y + 8} L ${x1} ${y} L ${centreX - 12} ${y}`} />
         <path d={`M ${centreX + 12} ${y} L ${x2} ${y} L ${x2} ${y + 8}`} />
@@ -464,22 +645,29 @@ function TripletMark({ group, tripletType, colour = COLOUR.green }) {
   );
 }
 
-function ScoreArea({ question, selectedNoteIds, selectedTripletTypeId, feedback, onToggleNote }) {
+function ScoreArea({ question, selectedNoteIds, feedback, onToggleNote }) {
   const layouts = useMemo(() => buildLayouts(question), [question]);
-  const selectedTripletType = TRIPLET_TYPES.find((type) => type.id === selectedTripletTypeId) || null;
   const selectedGroup = selectedNoteIds.length === 3 ? findNoteGroup(layouts, selectedNoteIds) : null;
+  const selectedTripletType = tripletTypeFromGroup(selectedGroup);
   const targetGroup = feedback ? findNoteGroup(layouts, question.targetNoteIds) : null;
   const visibleMarkGroup = feedback ? targetGroup : selectedGroup;
   const visibleMarkType = feedback ? question.tripletType : selectedTripletType;
 
   return (
     <svg viewBox={`0 0 ${SVG.width} ${SVG.height}`} className="h-auto w-full select-none touch-none overflow-visible" aria-label="Triplet exercise">
+      <defs>
+        <filter id="selectedNoteGlow" x="-150%" y="-150%" width="400%" height="400%">
+          <feDropShadow dx="0" dy="0" stdDeviation="2.2" floodColor="#facc15" floodOpacity="0.95" />
+          <feDropShadow dx="0" dy="0" stdDeviation="4.2" floodColor="#eab308" floodOpacity="0.85" />
+        </filter>
+      </defs>
       <rect width={SVG.width} height={SVG.height} fill="white" />
 
       {STAFF.tops.map((systemTop, systemIndex) => (
         <g key={systemIndex}>
           <StaffLines systemTop={systemTop} />
           <TrebleClef systemTop={systemTop} />
+          <KeySignature keySignature={question.key} systemTop={systemTop} />
           {systemIndex === 0 && <TimeSignature signature={question.timeSignature} systemTop={systemTop} />}
         </g>
       ))}
@@ -504,12 +692,13 @@ function ScoreArea({ question, selectedNoteIds, selectedTripletTypeId, feedback,
                   x={layout.positions[noteIndex]}
                   systemTop={layout.systemTop}
                   colour={colour}
+                  selected={!feedback && selectedNoteIds.includes(note.id)}
                   forcedStemDown={group ? beam.down : null}
                   forcedStemEndY={forcedStemEndY}
                   showFlag={!group}
                   onPointerDown={(event) => {
                     event.stopPropagation();
-                    if (!feedback && selectedTripletTypeId) onToggleNote(note.id);
+                    if (!feedback) onToggleNote(note.id);
                   }}
                 />
               );
@@ -522,7 +711,7 @@ function ScoreArea({ question, selectedNoteIds, selectedTripletTypeId, feedback,
               const groupNoteIds = groupNotes.map((note) => note.id);
               const selected = groupNoteIds.every((id) => selectedNoteIds.includes(id));
               const targetAfterFeedback = feedback && groupNoteIds.every((id) => question.targetNoteIds.includes(id));
-              return <Beam key={groupIndex} beam={beam} colour={selected || targetAfterFeedback ? COLOUR.green : "currentColor"} />;
+              return <Beam key={groupIndex} beam={beam} colour={targetAfterFeedback ? COLOUR.green : "currentColor"} glow={!feedback && selected} />;
             })}
 
             {layout.barIndex === BAR_COUNT - 1 ? (
@@ -537,7 +726,10 @@ function ScoreArea({ question, selectedNoteIds, selectedTripletTypeId, feedback,
         );
       })}
 
-      <TripletMark group={visibleMarkGroup} tripletType={visibleMarkType} />
+      {!feedback && selectedTripletType?.id === "quaver-triplet" && visibleMarkGroup && (
+        <Beam beam={getBeamData(visibleMarkGroup.notes, visibleMarkGroup.positions, visibleMarkGroup.systemTop)} colour="currentColor" glow={true} />
+      )}
+      <TripletMark group={visibleMarkGroup} tripletType={visibleMarkType} colour={feedback ? COLOUR.green : "currentColor"} glow={!feedback && Boolean(visibleMarkGroup)} />
     </svg>
   );
 }
@@ -562,32 +754,6 @@ function TripletButtonGlyph({ type }) {
         <text x="67" y={type.usesBracket ? "10" : "8"} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="22" fill="currentColor">3</text>
       </g>
     </svg>
-  );
-}
-
-function TripletSelector({ selectedTripletTypeId, correctTripletTypeId, feedback, onSelect }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {TRIPLET_TYPES.map((type) => {
-        const isSelected = selectedTripletTypeId === type.id;
-        const isCorrectType = feedback && type.id === correctTripletTypeId;
-        const isWrongType = feedback === "wrong-type" && isSelected && type.id !== correctTripletTypeId;
-        const className = isCorrectType
-          ? "border-green-600 bg-green-600 text-white"
-          : isWrongType
-          ? "border-red-600 bg-red-600 text-white"
-          : isSelected
-          ? "border-stone-950 bg-stone-950 text-white"
-          : "border-stone-300 bg-white text-stone-950";
-
-        return (
-          <button key={type.id} type="button" disabled={Boolean(feedback)} onClick={() => onSelect(type.id)} className={`flex h-[78px] min-w-[144px] items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition ${className}`}>
-            <span className="whitespace-nowrap">{type.label}</span>
-            <TripletButtonGlyph type={type} />
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -667,52 +833,9 @@ function StatCard({ label, value, footer, progress = null, medal = null, variant
   );
 }
 
-function TapIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]">
-      <path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" />
-    </svg>
-  );
-}
-
 function FeedbackBanner({ feedback, fading }) {
   if (!feedback) return null;
-  const correct = feedback === "correct";
-  const message = correct ? "Correct" : "Incorrect";
-
-  return (
-    <div className="relative flex w-full items-center justify-center text-center">
-      <div
-        className={`flex w-[330px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${correct ? "text-green-600" : "text-red-600"}`}
-        style={{
-          animation: fading
-            ? "feedbackFadeOut .28s ease-out forwards"
-            : correct
-            ? "correctFade .55s ease-out forwards"
-            : "incorrectDropShake .55s ease-out forwards",
-        }}
-      >
-        <span className="translate-y-[14px]">{message}</span>
-
-        {!correct && (
-          <div className="mt-[12px] flex flex-col items-center">
-            <span className="inline-flex -translate-x-[2px] items-center gap-0 text-sm font-semibold text-black">
-              <TapIcon />
-              <span>Click or tap anywhere to continue</span>
-            </span>
-
-            {feedback === "wrong-type" && (
-              <span className="mt-2 text-sm font-semibold text-red-700">
-                Wrong triplet type selected.
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return <window.MLH.FeedbackBadge feedback={{ correct: feedback === "correct" }} fading={fading} animationPrefix="note" />;
 }
 
 
@@ -721,12 +844,6 @@ function AppIcon() {
     <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
       <img src="https://mrtennant-music.github.io/musicliteracy/triplets-icon.svg" alt="" aria-hidden="true" className="block h-full w-full object-contain" />
     </div>
-  );
-}
-
-function MenuRows({ resetScore }) {
-  return (
-    <button type="button" onClick={resetScore} className="w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button>
   );
 }
 
@@ -758,9 +875,8 @@ function App() {
 
   const [question, setQuestion] = useState(() => createQuestion());
   const [questionVisible, setQuestionVisible] = useState(true);
-  const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [showAnswerMarks, setShowAnswerMarks] = useState(true);
-  const [selectedTripletTypeId, setSelectedTripletTypeId] = useState(null);
+  const [activeLevel, setActiveLevel] = useState("H");
+  const [levelOpen, setLevelOpen] = useState(false);
   const [selectedNoteIds, setSelectedNoteIds] = useState([]);
   const [feedback, setFeedback] = useState(null);
   const [feedbackFading, setFeedbackFading] = useState(false);
@@ -771,18 +887,32 @@ function App() {
   const [bestStreak, setBestStreak] = useState(0);
   const [confettiKey, setConfettiKey] = useState(0);
 
-  const customiseRef = useRef(null);
+  const levelRef = useRef(null);
+  const feedbackTimersRef = useRef([]);
 
-  useClickOutside([customiseRef], [() => customiseOpen && setCustomiseOpen(false)]);
+  useClickOutside([levelRef], [() => levelOpen && setLevelOpen(false)]);
+  useEffect(() => () => clearFeedbackTimers(), []);
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const canConfirm = selectedTripletTypeId !== null && selectedNoteIds.length === 3 && !feedback;
+  const canConfirm = selectedNoteIds.length === 3 && !feedback;
   const streakMedal = getStreakMedal(streak);
-  const scoreFeedback = showAnswerMarks ? feedback : null;
+  const scoreFeedback = feedback;
+
+  function clearFeedbackTimers() {
+    feedbackTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    feedbackTimersRef.current = [];
+  }
+
+  function scheduleFeedbackTimer(callback, delay) {
+    const timerId = window.setTimeout(() => {
+      feedbackTimersRef.current = feedbackTimersRef.current.filter((id) => id !== timerId);
+      callback();
+    }, delay);
+    feedbackTimersRef.current.push(timerId);
+  }
 
   function resetTask(nextQuestion) {
     setQuestion(nextQuestion);
-    setSelectedTripletTypeId(null);
     setSelectedNoteIds([]);
     setFeedback(null);
     setFeedbackFading(false);
@@ -790,6 +920,7 @@ function App() {
   }
 
   function newQuestion() {
+    clearFeedbackTimers();
     setQuestionVisible(false);
     window.setTimeout(() => {
       resetTask(createQuestion());
@@ -806,26 +937,22 @@ function App() {
     newQuestion();
   }
 
-  function fadeToNextQuestion() {
-    if (!feedback || feedback === "correct" || feedbackFading) return;
-    setFeedbackFading(true);
-    window.setTimeout(newQuestion, 280);
+  function applyLevel(level) {
+    setActiveLevel(level);
+    setLevelOpen(false);
+    newQuestion();
   }
 
-  function selectTripletType(typeId) {
-    if (feedback) return;
-    setSelectedTripletTypeId(typeId);
-    setSelectedNoteIds([]);
-    setPrompt("");
+  function fadeToNextQuestion() {
+    if (!feedback || feedbackFading) return;
+    clearFeedbackTimers();
+    setFeedbackFading(true);
+    scheduleFeedbackTimer(newQuestion, 280);
   }
 
   function toggleNote(noteId) {
     if (feedback) return;
 
-    if (!selectedTripletTypeId) {
-      setPrompt("Choose quaver triplet or crotchet triplet before selecting notes.");
-      return;
-    }
     setSelectedNoteIds((current) => {
       if (current.includes(noteId)) return current.filter((id) => id !== noteId);
       if (current.length >= 3) return [...current.slice(1), noteId];
@@ -852,106 +979,81 @@ function App() {
 
     if (isCorrect) {
       setFeedbackFading(false);
-      window.setTimeout(() => setFeedbackFading(true), 1700);
-      window.setTimeout(newQuestion, 2000);
+      scheduleFeedbackTimer(() => setFeedbackFading(true), 1700);
+      scheduleFeedbackTimer(newQuestion, 2000);
     }
   }
 
   function confirmAnswer() {
     if (feedback) return;
-    if (!selectedTripletTypeId) {
-      setPrompt("Choose quaver triplet or crotchet triplet first.");
-      return;
-    }
     if (selectedNoteIds.length !== 3) {
       setPrompt("Select exactly three notes before pressing Confirm.");
       return;
     }
 
+    const selectedGroup = findNoteGroup(buildLayouts(question), selectedNoteIds);
+    const selectedTripletType = tripletTypeFromGroup(selectedGroup);
     const selectedSet = new Set(selectedNoteIds);
     const targetSet = new Set(question.targetNoteIds);
     const notesCorrect = selectedSet.size === targetSet.size && [...selectedSet].every((id) => targetSet.has(id));
-    const typeCorrect = selectedTripletTypeId === question.tripletType.id;
+    const typeCorrect = selectedTripletType?.id === question.tripletType.id;
     const feedbackType = notesCorrect && typeCorrect ? "correct" : notesCorrect && !typeCorrect ? "wrong-type" : "incorrect";
     setPrompt("");
     scoreAnswer(feedbackType);
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <AppIcon />
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Triplets</h1>
-                <p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Identify quaver triplets and crotchet triplets.</p>
-              </div>
-            </div>
+    <div className={window.MLH.shell.pageShellClass}>
+      <window.MLH.AppHeader icon={ASSET.appIcon} title="Triplets" subtitle="Identify quaver triplets and crotchet triplets.">
+        <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} />
+      </window.MLH.AppHeader>
 
-            <div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end">
-              <StatCard variant="score" label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${accuracy}%`} progress={accuracy} />
-              <div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${streakMedal?.bg || "bg-stone-50"}`}>
-                <StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} medal={streakMedal} confettiKey={confettiKey} />
-                <div className="relative z-0 flex min-h-[52px] min-w-[64px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700">
-                  <div className="flex items-center gap-1"><span>💎</span><span className="text-cyan-500">30</span></div>
-                  <div className="mt-1">🥇 <span className="text-yellow-500">20</span></div>
-                  <div className="mt-1">🥈 <span className="text-slate-500">15</span></div>
-                  <div className="mt-1">🥉 <span className="text-amber-700">10</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
+      <div className={window.MLH.shell.pageContentClass}>
         <main
-          className="relative -mt-[10px] min-h-[560px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]"
+          className={`${window.MLH.shell.mainShellClass} flex flex-col pb-5 md:pb-6`}
           onPointerDown={() => {
-            if (feedback && feedback !== "correct") fadeToNextQuestion();
+            if (feedback) fadeToNextQuestion();
           }}
         >
-          <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="relative" ref={customiseRef}>
-                <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>
-                {customiseOpen && (
-                  <div className="absolute left-0 z-20 mt-2 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
-                    <h2 className="mb-3 text-center text-base font-semibold">Customise</h2>
-                    <MenuRows resetScore={resetScore} />
-                  </div>
-                )}
+          <window.MLH.AppToolbar
+            left={
+              <div className="flex items-center gap-2">
+                <div className="hub-menu-anchor relative" ref={levelRef}>
+                  <window.MLH.LevelButton
+                    icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
+                    activeLevel={activeLevel}
+                    activeLabel={LEVELS[activeLevel].label}
+                    onClick={() => setLevelOpen((value) => !value)}
+                    dataMenuTrigger={true}
+                  />
+                  {levelOpen && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}>
+                    <window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS} />
+                  </window.MLH.MenuPanel>}
+                </div>
               </div>
+            }
+            feedback={<FeedbackBanner feedback={feedback} fading={feedbackFading} />}
+            right={<window.MLH.SkipButton onClick={newQuestion} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />}
+          />
 
-
+          <div className={`relative -top-[20px] flex min-h-[330px] items-center justify-center overflow-visible rounded-xl transition-opacity duration-300 md:min-h-[410px] ${questionVisible ? "opacity-100" : "opacity-0"}`}>
+            <div className="w-[115%] max-w-none shrink-0 md:w-[100%]">
+              <ScoreArea
+                question={question}
+                selectedNoteIds={selectedNoteIds}
+                feedback={scoreFeedback}
+                onToggleNote={toggleNote}
+              />
             </div>
-
-            <button type="button" onClick={newQuestion} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible"><FeedbackBanner feedback={feedback} fading={feedbackFading} /></div>
           </div>
 
-          <div className={`relative -top-[48px] transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
-            <ScoreArea
-              question={question}
-              selectedNoteIds={selectedNoteIds}
-              selectedTripletTypeId={selectedTripletTypeId}
-              feedback={scoreFeedback}
-              onToggleNote={toggleNote}
-            />
-          </div>
-
-          <div className="relative z-10 mt-3 h-[142px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md md:-mt-[173px] md:mx-3">
-            <div className="space-y-2 text-stone-900">
-              <p className="text-base font-semibold leading-tight">Find the triplet in the music, choose the type, select the three notes, then press <strong>Confirm</strong>.</p>
-              {prompt && <p className="text-sm font-medium text-red-700">{prompt}</p>}
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-start justify-between gap-3 pb-[56px]">
-              <TripletSelector selectedTripletTypeId={selectedTripletTypeId} correctTripletTypeId={question.tripletType.id} feedback={feedback} onSelect={selectTripletType} />
-
-              <div className="absolute bottom-4 right-4 flex shrink-0 justify-end gap-2">
-                <button type="button" disabled={!canConfirm} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>
+          <div className="relative z-10 -mt-[50px] min-h-[74px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-stone-900">
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-semibold leading-tight">Identify the triplet in the music by selecting <strong>three</strong> notes.</p>
+                {prompt && <p className="mt-1 text-sm font-medium text-red-700">{prompt}</p>}
               </div>
+              <window.MLH.ConfirmButton onClick={confirmAnswer} disabled={!canConfirm}>Confirm</window.MLH.ConfirmButton>
             </div>
           </div>
         </main>
@@ -962,8 +1064,9 @@ function App() {
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element not found.");
-ReactDOM.render(<App />, rootElement);
+if (ReactDOM.createRoot) ReactDOM.createRoot(rootElement).render(<App />);
+else ReactDOM.render(<App />, rootElement);
   </script>
-<script src="./footer.js?v=1.3"></script>
+<script src="./footer.js?v=20260629"></script>
 </body>
 </html>
