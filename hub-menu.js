@@ -13,6 +13,7 @@
   const AUDIO_CONFIRM_BUTTON_CLASS = "";
   const ACTION_BUTTON_GROUP_CLASS = "grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-[112px_112px]";
   const PLAY_CLEAR_CONFIRM_ROW_CLASS = "mt-3 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between";
+  const TYPED_ANSWER_INPUT_BASE_CLASS = "mlh-typed-answer-input h-12 w-full rounded-xl border bg-white px-4 text-base font-semibold outline-none transition placeholder:font-medium placeholder:text-stone-400 focus:placeholder:text-transparent disabled:opacity-60";
   const WRONG_NOTATION_COLOUR = "#dc2626";
   const WRONG_NOTATION_OPACITY = 0.4;
   const CORRECT_NOTATION_COLOUR = "#16a34a";
@@ -175,8 +176,12 @@
   }
 
   function typedAnswerClass(feedback, baseClass = "") {
-    const tone = !feedback ? "text-stone-900" : feedback.correct ? "text-green-600" : "text-red-600";
-    return `${baseClass} ${tone}`.trim();
+    const tone = !feedback
+      ? "border-stone-300 text-stone-900 focus:border-stone-950"
+      : feedback.correct
+        ? "border-2 border-green-600 text-green-700 focus:border-green-600"
+        : "border-2 border-red-600 text-red-700 focus:border-red-600";
+    return `${TYPED_ANSWER_INPUT_BASE_CLASS} ${baseClass} ${tone}`.trim();
   }
 
   function feedbackNotationStyle(correct, { wrongOpacity = WRONG_NOTATION_OPACITY, correctOpacity = 1 } = {}) {
@@ -285,6 +290,7 @@
   MLH.AudioConfirmButtonClass = AUDIO_CONFIRM_BUTTON_CLASS;
   MLH.ActionButtonGroupClass = ACTION_BUTTON_GROUP_CLASS;
   MLH.PlayClearConfirmRowClass = PLAY_CLEAR_CONFIRM_ROW_CLASS;
+  MLH.TypedAnswerInputBaseClass = TYPED_ANSWER_INPUT_BASE_CLASS;
   MLH.useClickAway = useClickAway;
   MLH.useClickOutside = useClickOutside;
   MLH.MenuPanel = MenuPanel;
