@@ -39,10 +39,11 @@
     };
 
     const LEVELS = {
-      N3: { label: "National 3", description: "Repetition" },
-      N4: { label: "National 4", description: "Sequences" },
-      N5: { label: "National 5", description: "Repetition • Sequences" },
-      H: { label: "Higher", description: "Repetition • Sequences • Melodic Variation" },
+      N3: { label: "National 3", description: "These questions are based on repetition." },
+      N4: { label: "National 4", description: "These questions are based on sequences." },
+      N5: { label: "National 5", description: "These questions are based on repetition and sequences." },
+      H: { label: "Higher", description: "These questions are based on repetition, sequences, and melodic variations." },
+      AH: { label: "Advanced Higher", description: "These questions are based on more challenging melodic variations." },
     };
 
     const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
@@ -136,7 +137,8 @@
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
     const rhythmInfo = (rhythm) => RHYTHMS[rhythm] ?? RHYTHMS.crotchet;
-    const timeSignaturesForLevel = (level) => TIME_SIGNATURES.filter((signature) => signature.id !== "6/8" || level === "H");
+    const isHigherLevel = (level) => level === "H" || level === "AH";
+    const timeSignaturesForLevel = (level) => TIME_SIGNATURES.filter((signature) => signature.id !== "6/8" || isHigherLevel(level));
     const barPatternsForSignature = (signature) => BAR_PATTERNS[signature.id] ?? BAR_PATTERNS["4/4"];
     const noteBaseIndex = (note) => NOTE_POOL.findIndex((item) => item.letter === note?.letter && item.octave === note?.octave);
     const yForStep = (step, top) => top + STAFF.gap * 4 - step * (STAFF.gap / 2);
@@ -263,12 +265,12 @@
     function levelMode(level) {
       if (level === "N3") return "repetition";
       if (level === "N4") return "sequence";
-      if (level === "H") return randomItem(["repetition", "sequence", "repetition", "sequence", "free"]);
+      if (isHigherLevel(level)) return randomItem(["repetition", "sequence", "repetition", "sequence", "free"]);
       return randomItem(["repetition", "sequence"]);
     }
 
     function maxStepForLevel(level, mode) {
-      if (level === "H") return 4;
+      if (isHigherLevel(level)) return 4;
       if (level === "N3" || level === "N4" || level === "N5") return 1;
       return 2;
     }
@@ -474,14 +476,14 @@
 
     function levelMaximumInterval(level) {
       if (level === "N3") return 2;
-      if (level === "H") return 4;
+      if (isHigherLevel(level)) return 4;
       if (level === "N4" || level === "N5") return 3;
       return 3;
     }
 
     function levelMaximumRange(level) {
       if (level === "N3" || level === "N4") return 5;
-      if (level === "N5" || level === "H") return 7;
+      if (level === "N5" || isHigherLevel(level)) return 7;
       return 7;
     }
 
@@ -521,7 +523,7 @@
 
     function leapsRecoverByStep(notes, level) {
       const recoveryLimit = 1;
-      const leapThreshold = level === "H" ? 3 : 2;
+      const leapThreshold = isHigherLevel(level) ? 3 : 2;
       for (let index = 1; index < notes.length - 1; index += 1) {
         const leap = notes[index].step - notes[index - 1].step;
         if (Math.abs(leap) < leapThreshold) continue;
@@ -589,7 +591,7 @@
       return bars.filter((bar) => bar.barIndex === targetBar - 1 && bar.notes?.length);
     }
 
-    function makeQuestion(level = "N5", attempt = 0) {
+    function makeCompletionQuestion(level = "N5", attempt = 0) {
       const activeBarCount = barCountForLevel(level);
       const timeSignature = randomItem(timeSignaturesForLevel(level));
       const majorKeys = KEYS.filter((key) => key.id !== "Am");
@@ -598,7 +600,7 @@
         : Math.random() < 0.82 ? randomItem(majorKeys) : KEYS.find((item) => item.id === "Am");
       const progression = makeChordProgression();
 
-      const targetBar = level === "N4" || level === "N5" || level === "H"
+      const targetBar = level === "N4" || level === "N5" || isHigherLevel(level)
         ? randomItem([1, 2])
         : randomItem(Array.from({ length: activeBarCount }, (_, index) => index));
       const bars = [];
@@ -652,45 +654,142 @@
         barCount: activeBarCount,
       };
 
-      const targetMaximumInterval = level === "H" && mode === "free" ? 1 : maxStepForLevel(level, mode);
+      const targetMaximumInterval = isHigherLevel(level) && mode === "free" ? 1 : maxStepForLevel(level, mode);
 
-      if ((level === "N3" || level === "N4" || level === "N5" || level === "H") && !targetMovesWithinInterval(bars, targetBar, targetMaximumInterval) && attempt < 160) {
-        return makeQuestion(level, attempt + 1);
+      if ((level === "N3" || level === "N4" || level === "N5" || isHigherLevel(level)) && !targetMovesWithinInterval(bars, targetBar, targetMaximumInterval) && attempt < 160) {
+        return makeCompletionQuestion(level, attempt + 1);
       }
 
       if ((level === "N3" || level === "N4") && !hasEnoughPitchVariety(bars) && attempt < 160) {
-        return makeQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1);
       }
 
-      if ((level === "N5" || level === "H") && (bars[targetBar]?.notes?.length ?? 0) < 3 && attempt < 160) {
-        return makeQuestion(level, attempt + 1);
+      if ((level === "N5" || isHigherLevel(level)) && (bars[targetBar]?.notes?.length ?? 0) < 3 && attempt < 160) {
+        return makeCompletionQuestion(level, attempt + 1);
       }
 
       if (level === "N3" && melodyHasOctaveLeap(bars) && attempt < 160) {
-        return makeQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1);
       }
 
       if (level === "N4" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
-        return makeQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1);
       }
 
       if (level === "N5" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
-        return makeQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1);
       }
 
-      if (level === "H" && mode !== "free" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
-        return makeQuestion(level, attempt + 1);
+      if (isHigherLevel(level) && mode !== "free" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
+        return makeCompletionQuestion(level, attempt + 1);
       }
 
-      if (level === "H" && mode === "free" && targetHasAnySourcePattern(bars, targetBar) && attempt < 160) {
-        return makeQuestion(level, attempt + 1);
+      if (isHigherLevel(level) && mode === "free" && targetHasAnySourcePattern(bars, targetBar) && attempt < 160) {
+        return makeCompletionQuestion(level, attempt + 1);
       }
 
       if (!melodyPassesQualityRules(question) && attempt < 160) {
-        return makeQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1);
       }
 
       return question;
+    }
+
+    function shuffleItems(items) {
+      const next = [...items];
+      for (let index = next.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+      }
+      return next;
+    }
+
+    function cloneBarsForOption(bars, optionId) {
+      return bars.map((bar) => ({
+        ...bar,
+        notes: bar.notes.map((note, noteIndex) => ({
+          ...note,
+          id: `${optionId}-${bar.barIndex}-${noteIndex}`,
+        })),
+      }));
+    }
+
+    function mutateNotePitch(note, key, direction = 0) {
+      const currentIndex = noteBaseIndex(note);
+      const offsets = direction ? [direction] : shuffleItems([-1, 1]);
+      for (const offset of offsets) {
+        const base = NOTE_POOL[currentIndex + offset];
+        if (!base) continue;
+        return {
+          ...note,
+          ...base,
+          writtenAccidental: melodicAccidentalForLetter(key, base.letter),
+        };
+      }
+      return note;
+    }
+
+    function makeMelodyVariantBars(correctBars, key, variantId) {
+      const bars = cloneBarsForOption(correctBars, variantId);
+      const candidates = [];
+      bars.forEach((bar) => {
+        bar.notes.forEach((note, noteIndex) => {
+          const isFirstNote = bar.barIndex === 0 && noteIndex === 0;
+          const isFinalNote = bar.barIndex === bars.length - 1 && noteIndex === bar.notes.length - 1;
+          if (!isFirstNote && !isFinalNote) candidates.push({ bar, noteIndex });
+        });
+      });
+
+      const changes = Math.min(candidates.length, Math.random() < 0.72 ? 1 : 2);
+      shuffleItems(candidates).slice(0, changes).forEach(({ bar, noteIndex }, index) => {
+        const direction = index % 2 === 0 ? randomItem([-1, 1]) : 0;
+        bar.notes[noteIndex] = mutateNotePitch(bar.notes[noteIndex], key, direction);
+      });
+
+      return bars;
+    }
+
+    function barsSignature(bars) {
+      return bars.map((bar) => bar.notes.map((note) => `${note.step}:${note.rhythm}`).join(",")).join("|");
+    }
+
+    function makeIdentifyMelodyQuestion(level = "AH") {
+      const base = makeCompletionQuestion(level);
+      const correctBars = cloneBarsForOption(base.bars, "correct");
+      const options = [{ id: "correct", bars: correctBars, correct: true }];
+      const seen = new Set([barsSignature(correctBars)]);
+
+      let attempts = 0;
+      while (options.length < 3 && attempts < 40) {
+        attempts += 1;
+        const variantBars = makeMelodyVariantBars(correctBars, base.key, `variant-${options.length}-${attempts}`);
+        const signature = barsSignature(variantBars);
+        if (seen.has(signature)) continue;
+        seen.add(signature);
+        options.push({ id: `variant-${options.length}`, bars: variantBars, correct: false });
+      }
+
+      while (options.length < 3) {
+        const fallback = makeCompletionQuestion(level);
+        options.push({ id: `variant-${options.length}`, bars: cloneBarsForOption(fallback.bars, `fallback-${options.length}`), correct: false });
+      }
+
+      const shuffledOptions = shuffleItems(options);
+      return {
+        ...base,
+        questionType: "identifyMelody",
+        targetBar: null,
+        bars: correctBars,
+        options: shuffledOptions,
+        selectedOptionIndex: null,
+        answerIndex: shuffledOptions.findIndex((option) => option.correct),
+        prompt: "Listen to the music and select the melody that matches what you hear.",
+      };
+    }
+
+    function makeQuestion(level = "N5", attempt = 0) {
+      if (level === "AH") return makeIdentifyMelodyQuestion(level);
+      return makeCompletionQuestion(level, attempt);
     }
 
     function barStart(barIndex) {
@@ -914,7 +1013,81 @@
       return <BarNotes bar={bar} notes={correctionNotes} positions={shiftedPositions} top={top} colour={COLOUR.green} timeSignature={timeSignature} />;
     }
 
-    function Score({ question, userNotes, setUserNotes, feedback, activeNoteId, hoverNote, setHoverNote }) {
+    function MelodyOptionNotation({ option, question, colour = "currentColor" }) {
+      const top = STAFF.topA;
+      const optionQuestion = { ...question, bars: option.bars };
+      const finalBar = option.bars.length - 1;
+      return (
+        <svg viewBox="0 0 920 130" className="h-auto w-full overflow-visible" aria-hidden="true">
+          <rect width="920" height="130" fill="transparent" />
+          <g transform="translate(0 -36)" color={colour}>
+            <Staff top={top} systemIndex={0} question={optionQuestion} />
+            {option.bars.map((bar) => {
+              const start = barStart(bar.barIndex);
+              const end = start + barWidth(bar.barIndex);
+              const positions = barPositions(bar);
+              return (
+                <g key={bar.barIndex}>
+                  <text x={bar.barIndex === 0 ? start - 15 : start + 5} y={top - 17} fill={colour} fontSize="12" fontWeight="700">{bar.barIndex + 1}</text>
+                  <BarNotes bar={bar} notes={bar.notes} positions={positions} top={top} colour={colour} timeSignature={question.timeSignature} />
+                  {bar.barIndex === finalBar ? (
+                    <g>
+                      <line x1={end - 5} x2={end - 5} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke={colour} strokeWidth="1.4" />
+                      <line x1={end} x2={end} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke={colour} strokeWidth="4" />
+                    </g>
+                  ) : (
+                    <line x1={end} x2={end} y1={top} y2={top + STAFF.gap * 4} stroke={colour} strokeWidth="1.35" />
+                  )}
+                </g>
+              );
+            })}
+          </g>
+        </svg>
+      );
+    }
+
+    function IdentifyMelodyScore({ question, feedback, onSelectOption }) {
+      return (
+        <div className="w-full space-y-2 md:mx-3">
+          {question.options.map((option, index) => {
+            const selected = question.selectedOptionIndex === index;
+            const isCorrect = index === question.answerIndex;
+            const showCorrect = feedback && isCorrect;
+            const showWrong = feedback && selected && !isCorrect;
+            const lineColour = showCorrect ? COLOUR.green : showWrong ? COLOUR.red : "currentColor";
+            const stateClass = showCorrect ? "border-green-500 bg-green-50" : showWrong ? "border-red-500 bg-red-50" : selected ? "border-stone-950 bg-stone-50" : "border-stone-200 bg-white hover:bg-stone-50";
+            return (
+              <button
+                type="button"
+                key={option.id}
+                disabled={Boolean(feedback)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectOption(index);
+                }}
+                className={`relative flex w-full items-center rounded-xl border px-3 py-1.5 text-left shadow-sm ${stateClass}`}
+              >
+                <span className="min-w-0 flex-1 text-stone-950">
+                  <MelodyOptionNotation option={option} question={question} colour={lineColour} />
+                </span>
+                <span className={`ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-lg font-black ${showCorrect ? "border-green-600 bg-green-600 text-white" : showWrong ? "border-red-600 bg-red-600 text-white" : selected ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-transparent"}`}>
+                  ✓
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    function Score(props) {
+      if (props.question.questionType === "identifyMelody") {
+        return <IdentifyMelodyScore question={props.question} feedback={props.feedback} onSelectOption={props.onSelectOption} />;
+      }
+      return <MissingNotesScore {...props} />;
+    }
+
+    function MissingNotesScore({ question, userNotes, setUserNotes, feedback, activeNoteId, hoverNote, setHoverNote }) {
       const [draggingNote, setDraggingNote] = useState(null);
       const targetInputRef = useRef(null);
       const isOneSystem = question.bars.length <= BARS_PER_SYSTEM;
@@ -1115,11 +1288,6 @@
       return <window.MLH.FeedbackBadge feedback={feedback} fading={fading} />;
     }
 
-    function formatTime(seconds) {
-      const safe = Math.max(0, Math.floor(seconds || 0));
-      return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
-    }
-
     function playSound(correct, celebration = false, medal = null) {
       window.MLH?.playFeedbackSound?.(correct, celebration, medal);
     }
@@ -1271,8 +1439,6 @@
       const [activeNoteId, setActiveNoteId] = useState(null);
       const audioRef = useRef(null);
       const timersRef = useRef([]);
-      const playbackBarRef = useRef(null);
-      const scrubWasPlayingRef = useRef(false);
       const nextTimer = useRef(null);
       const fadeTimer = useRef(null);
       const menuRef = useRef(null);
@@ -1348,20 +1514,51 @@
         newQuestion();
       }
 
-      function undoLastNote() {
+      function clearUserNotes() {
         if (feedback) return;
-        const indexes = Object.keys(userNotes).map(Number);
-        if (!indexes.length) return;
-        const last = Math.max(...indexes);
-        setUserNotes((current) => {
-          const next = { ...current };
-          delete next[last];
-          return next;
-        });
+        if (question.questionType === "identifyMelody") {
+          setQuestion((current) => ({ ...current, selectedOptionIndex: null }));
+          setPrompt("");
+          return;
+        }
+        setUserNotes({});
       }
 
       function confirmAnswer() {
         if (feedback) return;
+        if (question.questionType === "identifyMelody") {
+          if (question.selectedOptionIndex === null) {
+            setPrompt("Select one melody first.");
+            return;
+          }
+          stopAudio();
+          const correct = question.selectedOptionIndex === question.answerIndex;
+          setScore((current) => {
+            const streak = correct ? current.streak + 1 : 0;
+            if (correct && [2, 4, 6, 10].includes(streak)) {
+              const medal = missingNotesStreakMedal(streak);
+              setConfetti((value) => value + 1);
+              setAutoShowMedals(true);
+              window.setTimeout(() => setAutoShowMedals(false), 2000);
+              window.setTimeout(() => playSound(true, true, medal?.sound), 180);
+            }
+            return {
+              correct: current.correct + (correct ? 1 : 0),
+              attempted: current.attempted + 1,
+              streak,
+              best: Math.max(current.best, streak),
+            };
+          });
+          playSound(correct);
+          setFeedback({ correct });
+          setFeedbackFading(false);
+          setPrompt("");
+          if (correct) {
+            fadeTimer.current = window.setTimeout(() => setFeedbackFading(true), 1700);
+            nextTimer.current = window.setTimeout(() => newQuestion(), 2050);
+          }
+          return;
+        }
         const target = question.bars[question.targetBar];
         if (target.notes.some((_, index) => !userNotes[index])) {
           return;
@@ -1392,6 +1589,12 @@
           fadeTimer.current = window.setTimeout(() => setFeedbackFading(true), 1700);
           nextTimer.current = window.setTimeout(() => newQuestion(), 2050);
         }
+      }
+
+      function selectMelodyOption(index) {
+        if (feedback) return;
+        setQuestion((current) => current.questionType === "identifyMelody" ? { ...current, selectedOptionIndex: index } : current);
+        setPrompt("");
       }
 
       function oscillator(ctx, gainNode, frequency, start, duration, volume = 0.035, type = "sine", release = 0.08) {
@@ -1542,43 +1745,14 @@
         timersRef.current.push(tick, stopTimer);
       }
 
-      function secondsFromScrubEvent(event) {
-        const rect = playbackBarRef.current?.getBoundingClientRect();
-        if (!rect || totalDuration <= 0) return 0;
-        return clamp(((event.clientX - rect.left) / rect.width) * totalDuration, 0, totalDuration);
-      }
-
-      function beginScrub(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        const seconds = secondsFromScrubEvent(event);
-        scrubWasPlayingRef.current = isPlaying;
-        if (isPlaying) stopAudio(false);
-        setPlaybackElapsed(seconds);
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-      }
-
-      function moveScrub(event) {
-        if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
-        event.preventDefault();
-        setPlaybackElapsed(secondsFromScrubEvent(event));
-      }
-
-      function endScrub(event) {
-        if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
-        event.preventDefault();
-        const seconds = secondsFromScrubEvent(event);
-        setPlaybackElapsed(seconds);
-        event.currentTarget.releasePointerCapture?.(event.pointerId);
-        if (scrubWasPlayingRef.current) playQuestionAudio(seconds, true);
-        scrubWasPlayingRef.current = false;
-      }
-
       useEffect(() => () => stopAudio(), []);
 
-      const progress = totalDuration > 0 ? clamp((playbackElapsed / totalDuration) * 100, 0, 100) : 0;
-      const targetBar = question.bars[question.targetBar];
-      const allRequiredNotesPlaced = Boolean(targetBar?.notes?.length) && targetBar.notes.every((_, index) => Boolean(userNotes[index]));
+      const isIdentifyMelody = question.questionType === "identifyMelody";
+      const targetBar = isIdentifyMelody ? null : question.bars[question.targetBar];
+      const allRequiredNotesPlaced = isIdentifyMelody
+        ? question.selectedOptionIndex !== null
+        : Boolean(targetBar?.notes?.length) && targetBar.notes.every((_, index) => Boolean(userNotes[index]));
+      const clearDisabled = Boolean(feedback) || (isIdentifyMelody ? question.selectedOptionIndex === null : !Object.keys(userNotes).length);
 
       return (
         <div className="overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12">
@@ -1650,65 +1824,26 @@
               </div>
 
               <div className={`mx-auto flex w-full flex-1 items-center justify-center transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}>
-                <Score question={question} userNotes={userNotes} setUserNotes={setUserNotes} feedback={feedback} activeNoteId={activeNoteId} hoverNote={hoverNote} setHoverNote={setHoverNote} />
+                <Score question={question} userNotes={userNotes} setUserNotes={setUserNotes} feedback={feedback} activeNoteId={activeNoteId} hoverNote={hoverNote} setHoverNote={setHoverNote} onSelectOption={selectMelodyOption} />
               </div>
 
-              <section className="relative z-10 mt-auto rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md md:mx-3 md:-mt-[42px]">
+              <section className={`relative z-10 rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md md:mx-3 ${isIdentifyMelody ? "mt-4" : "mt-auto md:-mt-[42px]"}`}>
                 <p className="text-base font-semibold leading-tight">
-                  Listen to the music and insert the missing notes in <strong>bar {question.targetBar + 1}</strong>. The rhythm is given above the stave.
+                  {isIdentifyMelody ? question.prompt : <>Listen to the music and insert the missing notes in <strong>bar {question.targetBar + 1}</strong>. The rhythm is given above the stave.</>}
                 </p>
                 {prompt && <p className="mt-2 text-sm font-medium text-red-700">{prompt}</p>}
-                <div className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <button type="button" onClick={playQuestionAudio} className="hidden h-11 w-[112px] shrink-0 items-center justify-center gap-2 rounded-xl bg-stone-950 px-[18px] py-[10px] text-sm font-bold text-white lg:flex">
-                      <span className="text-lg leading-none">{isPlaying ? "■" : "▶"}</span>
-                      <span>{isPlaying ? "Stop" : "Play"}</span>
+                <div className={window.MLH.PlayClearConfirmRowClass}>
+                  <button type="button" onClick={playQuestionAudio} className={window.MLH.PlayButtonClass}>
+                    <span className="text-lg leading-none">{isPlaying ? "■" : "▶"}</span>
+                    <span>{isPlaying ? "Stop" : "Play"}</span>
+                  </button>
+                  <div className={window.MLH.ActionButtonGroupClass}>
+                    <button type="button" disabled={clearDisabled} onClick={clearUserNotes} className={window.MLH.ClearButtonClass}>
+                      Clear
                     </button>
-                    <div className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3">
-                      <div
-                        ref={playbackBarRef}
-                        role="slider"
-                        tabIndex="0"
-                        aria-label="Playback position"
-                        aria-valuemin="0"
-                        aria-valuemax={Math.round(totalDuration)}
-                        aria-valuenow={Math.round(playbackElapsed)}
-                        className="relative h-[18px] flex-1 cursor-pointer touch-none rounded-full"
-                        onPointerDown={beginScrub}
-                        onPointerMove={moveScrub}
-                        onPointerUp={endScrub}
-                        onPointerCancel={endScrub}
-                        onKeyDown={(event) => {
-                          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-                          event.preventDefault();
-                          const change = event.key === "ArrowRight" ? 1 : -1;
-                          const nextPosition = clamp(playbackElapsed + change, 0, totalDuration);
-                          if (isPlaying) {
-                            playQuestionAudio(nextPosition, true);
-                          } else {
-                            setPlaybackElapsed(nextPosition);
-                          }
-                        }}
-                      >
-                        <div className="absolute left-0 right-0 top-1/2 h-[8.8px] -translate-y-1/2 rounded-full bg-stone-200" />
-                        <div className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-stone-900" style={{ left: "2px", width: `max(0px, calc(${progress}% - 2px))` }} />
-                        <div className="absolute top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-stone-950 shadow-sm transition-transform active:scale-110" style={{ left: `calc(${progress}% + 2px)` }} />
-                      </div>
-                      <div className="w-[72px] text-right text-xs font-semibold tabular-nums text-stone-600">{formatTime(playbackElapsed)} / {formatTime(totalDuration)}</div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 lg:flex lg:shrink-0 lg:justify-end">
-                    <button type="button" onClick={playQuestionAudio} className="flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl bg-stone-950 px-3 py-[10px] text-sm font-bold text-white lg:hidden">
-                      <span className="text-lg leading-none">{isPlaying ? "■" : "▶"}</span>
-                      <span>{isPlaying ? "Stop" : "Play"}</span>
-                    </button>
-                    <button type="button" disabled={Boolean(feedback) || !Object.keys(userNotes).length} onClick={undoLastNote} className="flex h-11 min-w-0 items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800 lg:min-w-[92px]">
-                      <span className="-translate-y-[1px] text-xl leading-none">↺</span>
-                      <span>Undo</span>
-                    </button>
-                    <button type="button" disabled={Boolean(feedback) || !allRequiredNotesPlaced} onClick={confirmAnswer} className="h-11 min-w-0 rounded-xl bg-stone-950 px-3 py-[10px] text-sm font-bold text-white disabled:bg-stone-400 disabled:text-white disabled:opacity-70 lg:px-[22px]">
+                    <window.MLH.ConfirmButton disabled={Boolean(feedback) || !allRequiredNotesPlaced} onClick={confirmAnswer} className={window.MLH.AudioConfirmButtonClass}>
                       Confirm
-                    </button>
+                    </window.MLH.ConfirmButton>
                   </div>
                 </div>
               </section>

@@ -7,7 +7,12 @@
   const MENU_TITLE_CLASS = "hub-menu-title";
   const TOOLBAR_BUTTON_CLASS = "flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5";
   const CUSTOMISE_MENU_PANEL_CLASS = "hub-menu-panel hub-menu-panel-customise";
-  const CONFIRM_BUTTON_CLASS = "hub-confirm-button rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60";
+  const PLAY_BUTTON_CLASS = "flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-stone-950 bg-stone-950 px-3 py-[10px] text-sm font-bold text-white disabled:opacity-50 sm:w-[112px]";
+  const CLEAR_BUTTON_CLASS = "flex h-11 w-full min-w-0 items-center justify-center rounded-xl border border-stone-300 bg-white px-3 text-sm font-bold text-stone-800 disabled:opacity-40 sm:w-[112px]";
+  const CONFIRM_BUTTON_CLASS = "hub-confirm-button flex h-11 w-full min-w-0 items-center justify-center rounded-xl border border-black bg-black px-3 py-[10px] text-sm font-bold text-white disabled:opacity-60 sm:w-[112px]";
+  const AUDIO_CONFIRM_BUTTON_CLASS = "";
+  const ACTION_BUTTON_GROUP_CLASS = "grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-[112px_112px]";
+  const PLAY_CLEAR_CONFIRM_ROW_CLASS = "mt-3 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between";
   const WRONG_NOTATION_COLOUR = "#dc2626";
   const WRONG_NOTATION_OPACITY = 0.4;
   const CORRECT_NOTATION_COLOUR = "#16a34a";
@@ -274,7 +279,12 @@
   MLH.MenuTitleClass = MENU_TITLE_CLASS;
   MLH.CustomiseMenuPanelClass = CUSTOMISE_MENU_PANEL_CLASS;
   MLH.ToolbarButtonClass = TOOLBAR_BUTTON_CLASS;
+  MLH.PlayButtonClass = PLAY_BUTTON_CLASS;
+  MLH.ClearButtonClass = CLEAR_BUTTON_CLASS;
   MLH.ConfirmButtonClass = CONFIRM_BUTTON_CLASS;
+  MLH.AudioConfirmButtonClass = AUDIO_CONFIRM_BUTTON_CLASS;
+  MLH.ActionButtonGroupClass = ACTION_BUTTON_GROUP_CLASS;
+  MLH.PlayClearConfirmRowClass = PLAY_CLEAR_CONFIRM_ROW_CLASS;
   MLH.useClickAway = useClickAway;
   MLH.useClickOutside = useClickOutside;
   MLH.MenuPanel = MenuPanel;
