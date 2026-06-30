@@ -83,10 +83,24 @@
     confettiKey = 0,
     autoShowMedals = false,
     showMedalPopover = false,
+    medalEligible = null,
   }) {
     const [popover, setPopover] = React.useState(null);
+    const [autoMedalEligible, setAutoMedalEligible] = React.useState(true);
     const ref = React.useRef(null);
     useClickAway(ref, () => setPopover(null));
+
+    React.useEffect(() => {
+      const updateMedalEligibility = () => {
+        const hasCustomLevel = Array.from(document.querySelectorAll("button[data-menu-trigger]"))
+          .some((button) => button.textContent.trim() === "Custom");
+        setAutoMedalEligible(!hasCustomLevel);
+      };
+      updateMedalEligibility();
+      const observer = new MutationObserver(updateMedalEligibility);
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+      return () => observer.disconnect();
+    }, []);
 
     const scoreFill = Math.max(0, Math.min(100, accuracy || 0));
     const scoreColour = scoreFill < 50 ? "rgba(220,38,38,.38)" : scoreFill < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)";
@@ -96,8 +110,12 @@
       { tier: "gold", value: 20, icon: assets.gold, className: "text-yellow-500", active: streak >= 20 && streak < 30 },
       { tier: "diamond", value: 30, icon: assets.diamond, className: "text-cyan-500", active: streak >= 30 },
     ];
-    const medal = thresholds.find((item) => item.active);
-    const medalStyle = streak >= 30
+    const effectiveMedalEligible = medalEligible ?? autoMedalEligible;
+    const medal = effectiveMedalEligible ? thresholds.find((item) => item.active) : null;
+    const shouldShowMedalPopover = popover === "streak" || (effectiveMedalEligible && (autoShowMedals || showMedalPopover));
+    const medalStyle = !effectiveMedalEligible
+      ? { backgroundColor: "#f5f5f4", color: "#a8a29e" }
+      : streak >= 30
       ? { backgroundColor: "rgba(34, 211, 238, .25)", color: "#06b6d4" }
       : streak >= 20
         ? { backgroundColor: "rgba(250, 204, 21, .25)", color: "#eab308" }
@@ -147,7 +165,7 @@
               style: { backgroundColor: medalStyle.backgroundColor },
             })
           ),
-          confettiKey > 0 && React.createElement("div", { key: confettiKey, className: "pointer-events-none absolute inset-0 z-20 overflow-visible" },
+          effectiveMedalEligible && confettiKey > 0 && React.createElement("div", { key: confettiKey, className: "pointer-events-none absolute inset-0 z-20 overflow-visible" },
             Array.from({ length: 18 }).map((_, index) => React.createElement("span", {
               key: index,
               className: "absolute block h-1.5 w-1 rounded-sm",
@@ -165,14 +183,14 @@
             React.createElement("div", { className: "mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px]", style: { color: medalStyle.color } }, streak),
             React.createElement("div", { className: "mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]" }, `Highest: ${bestStreak}`)
           ),
-          (popover === "streak" || autoShowMedals || showMedalPopover) && React.createElement("div", {
+          shouldShowMedalPopover && React.createElement("div", {
             className: "fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]",
             style: { animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" },
           },
             React.createElement("div", { className: "flex items-end justify-center gap-3" },
-              thresholds.map((item) => React.createElement("div", { key: item.value, className: `flex flex-col items-center justify-end ${item.active ? "medal-threshold-active" : ""}` },
-                React.createElement("img", { src: item.icon, alt: "", "aria-hidden": "true", className: "h-[22.8px] w-[22.8px] object-contain" }),
-                React.createElement("span", { className: `mt-1 text-[11px] font-semibold leading-none ${item.className}` }, item.value)
+              thresholds.map((item) => React.createElement("div", { key: item.value, className: `flex flex-col items-center justify-end ${effectiveMedalEligible && item.active ? "medal-threshold-active" : ""}` },
+                React.createElement("img", { src: item.icon, alt: "", "aria-hidden": "true", className: `h-[22.8px] w-[22.8px] object-contain ${effectiveMedalEligible ? "" : "grayscale opacity-35"}` }),
+                React.createElement("span", { className: `mt-1 text-[11px] font-semibold leading-none ${effectiveMedalEligible ? item.className : "text-stone-400"}` }, item.value)
               ))
             )
           )
