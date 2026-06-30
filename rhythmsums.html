@@ -10,11 +10,26 @@
   <link rel="stylesheet" href="./hub-ui.css?v=1.5" />
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="./hub-mobile.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=1.4"></script>
-  <script src="./hub-shell.js?v=1.3"></script>
-  <script src="./hub-menu.js?v=2.1"></script>
+  <script src="./bravura-symbols.js?v=20260629"></script>
+  <script src="./shared-notation-config.js?v=20260629"></script>
+  <script src="./hub-mobile.js?v=20260629"></script>
+  <script src="./hub-audio.js?v=20260629"></script>
+  <script src="./hub-shell.js?v=20260629"></script>
+  <script src="./hub-menu.js?v=20260629"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+    @font-face {
+      font-family: "Bravura";
+      src: url("./Bravura.otf") format("opentype");
+      font-display: block;
+    }
+
+    .music-symbol {
+      font-family: "Bravura", serif;
+      dominant-baseline: alphabetic;
+      text-rendering: geometricPrecision;
+    }
+  </style>
 </head>
 <body>
   <div id="root"></div>
@@ -25,13 +40,22 @@ const NOTE_RX = 7;
 const NOTE_RY = 5;
 const STEM_LENGTH = 34;
 const LINE_GAP = 10;
-const TICK = String.fromCodePoint(0x2714);
-const CROSS = String.fromCodePoint(0x2716);
 
 const COLOUR = {
   green: "#16a34a",
   red: "#dc2626",
   black: "#000000",
+};
+
+const ASSET = {
+  appIcon: "rhythm-sums-icon.svg",
+  levels: "levels.svg",
+  customise: "customise.svg",
+  next: "next.svg",
+  bronze: "bronze.svg",
+  silver: "silver.svg",
+  gold: "gold.svg",
+  diamond: "diamond.svg",
 };
 
 const OPERATORS = ["+", "−", "×", "÷"];
@@ -41,6 +65,41 @@ const OPERATOR_LABELS = {
   "−": "Subtract",
   "×": "Multiply",
   "÷": "Divide",
+};
+
+const LEVELS = {
+  N3: {
+    label: "National 3",
+    shortLabel: "N3",
+    description: "Crotchet • Minim • Dotted minim • Semibreve",
+    rhythmIds: ["crotchet", "minim", "dotted-minim", "semibreve"],
+    beamedIds: [],
+    includeRests: false,
+  },
+  N4: {
+    label: "National 4",
+    shortLabel: "N4",
+    description: "Quaver • Semiquaver • Grouped semiquavers • Paired quavers",
+    rhythmIds: ["crotchet", "minim", "dotted-minim", "semibreve", "quaver", "semiquaver"],
+    beamedIds: ["two-quavers", "four-semiquavers"],
+    includeRests: false,
+  },
+  N5: {
+    label: "National 5",
+    shortLabel: "N5",
+    description: "Dotted crotchet • Dotted quaver • Scotch snap",
+    rhythmIds: ["crotchet", "minim", "dotted-minim", "semibreve", "quaver", "semiquaver", "dotted-crotchet", "dotted-quaver"],
+    beamedIds: ["two-quavers", "four-semiquavers", "dotted-quaver-semiquaver", "scotch-snap"],
+    includeRests: false,
+  },
+  H: {
+    label: "Higher",
+    shortLabel: "H",
+    description: "Triplet quavers, triplet crotchets • Rests",
+    rhythmIds: ["crotchet", "minim", "dotted-minim", "semibreve", "quaver", "semiquaver", "dotted-crotchet", "dotted-quaver"],
+    beamedIds: ["two-quavers", "four-semiquavers", "dotted-quaver-semiquaver", "scotch-snap", "triplet-quavers", "triplet-crotchets"],
+    includeRests: true,
+  },
 };
 
 const RHYTHMS = {
@@ -65,27 +124,53 @@ const BASE_RHYTHMS = [
   "semiquaver",
 ].map((id) => ({ id, kind: "single", label: RHYTHMS[id].label, beats: RHYTHMS[id].beats }));
 
+const REST_ELIGIBLE_RHYTHMS = new Set([
+  "semibreve",
+  "dotted-minim",
+  "minim",
+  "dotted-crotchet",
+  "crotchet",
+  "dotted-quaver",
+  "quaver",
+]);
+
 const BEAMED_RHYTHMS = [
   { id: "two-quavers", label: "Two quavers", beats: 1, kind: "beamed", rhythms: ["quaver", "quaver"] },
   { id: "four-semiquavers", label: "Four semiquavers", beats: 1, kind: "beamed", rhythms: ["semiquaver", "semiquaver", "semiquaver", "semiquaver"] },
   { id: "quaver-two-semiquavers", label: "Quaver + two semiquavers", beats: 1, kind: "beamed", rhythms: ["quaver", "semiquaver", "semiquaver"] },
   { id: "two-semiquavers-quaver", label: "Two semiquavers + quaver", beats: 1, kind: "beamed", rhythms: ["semiquaver", "semiquaver", "quaver"] },
   { id: "dotted-quaver-semiquaver", label: "Dotted quaver + semiquaver", beats: 1, kind: "beamed", rhythms: ["dotted-quaver", "semiquaver"] },
+  { id: "scotch-snap", label: "Scotch snap", beats: 1, kind: "beamed", rhythms: ["semiquaver", "dotted-quaver"] },
+  { id: "triplet-quavers", label: "Triplet quavers", beats: 1, kind: "triplet", rhythms: ["quaver", "quaver", "quaver"] },
+  { id: "triplet-crotchets", label: "Triplet crotchets", beats: 2, kind: "triplet", rhythms: ["crotchet", "crotchet", "crotchet"] },
 ];
 
 const DEFAULT_SETTINGS = {
-  enabledItems: BASE_RHYTHMS.map((item) => item.id),
+  enabledItems: LEVELS.N3.rhythmIds,
+  enabledBeamedItems: LEVELS.N3.beamedIds,
   enabledOperators: ["+", "−"],
   includeRests: false,
   includeBeamedGroups: false,
 };
 
-function randomItem(items) {
-  return items[Math.floor(Math.random() * items.length)];
+function initialLevelFromUrl() {
+  const requested = new URLSearchParams(window.location.search).get("level") || "N3";
+  return LEVELS[requested] ? requested : "N3";
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+function settingsForLevel(levelKey, current = DEFAULT_SETTINGS) {
+  const level = LEVELS[levelKey] || LEVELS.N3;
+  return {
+    ...current,
+    enabledItems: level.rhythmIds,
+    enabledBeamedItems: level.beamedIds,
+    includeRests: level.includeRests,
+    includeBeamedGroups: level.beamedIds.length > 0,
+  };
+}
+
+function randomItem(items) {
+  return items[Math.floor(Math.random() * items.length)];
 }
 
 function isQuarterBeat(value) {
@@ -104,20 +189,22 @@ function calculate(left, operator, right) {
   return left / right;
 }
 
-function loadSettings() {
+function loadSettings(levelKey = initialLevelFromUrl()) {
   try {
+    const level = LEVELS[levelKey] || LEVELS.N3;
     const saved = window.localStorage.getItem("rhythms-golden-settings");
-    if (!saved) return DEFAULT_SETTINGS;
+    if (!saved) return settingsForLevel(levelKey);
     const parsed = JSON.parse(saved);
 
     return {
-      enabledItems: Array.isArray(parsed.enabledItems) ? parsed.enabledItems.filter((id) => BASE_RHYTHMS.some((item) => item.id === id)) : DEFAULT_SETTINGS.enabledItems,
+      enabledItems: Array.isArray(parsed.enabledItems) ? parsed.enabledItems.filter((id) => level.rhythmIds.includes(id)) : level.rhythmIds,
+      enabledBeamedItems: level.beamedIds,
       enabledOperators: Array.isArray(parsed.enabledOperators) ? parsed.enabledOperators.filter((operator) => OPERATORS.includes(operator)) : DEFAULT_SETTINGS.enabledOperators,
-      includeRests: typeof parsed.includeRests === "boolean" ? parsed.includeRests : DEFAULT_SETTINGS.includeRests,
-      includeBeamedGroups: typeof parsed.includeBeamedGroups === "boolean" ? parsed.includeBeamedGroups : DEFAULT_SETTINGS.includeBeamedGroups,
+      includeRests: level.includeRests && typeof parsed.includeRests === "boolean" ? parsed.includeRests : level.includeRests,
+      includeBeamedGroups: level.beamedIds.length > 0 && typeof parsed.includeBeamedGroups === "boolean" ? parsed.includeBeamedGroups : level.beamedIds.length > 0,
     };
   } catch {
-    return DEFAULT_SETTINGS;
+    return settingsForLevel(levelKey);
   }
 }
 
@@ -128,23 +215,9 @@ function saveSettings(settings) {
 }
 
 function beamedPoolFromSettings(settings) {
-  const quaverEnabled = settings.enabledItems.includes("quaver");
-  const semiquaverEnabled = settings.enabledItems.includes("semiquaver");
-  const dottedQuaverEnabled = settings.enabledItems.includes("dotted-quaver");
-
-  if (!settings.includeBeamedGroups || (!quaverEnabled && !semiquaverEnabled && !dottedQuaverEnabled)) return [];
-
-  return BEAMED_RHYTHMS.filter((item) => {
-    const usesQuaver = item.rhythms.includes("quaver");
-    const usesSemiquaver = item.rhythms.includes("semiquaver");
-    const usesDottedQuaver = item.rhythms.includes("dotted-quaver");
-
-    if (usesDottedQuaver && !(dottedQuaverEnabled && semiquaverEnabled)) return false;
-    if (usesQuaver && !quaverEnabled) return false;
-    if (usesSemiquaver && !semiquaverEnabled) return false;
-
-    return true;
-  });
+  if (!settings.includeBeamedGroups) return [];
+  const enabledBeamedItems = Array.isArray(settings.enabledBeamedItems) ? settings.enabledBeamedItems : [];
+  return BEAMED_RHYTHMS.filter((item) => enabledBeamedItems.includes(item.id));
 }
 
 function itemPoolFromSettings(settings) {
@@ -154,8 +227,9 @@ function itemPoolFromSettings(settings) {
 
 function makeDisplayItem(item, settings = DEFAULT_SETTINGS) {
   if (item.kind === "beamed") return { ...item, displayType: "beamed" };
+  if (item.kind === "triplet") return { ...item, displayType: "triplet" };
 
-  const useRest = settings.includeRests && Math.random() < 0.5;
+  const useRest = settings.includeRests && REST_ELIGIBLE_RHYTHMS.has(item.id) && Math.random() < 0.5;
   const rhythm = useRest ? RHYTHMS[item.id].rest : item.id;
 
   return {
@@ -201,98 +275,135 @@ function makeQuestion(settings = DEFAULT_SETTINGS) {
   };
 }
 
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS || {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || { drawing: {}, symbols: {} };
+const BEAMED_STEM_X_OFFSET = -2;
+const BEAMED_STEM_Y_OFFSET = -11;
+const BEAMED_STEM_DOWN_EXTENSION = 9;
+const SEMIQUAVER_BEAM_TRIM = 4;
+const SEMIQUAVER_BEAM_Y_OFFSET = 0;
+
+function sharedActualSymbolKey(key) {
+  if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
+  if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
+  return key;
+}
+
+function sharedSymbolConfig(key) {
+  const symbols = SHARED_CONFIG.symbols || {};
+  return symbols[key] || symbols[sharedActualSymbolKey(key)] || {
+    fontSizeScale: 3.4,
+    xOffsetScale: 0,
+    yOffsetScale: 0,
+    widthScale: 1,
+    heightScale: 1,
+    opticalXOffset: 0,
+    opticalYOffset: 0,
+  };
+}
+
+function sharedSymbolForKey(key) {
+  return SHARED_SYMBOLS[sharedActualSymbolKey(key)] || "";
+}
+
+function calibratedPoint(symbolKey, x, y, lineGap = LINE_GAP, settingOverrides = {}) {
+  const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
+  return {
+    x: x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0),
+    y: y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0),
+    settings,
+  };
+}
+
+function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = LINE_GAP, settingOverrides = {} }) {
+  const glyph = sharedSymbolForKey(symbolKey);
+  if (!glyph) return null;
+  const { x: adjustedX, y: adjustedY, settings } = calibratedPoint(symbolKey, x, y, lineGap, settingOverrides);
+  const fontSize = lineGap * Number(settings.fontSizeScale || 3.4);
+
+  return (
+    <text
+      className="music-symbol"
+      x={adjustedX}
+      y={adjustedY}
+      fill={colour}
+      opacity={opacity}
+      fontSize={fontSize}
+      textAnchor="middle"
+      transform={`translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale || 1} ${settings.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`}
+      pointerEvents="none"
+    >
+      {glyph}
+    </text>
+  );
+}
+
+function rhythmInfo(rhythm) {
+  return RHYTHMS[rhythm] || {};
+}
+
+function noteSymbolKey(rhythm, beamed = false) {
+  if (rhythm === "semibreve") return "wholeNote";
+  if (rhythm === "minim" || rhythm === "dotted-minim") return "halfNoteStemUp";
+  if (beamed) return "noteheadBlackStemUp";
+  if (rhythm === "quaver" || rhythm === "dotted-quaver") return "eighthNoteStemUp";
+  if (rhythm === "semiquaver") return "sixteenthNoteStemUp";
+  return "quarterNoteStemUp";
+}
+
+function restSymbolKey(rhythm) {
+  if (rhythm === "semibreve-rest") return "wholeRest";
+  if (rhythm === "minim-rest" || rhythm === "dotted-minim-rest") return "halfRest";
+  if (rhythm === "quaver-rest" || rhythm === "dotted-quaver-rest") return "eighthRest";
+  if (rhythm === "semiquaver-rest") return "sixteenthRest";
+  return "quarterRest";
+}
+
+function needsDot(rhythm) {
+  return rhythm?.startsWith("dotted-");
+}
+
+function symbolY(systemTop) {
+  return systemTop + LINE_GAP * 2;
+}
+
 function Rest({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
-  const middleY = systemTop + LINE_GAP * 2;
-
-  if (rhythm === "semibreve-rest") {
-    return (
-      <g>
-        <line x1={x - 10} x2={x + 10} y1={systemTop + LINE_GAP} y2={systemTop + LINE_GAP} stroke={colour} strokeWidth="1.4" />
-        <rect x={x - 8} y={systemTop + LINE_GAP} width="16" height="5" fill={colour} />
-      </g>
-    );
-  }
-
-  if (rhythm === "minim-rest" || rhythm === "dotted-minim-rest") {
-    return (
-      <g>
-        <line x1={x - 10} x2={x + 10} y1={systemTop + LINE_GAP * 2} y2={systemTop + LINE_GAP * 2} stroke={colour} strokeWidth="1.4" />
-        <rect x={x - 8} y={systemTop + LINE_GAP * 2 - 5} width="16" height="5" fill={colour} />
-        {rhythm === "dotted-minim-rest" && <circle cx={x + 14} cy={systemTop + LINE_GAP * 2 - 4} r="2.1" fill={colour} />}
-      </g>
-    );
-  }
-
-  if (rhythm === "crotchet-rest" || rhythm === "dotted-crotchet-rest") {
-    const d = `M ${x} ${middleY - 14} L ${x + 4} ${middleY - 9} L ${x - 2} ${middleY - 3} L ${x + 4} ${middleY + 3} L ${x - 2} ${middleY + 11}`;
-    return (
-      <g>
-        <path d={d} fill="none" stroke={colour} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-        {rhythm === "dotted-crotchet-rest" && <circle cx={x + 10} cy={middleY - 4} r="2.1" fill={colour} />}
-      </g>
-    );
-  }
-
-  const topY = middleY - 6;
-  const bottomY = middleY + 10;
-
-  if (rhythm === "dotted-quaver-rest") {
-    return (
-      <g>
-        <Rest rhythm="quaver-rest" x={x} systemTop={systemTop} colour={colour} />
-        <circle cx={x + 8} cy={topY + 3} r="2" fill={colour} />
-      </g>
-    );
-  }
-
-  if (rhythm === "semiquaver-rest") {
-    return (
-      <g stroke={colour} strokeWidth="2" strokeLinecap="round" fill="none">
-        <line x1={x - 3} y1={topY} x2={x + 3} y2={topY} />
-        <line x1={x + 3} y1={topY} x2={x - 1} y2={bottomY} />
-        <circle cx={x - 5} cy={topY - 1} r="2" fill={colour} stroke="none" />
-        <line x1={x - 3} y1={topY + 8} x2={x + 1} y2={topY + 8} />
-        <circle cx={x - 4} cy={topY + 7} r="1.8" fill={colour} stroke="none" />
-      </g>
-    );
-  }
-
+  const y = symbolY(systemTop) - (rhythm === "crotchet-rest" || rhythm === "dotted-crotchet-rest" ? 5 : 0);
+  const specialRestGlyph = rhythm === "semibreve-rest" ? "\uE4F4" : rhythm === "minim-rest" || rhythm === "dotted-minim-rest" ? "\uE4F5" : "";
   return (
-    <g stroke={colour} strokeWidth="1.9" strokeLinecap="round" fill="none">
-      <line x1={x - 3} y1={topY} x2={x + 2} y2={topY} />
-      <line x1={x + 2} y1={topY} x2={x - 1} y2={bottomY} />
-      <circle cx={x - 4} cy={topY - 1} r="1.9" fill={colour} stroke="none" />
+    <g>
+      {specialRestGlyph ? (
+        <text className="music-symbol" x={x} y={y} fill={colour} fontSize={LINE_GAP * 3.4} textAnchor="middle" dominantBaseline="middle" pointerEvents="none">{specialRestGlyph}</text>
+      ) : (
+        <CalibratedSymbol symbolKey={restSymbolKey(rhythm)} x={x} y={y} colour={colour} />
+      )}
+      {needsDot(rhythm) && <CalibratedSymbol symbolKey="augmentationDotSpace" x={x + LINE_GAP * 1.1} y={y - LINE_GAP * 0.35} colour={colour} />}
     </g>
   );
 }
 
-function Flag({ stemX, stemEndY, beams = 1, colour = "currentColor" }) {
-  const primaryPath = `M ${stemX} ${stemEndY} C ${stemX + 12} ${stemEndY + 5}, ${stemX + 12} ${stemEndY + 14}, ${stemX + 3} ${stemEndY + 18}`;
-  const secondaryPath = `M ${stemX} ${stemEndY + 7} C ${stemX + 10} ${stemEndY + 10}, ${stemX + 10} ${stemEndY + 18}, ${stemX + 3} ${stemEndY + 22}`;
+function Note({ rhythm, x = 42, systemTop = 12, colour = "currentColor", beamed = false, stemEndY = null, dotXOffset = null }) {
+  const info = rhythmInfo(rhythm);
+  const y = symbolY(systemTop);
+  const symbolKey = noteSymbolKey(rhythm, beamed);
+  const symbolPoint = calibratedPoint(symbolKey, x, y);
+  const stemX = beamed ? symbolPoint.x + NOTE_RX + BEAMED_STEM_X_OFFSET : x + NOTE_RX;
+  const stemStartY = beamed ? symbolPoint.y + BEAMED_STEM_Y_OFFSET + BEAMED_STEM_DOWN_EXTENSION : y;
+  const dotY = y - LINE_GAP * 0.25;
+  const stemThickness = Math.max(1, LINE_GAP * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12));
 
   return (
     <g>
-      <path d={primaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />
-      {beams === 2 && <path d={secondaryPath} fill="none" stroke={colour} strokeWidth="1.7" strokeLinecap="round" />}
+      <CalibratedSymbol symbolKey={symbolKey} x={x} y={y} colour={colour} />
+      {beamed && info.stem && <line x1={stemX} x2={stemX} y1={stemStartY} y2={stemEndY} stroke={colour} strokeWidth={stemThickness} strokeLinecap="butt" />}
+      {info.dots === 1 && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + LINE_GAP * 1.3 + (dotXOffset ?? (rhythm === "dotted-quaver" ? 8 : 0))} y={dotY} colour={colour} />}
     </g>
   );
 }
 
-function Note({ rhythm, x = 42, systemTop = 12, colour = "currentColor" }) {
-  const info = RHYTHMS[rhythm];
-  const y = systemTop + LINE_GAP * 2;
-  const stemX = x + NOTE_RX;
-  const stemEndY = y - STEM_LENGTH;
-  const dotY = y - 5;
-
-  return (
-    <g>
-      <ellipse cx={x} cy={y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${y})`} fill={info.open ? "transparent" : colour} stroke={colour} strokeWidth="1.8" />
-      {info.stem && <line x1={stemX} x2={stemX} y1={y} y2={stemEndY} stroke={colour} strokeWidth="1.6" />}
-      {info.dots === 1 && <circle cx={x + 13} cy={dotY} r="2.2" fill={colour} />}
-      {info.flag && <Flag stemX={stemX} stemEndY={stemEndY} colour={colour} beams={info.beams ?? 1} />}
-    </g>
-  );
+function beamedStemX(rhythm, x, systemTop) {
+  const y = symbolY(systemTop);
+  return calibratedPoint(noteSymbolKey(rhythm, true), x, y).x + NOTE_RX + BEAMED_STEM_X_OFFSET;
 }
 
 function getBeamLineYAtX(x, start, end) {
@@ -300,20 +411,52 @@ function getBeamLineYAtX(x, start, end) {
   return start.y + ((x - start.x) / (end.x - start.x)) * (end.y - start.y);
 }
 
-function BeamedNotes({ rhythms, colour = "currentColor", scale = 1 }) {
-  const systemTop = 10;
+function beamPolygonPoints(x1, y1, x2, y2, thickness) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy) || 1;
+  const normalX = (-dy / length) * thickness;
+  const normalY = (dx / length) * thickness;
+  return `${x1},${y1} ${x2},${y2} ${x2 + normalX},${y2 + normalY} ${x1 + normalX},${y1 + normalY}`;
+}
+
+function Beam({ start, end, colour = "currentColor", yOffset = 0, widthScale = 1, thicknessScale = 1, trim = 0 }) {
+  const thickness = LINE_GAP * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42) * thicknessScale;
+  const midX = (start.x + end.x) / 2;
+  const halfWidth = Math.max(1, ((end.x - start.x) * widthScale) / 2 - trim / 2);
+  const x1 = midX - halfWidth;
+  const x2 = midX + halfWidth;
+  const startY = getBeamLineYAtX(x1, start, end) + yOffset;
+  const endY = getBeamLineYAtX(x2, start, end) + yOffset;
+
+  return (
+    <polygon
+      points={beamPolygonPoints(x1, startY, x2, endY, thickness)}
+      fill={colour}
+      pointerEvents="none"
+    />
+  );
+}
+
+function BeamedNotes({ rhythms, colour = "currentColor", scale = 1, beamTrimExtra = 0, showTripletNumber = false }) {
+  const systemTop = 12;
   const isDottedPair = rhythms.length === 2 && rhythms[0] === "dotted-quaver" && rhythms[1] === "semiquaver";
-  const spacing = isDottedPair ? 26 : 18;
-  const positions = rhythms.map((_, index) => 20 + index * spacing);
-  const stemEndY = systemTop - 12;
-  const start = { x: positions[0] + NOTE_RX, y: stemEndY };
-  const end = { x: positions[positions.length - 1] + NOTE_RX, y: stemEndY };
+  const isScotchSnap = rhythms.length === 2 && rhythms[0] === "semiquaver" && rhythms[1] === "dotted-quaver";
+  const spacing = isDottedPair ? 30 : rhythms.length >= 4 ? 24 : 26;
+  const positions = rhythms.map((_, index) => 22 + index * spacing);
+  const stemXs = positions.map((x, index) => beamedStemX(rhythms[index], x, systemTop));
+  const hasSemi = rhythms.some((rhythm) => rhythmInfo(rhythm).beams === 2);
+  const beamY = systemTop + LINE_GAP * 0.1 + BEAMED_STEM_Y_OFFSET + (hasSemi ? SEMIQUAVER_BEAM_Y_OFFSET : 0);
+  const start = { x: stemXs[0], y: beamY };
+  const end = { x: stemXs[stemXs.length - 1], y: beamY - LINE_GAP * 0.08 * Math.max(0, rhythms.length - 2) };
+  const primaryBeamConfig = sharedSymbolConfig("quaverBeam");
+  const secondBeamConfig = sharedSymbolConfig("semiquaverBeam");
   const secondarySegments = [];
   let segmentStart = null;
 
   rhythms.forEach((rhythm, index) => {
-    const isSemi = RHYTHMS[rhythm].beams === 2;
-    const nextIsSemi = rhythms[index + 1] && RHYTHMS[rhythms[index + 1]].beams === 2;
+    const isSemi = rhythmInfo(rhythm).beams === 2;
+    const nextIsSemi = rhythms[index + 1] && rhythmInfo(rhythms[index + 1]).beams === 2;
     if (isSemi && segmentStart === null) segmentStart = index;
     if (segmentStart !== null && (!nextIsSemi || index === rhythms.length - 1)) {
       secondarySegments.push({ startIndex: segmentStart, endIndex: index, isHook: index === segmentStart });
@@ -322,42 +465,105 @@ function BeamedNotes({ rhythms, colour = "currentColor", scale = 1 }) {
   });
 
   return (
-    <svg viewBox="0 0 112 92" className="h-28 w-40 overflow-visible">
-      <g transform={`translate(56 78) scale(${scale}) translate(-50 -55)`}>
+    <svg viewBox="0 0 118 92" className="h-28 w-40 overflow-visible">
+      <g transform={`translate(58 72) scale(${scale}) translate(-54 -50)`}>
         {rhythms.map((rhythm, index) => {
           const x = positions[index];
-          const y = systemTop + LINE_GAP * 2;
-          const stemX = x + NOTE_RX;
-          const info = RHYTHMS[rhythm];
-          return (
-            <g key={`${rhythm}-${index}`}>
-              <ellipse cx={x} cy={y} rx={NOTE_RX} ry={NOTE_RY} transform={`rotate(-18 ${x} ${y})`} fill={colour} stroke={colour} strokeWidth="1.8" />
-              <line x1={stemX} x2={stemX} y1={y} y2={getBeamLineYAtX(stemX, start, end)} stroke={colour} strokeWidth="1.6" />
-              {info.dots === 1 && <circle cx={x + 13} cy={y - 5} r="2.2" fill={colour} />}
-            </g>
-          );
+          const stemX = stemXs[index];
+          const stemEndY = getBeamLineYAtX(stemX, start, end);
+          const dotXOffset = rhythm === "dotted-quaver"
+              ? isDottedPair
+                ? 3
+                : isScotchSnap
+                  ? 2
+                  : null
+              : null;
+          return <Note key={`${rhythm}-${index}`} rhythm={rhythm} x={x} systemTop={systemTop} colour={colour} beamed stemEndY={stemEndY} dotXOffset={dotXOffset} />;
         })}
 
-        <line x1={start.x - 1} y1={start.y} x2={end.x + 1} y2={end.y} stroke={colour} strokeWidth="4" />
+        <Beam start={start} end={end} colour={colour} widthScale={Number(primaryBeamConfig.widthScale || 1)} thicknessScale={Number(primaryBeamConfig.heightScale || 1)} trim={(hasSemi ? SEMIQUAVER_BEAM_TRIM - (isDottedPair || isScotchSnap ? 1 : 0) : 0) + beamTrimExtra} />
+        {showTripletNumber ? (
+          <text
+            x={(stemXs[0] + stemXs[stemXs.length - 1]) / 2}
+            y={beamY - 8}
+            textAnchor="middle"
+            fontFamily="serif"
+            fontWeight="900"
+            fontSize="18"
+            fill={colour}
+          >
+            3
+          </text>
+        ) : null}
 
         {secondarySegments.map((segment, index) => {
-          const x1 = positions[segment.startIndex] + NOTE_RX;
-          const y1 = stemEndY + 7;
-          const hookLength = isDottedPair ? 9 : 14;
-          const x2 = segment.isHook ? x1 + (segment.startIndex > 0 ? -hookLength : 17) : positions[segment.endIndex] + NOTE_RX;
-          return <line key={index} x1={x1} y1={y1} x2={x2} y2={y1} stroke={colour} strokeWidth="4" />;
+          const segmentStartX = stemXs[segment.startIndex];
+          const hookLength = isDottedPair ? 14 : 14;
+          const segmentEndX = segment.isHook
+            ? segmentStartX + (segment.startIndex > 0 ? -hookLength : hookLength)
+            : stemXs[segment.endIndex];
+          const rawSecondStartX = segmentStartX + (isDottedPair ? 4 : 0) - (isScotchSnap ? 1 : 0);
+          const rawSecondEndX = segmentEndX - (isScotchSnap ? 1 : 0);
+          const secondBeamShiftX = isDottedPair ? -1 : 0;
+          const secondBeamWidthReduction = isDottedPair ? 3 : 0;
+          const secondBeamLeftX = Math.min(rawSecondStartX, rawSecondEndX) + secondBeamShiftX + secondBeamWidthReduction / 2;
+          const secondBeamRightX = Math.max(rawSecondStartX, rawSecondEndX) + secondBeamShiftX - secondBeamWidthReduction / 2;
+          const secondStart = {
+            x: secondBeamLeftX,
+            y: getBeamLineYAtX(secondBeamLeftX, start, end) + LINE_GAP * 0.58,
+          };
+          const secondEnd = {
+            x: secondBeamRightX,
+            y: getBeamLineYAtX(secondBeamRightX, start, end) + LINE_GAP * 0.58,
+          };
+          return (
+            <Beam
+              key={index}
+              start={secondStart}
+              end={secondEnd}
+              colour={colour}
+              widthScale={Number(secondBeamConfig.widthScale || 1)}
+              thicknessScale={Number(secondBeamConfig.heightScale || 1)}
+              trim={SEMIQUAVER_BEAM_TRIM}
+            />
+          );
         })}
       </g>
     </svg>
   );
 }
 
+function TripletNotes({ rhythms, colour = "currentColor", scale = 1 }) {
+  const systemTop = 12;
+  const isCrotchetTriplet = rhythms.every((rhythm) => rhythm === "crotchet");
+  const isQuaverTriplet = rhythms.every((rhythm) => rhythm === "quaver");
+
+  if (!isCrotchetTriplet) {
+    return <BeamedNotes rhythms={rhythms} colour={colour} scale={scale} beamTrimExtra={isQuaverTriplet ? 2 : -1} showTripletNumber={isQuaverTriplet} />;
+  }
+
+  return (
+    <svg viewBox="0 0 150 92" className="h-28 w-44 overflow-visible">
+      <g transform={`translate(75 72) scale(${scale}) translate(-75 -50)`}>
+        {[42, 75, 108].map((x, index) => (
+          <Note key={index} rhythm="crotchet" x={x} systemTop={systemTop} colour={colour} />
+        ))}
+          <g stroke={colour} fill={colour} transform="translate(80.5 -8) scale(0.85) translate(-75 -8)">
+          <g stroke={colour} strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M 32 16 L 32 8 L 63 8" />
+            <path d="M 87 8 L 118 8 L 118 16" />
+          </g>
+          <text x="75" y="14" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="24">3</text>
+        </g>
+      </g>
+    </svg>
+  );
+}
+
 function rhythmVisualOffset(item) {
-  if (item.displayType === "beamed") return 0;
-  if (item.rhythm === "semibreve") return -2;
-  if (item.rhythm === "semibreve-rest") return -16;
-  if (item.rhythm === "minim-rest" || item.rhythm === "dotted-minim-rest") return -10;
-  if (item.rhythm?.includes("rest")) return -6;
+  if (item.displayType === "beamed" || item.displayType === "triplet") return 0;
+  if (item.rhythm === "semibreve-rest") return -10;
+  if (item.rhythm === "minim-rest" || item.rhythm === "dotted-minim-rest") return -4;
   return 0;
 }
 
@@ -372,9 +578,17 @@ function RhythmGlyph({ item, colour = "currentColor", scale = 1 }) {
     );
   }
 
+  if (item.displayType === "triplet") {
+    return (
+      <div style={{ transform: `translateY(${yOffset}px)` }}>
+        <TripletNotes rhythms={item.rhythms} colour={colour} scale={scale} />
+      </div>
+    );
+  }
+
   return (
     <svg viewBox="0 0 90 90" className="h-28 w-32 overflow-visible" style={{ transform: `translateY(${yOffset}px)` }}>
-      <g transform={`translate(45 72) scale(${scale}) translate(-42 -52)`}>
+      <g transform={`translate(45 70) scale(${scale}) translate(-42 -50)`}>
         {item.displayType === "rest" ? <Rest rhythm={item.rhythm} x={42} systemTop={12} colour={colour} /> : <Note rhythm={item.rhythm} x={42} systemTop={12} colour={colour} />}
       </g>
     </svg>
@@ -395,46 +609,11 @@ function medalNameForStreak(streak) {
   return null;
 }
 
-const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
-
-function StatCard({ label, value, footer, progress = null, medal = null, variant = "default" }) {
-  const safeProgress = progress == null ? null : clamp(progress, 0, 100);
-  const fillHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
-  const fillColour = safeProgress == null ? "transparent" : safeProgress < 50 ? "rgba(220, 38, 38, 0.38)" : safeProgress < 70 ? "rgba(255, 120, 0, 0.42)" : "rgba(22, 163, 74, 0.38)";
-  const isStreak = variant === "streak";
-
-  return (
-    <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>
-      {safeProgress !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fillHeight}%`, background: fillColour }} />}
-      <div className="relative z-10 text-center">
-        <div className="text-xs uppercase tracking-wide text-stone-500">{label}</div>
-        <div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>
-        {footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}
-      </div>
-      {isStreak && (
-        <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal?.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>
-          {medal?.emoji ?? "🥉"}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TapIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]">
-      <path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" />
-    </svg>
-  );
-}
-
 function FeedbackBanner({ feedback, fading = false, warning = "" }) {
   if (!feedback && warning) {
     return (
       <div className="relative flex w-full items-center justify-center text-center">
-        <div className="flex w-[520px] flex-col items-center justify-center whitespace-nowrap text-lg font-bold text-amber-700">{warning}</div>
+        <div className="rounded-2xl bg-amber-100 px-5 py-3 text-base font-bold text-amber-800 shadow-sm">{warning}</div>
       </div>
     );
   }
@@ -443,29 +622,71 @@ function FeedbackBanner({ feedback, fading = false, warning = "" }) {
 
   return (
     <div className="relative flex w-full items-center justify-center text-center">
-      <div className={`flex w-[460px] flex-col items-center justify-center whitespace-nowrap text-xl font-bold ${feedback.correct ? "text-green-600" : "text-red-600"}`} style={{ animation: fading ? "feedbackFadeOut .28s ease-out forwards" : feedback.correct ? "correctFade .55s ease-out forwards" : "incorrectDropShake .55s ease-out forwards" }}>
-        <span className="translate-y-[4px]">{feedback.correct ? "Correct" : "Incorrect"}</span>
-        {!feedback.correct && <span className="mt-2 text-sm font-semibold text-black"><span className="inline-flex items-center gap-1"><TapIcon />Click or tap anywhere to continue</span></span>}
+      <div
+        className={`flex h-10 min-w-[92px] items-center justify-center rounded-xl border px-4 text-[18px] font-black text-white ${
+          feedback.correct ? "border-[#16a34a] bg-[#16a34a]" : "border-[#dc2626] bg-[#dc2626]"
+        }`}
+        style={{
+          animation: fading
+            ? "feedbackFadeOut .28s ease-out forwards"
+            : feedback.correct
+              ? "correctFade .55s ease-out forwards"
+              : "incorrectDropShake .55s ease-out forwards",
+        }}
+      >
+        {feedback.correct ? "Correct" : "Incorrect"}
       </div>
     </div>
   );
 }
 
-function AppIcon() {
+function NoteLegendSymbol({ rhythm }) {
   return (
-    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
-      <img src="https://mrtennant-music.github.io/musicliteracy/rhythm-sums-icon.svg" alt="" aria-hidden="true" className="block h-full w-full object-contain" />
+    <svg viewBox="0 0 70 70" className="h-11 w-16 overflow-visible">
+      <g transform="translate(0 11) scale(0.94)">
+        <Note rhythm={rhythm} x={32} systemTop={8} />
+      </g>
+    </svg>
+  );
+}
+
+function RhythmGuide() {
+  const legend = [
+    { rhythm: "semibreve", rest: "semibreve-rest", label: "4" },
+    { rhythm: "dotted-minim", rest: null, label: "3" },
+    { rhythm: "minim", rest: "minim-rest", label: "2" },
+    { rhythm: "dotted-crotchet", rest: "dotted-crotchet-rest", label: "1.5" },
+    { rhythm: "crotchet", rest: "crotchet-rest", label: "1" },
+    { rhythm: "quaver", rest: "quaver-rest", label: "0.5" },
+    { rhythm: "semiquaver", rest: null, label: "0.25" },
+  ];
+
+  return (
+    <div className="mb-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+      <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-7">
+        {legend.map((item) => (
+          <div key={item.rhythm} className="flex flex-col items-center justify-center rounded-lg bg-white px-2 py-2 text-center">
+            <div className="flex items-center justify-center">
+              <NoteLegendSymbol rhythm={item.rhythm} />
+              {item.rest && (
+                <svg viewBox="0 0 70 70" className="h-11 w-10 overflow-visible">
+                  <g transform="translate(0 11) scale(0.94)">
+                    <Rest rhythm={item.rest} x={34} systemTop={8} />
+                  </g>
+                </svg>
+              )}
+            </div>
+            <span className="font-semibold">{item.label} beats</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function ToggleSwitch({ active }) {
-  return <span className={`flex h-6 w-11 items-center rounded-full p-1 transition ${active ? "bg-green-600" : "bg-stone-400"}`}><span className={`h-4 w-4 rounded-full bg-white transition ${active ? "translate-x-5" : "translate-x-0"}`} /></span>;
-}
-
 function CustomiseGlyphSlot({ children }) {
   return (
-    <span className="pointer-events-none absolute left-0 top-0 flex h-full w-[58px] items-center justify-center">
+    <span className="flex h-14 w-14 items-center justify-center overflow-visible">
       {children}
     </span>
   );
@@ -474,8 +695,8 @@ function CustomiseGlyphSlot({ children }) {
 function RhythmMenuGlyph({ item }) {
   return (
     <CustomiseGlyphSlot>
-      <svg viewBox="0 0 90 80" className="h-[55px] w-[70px] overflow-visible">
-        <g transform="translate(0 16)">
+      <svg viewBox="0 0 90 80" className="h-[56px] w-[66px] overflow-visible text-stone-800">
+        <g transform="translate(2 15) scale(1.08)">
           <Note rhythm={item.id} x={42} systemTop={12} />
         </g>
       </svg>
@@ -486,8 +707,8 @@ function RhythmMenuGlyph({ item }) {
 function RestMenuGlyph() {
   return (
     <CustomiseGlyphSlot>
-      <svg viewBox="0 0 90 80" className="h-[55px] w-[70px] overflow-visible">
-        <g transform="translate(2 8)">
+      <svg viewBox="0 0 90 80" className="h-[56px] w-[66px] overflow-visible text-stone-800">
+        <g transform="translate(3 13) scale(1.08)">
           <Rest rhythm="crotchet-rest" x={42} systemTop={12} />
         </g>
       </svg>
@@ -495,11 +716,11 @@ function RestMenuGlyph() {
   );
 }
 
-function BeamedMenuGlyph() {
+function BeamedMenuGlyph({ rhythms = ["quaver", "quaver"], isTriplet = false }) {
   return (
     <CustomiseGlyphSlot>
-      <div className="flex h-[42px] w-[54px] translate-x-[10px] -translate-y-[17px] items-center justify-center overflow-visible">
-        <BeamedNotes rhythms={["quaver", "quaver"]} scale={0.48} />
+      <div className="flex h-[48px] w-[62px] translate-x-[14px] -translate-y-[11px] items-center justify-center overflow-visible text-stone-800">
+        {isTriplet ? <TripletNotes rhythms={rhythms} scale={0.42} /> : <BeamedNotes rhythms={rhythms} scale={0.5} />}
       </div>
     </CustomiseGlyphSlot>
   );
@@ -508,33 +729,52 @@ function BeamedMenuGlyph() {
 function OperationMenuGlyph({ operator }) {
   return (
     <CustomiseGlyphSlot>
-      <span className="flex h-full w-full -translate-y-[3px] items-center justify-center text-2xl font-bold leading-none">{operator}</span>
+      <span className="flex h-full w-full translate-x-[10px] -translate-y-[2px] items-center justify-center text-[32px] font-bold leading-none text-stone-900">{operator}</span>
     </CustomiseGlyphSlot>
   );
 }
 
-function CustomiseRow({ label, active, disabled = false, onClick, glyph }) {
+function GlyphToggleButton({ label, active, disabled = false, onClick, glyph, showLabel = false, compact = false }) {
+  const padding = showLabel ? "7px 46px 7px 6px" : compact ? "7px 32px 7px 2px" : "7px 48px 7px 6px";
+  const glyphWidth = showLabel ? "w-[34px]" : compact ? "w-[26px]" : "w-[42px]";
+  const trackScale = compact ? 0.72 : 0.84;
+  const trackRight = compact ? "4px" : "8px";
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`relative mb-2.5 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-xl border border-stone-200 bg-stone-50 py-[6px] pl-[64px] pr-[14px] text-left ${disabled ? "opacity-45" : ""}`}
+      className="hub-toggle-row"
+      style={{ marginBottom: 0, minHeight: "48px", padding, overflow: "visible", position: "relative", justifyContent: "flex-start" }}
+      aria-label={`Toggle ${label}`}
+      title={label}
     >
-      {glyph}
-      <span className="text-sm font-semibold leading-tight">{label}</span>
-      <ToggleSwitch active={active} />
+      <span className={`flex h-full ${glyphWidth} items-center justify-center overflow-visible`}>
+        {glyph}
+      </span>
+      {showLabel && <span className="ml-1 min-w-0 flex-1 truncate text-left text-sm font-semibold leading-none text-stone-900">{label}</span>}
+      <span className={`hub-toggle-track shrink-0 ${active ? "is-on" : ""}`} style={{ position: "absolute", right: trackRight, top: "50%", transform: `translateY(-50%) scale(${trackScale})`, transformOrigin: "center" }}>
+        <span className="hub-toggle-thumb" />
+      </span>
     </button>
   );
 }
 
-function MenuRows({ settings, updateSettings, resetScore, newQuestion }) {
-  const canIncludeBeamedGroups = settings.enabledItems.includes("quaver") || settings.enabledItems.includes("semiquaver") || settings.enabledItems.includes("dotted-quaver");
+function MenuRows({ activeLevel, settings, updateSettings, newQuestion, showRhythmGuide, setShowRhythmGuide }) {
+  const level = LEVELS[activeLevel] || LEVELS.N3;
+  const levelRhythms = BASE_RHYTHMS.filter((item) => level.rhythmIds.includes(item.id));
+  const levelGroups = BEAMED_RHYTHMS.filter((item) => level.beamedIds.includes(item.id));
 
   function commit(next) {
-    const clean = { ...next };
-    const canBeam = clean.enabledItems.includes("quaver") || clean.enabledItems.includes("semiquaver") || clean.enabledItems.includes("dotted-quaver");
-    if (!canBeam) clean.includeBeamedGroups = false;
+    const includeBeamedGroups = level.beamedIds.length > 0 && next.includeBeamedGroups;
+    const enabledBeamedItems = includeBeamedGroups ? level.beamedIds : [];
+    const clean = {
+      ...next,
+      enabledItems: next.enabledItems.filter((id) => level.rhythmIds.includes(id)),
+      enabledBeamedItems,
+      includeRests: level.includeRests && next.includeRests,
+      includeBeamedGroups,
+    };
     updateSettings(clean);
     setTimeout(() => newQuestion(clean), 0);
   }
@@ -554,46 +794,69 @@ function MenuRows({ settings, updateSettings, resetScore, newQuestion }) {
   }
 
   return (
-    <>
-      <h3 className="mb-2 text-sm font-bold text-stone-700">Rhythms</h3>
-      {BASE_RHYTHMS.map((item) => (
-        <CustomiseRow
-          key={item.id}
-          label={item.label}
-          active={settings.enabledItems.includes(item.id)}
-          onClick={() => toggleItem(item.id)}
-          glyph={<RhythmMenuGlyph item={item} />}
-        />
-      ))}
+    <div style={{ width: "min(360px, calc(100vw - 4.5rem))" }}>
+      <window.MLH.MenuSubheading>Help</window.MLH.MenuSubheading>
+      <window.MLH.MenuToggleRow glyph={<span className="text-[36px] leading-none">♩</span>} label="Show Rhythm Guide" checked={showRhythmGuide} onChange={() => setShowRhythmGuide((value) => !value)} />
 
-      <h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Options</h3>
-      <CustomiseRow
-        label="Rests"
-        active={settings.includeRests}
-        onClick={() => commit({ ...settings, includeRests: !settings.includeRests })}
-        glyph={<RestMenuGlyph />}
-      />
-      <CustomiseRow
-        label="Beamed Groups"
-        active={settings.includeBeamedGroups && canIncludeBeamedGroups}
-        disabled={!canIncludeBeamedGroups}
-        onClick={() => commit({ ...settings, includeBeamedGroups: !settings.includeBeamedGroups })}
-        glyph={<BeamedMenuGlyph />}
-      />
+      <window.MLH.MenuSubheading>Operations</window.MLH.MenuSubheading>
+      <div className="grid grid-cols-4 gap-2">
+        {OPERATORS.map((operator) => (
+          <GlyphToggleButton
+            key={operator}
+            label={OPERATOR_LABELS[operator]}
+            active={settings.enabledOperators.includes(operator)}
+            onClick={() => toggleOperator(operator)}
+            glyph={<OperationMenuGlyph operator={operator} />}
+            compact
+          />
+        ))}
+      </div>
 
-      <h3 className="mb-2 mt-4 text-sm font-bold text-stone-700">Operations</h3>
-      {OPERATORS.map((operator) => (
-        <CustomiseRow
-          key={operator}
-          label={OPERATOR_LABELS[operator]}
-          active={settings.enabledOperators.includes(operator)}
-          onClick={() => toggleOperator(operator)}
-          glyph={<OperationMenuGlyph operator={operator} />}
-        />
-      ))}
+      <window.MLH.MenuSubheading>Rhythms</window.MLH.MenuSubheading>
+          <div className="grid grid-cols-4 gap-2">
+            {levelRhythms.map((item) => (
+              <GlyphToggleButton
+                key={item.id}
+                label={item.label}
+                active={settings.enabledItems.includes(item.id)}
+                onClick={() => toggleItem(item.id)}
+                glyph={<RhythmMenuGlyph item={item} />}
+                compact
+              />
+            ))}
+          </div>
 
-      <button type="button" onClick={resetScore} className="mt-2.5 w-full rounded-xl border border-red-500 bg-white px-[18px] py-[10px] text-sm font-semibold text-red-600 hover:bg-red-50">↺ Reset score</button>
-    </>
+      {(levelGroups.length > 0 || level.includeRests) && (
+        <>
+          <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
+          <div className="grid grid-cols-2 gap-2">
+            {levelGroups.length > 0 && (
+              <div className={level.includeRests ? "" : "col-span-2"}>
+                <GlyphToggleButton
+                  label="Groups"
+                  active={settings.includeBeamedGroups}
+                  onClick={() => commit({ ...settings, includeBeamedGroups: !settings.includeBeamedGroups })}
+                  glyph={<BeamedMenuGlyph rhythms={["quaver", "quaver"]} />}
+                  showLabel
+                />
+              </div>
+            )}
+            {level.includeRests && (
+              <div className={levelGroups.length > 0 ? "" : "col-span-2"}>
+              <GlyphToggleButton
+                label="Rests"
+                active={settings.includeRests}
+                onClick={() => commit({ ...settings, includeRests: !settings.includeRests })}
+                glyph={<RestMenuGlyph />}
+                showLabel
+              />
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+    </div>
   );
 }
 
@@ -613,11 +876,16 @@ const useClickOutside = window.MLH.useClickOutside;
 function RhythmSumsGoldenApp() {
   useInjectedStyles();
 
-  const [settings, setSettings] = useState(() => loadSettings());
-  const [question, setQuestion] = useState(() => makeQuestion(loadSettings()));
+  const initialLevel = initialLevelFromUrl();
+  const [activeLevel, setActiveLevel] = useState(initialLevel);
+  const [settings, setSettings] = useState(() => loadSettings(initialLevel));
+  const [question, setQuestion] = useState(() => makeQuestion(loadSettings(initialLevel)));
   const [questionVisible, setQuestionVisible] = useState(true);
+  const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [showRhythmGuide, setShowRhythmGuide] = useState(false);
   const [answerText, setAnswerText] = useState("");
+  const [answerFocused, setAnswerFocused] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [feedbackFading, setFeedbackFading] = useState(false);
   const [warning, setWarning] = useState("");
@@ -625,15 +893,23 @@ function RhythmSumsGoldenApp() {
   const [attempted, setAttempted] = useState(0);
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
+  const [confettiKey, setConfettiKey] = useState(0);
 
+  const levelRef = useRef(null);
   const customiseRef = useRef(null);
   const warningTimer = useRef(null);
   const nextTimer = useRef(null);
+  const fadeTimer = useRef(null);
 
-  useClickOutside([customiseRef], [() => customiseOpen && setCustomiseOpen(false)]);
+  useClickOutside(
+    [levelRef, customiseRef],
+    [
+      () => levelOpen && setLevelOpen(false),
+      () => customiseOpen && setCustomiseOpen(false),
+    ],
+  );
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const medal = getStreakMedal(streak);
   const hasAnswer = answerText.trim().length > 0;
 
   function updateSettings(nextSettings) {
@@ -641,10 +917,26 @@ function RhythmSumsGoldenApp() {
     setSettings(nextSettings);
   }
 
+  function applyLevel(levelKey) {
+    const nextSettings = settingsForLevel(levelKey, settings);
+    setActiveLevel(levelKey);
+    updateSettings(nextSettings);
+    setLevelOpen(false);
+    setCustomiseOpen(false);
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+    newQuestion(nextSettings);
+  }
+
   function resetTask(nextQuestion = question) {
     if (nextTimer.current) clearTimeout(nextTimer.current);
+    if (fadeTimer.current) clearTimeout(fadeTimer.current);
     setQuestion(nextQuestion);
     setAnswerText("");
+    setAnswerFocused(false);
     setFeedback(null);
     setFeedbackFading(false);
     setWarning("");
@@ -663,6 +955,7 @@ function RhythmSumsGoldenApp() {
     setAttempted(0);
     setStreak(0);
     setBestStreak(0);
+    setConfettiKey(0);
     newQuestion();
   }
 
@@ -679,6 +972,9 @@ function RhythmSumsGoldenApp() {
   }
 
   function scoreAnswer(ok) {
+    if (nextTimer.current) clearTimeout(nextTimer.current);
+    if (fadeTimer.current) clearTimeout(fadeTimer.current);
+
     const nextStreak = ok ? streak + 1 : 0;
     const earnedMedal = ok ? medalNameForStreak(nextStreak) : null;
     playFeedbackSound(ok, Boolean(earnedMedal), earnedMedal);
@@ -686,11 +982,12 @@ function RhythmSumsGoldenApp() {
     setCorrect((value) => value + (ok ? 1 : 0));
     setStreak(nextStreak);
     setBestStreak((value) => Math.max(value, nextStreak));
+    setFeedbackFading(false);
     setFeedback({ correct: ok });
+    if (earnedMedal) setConfettiKey((value) => value + 1);
 
     if (ok) {
-      setFeedbackFading(false);
-      setTimeout(() => setFeedbackFading(true), 1700);
+      fadeTimer.current = setTimeout(() => setFeedbackFading(true), 1700);
       nextTimer.current = setTimeout(() => newQuestion(), 2000);
     }
   }
@@ -702,105 +999,111 @@ function RhythmSumsGoldenApp() {
   }
 
   function fadeToNextQuestion() {
-    if (!feedback || feedback.correct || feedbackFading) return;
+    if (!feedback || feedbackFading) return;
+    if (nextTimer.current) clearTimeout(nextTimer.current);
+    if (fadeTimer.current) clearTimeout(fadeTimer.current);
     setFeedbackFading(true);
-    setTimeout(() => newQuestion(), 280);
+    fadeTimer.current = setTimeout(() => newQuestion(), 280);
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 px-4 pb-4 pt-1 text-stone-950 md:px-8 md:pb-8 md:pt-2">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-5 rounded-2xl border border-stone-200 bg-white px-5 py-3 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <AppIcon />
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Rhythm Sums</h1>
-                <p className="mt-0.5 max-w-2xl whitespace-normal break-words text-[clamp(0.72rem,1.2vw,1rem)] leading-tight text-stone-600 xl:whitespace-nowrap">Solve rhythm value sums.</p>
-              </div>
-            </div>
+    <div className={window.MLH.shell.pageShellClass}>
+      <window.MLH.AppHeader icon={ASSET.appIcon} title="Rhythm Sums" subtitle="Solve rhythm value sums.">
+        <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} />
+      </window.MLH.AppHeader>
 
-            <div className="flex w-full flex-wrap items-stretch justify-start gap-2 lg:ml-auto lg:w-auto lg:flex-nowrap lg:justify-end">
-              <StatCard label="Score" value={`${correct}/${attempted}`} footer={`Accuracy: ${accuracy}%`} progress={accuracy} />
-              <div className={`relative flex overflow-visible rounded-xl border border-stone-200 shadow-sm ${medal?.bg ?? "bg-stone-50"}`}>
-                <StatCard variant="streak" label="Streak" value={streak} footer={`Best streak: ${bestStreak}`} medal={medal} />
-                <div className="relative z-0 flex min-h-[52px] min-w-[64px] shrink-0 flex-col items-start justify-center px-[14px] py-[10px] text-[13px] leading-[1.15] text-stone-700">
-                  <div>💎 <span className="text-cyan-500">30</span></div>
-                  <div className="mt-1">🥇 <span className="text-yellow-500">20</span></div>
-                  <div className="mt-1">🥈 <span className="text-slate-500">15</span></div>
-                  <div className="mt-1">🥉 <span className="text-amber-700">10</span></div>
+      <div className={window.MLH.shell.pageContentClass}>
+        <main className={`${window.MLH.shell.mainShellClass} flex flex-col pb-5 md:pb-6`} onPointerDownCapture={() => { if (feedback) fadeToNextQuestion(); }}>
+          <window.MLH.AppToolbar
+            left={
+              <div className="flex items-center gap-2">
+                <div className="hub-menu-anchor relative" ref={levelRef}>
+                  <window.MLH.LevelButton
+                    icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26.6px] w-[26.6px] object-contain" />}
+                    activeLevel={activeLevel}
+                    activeLabel={LEVELS[activeLevel].label}
+                    onClick={() => {
+                      setCustomiseOpen(false);
+                      setLevelOpen((value) => !value);
+                    }}
+                    dataMenuTrigger={true}
+                  />
+                  {levelOpen && (
+                    <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}>
+                      <window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS} />
+                    </window.MLH.MenuPanel>
+                  )}
+                </div>
+                <div className="hub-menu-anchor relative" ref={customiseRef}>
+                  <window.MLH.CustomiseButton
+                    icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26.6px] w-[26.6px] object-contain" />}
+                    onClick={() => {
+                      setLevelOpen(false);
+                      setCustomiseOpen((value) => !value);
+                    }}
+                    dataMenuTrigger={true}
+                  />
+                  {customiseOpen && (
+                    <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}>
+                      <MenuRows
+                        activeLevel={activeLevel}
+                        settings={settings}
+                        updateSettings={updateSettings}
+                        newQuestion={newQuestion}
+                        showRhythmGuide={showRhythmGuide}
+                        setShowRhythmGuide={setShowRhythmGuide}
+                      />
+                    </window.MLH.MenuPanel>
+                  )}
                 </div>
               </div>
+            }
+            feedback={<FeedbackBanner feedback={feedback} fading={feedbackFading} warning={warning} />}
+            right={<window.MLH.SkipButton onClick={() => newQuestion()} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />}
+          />
+
+          {showRhythmGuide && (
+            <div className="relative z-10 md:mx-3">
+              <RhythmGuide />
             </div>
-          </div>
-        </header>
-
-        <main className="relative -mt-[10px] min-h-[430px] overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-4 pt-[10px] shadow-sm md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]" onPointerDown={() => { if (feedback && !feedback.correct) fadeToNextQuestion(); }}>
-          <div className="relative z-20 mb-2.5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="relative" ref={customiseRef}>
-                <button type="button" onClick={() => setCustomiseOpen((value) => !value)} className="flex h-11 min-w-[124px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800">⚙️ <span>Customise</span></button>
-                {customiseOpen && (
-                  <div className="absolute left-0 z-[60] mt-2 max-h-[72vh] w-[min(430px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-stone-200 bg-white p-4 shadow-lg">
-                    <h2 className="mb-3 text-center text-base font-semibold">Customise</h2>
-                    <MenuRows settings={settings} updateSettings={updateSettings} resetScore={resetScore} newQuestion={newQuestion} />
-                  </div>
-                )}
-              </div>
-
-
-            </div>
-
-            <button type="button" onClick={() => newQuestion()} className="flex h-11 min-w-[132px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold text-stone-800"><span>Skip Question</span><span className="text-lg leading-none">→</span></button>
-
-            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center overflow-visible">
-              <FeedbackBanner feedback={feedback} fading={feedbackFading} warning={warning} />
-            </div>
-          </div>
+          )}
 
           <div className={`relative z-10 mt-4 transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
-            <div className="flex flex-wrap items-center justify-center gap-5 overflow-visible py-7 text-4xl font-semibold">
-                <RhythmSlot className="scale-[1.18]">
-                  <div className="flex flex-col items-center">
-                    <RhythmGlyph item={question.left} />
-                    {feedback && !feedback.correct && <span className="mt-1 text-sm font-semibold text-black">{formatBeat(question.left.beats)}</span>}
-                  </div>
-                </RhythmSlot>
-
-                <span className="min-w-[44px] text-center leading-none">{question.operator}</span>
-
-                <RhythmSlot className="scale-[1.18]">
-                  <div className="flex flex-col items-center">
-                    <RhythmGlyph item={question.right} />
-                    {feedback && !feedback.correct && <span className="mt-1 text-sm font-semibold text-black">{formatBeat(question.right.beats)}</span>}
-                  </div>
-                </RhythmSlot>
-
-                <span className="leading-none">=</span>
-
-                <div className="flex flex-col items-center self-center -mt-5">
-                  <label className="mb-1 -translate-y-[6px] text-sm font-semibold text-stone-700">Tap or click here to enter your answer:</label>
-                  <input value={answerText} onChange={handleInput} inputMode="decimal" disabled={Boolean(feedback)} className={`w-32 rounded-xl border bg-white px-3 py-2 text-center text-2xl font-semibold outline-none ${feedback ? feedback.correct ? "border-green-600 text-green-700" : "border-red-600 text-red-700" : "border-stone-300 text-stone-950"}`} />
+            <div className="flex flex-wrap items-center justify-center gap-5 overflow-visible py-7 text-4xl font-medium">
+              <RhythmSlot>
+                <div className="flex flex-col items-center">
+                  <RhythmGlyph item={question.left} scale={1.14} />
                 </div>
-              </div>
+              </RhythmSlot>
 
-              {feedback && !feedback.correct && (
-                <div className="mt-4 text-center text-sm">
-                  <span className="font-semibold text-red-700">Your answer: {answerText}</span>
-                  <span className="mx-2 text-stone-400">|</span>
-                  <span className="font-semibold text-green-700">Correct answer: {formatBeat(question.answer)}</span>
+              <span className="min-w-[44px] text-center leading-none">{question.operator}</span>
+
+              <RhythmSlot>
+                <div className="flex flex-col items-center">
+                  <RhythmGlyph item={question.right} scale={1.14} />
                 </div>
-              )}
+              </RhythmSlot>
             </div>
+          </div>
 
-          <div className="relative z-10 mt-4 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3">
-            <div className="flex flex-wrap items-center justify-between gap-3 text-stone-900">
-              <div>
-                <p className="text-base font-semibold leading-tight">{question.prompt}</p>
-              </div>
-              <div className="flex gap-2">
-                <button type="button" disabled={Boolean(feedback) || !answerText} onClick={() => { setAnswerText(""); setWarning(""); }} className="hidden"></button>
-                <button type="button" disabled={Boolean(feedback) || !hasAnswer} onClick={confirmAnswer} className="rounded-xl bg-green-600 px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60">Confirm</button>
+          <div className="relative z-10 mt-auto rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3">
+            <div className="flex flex-col gap-3 text-stone-900 md:flex-row md:items-center md:justify-between">
+              <p className="text-base font-semibold leading-tight">{question.prompt}</p>
+              <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+                {feedback && !feedback.correct && <span className="min-w-[2.4rem] text-right text-lg font-semibold text-green-700">{formatBeat(question.answer)}</span>}
+                <input
+                  value={answerText}
+                  onChange={handleInput}
+                  onFocus={() => setAnswerFocused(true)}
+                  onBlur={() => {
+                    if (!answerText.trim()) setAnswerFocused(false);
+                  }}
+                  inputMode="decimal"
+                  disabled={Boolean(feedback)}
+                  placeholder={answerFocused ? "" : "Type answer"}
+                  className={`h-11 w-[116px] rounded-xl border bg-white px-3 text-center text-base font-normal outline-none transition placeholder:text-sm placeholder:font-normal placeholder:text-stone-500 focus:ring-2 focus:ring-stone-300 ${feedback ? feedback.correct ? "border-green-600 text-green-700" : "border-red-600 text-red-700" : "border-stone-300 text-stone-950"}`}
+                />
+                <window.MLH.ConfirmButton onClick={confirmAnswer} disabled={Boolean(feedback) || !hasAnswer}>Confirm</window.MLH.ConfirmButton>
               </div>
             </div>
           </div>
@@ -812,6 +1115,6 @@ function RhythmSumsGoldenApp() {
 
 ReactDOM.createRoot(document.getElementById("root")).render(<RhythmSumsGoldenApp />);
   </script>
-<script src="./footer.js?v=1.3"></script>
+<script src="./footer.js?v=20260629"></script>
 </body>
 </html>
