@@ -39,8 +39,8 @@
     };
 
     const LEVELS = {
-      N3: { label: "National 3", description: "These questions are based on repetition." },
-      N4: { label: "National 4", description: "These questions are based on sequences." },
+      N3: { label: "National 3", description: "These questions are based on stepwise melodic repetition." },
+      N4: { label: "National 4", description: "These questions are based on stepwise melodic sequences." },
       N5: { label: "National 5", description: "These questions are based on repetition and sequences." },
       H: { label: "Higher", description: "These questions are based on repetition, sequences, and melodic variations." },
       AH: { label: "Advanced Higher", description: "These questions are based on more challenging melodic variations." },
@@ -67,12 +67,15 @@
       { id: "6/8", top: 6, bottom: 8, beats: 3 },
     ];
     const RHYTHMS = {
+      semiquaver: { beats: 0.25, spacing: 0.62, label: "semiquaver" },
       quaver: { beats: 0.5, spacing: 0.95, label: "quaver" },
       crotchet: { beats: 1, spacing: 1.35, label: "crotchet" },
       dottedCrotchet: { beats: 1.5, spacing: 1.75, label: "dotted crotchet" },
       minim: { beats: 2, spacing: 2.15, label: "minim" },
       dottedMinim: { beats: 3, spacing: 2.75, label: "dotted minim" },
       semibreve: { beats: 4, spacing: 3.4, label: "semibreve" },
+      crotchetRest: { beats: 1, spacing: 1.15, label: "crotchet rest" },
+      quaverRest: { beats: 0.5, spacing: 0.82, label: "quaver rest" },
     };
     const BAR_PATTERNS = {
       "2/4": [
@@ -112,7 +115,46 @@
         ["crotchet", "quaver", "crotchet", "quaver"],
       ],
     };
+    const AH_BAR_PATTERNS = {
+      "2/4": [
+        ["quaver", "quaver", "quaver", "quaver"],
+        ["semiquaver", "semiquaver", "semiquaver", "semiquaver", "quaver", "quaver"],
+        ["quaver", "semiquaver", "semiquaver", "crotchet"],
+        ["crotchet", "quaver", "quaver"],
+        ["crotchetRest", "quaver", "quaver"],
+        ["quaverRest", "quaver", "crotchet"],
+      ],
+      "3/4": [
+        ["quaver", "quaver", "crotchet", "quaver", "quaver"],
+        ["crotchet", "semiquaver", "semiquaver", "semiquaver", "semiquaver", "crotchet"],
+        ["dottedCrotchet", "quaver", "crotchet"],
+        ["crotchet", "quaver", "quaver", "crotchet"],
+        ["crotchetRest", "quaver", "quaver", "crotchet"],
+        ["quaverRest", "quaver", "crotchet", "crotchet"],
+      ],
+      "4/4": [
+        ["quaver", "quaver", "crotchet", "quaver", "quaver", "crotchet"],
+        ["crotchet", "semiquaver", "semiquaver", "semiquaver", "semiquaver", "crotchet", "crotchet"],
+        ["dottedCrotchet", "quaver", "crotchet", "crotchet"],
+        ["crotchet", "quaver", "quaver", "crotchetRest", "crotchet"],
+        ["minim", "quaver", "quaver", "crotchet"],
+        ["quaverRest", "quaver", "crotchet", "minim"],
+      ],
+      "6/8": [
+        ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
+        ["dottedCrotchet", "quaver", "quaver", "quaver"],
+        ["quaver", "quaver", "quaver", "dottedCrotchet"],
+        ["crotchet", "quaver", "quaverRest", "quaver", "quaver"],
+      ],
+    };
     const NOTE_POOL = [
+      { letter: "C", octave: 3, step: -9, midi: 48 },
+      { letter: "D", octave: 3, step: -8, midi: 50 },
+      { letter: "E", octave: 3, step: -7, midi: 52 },
+      { letter: "F", octave: 3, step: -6, midi: 53 },
+      { letter: "G", octave: 3, step: -5, midi: 55 },
+      { letter: "A", octave: 3, step: -4, midi: 57 },
+      { letter: "B", octave: 3, step: -3, midi: 59 },
       { letter: "C", octave: 4, step: -2, midi: 60 },
       { letter: "D", octave: 4, step: -1, midi: 62 },
       { letter: "E", octave: 4, step: 0, midi: 64 },
@@ -140,13 +182,27 @@
     const isHigherLevel = (level) => level === "H" || level === "AH";
     const timeSignaturesForLevel = (level) => TIME_SIGNATURES.filter((signature) => signature.id !== "6/8" || isHigherLevel(level));
     const barPatternsForSignature = (signature) => BAR_PATTERNS[signature.id] ?? BAR_PATTERNS["4/4"];
+    const hasSemiquaverGroup = (pattern) => pattern.includes("semiquaver");
+    const isRestRhythm = (rhythm) => rhythm === "crotchetRest" || rhythm === "quaverRest";
+    const patternHasRest = (pattern) => pattern.some(isRestRhythm);
+    const barsHaveRest = (bars) => bars.some((bar) => bar.notes.some((note) => note.rest));
+    const ahBarPatternsForSignature = (signature, allowSemiquaverGroups = false) => {
+      const patterns = AH_BAR_PATTERNS[signature.id] ?? AH_BAR_PATTERNS["4/4"];
+      return allowSemiquaverGroups ? patterns : patterns.filter((pattern) => !hasSemiquaverGroup(pattern));
+    };
     const noteBaseIndex = (note) => NOTE_POOL.findIndex((item) => item.letter === note?.letter && item.octave === note?.octave);
+    const clefStepOffset = (clef) => clef === "bass" ? 12 : 0;
+    const displayStep = (note, clef = "treble") => (note?.step ?? 0) + clefStepOffset(clef);
+    const MIN_DISPLAY_STEP = -4;
+    const MAX_DISPLAY_STEP = 12;
     const yForStep = (step, top) => top + STAFF.gap * 4 - step * (STAFF.gap / 2);
     const stemDown = (step) => step > 4;
     const midiToFrequency = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
+    const LEGACY_NOTE_INDEX_OFFSET = 7;
     const noteByLetter = (letter, preferredIndex = 6) => {
+      const targetIndex = preferredIndex + LEGACY_NOTE_INDEX_OFFSET;
       const options = NOTE_POOL.map((note, index) => ({ ...note, index })).filter((note) => note.letter === letter);
-      return options.reduce((best, item) => Math.abs(item.index - preferredIndex) < Math.abs(best.index - preferredIndex) ? item : best, options[0]);
+      return options.reduce((best, item) => Math.abs(item.index - targetIndex) < Math.abs(best.index - targetIndex) ? item : best, options[0]);
     };
     const keyAccidentalForLetter = (key, letter) => {
       if (key?.id === "F" && letter === "B") return -1;
@@ -181,6 +237,22 @@
     }[signature.id] ?? "semibreve");
 
     function makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol) {
+      if (isRestRhythm(rhythm)) {
+        return {
+          id: `${barIndex}-${noteIndex}`,
+          rhythm,
+          beats: rhythmInfo(rhythm).beats,
+          beat,
+          barIndex,
+          noteIndex,
+          rest: true,
+          step: 4,
+          midi: 0,
+          letter: "R",
+          octave: 4,
+          writtenAccidental: null,
+        };
+      }
       const melodicAccidental = melodicAccidentalForLetter(key, base.letter);
       const chordAccidental = chordAccidentalForLetter(key, chordSymbol, base.letter);
       return {
@@ -257,6 +329,10 @@
     function noteSymbolKey(rhythm, down, beamed = false) {
       if (rhythm === "semibreve") return "wholeNote";
       if (rhythm === "minim" || rhythm === "dottedMinim") return down ? "halfNoteStemDown" : "halfNoteStemUp";
+      if (rhythm === "crotchetRest") return "quarterRest";
+      if (rhythm === "quaverRest") return "eighthRest";
+      if (rhythm === "semiquaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
+      if (rhythm === "semiquaver") return down ? "sixteenthNoteStemDown" : "sixteenthNoteStemUp";
       if (rhythm === "quaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
       if (rhythm === "quaver") return down ? "eighthNoteStemDown" : "eighthNoteStemUp";
       return down ? "quarterNoteStemDown" : "quarterNoteStemUp";
@@ -276,7 +352,46 @@
     }
 
     function noteAllowedForLevel(level, note) {
-      return level !== "N3" || (note.step >= 0 && note.step <= 8);
+      if (level === "N3" || level === "N4") return note.step >= 0 && note.step <= 8;
+      if (level === "N5") return note.step >= -2 && note.step <= 10;
+      return true;
+    }
+
+    function noteInClefRange(note, clef) {
+      const step = displayStep(note, clef);
+      return step >= MIN_DISPLAY_STEP && step <= MAX_DISPLAY_STEP;
+    }
+
+    function fitNoteToClefRange(note, clef, key) {
+      if (!note || note.rest || noteInClefRange(note, clef)) return note;
+      let index = noteBaseIndex(note);
+      if (index < 0) return note;
+      let fitted = NOTE_POOL[index];
+      let guard = 0;
+      while (displayStep(fitted, clef) > MAX_DISPLAY_STEP && NOTE_POOL[index - 7] && guard < 4) {
+        index -= 7;
+        fitted = NOTE_POOL[index];
+        guard += 1;
+      }
+      while (displayStep(fitted, clef) < MIN_DISPLAY_STEP && NOTE_POOL[index + 7] && guard < 8) {
+        index += 7;
+        fitted = NOTE_POOL[index];
+        guard += 1;
+      }
+      if (!noteInClefRange(fitted, clef)) {
+        const sameLetter = NOTE_POOL
+          .filter((candidate) => candidate.letter === note.letter && noteInClefRange(candidate, clef))
+          .sort((a, b) => Math.abs(displayStep(a, clef) - displayStep(note, clef)) - Math.abs(displayStep(b, clef) - displayStep(note, clef)));
+        fitted = sameLetter[0] ?? fitted;
+      }
+      return { ...note, ...fitted, writtenAccidental: melodicAccidentalForLetter(key, fitted.letter) };
+    }
+
+    function fitBarsToClefRange(bars, clef, key) {
+      bars.forEach((bar) => {
+        bar.notes = bar.notes.map((note) => fitNoteToClefRange(note, clef, key));
+      });
+      return bars;
     }
 
     function barCountForLevel(level) {
@@ -390,6 +505,12 @@
       const maxLeap = maxStepForLevel(level, mode);
 
       pattern.forEach((rhythm, noteIndex) => {
+        if (isRestRhythm(rhythm)) {
+          const rest = makeNote(null, rhythm, barIndex, noteIndex, beat, key, chordSymbol);
+          notes.push(rest);
+          beat += rhythmInfo(rhythm).beats;
+          return;
+        }
         const strongBeat = beat === 0 || beat === 2 || (beat === 1.5 && rhythmInfo(rhythm).beats >= 1);
         const preferLeap = false;
         let base = chooseNextNote({
@@ -440,34 +561,36 @@
 
     function targetOnlyMovesByStep(bars, targetBar) {
       const target = bars[targetBar];
-      if (!target?.notes?.length) return false;
-      for (let index = 1; index < target.notes.length; index += 1) {
-        if (Math.abs(target.notes[index].step - target.notes[index - 1].step) > 1) return false;
+      const notes = (target?.notes ?? []).filter((note) => !note.rest);
+      if (!notes.length) return false;
+      for (let index = 1; index < notes.length; index += 1) {
+        if (Math.abs(notes[index].step - notes[index - 1].step) > 1) return false;
       }
       return true;
     }
 
     function targetMovesWithinInterval(bars, targetBar, maximumInterval) {
       const target = bars[targetBar];
-      if (!target?.notes?.length) return false;
-      for (let index = 1; index < target.notes.length; index += 1) {
-        if (Math.abs(target.notes[index].step - target.notes[index - 1].step) > maximumInterval) return false;
+      const notes = (target?.notes ?? []).filter((note) => !note.rest);
+      if (!notes.length) return false;
+      for (let index = 1; index < notes.length; index += 1) {
+        if (Math.abs(notes[index].step - notes[index - 1].step) > maximumInterval) return false;
       }
       return true;
     }
 
     function melodyHasOctaveLeap(bars) {
-      const notes = bars.flatMap((bar) => bar.notes ?? []);
+      const notes = bars.flatMap((bar) => bar.notes ?? []).filter((note) => !note.rest);
       return notes.some((note, index) => index > 0 && Math.abs(note.step - notes[index - 1].step) >= 7);
     }
 
     function hasEnoughPitchVariety(bars, minimum = 3) {
-      const pitches = new Set(bars.flatMap((bar) => bar.notes ?? []).map((note) => `${note.letter}${note.octave}`));
+      const pitches = new Set(bars.flatMap((bar) => bar.notes ?? []).filter((note) => !note.rest).map((note) => `${note.letter}${note.octave}`));
       return pitches.size >= minimum;
     }
 
     function melodyNotes(bars) {
-      return bars.flatMap((bar) => bar.notes ?? []);
+      return bars.flatMap((bar) => bar.notes ?? []).filter((note) => !note.rest);
     }
 
     function dominantLetterForKey(key) {
@@ -476,8 +599,9 @@
 
     function levelMaximumInterval(level) {
       if (level === "N3") return 2;
+      if (level === "N4") return 1;
       if (isHigherLevel(level)) return 4;
-      if (level === "N4" || level === "N5") return 3;
+      if (level === "N5") return 3;
       return 3;
     }
 
@@ -505,8 +629,10 @@
       const maximum = levelMaximumInterval(level);
       return bars.some((bar, index) => {
         const nextBar = bars[index + 1];
-        if (!bar?.notes?.length || !nextBar?.notes?.length) return false;
-        return Math.abs(nextBar.notes[0].step - bar.notes.at(-1).step) > maximum;
+        const barNotes = (bar?.notes ?? []).filter((note) => !note.rest);
+        const nextNotes = (nextBar?.notes ?? []).filter((note) => !note.rest);
+        if (!barNotes.length || !nextNotes.length) return false;
+        return Math.abs(nextNotes[0].step - barNotes.at(-1).step) > maximum;
       });
     }
 
@@ -570,6 +696,7 @@
     function chordFitScore(key, bar, chordSymbol) {
       const chordLetters = key.chords[chordSymbol] ?? [];
       return (bar.notes ?? []).reduce((score, note) => {
+        if (note.rest) return score;
         const isChordTone = chordLetters.includes(note.letter);
         const weight = note.beat === 0 || note.beat === 2 ? 3 : 1;
         return score + (isChordTone ? weight : -weight);
@@ -591,7 +718,7 @@
       return bars.filter((bar) => bar.barIndex === targetBar - 1 && bar.notes?.length);
     }
 
-    function makeCompletionQuestion(level = "N5", attempt = 0) {
+    function makeCompletionQuestion(level = "N5", attempt = 0, allowDenseAhPatterns = false) {
       const activeBarCount = barCountForLevel(level);
       const timeSignature = randomItem(timeSignaturesForLevel(level));
       const majorKeys = KEYS.filter((key) => key.id !== "Am");
@@ -614,7 +741,7 @@
           bar = buildFinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars: activeBarCount, level });
           previousIndex = noteBaseIndex(bar.notes[0]);
         } else {
-          const availablePatterns = barPatternsForSignature(timeSignature);
+          const availablePatterns = level === "AH" ? ahBarPatternsForSignature(timeSignature, allowDenseAhPatterns) : barPatternsForSignature(timeSignature);
           const pattern = randomItem(availablePatterns);
           const built = buildNotesFromPattern({ key, chordSymbol, pattern, barIndex, previousIndex, level, mode });
           previousIndex = built.lastIndex;
@@ -657,39 +784,39 @@
       const targetMaximumInterval = isHigherLevel(level) && mode === "free" ? 1 : maxStepForLevel(level, mode);
 
       if ((level === "N3" || level === "N4" || level === "N5" || isHigherLevel(level)) && !targetMovesWithinInterval(bars, targetBar, targetMaximumInterval) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
       }
 
       if ((level === "N3" || level === "N4") && !hasEnoughPitchVariety(bars) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
       }
 
-      if ((level === "N5" || isHigherLevel(level)) && (bars[targetBar]?.notes?.length ?? 0) < 3 && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1);
+      if ((level === "N5" || isHigherLevel(level)) && ((bars[targetBar]?.notes ?? []).filter((note) => !note.rest).length) < 3 && attempt < 160) {
+        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
       }
 
       if (level === "N3" && melodyHasOctaveLeap(bars) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
       }
 
       if (level === "N4" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
       }
 
       if (level === "N5" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
       }
 
       if (isHigherLevel(level) && mode !== "free" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
       }
 
       if (isHigherLevel(level) && mode === "free" && targetHasAnySourcePattern(bars, targetBar) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
       }
 
       if (!melodyPassesQualityRules(question) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1);
+        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
       }
 
       return question;
@@ -705,16 +832,22 @@
     }
 
     function cloneBarsForOption(bars, optionId) {
-      return bars.map((bar) => ({
+      const totalBars = bars.length;
+      return bars.map((bar, barIndex) => ({
         ...bar,
+        barIndex,
+        totalBars,
         notes: bar.notes.map((note, noteIndex) => ({
           ...note,
-          id: `${optionId}-${bar.barIndex}-${noteIndex}`,
+          id: `${optionId}-${barIndex}-${noteIndex}`,
+          barIndex,
+          noteIndex,
         })),
       }));
     }
 
     function mutateNotePitch(note, key, direction = 0) {
+      if (note?.rest) return note;
       const currentIndex = noteBaseIndex(note);
       const offsets = direction ? [direction] : shuffleItems([-1, 1]);
       for (const offset of offsets) {
@@ -729,33 +862,192 @@
       return note;
     }
 
+    function canUseForMelodyVariant(bars, bar, note, noteIndex) {
+      if (!note) return false;
+      const isFirstNote = bar.barIndex === 0 && noteIndex === 0;
+      const isFinalNote = bar.barIndex === bars.length - 1 && noteIndex === bar.notes.length - 1;
+      return !note.rest && !note.tieToNext && !note.tiedFromPrevious && !isFirstNote && !isFinalNote;
+    }
+
+    function makeMelodyVariantCell(bars, candidates) {
+      const cells = [];
+      candidates.forEach(({ bar, noteIndex }) => {
+        const cell = [{ bar, noteIndex }];
+        let nextIndex = noteIndex + 1;
+        while (cell.length < 3 && canUseForMelodyVariant(bars, bar, bar.notes[nextIndex], nextIndex)) {
+          cell.push({ bar, noteIndex: nextIndex });
+          nextIndex += 1;
+        }
+        if (cell.length >= 2) cells.push(cell);
+      });
+      return randomItem(cells) ?? null;
+    }
+
+    function reshapeMelodyVariantCell(cell, key) {
+      if (!cell || cell.length < 2) return false;
+      const first = cell[0].bar.notes[cell[0].noteIndex];
+      const firstIndex = noteBaseIndex(first);
+      if (firstIndex < 0) return false;
+      const second = cell[1].bar.notes[cell[1].noteIndex];
+      const originalDirection = Math.sign(noteBaseIndex(second) - firstIndex);
+      const possibleDirections = [-1, 1].filter((direction) => {
+        const endIndex = firstIndex + direction * (cell.length - 1);
+        return endIndex >= 0 && endIndex < NOTE_POOL.length;
+      });
+      const oppositeDirection = originalDirection ? -originalDirection : 0;
+      const direction = oppositeDirection && possibleDirections.includes(oppositeDirection) && Math.random() < 0.72
+        ? oppositeDirection
+        : randomItem(possibleDirections.length ? possibleDirections : [-1, 1]);
+      let previousIndex = firstIndex;
+      let changed = false;
+
+      cell.slice(1).forEach(({ bar, noteIndex }, index) => {
+        const current = bar.notes[noteIndex];
+        const currentIndex = noteBaseIndex(current);
+        const stepSize = index === 0 && Math.random() < 0.68 ? 2 : 1;
+        const targetIndex = clamp(previousIndex + direction * stepSize, 0, NOTE_POOL.length - 1);
+        const base = NOTE_POOL[targetIndex];
+        if (!base) return;
+        if (targetIndex !== currentIndex) changed = true;
+        bar.notes[noteIndex] = {
+          ...current,
+          ...base,
+          writtenAccidental: melodicAccidentalForLetter(key, base.letter),
+        };
+        previousIndex = targetIndex;
+      });
+
+      return changed;
+    }
+
+    function transposeMelodyVariantCell(cell, key) {
+      if (!cell || cell.length < 2) return false;
+      const intervals = [-2, -2, -2, 2, 2, -3, 3, -4, 4];
+      const interval = randomItem(intervals);
+      const replacements = [];
+
+      for (const { bar, noteIndex } of cell) {
+        const current = bar.notes[noteIndex];
+        const currentIndex = noteBaseIndex(current);
+        const targetIndex = currentIndex + interval;
+        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= NOTE_POOL.length) return false;
+        replacements.push({ bar, noteIndex, current, base: NOTE_POOL[targetIndex] });
+      }
+
+      replacements.forEach(({ bar, noteIndex, current, base }) => {
+        bar.notes[noteIndex] = {
+          ...current,
+          ...base,
+          writtenAccidental: melodicAccidentalForLetter(key, base.letter),
+        };
+      });
+
+      return true;
+    }
+
     function makeMelodyVariantBars(correctBars, key, variantId) {
       const bars = cloneBarsForOption(correctBars, variantId);
       const candidates = [];
       bars.forEach((bar) => {
         bar.notes.forEach((note, noteIndex) => {
-          const isFirstNote = bar.barIndex === 0 && noteIndex === 0;
-          const isFinalNote = bar.barIndex === bars.length - 1 && noteIndex === bar.notes.length - 1;
-          if (!isFirstNote && !isFinalNote) candidates.push({ bar, noteIndex });
+          if (canUseForMelodyVariant(bars, bar, note, noteIndex)) candidates.push({ bar, noteIndex });
         });
       });
 
-      const changes = Math.min(candidates.length, Math.random() < 0.72 ? 1 : 2);
-      shuffleItems(candidates).slice(0, changes).forEach(({ bar, noteIndex }, index) => {
-        const direction = index % 2 === 0 ? randomItem([-1, 1]) : 0;
-        bar.notes[noteIndex] = mutateNotePitch(bar.notes[noteIndex], key, direction);
-      });
+      const used = new Set();
+      const variantCell = Math.random() < 0.9 ? makeMelodyVariantCell(bars, candidates) : null;
+      if (variantCell) {
+        const transposed = Math.random() < 0.62 && transposeMelodyVariantCell(variantCell, key);
+        const reshaped = !transposed && Math.random() < 0.82 && reshapeMelodyVariantCell(variantCell, key);
+        if (!transposed && !reshaped) {
+          const direction = randomItem([-1, 1]);
+          variantCell.forEach(({ bar, noteIndex }) => {
+            bar.notes[noteIndex] = mutateNotePitch(bar.notes[noteIndex], key, direction);
+          });
+        }
+        variantCell.forEach(({ bar, noteIndex }) => used.add(`${bar.barIndex}:${noteIndex}`));
+      }
+
+      const targetChanges = Math.min(candidates.length, Math.random() < 0.5 ? 3 : 4);
+      shuffleItems(candidates)
+        .filter(({ bar, noteIndex }) => !used.has(`${bar.barIndex}:${noteIndex}`))
+        .slice(0, Math.max(0, targetChanges - used.size))
+        .forEach(({ bar, noteIndex }, index) => {
+          const direction = index % 2 === 0 ? randomItem([-1, 1]) : 0;
+          bar.notes[noteIndex] = mutateNotePitch(bar.notes[noteIndex], key, direction);
+        });
 
       return bars;
     }
 
+    function balanceRestOptions(options, key) {
+      const restOptionCount = options.filter((option) => barsHaveRest(option.bars)).length;
+      if (restOptionCount !== 1) return options;
+
+      const source = options.find((option) => barsHaveRest(option.bars));
+      const targetIndex = options.findIndex((option) => !option.correct && !barsHaveRest(option.bars));
+      if (!source || targetIndex < 0) return options;
+
+      const balancedBars = makeMelodyVariantBars(source.bars, key, `${options[targetIndex].id}-rest-balanced`);
+      options[targetIndex] = { ...options[targetIndex], bars: balancedBars };
+      return options;
+    }
+
+    function canTieAcrossBeat(first, second, timeSignature) {
+      if (first?.rhythm !== "quaver") return false;
+      if (!["crotchet", "minim", "dottedCrotchet"].includes(second?.rhythm)) return false;
+      const beatUnit = timeSignature?.id === "6/8" ? 1.5 : 1;
+      const tiePoint = first.beat + first.beats;
+      const startsNextExactly = Math.abs(second.beat - tiePoint) < 0.001;
+      const crossesBeatGroup = Math.abs(tiePoint / beatUnit - Math.round(tiePoint / beatUnit)) < 0.001;
+      return startsNextExactly && crossesBeatGroup;
+    }
+
+    function addTieToAhBars(bars, key, timeSignature) {
+      const candidates = [];
+      bars.forEach((bar) => {
+        bar.notes.forEach((note, noteIndex) => {
+          const next = bar.notes[noteIndex + 1];
+          if (note?.rest || next?.rest || !next) return;
+          if (!canTieAcrossBeat(note, next, timeSignature)) return;
+          candidates.push({ bar, noteIndex });
+        });
+      });
+      if (!candidates.length) return bars;
+      const { bar, noteIndex } = randomItem(candidates);
+      const first = bar.notes[noteIndex];
+      const second = bar.notes[noteIndex + 1];
+      bar.notes[noteIndex] = { ...first, tieToNext: true };
+      bar.notes[noteIndex + 1] = {
+        ...second,
+        ...NOTE_POOL[noteBaseIndex(first)],
+        writtenAccidental: melodicAccidentalForLetter(key, first.letter),
+        tiedFromPrevious: true,
+      };
+      return bars;
+    }
+
     function barsSignature(bars) {
-      return bars.map((bar) => bar.notes.map((note) => `${note.step}:${note.rhythm}`).join(",")).join("|");
+      return bars.map((bar) => bar.notes.map((note) => `${note.rest ? "R" : note.step}:${note.rhythm}:${note.tieToNext ? "tie" : ""}`).join(",")).join("|");
     }
 
     function makeIdentifyMelodyQuestion(level = "AH") {
-      const base = makeCompletionQuestion(level);
-      const correctBars = cloneBarsForOption(base.bars, "correct");
+      const useShortExtract = Math.random() < 0.28;
+      const base = makeCompletionQuestion(level, 0, useShortExtract);
+      const clef = Math.random() < 0.28 ? "bass" : "treble";
+      const sourceBars = useShortExtract ? base.bars.slice(0, 2) : base.bars;
+      const correctBars = cloneBarsForOption(sourceBars, "correct");
+      if (Math.random() < 0.28) addTieToAhBars(correctBars, base.key, base.timeSignature);
+      if (clef === "bass") {
+        correctBars.forEach((bar) => {
+          bar.notes = bar.notes.map((note) => {
+            if (note.rest) return note;
+            const lower = NOTE_POOL[clamp(noteBaseIndex(note) - 7, 0, NOTE_POOL.length - 1)];
+            return { ...note, ...lower, writtenAccidental: melodicAccidentalForLetter(base.key, lower.letter) };
+          });
+        });
+      }
+      fitBarsToClefRange(correctBars, clef, base.key);
       const options = [{ id: "correct", bars: correctBars, correct: true }];
       const seen = new Set([barsSignature(correctBars)]);
 
@@ -763,6 +1055,7 @@
       while (options.length < 3 && attempts < 40) {
         attempts += 1;
         const variantBars = makeMelodyVariantBars(correctBars, base.key, `variant-${options.length}-${attempts}`);
+        fitBarsToClefRange(variantBars, clef, base.key);
         const signature = barsSignature(variantBars);
         if (seen.has(signature)) continue;
         seen.add(signature);
@@ -770,14 +1063,16 @@
       }
 
       while (options.length < 3) {
-        const fallback = makeCompletionQuestion(level);
-        options.push({ id: `variant-${options.length}`, bars: cloneBarsForOption(fallback.bars, `fallback-${options.length}`), correct: false });
+        const fallbackBars = makeMelodyVariantBars(correctBars, base.key, `fallback-${options.length}`);
+        options.push({ id: `variant-${options.length}`, bars: fallbackBars, correct: false });
       }
 
+      balanceRestOptions(options, base.key);
       const shuffledOptions = shuffleItems(options);
       return {
         ...base,
         questionType: "identifyMelody",
+        clef,
         targetBar: null,
         bars: correctBars,
         options: shuffledOptions,
@@ -792,25 +1087,25 @@
       return makeCompletionQuestion(level, attempt);
     }
 
-    function barStart(barIndex) {
+    function barStart(barIndex, displayBarCount = BARS_PER_SYSTEM) {
       const topSystem = barIndex < 4;
       const musicStart = topSystem ? STAFF.left + 122 : STAFF.left + 74;
-      const width = (STAFF.right - musicStart) / BARS_PER_SYSTEM;
+      const width = (STAFF.right - musicStart) / displayBarCount;
       return musicStart + (barIndex % BARS_PER_SYSTEM) * width;
     }
 
-    function barWidth(barIndex) {
+    function barWidth(barIndex, displayBarCount = BARS_PER_SYSTEM) {
       const musicStart = barIndex < 4 ? STAFF.left + 122 : STAFF.left + 74;
-      return (STAFF.right - musicStart) / BARS_PER_SYSTEM;
+      return (STAFF.right - musicStart) / displayBarCount;
     }
 
     function systemTop(barIndex) {
       return barIndex < 4 ? STAFF.topA : STAFF.topB;
     }
 
-    function barPositions(bar) {
-      const start = barStart(bar.barIndex);
-      const end = start + barWidth(bar.barIndex);
+    function barPositions(bar, displayBarCount = BARS_PER_SYSTEM) {
+      const start = barStart(bar.barIndex, displayBarCount);
+      const end = start + barWidth(bar.barIndex, displayBarCount);
       const scoreStart = start + (bar.barIndex === 0 ? 4 : 15);
       const scoreEnd = bar.barIndex === (bar.totalBars ?? BAR_COUNT) - 1 ? end - 24 : end - 4;
       const units = bar.notes.reduce((sum, note) => sum + rhythmInfo(note.rhythm).spacing, 0);
@@ -823,16 +1118,20 @@
       });
     }
 
+    function isBeamableRhythm(rhythm) {
+      return rhythm === "quaver" || rhythm === "semiquaver";
+    }
+
     function getQuaverGroups(notes, timeSignature = null) {
       const groups = [];
       let index = 0;
       while (index < notes.length) {
-        if (notes[index]?.rhythm !== "quaver") {
+        if (!isBeamableRhythm(notes[index]?.rhythm)) {
           index += 1;
           continue;
         }
         const start = index;
-        while (notes[index + 1]?.rhythm === "quaver") {
+        while (isBeamableRhythm(notes[index + 1]?.rhythm)) {
           if (timeSignature?.id === "6/8") {
             const currentGroup = Math.floor((notes[index].beat + 0.001) / 1.5);
             const nextGroup = Math.floor((notes[index + 1].beat + 0.001) / 1.5);
@@ -840,7 +1139,14 @@
           }
           index += 1;
         }
-        if (index > start) groups.push({ start, end: index });
+        let groupStart = start;
+        while (groupStart <= index) {
+          const remaining = index - groupStart + 1;
+          const groupSize = remaining === 5 ? 3 : remaining >= 4 ? 4 : remaining;
+          const groupEnd = groupStart + groupSize - 1;
+          if (groupEnd > groupStart) groups.push({ start: groupStart, end: groupEnd });
+          groupStart = groupEnd + 1;
+        }
         index += 1;
       }
       return groups;
@@ -848,6 +1154,21 @@
 
     function groupContaining(groups, index) {
       return groups.find((group) => index >= group.start && index <= group.end) ?? null;
+    }
+
+    function secondaryBeamSegments(groupNotes) {
+      const segments = [];
+      let segmentStart = null;
+      groupNotes.forEach((note, index) => {
+        const isSemiquaver = note?.rhythm === "semiquaver";
+        const nextIsSemiquaver = groupNotes[index + 1]?.rhythm === "semiquaver";
+        if (isSemiquaver && segmentStart === null) segmentStart = index;
+        if (segmentStart !== null && (!nextIsSemiquaver || index === groupNotes.length - 1)) {
+          segments.push({ startIndex: segmentStart, endIndex: index, isHook: index === segmentStart });
+          segmentStart = null;
+        }
+      });
+      return segments;
     }
 
     function getStem(x, y, step, down, forcedEndY = null) {
@@ -861,34 +1182,103 @@
       };
     }
 
-    function groupHasDownStems(notes) {
+    function groupHasDownStems(notes, clef = "treble") {
       let down = 0;
       let up = 0;
-      notes.forEach((note) => stemDown(note.step) ? down += 1 : up += 1);
+      notes.forEach((note) => stemDown(displayStep(note, clef)) ? down += 1 : up += 1);
       return down > up;
     }
 
-    function getBeam(notes, positions, top, forcedDown = null) {
-      const down = forcedDown ?? groupHasDownStems(notes);
+    function getBeam(notes, positions, top, forcedDown = null, clef = "treble") {
+      const down = forcedDown ?? groupHasDownStems(notes, clef);
       const settings = sharedSymbolConfig("quaverBeam");
       const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0);
       const yOffset = STAFF.gap * Number(settings.yOffsetScale || 0);
       const stemLength = STAFF.gap * 3.1 * Number(settings.heightScale || 1);
       const beamWidthAdjust = STAFF.gap * 0.6 * (Number(settings.widthScale || 1) - 1);
-      const firstY = yForStep(notes[0].step, top);
-      const lastY = yForStep(notes.at(-1).step, top);
-      const firstStem = getStem(positions[0] + xOffset, firstY + yOffset, notes[0].step, down, down ? firstY + yOffset + stemLength : firstY + yOffset - stemLength);
-      const lastStem = getStem(positions.at(-1) + xOffset, lastY + yOffset, notes.at(-1).step, down, down ? lastY + yOffset + stemLength : lastY + yOffset - stemLength);
+      const firstStep = displayStep(notes[0], clef);
+      const lastStep = displayStep(notes.at(-1), clef);
+      const firstY = yForStep(firstStep, top);
+      const lastY = yForStep(lastStep, top);
+      const firstStem = getStem(positions[0] + xOffset, firstY + yOffset, firstStep, down, down ? firstY + yOffset + stemLength : firstY + yOffset - stemLength);
+      const lastStem = getStem(positions.at(-1) + xOffset, lastY + yOffset, lastStep, down, down ? lastY + yOffset + stemLength : lastY + yOffset - stemLength);
+      let startY = firstStem.endY;
+      let endY = lastStem.endY;
+      const beamPoints = notes.map((note, index) => ({
+        x: positions[index],
+        y: yForStep(displayStep(note, clef), top),
+      }));
+
+      if (notes.length > 2 && notes.some((note) => note.rhythm === "semiquaver")) {
+        const steps = beamPoints.map((point) => point.y);
+        const spread = Math.max(...steps) - Math.min(...steps);
+
+        if (spread >= STAFF.gap * 0.75) {
+          const xMean = beamPoints.reduce((sum, point) => sum + point.x, 0) / beamPoints.length;
+          const yMean = beamPoints.reduce((sum, point) => sum + point.y, 0) / beamPoints.length;
+          const xVariance = beamPoints.reduce((sum, point) => sum + ((point.x - xMean) ** 2), 0);
+          const covariance = beamPoints.reduce((sum, point) => sum + ((point.x - xMean) * (point.y - yMean)), 0);
+          let slope = xVariance ? covariance / xVariance : 0;
+          const maxSlope = 0.11;
+          slope = clamp(slope, -maxSlope, maxSlope);
+
+          if (Math.abs(slope) < 0.035) {
+            const firstNoteY = beamPoints[0].y;
+            const lastNoteY = beamPoints.at(-1).y;
+            slope = lastNoteY <= firstNoteY ? -0.045 : 0.045;
+          }
+
+          const centreX = (firstStem.stemX + lastStem.stemX) / 2;
+          const centreY = (firstStem.endY + lastStem.endY) / 2;
+          startY = centreY + slope * (firstStem.stemX - centreX);
+          endY = centreY + slope * (lastStem.stemX - centreX);
+        }
+      }
+
+      const minStemLength = STAFF.gap * 2.45;
+      let beamShift = 0;
+      beamPoints.forEach((point, index) => {
+        const noteStep = displayStep(notes[index], clef);
+        const stemX = getStem(positions[index], point.y, noteStep, down).stemX;
+        const projectedY = startY + ((stemX - firstStem.stemX) / ((lastStem.stemX - firstStem.stemX) || 1)) * (endY - startY);
+        if (down) {
+          beamShift = Math.max(beamShift, (point.y + minStemLength) - projectedY);
+        } else {
+          beamShift = Math.min(beamShift, (point.y - minStemLength) - projectedY);
+        }
+      });
+      startY += beamShift;
+      endY += beamShift;
+
       return {
         down,
-        start: { x: firstStem.stemX, y: firstStem.endY },
-        end: { x: lastStem.stemX, y: lastStem.endY },
+        start: { x: firstStem.stemX, y: startY },
+        end: { x: lastStem.stemX, y: endY },
       };
     }
 
     function beamYAtX(x, beam) {
       const progress = (x - beam.start.x) / (beam.end.x - beam.start.x || 1);
       return beam.start.y + progress * (beam.end.y - beam.start.y);
+    }
+
+    function secondaryBeamForSegment(beam, segment, groupNotes, groupPositions, top, clef) {
+      const secondaryOffset = beam.down ? -STAFF.gap * 0.85 : STAFF.gap * 0.85;
+      const hookLength = STAFF.gap * 1.25;
+      function stemXFor(index) {
+        const noteStep = displayStep(groupNotes[index], clef);
+        const y = yForStep(noteStep, top);
+        return getStem(groupPositions[index], y, noteStep, beam.down).stemX;
+      }
+      const x1 = stemXFor(segment.startIndex);
+      const x2 = segment.isHook
+        ? x1 + (segment.startIndex > 0 ? -hookLength : hookLength)
+        : stemXFor(segment.endIndex);
+      return {
+        down: beam.down,
+        start: { x: x1, y: beamYAtX(x1, beam) + secondaryOffset },
+        end: { x: x2, y: (segment.isHook ? beamYAtX(x1, beam) : beamYAtX(x2, beam)) + secondaryOffset },
+      };
     }
 
     function beamPolygonPoints(x1, y1, x2, y2, thickness) {
@@ -899,6 +1289,31 @@
     function BeamShape({ beam, colour = "currentColor", opacity = 1 }) {
       const thickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42));
       return <polygon points={beamPolygonPoints(beam.start.x - 0.5, beam.start.y, beam.end.x + 0.5, beam.end.y, thickness)} fill={colour} opacity={opacity} />;
+    }
+
+    function TieShape({ firstNote, secondNote, firstX, secondX, top, clef = "treble", colour = "currentColor" }) {
+      if (!firstNote || !secondNote) return null;
+      const firstStep = displayStep(firstNote, clef);
+      const secondStep = displayStep(secondNote, clef);
+      const firstY = yForStep(firstStep, top);
+      const secondY = yForStep(secondStep, top);
+      const averageStep = (firstStep + secondStep) / 2;
+      const tieAbove = stemDown(averageStep);
+      const leftX = Math.min(firstX, secondX) + STAFF.gap * 0.08;
+      const rightX = Math.max(firstX, secondX) - STAFF.gap * 0.08;
+      const width = Math.max(STAFF.gap * 1.4, rightX - leftX);
+      const baseY = (firstY + secondY) / 2 + (tieAbove ? -STAFF.gap * 1.0 : STAFF.gap * 1.0);
+      const archDepth = clamp(width * 0.12, STAFF.gap * 0.55, STAFF.gap * 1.45);
+      const thickness = Math.max(1.6, STAFF.gap * 0.22);
+      const outerY = baseY + (tieAbove ? -archDepth : archDepth);
+      const innerY = outerY + (tieAbove ? thickness : -thickness);
+      const path = [
+        `M ${leftX} ${baseY}`,
+        `C ${leftX + width * 0.22} ${outerY}, ${rightX - width * 0.22} ${outerY}, ${rightX} ${baseY}`,
+        `C ${rightX - width * 0.22} ${innerY}, ${leftX + width * 0.22} ${innerY}, ${leftX} ${baseY}`,
+        "Z",
+      ].join(" ");
+      return <path d={path} fill={colour} transform={`translate(0 ${tieAbove ? -1 : 1})`} pointerEvents="none" />;
     }
 
     function LedgerLines({ x, step, top, colour = "currentColor", opacity = 1 }) {
@@ -913,25 +1328,27 @@
       return <g>{ledgerSteps.map((ledgerStep) => <line key={ledgerStep} x1={x - halfWidth + xOffset} x2={x + halfWidth + xOffset} y1={yForStep(ledgerStep, top) + yOffset} y2={yForStep(ledgerStep, top) + yOffset} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" opacity={opacity} />)}</g>;
     }
 
-    function Accidental({ value, x, y, colour = "currentColor" }) {
-      if (!value) return null;
-      return <CalibratedSymbol symbolKey={value === 1 ? "sharpInScore" : "flatInScore"} x={x} y={y} colour={colour} />;
-    }
+        function Accidental({ value, x, y, colour = "currentColor" }) {
+            if (!value) return null;
+            const sharpOffsetX = value === 1 ? -2 : 0;
+            return <CalibratedSymbol symbolKey={value === 1 ? "sharpInScore" : "flatInScore"} x={x + sharpOffsetX} y={y} colour={colour} />;
+        }
 
-    function Note({ note, x, top, colour = "currentColor", opacity = 1, active = false, faint = false, showFlag = true, forcedDown = null, forcedEndY = null, scale = 1 }) {
+    function Note({ note, x, top, colour = "currentColor", opacity = 1, active = false, faint = false, showFlag = true, forcedDown = null, forcedEndY = null, scale = 1, clef = "treble" }) {
       if (!note) return null;
-      const y = yForStep(note.step, top);
-      const down = forcedDown ?? stemDown(note.step);
-      const beamed = note.rhythm === "quaver" && !showFlag;
-      const stem = getStem(x, y, note.step, down, forcedEndY);
-      const dotKey = note.step % 2 === 0 ? "augmentationDotLine" : "augmentationDotSpace";
-      const dotY = note.step % 2 === 0 ? y - STAFF.gap * 0.25 : y;
+      const step = displayStep(note, clef);
+      const y = note.rest ? yForStep(4, top) : yForStep(step, top);
+      const down = forcedDown ?? stemDown(step);
+      const beamed = isBeamableRhythm(note.rhythm) && !showFlag;
+      const stem = getStem(x, y, step, down, forcedEndY);
+      const dotKey = step % 2 === 0 ? "augmentationDotLine" : "augmentationDotSpace";
+      const dotY = step % 2 === 0 ? y - STAFF.gap * 0.25 : y;
       const noteColour = active ? COLOUR.blue : colour;
       const stemThickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12));
       return (
         <g pointerEvents="none" opacity={faint ? 0.32 : opacity} transform={scale !== 1 ? `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})` : undefined}>
-          <LedgerLines x={x} step={note.step} top={top} colour={noteColour} />
-          <Accidental value={note.writtenAccidental} x={x - STAFF.gap * 2.45} y={y} colour={noteColour} />
+          {!note.rest && <LedgerLines x={x} step={step} top={top} colour={noteColour} />}
+          <Accidental value={note.writtenAccidental} x={x - STAFF.gap * 1.75} y={y} colour={noteColour} />
           <CalibratedSymbol symbolKey={noteSymbolKey(note.rhythm, down, beamed)} x={x} y={y} colour={noteColour} />
           {(note.rhythm === "dottedMinim" || note.rhythm === "dottedCrotchet") && <CalibratedSymbol symbolKey={dotKey} x={x + STAFF.gap * 1.3} y={dotY} colour={noteColour} />}
           {beamed && <line x1={stem.stemX} x2={stem.stemX} y1={stem.startY} y2={stem.endY} stroke={noteColour} strokeWidth={stemThickness} />}
@@ -939,24 +1356,28 @@
       );
     }
 
-    function Staff({ top, systemIndex, question }) {
+    function Staff({ top, systemIndex, question, displayBarCount = BARS_PER_SYSTEM, colour = "currentColor" }) {
       const finalBar = Math.min(systemIndex * BARS_PER_SYSTEM + BARS_PER_SYSTEM - 1, question.bars.length - 1);
-      const staffEnd = barStart(finalBar) + barWidth(finalBar);
+      const staffEnd = barStart(finalBar, displayBarCount) + barWidth(finalBar, displayBarCount);
+      const clef = question.clef ?? "treble";
       return (
         <g>
           {[0, 1, 2, 3, 4].map((line) => <line key={line} x1={STAFF.left} x2={staffEnd} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.25" />)}
-          <CalibratedSymbol symbolKey="gClef" x={STAFF.left + 32} y={yForStep(2, top)} />
-          {systemIndex === 0 && <KeySignature keySignature={question.key} top={top} />}
-          {systemIndex === 0 && <TimeSignature signature={question.timeSignature} top={top} />}
+          <CalibratedSymbol symbolKey={clef === "bass" ? "fClef" : "gClef"} x={STAFF.left + 32} y={clef === "bass" ? yForStep(6, top) : yForStep(2, top)} colour={colour} />
+          {systemIndex === 0 && <KeySignature keySignature={question.key} top={top} clef={clef} colour={colour} />}
+          {systemIndex === 0 && <TimeSignature signature={question.timeSignature} top={top} colour={colour} />}
         </g>
       );
     }
 
-    function KeySignature({ keySignature, top }) {
-      return <g>{keySignature.signature.map((item, index) => <CalibratedSymbol key={`${item.type}-${index}`} symbolKey={item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature"} x={STAFF.left + 54 + index * KEY_SIGNATURE_SPACING} y={yForStep(item.step, top)} />)}</g>;
+    function KeySignature({ keySignature, top, clef = "treble", colour = "currentColor" }) {
+      return <g>{keySignature.signature.map((item, index) => {
+        const clefStep = clef === "bass" ? item.step - 2 : item.step;
+        return <CalibratedSymbol key={`${item.type}-${index}`} symbolKey={item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature"} x={STAFF.left + 54 + index * KEY_SIGNATURE_SPACING} y={yForStep(clefStep, top)} colour={colour} />;
+      })}</g>;
     }
 
-    function TimeSignature({ signature, top }) {
+    function TimeSignature({ signature, top, colour = "currentColor" }) {
       const key = `timeSig${signature.top}${signature.bottom}`;
       const settings = sharedSymbolConfig(key);
       const topGlyph = sharedSymbolForKey(`timeSig${signature.top}`);
@@ -964,10 +1385,10 @@
       const x = calibrationAnchorX(key) + STAFF.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
       const y = calibrationAnchorY(key, top) + STAFF.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
       const fontSize = STAFF.gap * Number(settings.fontSizeScale || 3.4);
-      return <g pointerEvents="none"><text className="music-symbol" x={x} y={y - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{topGlyph}</text><text className="music-symbol" x={x} y={y + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text></g>;
+      return <g pointerEvents="none"><text className="music-symbol" x={x} y={y - fontSize * 0.14} fill={colour} fontSize={fontSize} textAnchor="middle">{topGlyph}</text><text className="music-symbol" x={x} y={y + fontSize * 0.43} fill={colour} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text></g>;
     }
 
-    function BarNotes({ bar, notes, positions, top, colour = "currentColor", feedback = null, hidden = false, activeNoteId = null, forceStemUp = false, timeSignature = null }) {
+    function BarNotes({ bar, notes, positions, top, colour = "currentColor", feedback = null, hidden = false, activeNoteId = null, forceStemUp = false, timeSignature = null, clef = "treble" }) {
       const groups = getQuaverGroups(hidden ? bar.notes : notes, timeSignature);
       const shownAccidentals = new Set();
       return (
@@ -981,55 +1402,76 @@
             const group = groupContaining(groups, index);
             const groupNotes = group ? notes.slice(group.start, group.end + 1) : [];
             const groupPositions = group ? positions.slice(group.start, group.end + 1) : [];
-            const beam = group && groupNotes.every(Boolean) ? getBeam(groupNotes, groupPositions, top, forceStemUp ? false : null) : null;
+            const beam = group && groupNotes.every(Boolean) ? getBeam(groupNotes, groupPositions, top, forceStemUp ? false : null, clef) : null;
             const noteStemDown = forceStemUp ? false : beam?.down ?? null;
-            const stem = beam ? getStem(positions[index], yForStep(note.step, top), note.step, beam.down) : null;
+            const noteStep = displayStep(note, clef);
+            const stem = beam ? getStem(positions[index], yForStep(noteStep, top), noteStep, beam.down) : null;
             const forcedEndY = beam && stem ? beamYAtX(stem.stemX, beam) : null;
             const expected = bar.notes[index];
             const resultColour = feedback && hidden ? (note.step === expected?.step ? COLOUR.green : COLOUR.red) : colour;
-            return <Note key={note.id ?? `${bar.barIndex}-${index}`} note={displayNote} x={positions[index]} top={top} colour={resultColour} active={activeNoteId === note.id} showFlag={!beam} forcedDown={noteStemDown} forcedEndY={forcedEndY} opacity={feedback && hidden && note.step !== expected?.step ? 0.58 : 1} />;
+            return <Note key={note.id ?? `${bar.barIndex}-${index}`} note={displayNote} x={positions[index]} top={top} colour={resultColour} active={activeNoteId === note.id} showFlag={!beam} forcedDown={noteStemDown} forcedEndY={forcedEndY} opacity={feedback && hidden && note.step !== expected?.step ? 0.58 : 1} clef={clef} />;
           })}
           {groups.map((group, index) => {
             const groupNotes = notes.slice(group.start, group.end + 1);
             if (!groupNotes.every(Boolean)) return null;
-            const beam = getBeam(groupNotes, positions.slice(group.start, group.end + 1), top, forceStemUp ? false : null);
+            const beam = getBeam(groupNotes, positions.slice(group.start, group.end + 1), top, forceStemUp ? false : null, clef);
             const groupCorrect = groupNotes.every((note, noteIndex) => note?.step === bar.notes[group.start + noteIndex]?.step);
             const beamColour = feedback && hidden ? (groupCorrect ? COLOUR.green : COLOUR.red) : colour;
-            return <BeamShape key={`beam-${bar.barIndex}-${index}`} beam={beam} colour={beamColour} />;
+            return (
+              <g key={`beam-${bar.barIndex}-${index}`}>
+                <BeamShape beam={beam} colour={beamColour} />
+                {secondaryBeamSegments(groupNotes).map((segment, segmentIndex) => (
+                  <BeamShape
+                    key={`secondary-${segmentIndex}`}
+                    beam={secondaryBeamForSegment(beam, segment, groupNotes, positions.slice(group.start, group.end + 1), top, clef)}
+                    colour={beamColour}
+                  />
+                ))}
+              </g>
+            );
+          })}
+          {notes.map((note, index) => {
+            if (!note?.tieToNext || !notes[index + 1]) return null;
+            const expected = bar.notes[index];
+            const nextExpected = bar.notes[index + 1];
+            const tieCorrect = note.step === expected?.step && notes[index + 1]?.step === nextExpected?.step;
+            const tieColour = feedback && hidden ? (tieCorrect ? COLOUR.green : COLOUR.red) : colour;
+            return <TieShape key={`tie-${bar.barIndex}-${index}`} firstNote={note} secondNote={notes[index + 1]} firstX={positions[index]} secondX={positions[index + 1]} top={top} clef={clef} colour={tieColour} />;
           })}
         </g>
       );
     }
 
-    function RhythmGuide({ bar, positions, top, activeNoteId, timeSignature }) {
+    function RhythmGuide({ bar, positions, top, activeNoteId, timeSignature, clef = "treble" }) {
       const guideTop = top - 48;
       const guideNotes = bar.notes.map((note) => ({ ...note, step: 5, writtenAccidental: null }));
-      return <g opacity="0.72"><BarNotes bar={{ ...bar, notes: guideNotes }} notes={guideNotes} positions={positions} top={guideTop} colour={COLOUR.guide} activeNoteId={activeNoteId} forceStemUp timeSignature={timeSignature} /></g>;
+      return <g opacity="0.72"><BarNotes bar={{ ...bar, notes: guideNotes }} notes={guideNotes} positions={positions} top={guideTop} colour={COLOUR.guide} activeNoteId={activeNoteId} forceStemUp timeSignature={timeSignature} clef={clef} /></g>;
     }
 
-    function CorrectionLayer({ bar, userNotes, positions, top, timeSignature }) {
+    function CorrectionLayer({ bar, userNotes, positions, top, timeSignature, clef = "treble" }) {
       const correctionNotes = bar.notes.map((note, index) => userNotes[index]?.step === note.step ? null : { ...note, id: `correct-${index}` });
       const shiftedPositions = positions.map((x) => x + 20);
-      return <BarNotes bar={bar} notes={correctionNotes} positions={shiftedPositions} top={top} colour={COLOUR.green} timeSignature={timeSignature} />;
+      return <BarNotes bar={bar} notes={correctionNotes} positions={shiftedPositions} top={top} colour={COLOUR.green} timeSignature={timeSignature} clef={clef} />;
     }
 
     function MelodyOptionNotation({ option, question, colour = "currentColor" }) {
       const top = STAFF.topA;
       const optionQuestion = { ...question, bars: option.bars };
       const finalBar = option.bars.length - 1;
+      const displayBarCount = option.bars.length === 2 ? 2 : BARS_PER_SYSTEM;
       return (
         <svg viewBox="0 0 920 130" className="h-auto w-full overflow-visible" aria-hidden="true">
           <rect width="920" height="130" fill="transparent" />
           <g transform="translate(0 -36)" color={colour}>
-            <Staff top={top} systemIndex={0} question={optionQuestion} />
+            <Staff top={top} systemIndex={0} question={optionQuestion} displayBarCount={displayBarCount} colour={colour} />
             {option.bars.map((bar) => {
-              const start = barStart(bar.barIndex);
-              const end = start + barWidth(bar.barIndex);
-              const positions = barPositions(bar);
+              const start = barStart(bar.barIndex, displayBarCount);
+              const end = start + barWidth(bar.barIndex, displayBarCount);
+              const positions = barPositions(bar, displayBarCount);
               return (
                 <g key={bar.barIndex}>
                   <text x={bar.barIndex === 0 ? start - 15 : start + 5} y={top - 17} fill={colour} fontSize="12" fontWeight="700">{bar.barIndex + 1}</text>
-                  <BarNotes bar={bar} notes={bar.notes} positions={positions} top={top} colour={colour} timeSignature={question.timeSignature} />
+                  <BarNotes bar={bar} notes={bar.notes} positions={positions} top={top} colour={colour} timeSignature={question.timeSignature} clef={question.clef} />
                   {bar.barIndex === finalBar ? (
                     <g>
                       <line x1={end - 5} x2={end - 5} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke={colour} strokeWidth="1.4" />
@@ -1060,9 +1502,10 @@
               <button
                 type="button"
                 key={option.id}
-                disabled={Boolean(feedback)}
+                aria-disabled={Boolean(feedback)}
+                data-feedback-continue={feedback ? "true" : undefined}
                 onClick={(event) => {
-                  event.stopPropagation();
+                  if (feedback) return;
                   onSelectOption(index);
                 }}
                 className={`relative flex w-full items-center rounded-xl border px-3 py-1.5 text-left shadow-sm ${stateClass}`}
@@ -1070,7 +1513,7 @@
                 <span className="min-w-0 flex-1 text-stone-950">
                   <MelodyOptionNotation option={option} question={question} colour={lineColour} />
                 </span>
-                <span className={`ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-lg font-black ${showCorrect ? "border-green-600 bg-green-600 text-white" : showWrong ? "border-red-600 bg-red-600 text-white" : selected ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-transparent"}`}>
+                <span className={`ml-3 mr-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-lg font-black ${showCorrect ? "border-green-600 bg-green-600 text-white" : showWrong ? "border-red-600 bg-red-600 text-white" : selected ? "border-stone-950 bg-stone-950 text-white" : "border-black/20 bg-white text-transparent"}`}>
                   ✓
                 </span>
               </button>
@@ -1194,17 +1637,17 @@
               <g key={bar.barIndex}>
                 <text x={(bar.barIndex === 0 || bar.barIndex === 4) ? start - 15 : start + 5} y={top - 17} fontSize="12" fontWeight="700">{bar.barIndex + 1}</text>
                 {isTarget && <rect ref={targetInputRef} x={start} y={top - 62} width={end - start} height="122" fill="transparent" pointerEvents="all" className="touch-none" style={{ touchAction: "none", WebkitUserSelect: "none", userSelect: "none", overscrollBehavior: "contain" }} onPointerMove={handleMove} onPointerLeave={() => { if (!draggingNote) setHoverNote(null); }} onPointerDown={handlePointerDown} onPointerUp={handlePointerUp} onPointerCancel={() => { setDraggingNote(null); setHoverNote(null); }} />}
-                {isTarget && <RhythmGuide bar={bar} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} />}
+                {isTarget && <RhythmGuide bar={bar} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} clef={question.clef} />}
                 {isTarget
-                  ? <BarNotes bar={bar} notes={targetUserNotes} positions={positions} top={top} hidden feedback={feedback} timeSignature={question.timeSignature} />
-                  : <BarNotes bar={bar} notes={bar.notes} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} />}
+                  ? <BarNotes bar={bar} notes={targetUserNotes} positions={positions} top={top} hidden feedback={feedback} timeSignature={question.timeSignature} clef={question.clef} />
+                  : <BarNotes bar={bar} notes={bar.notes} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} clef={question.clef} />}
                 {isTarget && hoverNote && !feedback && (
                   <>
-                    {draggingNote && <Note note={{ ...hoverNote, id: `ghost-${hoverNote.id}` }} x={positions[hoverNote.noteIndex]} top={top} colour="#666" faint />}
-                    <Note note={hoverNote} x={positions[hoverNote.noteIndex]} top={top} colour="#444" faint={!draggingNote} scale={draggingNote ? 1.6 : 1} />
+                    {draggingNote && <Note note={{ ...hoverNote, id: `ghost-${hoverNote.id}` }} x={positions[hoverNote.noteIndex]} top={top} colour="#666" faint clef={question.clef} />}
+                    <Note note={hoverNote} x={positions[hoverNote.noteIndex]} top={top} colour="#444" faint={!draggingNote} scale={draggingNote ? 1.6 : 1} clef={question.clef} />
                   </>
                 )}
-                {feedback && isTarget && <CorrectionLayer bar={bar} userNotes={userNotes} positions={positions} top={top} timeSignature={question.timeSignature} />}
+                {feedback && isTarget && <CorrectionLayer bar={bar} userNotes={userNotes} positions={positions} top={top} timeSignature={question.timeSignature} clef={question.clef} />}
                 {bar.barIndex === question.bars.length - 1 ? (
                   <g>
                     <line x1={end - 5} x2={end - 5} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="1.4" />
@@ -1444,7 +1887,8 @@
       const menuRef = useRef(null);
       window.MLH.useClickAway(menuRef, () => setMenu(null));
 
-      const selectedTempo = TEMPOS.find((item) => item.id === tempo) ?? TEMPOS[0];
+      const selectedTempoId = activeLevel === "AH" ? "slow" : tempo;
+      const selectedTempo = TEMPOS.find((item) => item.id === selectedTempoId) ?? TEMPOS[0];
       const beatSeconds = 60 / selectedTempo.bpm;
       const barSeconds = beatSeconds * question.timeSignature.beats;
       const totalDuration = question.bars.length * barSeconds;
@@ -1621,6 +2065,22 @@
         const chordLetters = question.key.chords[bar.chordSymbol] ?? [];
         if (!chordLetters.length) return;
 
+        if (bar.barIndex === question.bars.length - 1 && question.questionType === "identifyMelody" && question.bars.length === 2) {
+          const finalNote = [...bar.notes].reverse().find((note) => !note.rest);
+          if (!finalNote) return;
+          const chordStart = barStart + finalNote.beat * beatSeconds;
+          const chordDuration = Math.max(0.04, Math.min(finalNote.beats * beatSeconds * 0.72, beatSeconds * 0.72));
+          if (chordStart + chordDuration <= offset) return;
+          const audibleStart = Math.max(chordStart, offset);
+          const audibleDuration = Math.max(0.04, chordStart + chordDuration - audibleStart);
+          chordLetters.forEach((letter, index) => {
+            const chordMidi = pitchForChordLetter(question, bar, letter, 3 + index);
+            oscillator(ctx, gainNode, midiToFrequency(chordMidi), startTime + audibleStart, audibleDuration, 0.026, "triangle", 0.08);
+            if (index === 0) oscillator(ctx, gainNode, midiToFrequency(chordMidi - 12), startTime + audibleStart, audibleDuration, 0.02, "sine", 0.08);
+          });
+          return;
+        }
+
         if (bar.barIndex === question.bars.length - 1) {
           const chordStart = Math.max(barStart, offset);
           const chordDuration = Math.max(0.04, barStart + barSeconds * 0.96 - chordStart);
@@ -1718,9 +2178,11 @@
             }
           }
           playAccompaniment(ctx, master, question, bar, barStart, offset, startTime);
-          bar.notes.forEach((note) => {
+          bar.notes.forEach((note, noteIndex) => {
+            if (note.rest || note.tiedFromPrevious) return;
             const noteStart = barStart + note.beat * beatSeconds;
-            const duration = note.beats * beatSeconds * 0.96;
+            const nextTiedNote = note.tieToNext && !bar.notes[noteIndex + 1]?.rest ? bar.notes[noteIndex + 1] : null;
+            const duration = (note.beats + (nextTiedNote?.beats ?? 0)) * beatSeconds * 0.96;
             if (noteStart + duration <= offset) return;
             const audibleStart = Math.max(noteStart, offset);
             const audibleDuration = Math.max(0.04, noteStart + duration - audibleStart);
@@ -1774,7 +2236,9 @@
               className="relative flex min-h-[560px] flex-col overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-3 pt-[10px] shadow-sm sm:px-4 md:px-6 md:pb-6 md:pt-[14px]"
               onPointerDown={(event) => {
                 if (!feedback) return;
-                if (event.target.closest("button,[data-menu-trigger],[data-menu-panel]")) return;
+                const button = event.target.closest("button");
+                if (button && !button.closest("[data-feedback-continue]")) return;
+                if (event.target.closest("[data-menu-trigger],[data-menu-panel]")) return;
                 advanceAfterFeedback();
               }}
             >
