@@ -1794,6 +1794,7 @@ function StatCard({ label, value, footer, progress = null, medal = null, variant
 
 function CorrectRhythmScorePanel({ correct, attempted, accuracy, streak, bestStreak, resetScore, confettiKey, medalEligible }) {
   const [popover, setPopover] = useState(null);
+  const [autoPopoverKey, setAutoPopoverKey] = useState(0);
   const ref = useRef(null);
   window.MLH.useClickAway(ref, () => setPopover(null));
 
@@ -1806,6 +1807,13 @@ function CorrectRhythmScorePanel({ correct, attempted, accuracy, streak, bestStr
     { label: "Diamond", value: 10, icon: ASSET.diamond, className: "text-cyan-500", active: streak >= 10 },
   ];
   const activeThreshold = medalEligible ? thresholds.find((item) => item.active) : null;
+  useEffect(() => {
+    if (!medalEligible || confettiKey <= 0) return;
+    setAutoPopoverKey(confettiKey);
+    const timer = setTimeout(() => setAutoPopoverKey(0), 2000);
+    return () => clearTimeout(timer);
+  }, [confettiKey, medalEligible]);
+  const autoMedalPopover = medalEligible && autoPopoverKey > 0;
   const medalStyle = !medalEligible
     ? { backgroundColor: "#f5f5f4", color: "#a8a29e" }
     : streak >= 10
@@ -1881,10 +1889,10 @@ function CorrectRhythmScorePanel({ correct, attempted, accuracy, streak, bestStr
           <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px]" style={{ color: medalStyle.color }}>{streak}</div>
           <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
         </div>
-        {popover === "streak" && (
+        {(popover === "streak" || autoMedalPopover) && (
           <div
             className="fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]"
-            style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
+            style={{ animation: autoMedalPopover ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
           >
             <div className="flex items-end justify-center gap-3">
               {thresholds.map((item) => (

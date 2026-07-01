@@ -112,7 +112,15 @@
     ];
     const effectiveMedalEligible = medalEligible ?? autoMedalEligible;
     const medal = effectiveMedalEligible ? thresholds.find((item) => item.active) : null;
-    const shouldShowMedalPopover = popover === "streak" || (effectiveMedalEligible && (autoShowMedals || showMedalPopover));
+    const [autoPopoverKey, setAutoPopoverKey] = React.useState(0);
+    React.useEffect(() => {
+      if (!effectiveMedalEligible || confettiKey <= 0) return;
+      setAutoPopoverKey(confettiKey);
+      const timer = window.setTimeout(() => setAutoPopoverKey(0), 2000);
+      return () => window.clearTimeout(timer);
+    }, [confettiKey, effectiveMedalEligible]);
+    const autoMedalPopover = effectiveMedalEligible && (autoShowMedals || showMedalPopover || autoPopoverKey > 0);
+    const shouldShowMedalPopover = popover === "streak" || autoMedalPopover;
     const medalStyle = !effectiveMedalEligible
       ? { backgroundColor: "#f5f5f4", color: "#a8a29e" }
       : streak >= 30
@@ -185,7 +193,7 @@
           ),
           shouldShowMedalPopover && React.createElement("div", {
             className: "fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]",
-            style: { animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" },
+            style: { animation: autoMedalPopover ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" },
           },
             React.createElement("div", { className: "flex items-end justify-center gap-3" },
               thresholds.map((item) => React.createElement("div", { key: item.value, className: `flex flex-col items-center justify-end ${effectiveMedalEligible && item.active ? "medal-threshold-active" : ""}` },

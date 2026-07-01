@@ -73,6 +73,7 @@ const ASSET = {
 };
 
 const QUESTION_TYPES = ["identify-choice","identify-text","apply","aural-articulation"];
+const DEFAULT_MARKINGS = MARKINGS.map(mark => mark.id);
 const QUESTION_LABELS = {
   "identify-choice":"Multiple Choice",
   "identify-text":"Definition",
@@ -661,6 +662,14 @@ const useClickOutside = window.MLH.useClickOutside;
 const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
 const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 
+function sameEnabledSet(current, defaults) {
+  return current.length === defaults.length && defaults.every(item => current.includes(item));
+}
+
+function taskMatchesLevel(enabledMarkings, enabledTypes) {
+  return sameEnabledSet(enabledMarkings, DEFAULT_MARKINGS) && sameEnabledSet(enabledTypes, QUESTION_TYPES);
+}
+
 function App(){
   useStyles();
   const [activeLevel,setActiveLevel]=useState(levelFromUrl);
@@ -681,14 +690,18 @@ function App(){
   const [attempted,setAttempted]=useState(0);
   const [streak,setStreak]=useState(0);
   const [best,setBest]=useState(0);
+  const [confettiKey,setConfettiKey]=useState(0);
   const [playing,setPlaying]=useState(false);
   const [followPlayback,setFollowPlayback]=useState(false);
   const [tempo,setTempo]=useState("andante");
   const [metronomeEnabled,setMetronomeEnabled]=useState(false);
   const [activeNoteId,setActiveNoteId]=useState(null);
-  const levelRef=useRef(null), customiseRef=useRef(null), audioRef=useRef(null), timerRef=useRef(null), masterRef=useRef(null), feedbackTimersRef=useRef([]), highlightTimersRef=useRef([]);
+  const levelRef=useRef(null), customiseRef=useRef(null), audioRef=useRef(null), timerRef=useRef(null), masterRef=useRef(null), feedbackTimersRef=useRef([]), highlightTimersRef=useRef([]), levelTaskStatusRef=useRef(null);
   useClickOutside([levelRef,customiseRef],[()=>levelOpen&&setLevelOpen(false),()=>customiseOpen&&setCustomiseOpen(false)]);
   const acc=attempted===0?0:Math.round(correct/attempted*100);
+  const medalEligible=taskMatchesLevel(enabledMarkings,enabledTypes);
+  const displayedLevel=medalEligible?activeLevel:"Custom";
+  const displayedLevelLabel=medalEligible?LEVELS[activeLevel].label:"Custom";
   const showMC=question.type==="identify-choice"||(question.type==="aural-articulation"&&question.marking.id!=="accent");
   const textCanConfirm=clean(typedAnswer).length>0;
   const applyNeedsRange=selectedMarking==="slur"||selectedMarking==="phrase";
@@ -707,10 +720,17 @@ function App(){
     } else try{ctx.close()}catch{}
     audioRef.current=null; setPlaying(false);
   }
+  useEffect(()=>{
+    if(levelTaskStatusRef.current===null){ levelTaskStatusRef.current=medalEligible; return; }
+    if(levelTaskStatusRef.current===medalEligible) return;
+    levelTaskStatusRef.current=medalEligible;
+    window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
+    setConfettiKey(0);
+  },[medalEligible]);
   function clearFeedbackTimers(){ feedbackTimersRef.current.forEach(id=>clearTimeout(id)); feedbackTimersRef.current=[]; }
   function resetTask(q){ stopAudio(); clearFeedbackTimers(); setQuestion(q); setSelectedAnswer(null); setTypedAnswer(""); setSelectedMarking(null); setSelectedNotes([]); setPromptMessage(""); setFeedback(null); setFeedbackFading(false); }
   function newQuestion(types=enabledTypes, marks=enabledMarkings){ setQuestionVisible(false); setTimeout(()=>{ resetTask(makeQuestion(types,marks)); setQuestionVisible(true); },260); }
-  function resetScore(){ setCorrect(0); setAttempted(0); setStreak(0); setBest(0); newQuestion(); }
+  function resetScore(){ setCorrect(0); setAttempted(0); setStreak(0); setBest(0); setConfettiKey(0); newQuestion(); }
   function applyLevel(level){
     if(!LEVELS[level]) return;
     setActiveLevel(level);
@@ -719,10 +739,12 @@ function App(){
     const url=new URL(window.location.href);
     url.searchParams.set("level",level);
     window.history.replaceState({},"",url);
+    window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
+    setConfettiKey(0);
     newQuestion();
   }
   function fadeToNext(){ if(!feedback||feedbackFading)return; clearFeedbackTimers(); setFeedbackFading(true); feedbackTimersRef.current.push(setTimeout(()=>newQuestion(),280)); }
-  function score(ok){ clearFeedbackTimers(); const ns=ok?streak+1:0; const medalBefore=getStreakMedal(streak); const medalAfter=getStreakMedal(ns); playFeedbackSound(ok); if(ok&&medalAfter&&(!medalBefore||medalBefore.sound!==medalAfter.sound)){ setTimeout(()=>playFeedbackSound(true,true,medalAfter.sound),420); } setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){ feedbackTimersRef.current.push(setTimeout(()=>setFeedbackFading(true),1700)); feedbackTimersRef.current.push(setTimeout(()=>newQuestion(),2000)); } }
+  function score(ok){ clearFeedbackTimers(); const ns=ok?streak+1:0; const medalBefore=getStreakMedal(streak); const medalAfter=getStreakMedal(ns); playFeedbackSound(ok); if(medalEligible&&ok&&medalAfter&&(!medalBefore||medalBefore.sound!==medalAfter.sound)){ setConfettiKey(v=>v+1); setTimeout(()=>playFeedbackSound(true,true,medalAfter.sound),420); } setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){ feedbackTimersRef.current.push(setTimeout(()=>setFeedbackFading(true),1700)); feedbackTimersRef.current.push(setTimeout(()=>newQuestion(),2000)); } }
   function selectAnswer(id){ if(feedback)return; stopAudio(true); setSelectedAnswer(id); score(id===question.marking.id); }
   function confirmAnswer(){
     if(feedback)return;
@@ -793,13 +815,15 @@ function App(){
         streak={streak}
         bestStreak={best}
         resetScore={resetScore}
+        medalEligible={medalEligible}
+        confettiKey={confettiKey}
       />
     </window.MLH.AppHeader>
 
     <div className={window.MLH.shell.pageContentClass}>
     <main className="relative overflow-visible rounded-2xl border border-stone-200 bg-white px-4 pb-8 pt-[10px] shadow-sm md:h-auto md:overflow-visible md:px-6 md:pb-10 md:pt-[14px]" onPointerDown={()=>{if(feedback)fadeToNext();}}>
       <window.MLH.AppToolbar
-        left={<><div className="hub-menu-anchor relative" ref={levelRef}><window.MLH.LevelButton icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} activeLevel={activeLevel} activeLabel={LEVELS[activeLevel].label} onClick={()=>{setCustomiseOpen(false);setLevelOpen(v=>!v);}} dataMenuTrigger={true}/>{levelOpen&&<window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS}/></window.MLH.MenuPanel>}</div><div className="hub-menu-anchor relative" ref={customiseRef}><window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} onClick={()=>{setLevelOpen(false);setCustomiseOpen(v=>!v);}} dataMenuTrigger={true}/>{customiseOpen&&<window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}><MenuRows enabledMarkings={enabledMarkings} setEnabledMarkings={setEnabledMarkings} enabledTypes={enabledTypes} setEnabledTypes={setEnabledTypes} newQuestion={newQuestion} followPlayback={followPlayback} setFollowPlayback={setFollowPlayback} tempo={tempo} setTempo={setTempo} metronomeEnabled={metronomeEnabled} setMetronomeEnabled={setMetronomeEnabled} stopAudio={stopAudio}/></window.MLH.MenuPanel>}</div></>}
+        left={<><div className="hub-menu-anchor relative" ref={levelRef}><window.MLH.LevelButton icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} activeLevel={displayedLevel} activeLabel={displayedLevelLabel} isCustom={!medalEligible} onClick={()=>{setCustomiseOpen(false);setLevelOpen(v=>!v);}} dataMenuTrigger={true}/>{levelOpen&&<window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS}/></window.MLH.MenuPanel>}</div><div className="hub-menu-anchor relative" ref={customiseRef}><window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} onClick={()=>{setLevelOpen(false);setCustomiseOpen(v=>!v);}} dataMenuTrigger={true}/>{customiseOpen&&<window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}><MenuRows enabledMarkings={enabledMarkings} setEnabledMarkings={setEnabledMarkings} enabledTypes={enabledTypes} setEnabledTypes={setEnabledTypes} newQuestion={newQuestion} followPlayback={followPlayback} setFollowPlayback={setFollowPlayback} tempo={tempo} setTempo={setTempo} metronomeEnabled={metronomeEnabled} setMetronomeEnabled={setMetronomeEnabled} stopAudio={stopAudio}/></window.MLH.MenuPanel>}</div></>}
         feedback={<FeedbackBanner feedback={feedback} fading={feedbackFading}/>}
         right={<window.MLH.SkipButton onClick={()=>newQuestion()} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />}/>}
       />

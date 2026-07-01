@@ -169,6 +169,19 @@ function settingsForLevel(levelKey, current = DEFAULT_SETTINGS) {
   };
 }
 
+function sameEnabledSet(current, defaults) {
+  return current.length === defaults.length && defaults.every(item => current.includes(item));
+}
+
+function taskMatchesLevel(levelKey, settings) {
+  const official = settingsForLevel(levelKey, DEFAULT_SETTINGS);
+  return sameEnabledSet(settings.enabledItems, official.enabledItems)
+    && sameEnabledSet(settings.enabledBeamedItems, official.enabledBeamedItems)
+    && sameEnabledSet(settings.enabledOperators, official.enabledOperators)
+    && settings.includeRests === official.includeRests
+    && settings.includeBeamedGroups === official.includeBeamedGroups;
+}
+
 function randomItem(items) {
   return items[Math.floor(Math.random() * items.length)];
 }
@@ -899,6 +912,7 @@ function RhythmSumsGoldenApp() {
   const warningTimer = useRef(null);
   const nextTimer = useRef(null);
   const fadeTimer = useRef(null);
+  const levelTaskStatusRef = useRef(null);
 
   useClickOutside(
     [levelRef, customiseRef],
@@ -909,6 +923,9 @@ function RhythmSumsGoldenApp() {
   );
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medalEligible = taskMatchesLevel(activeLevel, settings);
+  const displayedLevel = medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel = medalEligible ? LEVELS[activeLevel].label : "Custom";
   const hasAnswer = answerText.trim().length > 0;
 
   function updateSettings(nextSettings) {
@@ -958,6 +975,20 @@ function RhythmSumsGoldenApp() {
     newQuestion();
   }
 
+  useEffect(() => {
+    if (levelTaskStatusRef.current === null) {
+      levelTaskStatusRef.current = medalEligible;
+      return;
+    }
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+  }, [medalEligible]);
+
   function showWarning(message) {
     setWarning(message);
     if (warningTimer.current) clearTimeout(warningTimer.current);
@@ -975,7 +1006,7 @@ function RhythmSumsGoldenApp() {
     if (fadeTimer.current) clearTimeout(fadeTimer.current);
 
     const nextStreak = ok ? streak + 1 : 0;
-    const earnedMedal = ok ? medalNameForStreak(nextStreak) : null;
+    const earnedMedal = ok && medalEligible ? medalNameForStreak(nextStreak) : null;
     playFeedbackSound(ok, Boolean(earnedMedal), earnedMedal);
     setAttempted((value) => value + 1);
     setCorrect((value) => value + (ok ? 1 : 0));
@@ -1008,7 +1039,7 @@ function RhythmSumsGoldenApp() {
   return (
     <div className={window.MLH.shell.pageShellClass}>
       <window.MLH.AppHeader icon={ASSET.appIcon} title="Rhythm Sums" subtitle="Solve rhythm value sums.">
-        <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} />
+        <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} medalEligible={medalEligible} />
       </window.MLH.AppHeader>
 
       <div className={window.MLH.shell.pageContentClass}>
@@ -1019,8 +1050,9 @@ function RhythmSumsGoldenApp() {
                 <div className="hub-menu-anchor relative" ref={levelRef}>
                   <window.MLH.LevelButton
                     icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26.6px] w-[26.6px] object-contain" />}
-                    activeLevel={activeLevel}
-                    activeLabel={LEVELS[activeLevel].label}
+                    activeLevel={displayedLevel}
+                    activeLabel={displayedLevelLabel}
+                    isCustom={!medalEligible}
                     onClick={() => {
                       setCustomiseOpen(false);
                       setLevelOpen((value) => !value);

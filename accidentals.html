@@ -161,6 +161,7 @@ const ACCIDENTALS = [
   { id: "flat", name: "Flat", value: -1 },
   { id: "natural", name: "Natural", value: 0 },
 ];
+const DEFAULT_ACCIDENTALS = ACCIDENTALS.map((accidental) => accidental.id);
 
 const QUESTION_TYPES = [
   { id: "multiple-choice", label: "Multiple Choice" },
@@ -168,6 +169,7 @@ const QUESTION_TYPES = [
   { id: "audio-two", label: "Audio Questions" },
   { id: "audio-full", label: "Audio Questions" },
 ];
+const DEFAULT_QUESTION_TYPES = QUESTION_TYPES.map((question) => question.id);
 
 const QUESTION_TYPE_OPTIONS = [
   { id: "multiple-choice", label: "Multiple Choice", typeIds: ["multiple-choice"], glyph: "numbers" },
@@ -241,9 +243,14 @@ function yForStep(step, top = STAFF.top) { return top + STAFF.gap * 4 - step * (
 function stemDown(step) { return step > 4; }
 function visualNote(note) { return note; }
 function accidentalId(value) { if (value === 1) return "sharp"; if (value === -1) return "flat"; return "natural"; }
-function accidentalById(id) { return ACCIDENTALS.find((a) => a.id === id) ?? ACCIDENTALS[0]; }
 function accidentalValue(id) { if (id === "sharp") return 1; if (id === "flat") return -1; return 0; }
 function enabledAccidentalValues(enabledAccidentals) { return enabledAccidentals.map(accidentalValue); }
+function sameEnabledSet(current, defaults) {
+  return current.length === defaults.length && defaults.every((item) => current.includes(item));
+}
+function taskMatchesLevel(enabledAccidentals, enabledQuestionTypes) {
+  return sameEnabledSet(enabledAccidentals, DEFAULT_ACCIDENTALS) && sameEnabledSet(enabledQuestionTypes, DEFAULT_QUESTION_TYPES);
+}
 function keysForAccidentals(enabledAccidentals) {
   return KEYS.filter((key) => {
     if (key.id === "F") return enabledAccidentals.includes("flat") || enabledAccidentals.includes("natural");
@@ -262,6 +269,22 @@ function midiFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
 function noteByLetter(letter, preferred = 6) {
   const matches = NOTES.filter((note) => note.letter === letter);
   return matches.reduce((best, note) => (Math.abs(note.index - preferred) < Math.abs(best.index - preferred) ? note : best), matches[0]);
+}
+function noteBaseIndex(note) {
+  return NOTES.findIndex((item) => item.letter === note?.letter && item.octave === note?.octave);
+}
+function keyAccidentalForLetter(key, letter) {
+  return key?.keyAcc?.[letter] ?? 0;
+}
+function chordAccidentalForLetter(chordLetters, letter, key) {
+  const chordLetter = chordLetters.find((item) => item[0] === letter);
+  if (!chordLetter) return null;
+  if (chordLetter.includes("#")) return keyAccidentalForLetter(key, letter) === 1 ? null : 1;
+  if (chordLetter.includes("b")) return keyAccidentalForLetter(key, letter) === -1 ? null : -1;
+  return null;
+}
+function melodicAccidentalForLetter(key, letter) {
+  return key?.forceGSharp && letter === "G" ? 1 : null;
 }
 function weighted(items) {
   const safeItems = items.length ? items : [{ value: 0, weight: 1 }];
@@ -302,65 +325,169 @@ function applyOctaveCounterparts(bar, target, value, skipIndex) {
   });
 }
 
-function chooseMelodicIndex({ previousIndex, movement, key, pattern, beat, rhythm, barIndex, noteIndex, noteCount, timeSignature }) {
-  if (barIndex === 0 && noteIndex === 0) return noteByLetter(key.tonic, 5).index;
-  if (barIndex === BAR_COUNT - 1 && noteIndex === noteCount - 1) return noteByLetter(key.tonic, 6).index;
-  const scale = SCALES[key.id] ?? SCALES.C;
-  const chord = (CHORDS[key.id] ?? CHORDS.C)[barIndex];
-  const passing = rhythm === "quaver" && pattern[noteIndex - 1] === "quaver";
-  const forceStep = rhythm === "quaver";
-  const strongBeat = beat === 0 || (timeSignature.id === "4/4" && beat === 2) || (timeSignature.id === "6/8" && beat === 1.5);
-  const contour = barIndex < 2 ? 1 : -1;
-  const candidates = [];
-  NOTES.forEach((note, index) => {
-    const inScale = scale.includes(note.letter);
-    const inChord = chord.includes(note.letter);
-    if (!inScale && !passing) return;
-    const distance = index - previousIndex;
-    const abs = Math.abs(distance);
-    if (forceStep && abs !== 1) return;
-    let weight = strongBeat ? (inChord ? 14 : 1.5) : inChord ? 6 : 3;
-    if (passing && !inChord) weight *= 2.2;
-    if (abs === 0) weight *= 2;
-    if (abs === 1) weight *= 5;
-    if (abs === 2) weight *= 3;
-    if (abs >= 4) weight *= 0.15;
-    if (Math.abs(movement) >= 3 && Math.sign(distance) !== Math.sign(movement) && abs <= 2) weight *= 4;
-    if (contour > 0 && distance > 0) weight *= 1.5;
-    if (contour < 0 && distance < 0) weight *= 1.5;
-    if (index < 1 || index > NOTES.length - 2) weight *= 0.35;
-    candidates.push({ value: index, weight });
-  });
-  return weighted(candidates.length ? candidates : [{ value: previousIndex, weight: 1 }]);
+function makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordLetters) {
+  const melodicAccidental = melodicAccidentalForLetter(key, base.letter);
+  const chordAccidental = chordAccidentalForLetter(chordLetters, base.letter, key);
+  return { id: `${barIndex}-${noteIndex}`, barIndex, noteIndex, beat, rhythm, letter: base.letter, octave: base.octave, step: base.step, midi: base.midi, writtenAccidental: melodicAccidental ?? chordAccidental, hiddenAccidental: null, highlight: false };
 }
 
-function makeBars(timeSignature, key) {
+function chooseNextNote({ key, chordLetters, previous, currentIndex, strongBeat, rhythm }) {
+  const previousIndex = noteBaseIndex(previous) >= 0 ? noteBaseIndex(previous) : currentIndex;
+  const previousMidi = previous?.midi ?? NOTES[previousIndex]?.midi ?? 72;
+  const maxLeap = 1;
+  const candidates = [];
+
+  NOTES.forEach((candidate, candidateIndex) => {
+    const distance = candidateIndex - previousIndex;
+    const absDistance = Math.abs(distance);
+    const isChordTone = chordLetters.some((letter) => letter[0] === candidate.letter);
+    const pitchDistance = Math.abs((candidate.midi + keyAccidentalForLetter(key, candidate.letter)) - previousMidi);
+
+    if (pitchDistance > 12) return;
+    if (absDistance > maxLeap) return;
+    if (strongBeat && !isChordTone) return;
+
+    let weight = isChordTone ? 8 : 2;
+    if (strongBeat) weight *= 2.8;
+    if (absDistance === 0) weight *= 0.6;
+    if (absDistance === 1) weight *= 5;
+    if (candidateIndex < 1 || candidateIndex > NOTES.length - 2) weight *= 0.35;
+    if (key.id === "Am" && candidate.letter === "G") weight *= 0.8;
+    candidates.push({ value: candidate, weight });
+  });
+
+  if (!candidates.length) {
+    const fallback = NOTES
+      .map((note, index) => ({ ...note, index }))
+      .filter((note) => Math.abs(note.index - previousIndex) <= maxLeap);
+    return randomItem(fallback.length ? fallback : [previous]);
+  }
+  return weighted(candidates);
+}
+
+function buildNotesFromPattern({ key, chordLetters, pattern, barIndex, previousIndex, timeSignature }) {
+  let currentIndex = previousIndex;
+  let previous = NOTES[currentIndex] ?? noteByLetter(key.tonic, 6);
+  let beat = 0;
+  const notes = [];
+
+  pattern.forEach((rhythm, noteIndex) => {
+    const strongBeat = beat === 0 || beat === 2 || (timeSignature.id === "6/8" && beat === 1.5);
+    let base = chooseNextNote({ key, chordLetters, previous, currentIndex, strongBeat, rhythm });
+    if (barIndex === 0 && noteIndex === 0) base = noteByLetter(key.tonic, 6);
+    const note = makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordLetters);
+    notes.push(note);
+    currentIndex = noteBaseIndex(base) >= 0 ? noteBaseIndex(base) : currentIndex;
+    previous = base;
+    beat += rhythmInfo(rhythm).beats;
+  });
+
+  return { notes, lastIndex: currentIndex };
+}
+
+function finalRhythmForSignature(timeSignature) {
+  return FINAL_PATTERNS[timeSignature.id]?.[0] ?? "semibreve";
+}
+
+function buildFinalBar({ key, chordLetters, barIndex, timeSignature, previousIndex }) {
+  const rhythm = finalRhythmForSignature(timeSignature);
+  const previous = NOTES[previousIndex] ?? noteByLetter(key.tonic, 6);
+  const tonicOptions = NOTES.filter((note) => note.letter === key.tonic);
+  const base = tonicOptions.reduce((best, note) => Math.abs(note.midi - previous.midi) < Math.abs(best.midi - previous.midi) ? note : best, tonicOptions[0] ?? noteByLetter(key.tonic, previousIndex));
+  return { barIndex, notes: [makeNote(base, rhythm, barIndex, 0, 0, key, chordLetters)] };
+}
+
+function melodyNotes(bars) {
+  return bars.flatMap((bar) => bar.notes ?? []);
+}
+
+function longestRepeatedPitchRun(notes) {
+  let longest = 1;
+  let current = 1;
+  for (let index = 1; index < notes.length; index += 1) {
+    if (notes[index].step === notes[index - 1].step) {
+      current += 1;
+      longest = Math.max(longest, current);
+    } else {
+      current = 1;
+    }
+  }
+  return longest;
+}
+
+function hasAwkwardBarlineLeap(bars) {
+  return bars.some((bar, index) => {
+    const nextBar = bars[index + 1];
+    if (!bar?.notes?.length || !nextBar?.notes?.length) return false;
+    return Math.abs(nextBar.notes[0].step - bar.notes.at(-1).step) > 3;
+  });
+}
+
+function hasBalancedContour(notes) {
+  let rises = 0;
+  let falls = 0;
+  for (let index = 1; index < notes.length; index += 1) {
+    const interval = notes[index].step - notes[index - 1].step;
+    if (interval > 0) rises += 1;
+    if (interval < 0) falls += 1;
+  }
+  return rises > 0 && falls > 0;
+}
+
+function leapsRecoverByStep(notes) {
+  for (let index = 1; index < notes.length - 1; index += 1) {
+    const leap = notes[index].step - notes[index - 1].step;
+    if (Math.abs(leap) < 2) continue;
+    const recovery = notes[index + 1].step - notes[index].step;
+    if (recovery === 0) continue;
+    if (Math.sign(recovery) === Math.sign(leap) || Math.abs(recovery) > 1) return false;
+  }
+  return true;
+}
+
+function melodyPassesQualityRules(question) {
+  const notes = melodyNotes(question.bars);
+  if (notes.length < 2) return false;
+  const intervals = notes.slice(1).map((note, index) => Math.abs(note.step - notes[index].step));
+  const range = Math.max(...notes.map((note) => note.step)) - Math.min(...notes.map((note) => note.step));
+  const first = notes[0];
+  const last = notes.at(-1);
+
+  if (first.letter !== question.key.tonic) return false;
+  if (last.letter !== question.key.tonic) return false;
+  if (range > 7) return false;
+  if (Math.max(...intervals) > 3) return false;
+  if (hasAwkwardBarlineLeap(question.bars)) return false;
+  if (!hasBalancedContour(notes)) return false;
+  if (!leapsRecoverByStep(notes)) return false;
+  if (longestRepeatedPitchRun(notes) > 2) return false;
+  return true;
+}
+
+function makeBars(timeSignature, key, attempt = 0) {
   const bars = [];
   let previousIndex = noteByLetter(key.tonic, 6).index;
-  let movement = 0;
-  let usedGSharp = false;
   for (let barIndex = 0; barIndex < BAR_COUNT; barIndex += 1) {
-    const pattern = barIndex === BAR_COUNT - 1 ? FINAL_PATTERNS[timeSignature.id] : randomItem(PATTERNS[timeSignature.id]);
-    const starts = beatStarts(pattern);
-    const notes = pattern.map((rhythm, noteIndex) => {
-      const index = chooseMelodicIndex({ previousIndex, movement, key, pattern, beat: starts[noteIndex], rhythm, barIndex, noteIndex, noteCount: pattern.length, timeSignature });
-      let base = NOTES[index];
-      let writtenAccidental = null;
-      if (key.forceGSharp && !usedGSharp && barIndex >= 1 && barIndex <= 2) {
-        base = noteByLetter("G", index);
-        writtenAccidental = 1;
-        usedGSharp = true;
-      }
-      movement = index - previousIndex;
-      previousIndex = index;
-      return { id: `${barIndex}-${noteIndex}`, barIndex, noteIndex, rhythm, letter: base.letter, octave: base.octave, step: base.step, midi: base.midi, writtenAccidental, hiddenAccidental: null, highlight: false };
-    });
-    bars.push({ barIndex, notes });
+    const chordLetters = (CHORDS[key.id] ?? CHORDS.C)[barIndex] ?? tonicChordForKey(key);
+    if (barIndex === BAR_COUNT - 1) {
+      const bar = buildFinalBar({ key, chordLetters, barIndex, timeSignature, previousIndex });
+      previousIndex = noteBaseIndex(bar.notes[0]);
+      bars.push(bar);
+    } else {
+      const pattern = randomItem(PATTERNS[timeSignature.id]);
+      const built = buildNotesFromPattern({ key, chordLetters, pattern, barIndex, previousIndex, timeSignature });
+      previousIndex = built.lastIndex;
+      bars.push({ barIndex, notes: built.notes });
+    }
   }
-  if (key.forceGSharp && !usedGSharp) {
+
+  if (key.forceGSharp && !bars.some((bar) => bar.notes.some((note) => note.letter === "G" && note.writtenAccidental === 1))) {
     const g = noteByLetter("G", 6);
     Object.assign(bars[1].notes[0], { letter: "G", octave: g.octave, step: g.step, midi: g.midi, writtenAccidental: 1 });
   }
+
+  const question = { key, bars };
+  if (!melodyPassesQualityRules(question) && attempt < 160) return makeBars(timeSignature, key, attempt + 1);
   return bars;
 }
 
@@ -468,9 +595,11 @@ function makeApply(enabledAccidentals) {
   }
   if (!targets.length) return makeAudioTwo(enabledAccidentals);
   const target = randomItem(targets);
-  base.bars[target.barIndex].notes[target.noteIndex].highlight = true;
+  const targetNote = base.bars[target.barIndex].notes[target.noteIndex];
+  const showKeySignatureReminder = Boolean(base.key.keyAcc?.[targetNote.letter]) && target.accidental === 0;
+  targetNote.highlight = true;
   const id = accidentalId(target.accidental);
-  return { ...base, answerId: id, required: [{ symbolId: id, barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "before-note" }], prompt: `The <strong><span style=\"text-shadow: 0 0 3px #facc15, 0 0 6px #eab308;\">note</span></strong> in <strong>bar ${target.barIndex + 1}</strong> should be a <strong>semitone ${target.direction}</strong>. Apply this change to the score using a symbol from below.<br/><br/>` };
+  return { ...base, answerId: id, keySignatureReminder: showKeySignatureReminder, required: [{ symbolId: id, barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "before-note" }], prompt: `The <strong><span style=\"text-shadow: 0 0 3px #facc15, 0 0 6px #eab308;\">note</span></strong> in <strong>bar ${target.barIndex + 1}</strong> should be a <strong>semitone ${target.direction}</strong>. Apply this change to the score using a symbol from below.<br/><br/>` };
 }
 function makeAudioTwo(enabledAccidentals) {
   const safeSharps = ["C", "D", "F", "G", "A"];
@@ -555,9 +684,7 @@ function getBarGeometry(barIndex, oneBarMode = false) {
   const startX = STAFF.musicStartX + barIndex * barWidth;
   return { barIndex, systemTop: STAFF.top, startX, endX: startX + barWidth };
 }
-function getBarPositions(notes, startX, endX, oneBarMode = false, placedAccidentalIndexes = [], compoundTime = false) {
-  const placedSet = new Set(placedAccidentalIndexes);
-  const shouldShiftForPlacedAccidental = (note, index) => placedSet.has(index) && (note.rhythm === "quaver" || compoundTime);
+function getBarPositions(notes, startX, endX, oneBarMode = false) {
   const leftPad = oneBarMode ? 18 : 30;
   const rightPad = oneBarMode ? 18 : 30;
   const usableStart = startX + leftPad;
@@ -574,11 +701,10 @@ function getBarPositions(notes, startX, endX, oneBarMode = false, placedAccident
     if (oneBarMode && notes.length === 2 && index === 0) x -= 5;
     if (oneBarMode && notes.length === 2 && index === 1) x += 62;
     if (note.writtenAccidental !== null && note.writtenAccidental !== undefined) x += oneBarMode ? 8 : 14;
-    if (shouldShiftForPlacedAccidental(note, index)) x += oneBarMode ? 16 : 22;
     if (index > 0) {
       const previous = notes[index - 1];
       let minimumGap = previous.rhythm === "quaver" && note.rhythm === "quaver" ? 18 : 24;
-      if (previous.writtenAccidental !== null || note.writtenAccidental !== null || shouldShiftForPlacedAccidental(note, index) || shouldShiftForPlacedAccidental(previous, index - 1)) minimumGap = 42;
+      if (previous.writtenAccidental !== null || note.writtenAccidental !== null) minimumGap = 42;
       x = Math.max(x, output[index - 1] + minimumGap);
     }
     output.push(x);
@@ -586,11 +712,10 @@ function getBarPositions(notes, startX, endX, oneBarMode = false, placedAccident
   });
   return output;
 }
-function scoreLayouts(question, placements = []) {
+function scoreLayouts(question) {
   return question.bars.map((bar) => {
     const geometry = getBarGeometry(bar.barIndex, question.oneBarMode);
-    const placedAccidentalIndexes = placements.filter((placement) => placement.barIndex === bar.barIndex).map((placement) => placement.noteIndex);
-    return { ...geometry, bar, positions: getBarPositions(bar.notes, geometry.startX, geometry.endX - 40, question.oneBarMode, placedAccidentalIndexes, question.timeSignature.compound) };
+    return { ...geometry, bar, positions: getBarPositions(bar.notes, geometry.startX, geometry.endX - 40, question.oneBarMode) };
   });
 }
 function stemData(note, x, systemTop, forcedDown = null, forcedEnd = null) {
@@ -663,8 +788,8 @@ function snapPlacement(pointer, symbolId, question) {
   });
   return closest;
 }
-function placementPosition(placement, question, offset = false, placements = []) {
-  const layout = scoreLayouts(question, placements).find((item) => item.barIndex === placement.barIndex);
+function placementPosition(placement, question, offset = false) {
+  const layout = scoreLayouts(question).find((item) => item.barIndex === placement.barIndex);
   const note = layout?.bar.notes[placement.noteIndex];
   return { x: scoreAccidentalBaseX(layout?.positions[placement.noteIndex] ?? 0), y: note && layout ? yForStep(visualNote(note).step, layout.systemTop) - STAFF.gap / 2 + (offset ? 42 : 0) : STAFF.top };
 }
@@ -722,7 +847,7 @@ function ButtonGlyph({ id }) {
   const yOffset = id === "sharp" ? 2 : id === "natural" ? 1 : 8;
   return <svg viewBox="0 0 100 74" className="h-[44px] w-14 overflow-visible sm:h-[58px] sm:w-20"><text className="music-symbol" x="50" y={37 + yOffset} fill="currentColor" fontSize="58" textAnchor="middle" dominantBaseline="middle">{sharedSymbolForKey(id)}</text></svg>;
 }
-function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false, placements = [] }) { const pos = placementPosition(placement, question, feedbackOffset, placements); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} glow={false} />; }
+function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false }) { const pos = placementPosition(placement, question, feedbackOffset); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} glow={false} />; }
 function StaffLines({ top, left = STAFF.left, right = STAFF.right, fadeGradientId = null }) {
   const stroke = fadeGradientId ? `url(#${fadeGradientId})` : "currentColor";
   return <g>{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke={stroke} strokeWidth="1.2" />)}</g>;
@@ -780,7 +905,7 @@ function Note({ note, x, top, colour = "currentColor", accidentalColour = "curre
 }
 
 function Score({ question, selectedSymbol, placements, hoverPlacement, feedback, wrong, missing, onMove, onLeave, onLock }) {
-  const layouts = useMemo(() => scoreLayouts(question, placements), [question, placements]);
+  const layouts = useMemo(() => scoreLayouts(question), [question]);
   const left = question.oneBarMode ? 335 : STAFF.left;
   const right = question.oneBarMode ? 535 : STAFF.right;
   const transform = question.oneBarMode ? "translate(-410 -120) scale(2)" : "";
@@ -835,16 +960,21 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
             : <line x1={layout.endX} x2={layout.endX} y1={layout.systemTop} y2={layout.systemTop + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.4" />)}
         </g>;
       })}
-      {feedback && !feedback.correct && question.keySignatureReminder && !question.oneBarMode && <text style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 4 }} x={(STAFF.left + STAFF.right) / 2} y={STAFF.top + 114} fill={COLOUR.red} fontSize="14" fontWeight="600" textAnchor="middle">Don't forget to check the key signature!</text>}
-      {placements.map((placement) => <Placement key={placement.localId} placement={placement} question={question} placements={placements} colour={feedback ? wrong.some((item) => placementKey(item) === placementKey(placement)) ? COLOUR.red : COLOUR.green : COLOUR.black} />)}
-      {feedback && missing.map((placement, index) => <Placement key={`missing-${index}`} placement={placement} question={question} placements={placements} colour={COLOUR.green} feedbackOffset={wrong.some((item) => item.barIndex === placement.barIndex && item.noteIndex === placement.noteIndex)} />)}
-      {!feedback && selectedSymbol && hoverPlacement && <Placement placement={hoverPlacement} question={question} placements={placements} colour={COLOUR.black} opacity={0.45} />}
+      {placements.map((placement) => <Placement key={placement.localId} placement={placement} question={question} colour={feedback ? wrong.some((item) => placementKey(item) === placementKey(placement)) ? COLOUR.red : COLOUR.green : COLOUR.black} />)}
+      {feedback && missing.map((placement, index) => <Placement key={`missing-${index}`} placement={placement} question={question} colour={COLOUR.green} feedbackOffset={wrong.some((item) => item.barIndex === placement.barIndex && item.noteIndex === placement.noteIndex)} />)}
+      {!feedback && selectedSymbol && hoverPlacement && <Placement placement={hoverPlacement} question={question} colour={COLOUR.black} opacity={0.45} />}
     </g>
   </svg>;
 }
 
 const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
-function medalNameForStreak(streak) { if (streak === 10) return "bronze"; if (streak === 15) return "silver"; if (streak === 20) return "gold"; if (streak === 30) return "platinum"; return null; }
+function medalNameForStreak(streak) {
+  if (streak === 10) return "bronze";
+  if (streak === 15) return "silver";
+  if (streak === 20) return "gold";
+  if (streak === 30) return "platinum";
+  return null;
+}
 function SymbolButton({ accidental, selected, disabled, correct, wrong, onClick }) { let style = "border-stone-300 bg-white text-stone-900"; if (correct) style = "border-green-700 bg-green-600 text-white"; else if (wrong) style = "border-red-700 bg-red-600 text-white"; else if (selected) style = "border-stone-950 bg-stone-950 text-white"; return <button type="button" disabled={disabled} onClick={onClick} className={`flex h-[64px] flex-1 items-center justify-center rounded-xl border px-1 text-sm font-bold transition sm:h-[74px] sm:min-w-[88px] sm:flex-none ${style}`}><ButtonGlyph id={accidental.id} /></button>; }
 
 
@@ -895,9 +1025,9 @@ const useClickOutside = window.MLH.useClickOutside;
 
 function App() {
   useInjectedStyles();
-  const [enabledAccidentals, setEnabledAccidentals] = useState(() => ACCIDENTALS.map((accidental) => accidental.id));
-  const [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => QUESTION_TYPES.map((q) => q.id));
-  const [question, setQuestion] = useState(() => makeQuestion({ enabledQuestionTypes: ["apply-score"] }));
+  const [enabledAccidentals, setEnabledAccidentals] = useState(() => [...DEFAULT_ACCIDENTALS]);
+  const [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => [...DEFAULT_QUESTION_TYPES]);
+  const [question, setQuestion] = useState(() => makeQuestion({ enabledQuestionTypes: DEFAULT_QUESTION_TYPES, enabledAccidentals: DEFAULT_ACCIDENTALS }));
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
@@ -914,22 +1044,39 @@ function App() {
   const [attempted, setAttempted] = useState(0);
   const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
+  const [confettiKey, setConfettiKey] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const levelRef = useRef(null), customiseRef = useRef(null), warningTimer = useRef(null), nextTimer = useRef(null), audioContext = useRef(null), audioTimers = useRef([]);
+  const levelRef = useRef(null), customiseRef = useRef(null), warningTimer = useRef(null), nextTimer = useRef(null), audioContext = useRef(null), audioTimers = useRef([]), levelTaskStatusRef = useRef(null);
   useClickOutside([levelRef, customiseRef], [() => levelOpen && setLevelOpen(false), () => customiseOpen && setCustomiseOpen(false)]);
   useEffect(() => () => stopAudio(), []);
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medalEligible = taskMatchesLevel(enabledAccidentals, enabledQuestionTypes);
+  const displayedLevelLabel = medalEligible ? LEVELS.N5.label : "Custom";
+  const displayedLevel = medalEligible ? "N5" : "Custom";
+  useEffect(() => {
+    if (levelTaskStatusRef.current === null) {
+      levelTaskStatusRef.current = medalEligible;
+      return;
+    }
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+  }, [medalEligible]);
   const isChoice = question.questionType === "multiple-choice";
   const isPlacement = !isChoice;
   const canConfirm = isPlacement && placements.length > 0;
   function stopAudio() { audioTimers.current.forEach(clearTimeout); audioTimers.current = []; if (audioContext.current) { try { audioContext.current.close(); } catch {} } audioContext.current = null; setPlaying(false); }
   function resetTask(nextQuestion = question) { stopAudio(); if (nextTimer.current) clearTimeout(nextTimer.current); setQuestion(nextQuestion); setSelectedSymbol(null); setPlacements([]); setHoverPlacement(null); setFeedback(null); setFeedbackFading(false); setWarning(""); setChoice(null); setWrong([]); setMissing([]); }
   function newQuestion(nextTypes = enabledQuestionTypes, nextAccidentals = enabledAccidentals) { setQuestionVisible(false); setTimeout(() => { resetTask(makeQuestion({ enabledQuestionTypes: nextTypes, enabledAccidentals: nextAccidentals })); setQuestionVisible(true); }, 260); }
-  function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); newQuestion(); }
+  function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); setConfettiKey(0); newQuestion(); }
   function showWarning(message) { setWarning(message); if (warningTimer.current) clearTimeout(warningTimer.current); warningTimer.current = setTimeout(() => setWarning(""), 1800); }
   function scoreAnswer(ok) {
     const nextStreak = ok ? streak + 1 : 0;
-    const earnedMedal = ok ? medalNameForStreak(nextStreak) : null;
+    const earnedMedal = ok && medalEligible ? medalNameForStreak(nextStreak) : null;
     setAttempted((value) => value + 1);
     setCorrect((value) => value + (ok ? 1 : 0));
     setStreak(nextStreak);
@@ -937,6 +1084,7 @@ function App() {
     setFeedback({ correct: ok });
     setFeedbackFading(false);
     try { playFeedbackSound(ok, Boolean(earnedMedal), earnedMedal); } catch {}
+    if (earnedMedal) setConfettiKey((value) => value + 1);
     if (ok) {
       setTimeout(() => setFeedbackFading(true), 1700);
       nextTimer.current = setTimeout(() => newQuestion(), 2000);
@@ -1002,7 +1150,7 @@ function App() {
   ));
   return <div className={window.MLH.shell.pageShellClass}>
     <window.MLH.AppHeader icon={ASSET.appIcon} title="Accidentals" subtitle="Identify and apply flats, sharps and naturals.">
-      <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} />
+      <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} medalEligible={medalEligible} />
     </window.MLH.AppHeader>
 
     <div className={window.MLH.shell.pageContentClass}>
@@ -1012,8 +1160,9 @@ function App() {
             <div className="relative" ref={levelRef}>
               <window.MLH.LevelButton
                 icon={<img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain scale-[1.06]" />}
-                activeLabel={LEVELS.N5.label}
-                activeLevel="N5"
+                activeLabel={displayedLevelLabel}
+                activeLevel={displayedLevel}
+                isCustom={!medalEligible}
                 onClick={() => {
                   setCustomiseOpen(false);
                   setLevelOpen((value) => !value);
@@ -1042,7 +1191,7 @@ function App() {
             {feedback ? <window.MLH.FeedbackBadge feedback={feedback} fading={feedbackFading} animationPrefix="note" /> : <WarningBanner warning={warning} />}
           </div>
           <div className="flex items-center justify-end gap-2 justify-self-end">
-            <window.MLH.SkipButton onClick={() => newQuestion()} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
+            <window.MLH.SkipButton onClick={() => { setStreak(0); newQuestion(); }} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
           </div>
         </div>
         <div className={`relative -top-[6px] ${mobileScoreHeight} flex items-center overflow-hidden transition-opacity duration-300 md:block md:h-[280px] md:flex-none ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbol={selectedSymbol} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} onMove={handleMove} onLeave={() => setHoverPlacement(null)} onLock={handleLock} /></div>
@@ -1050,6 +1199,11 @@ function App() {
           <div className="flex items-start justify-between gap-3 text-stone-900">
             <div className={isPlacement ? "pb-2" : hasPlayButton ? "pb-3" : "pb-1 sm:pb-3"}>
               <p className="text-base font-semibold leading-none" dangerouslySetInnerHTML={{ __html: question.prompt }} />
+              {feedback && !feedback.correct && question.keySignatureReminder && !question.oneBarMode && (
+                <p className="mt-3 text-base font-semibold leading-tight text-stone-950">
+                  Don't forget to check the key signature!
+                </p>
+              )}
             </div>
           </div>
           {isChoice && (
@@ -1080,34 +1234,59 @@ function App() {
           )}
           {isPlacement && (
             <>
-              <div className="mt-2 flex w-fit max-w-full flex-nowrap justify-start gap-2">
-                {accidentalButtons}
-              </div>
-              <div className={`mt-4 flex flex-wrap items-end gap-3 pb-[0px] ${hasPlayButton ? "justify-between" : "justify-end"}`}>
-                {hasPlayButton && (
-                  <button type="button" onClick={playQuestion} disabled={playing} className={window.MLH.PlayButtonClass}>
-                    <span className="text-base leading-none">▶</span>
-                    <span>Play</span>
-                  </button>
-                )}
-                <div className={hasPlayButton ? window.MLH.ActionButtonGroupClass : "ml-auto grid grid-cols-2 gap-2"}>
-                  <button
-                    type="button"
-                    disabled={Boolean(feedback) || placements.length === 0}
-                    onClick={() => {
-                      setPlacements([]);
-                      setHoverPlacement(null);
-                      setWarning("");
-                    }}
-                    className={window.MLH.ClearButtonClass}
-                  >
-                    Clear
-                  </button>
-                  <window.MLH.ConfirmButton disabled={!canConfirm || Boolean(feedback)} onClick={confirmPlacement} className={hasPlayButton ? window.MLH.AudioConfirmButtonClass : ""}>
-                    Confirm
-                  </window.MLH.ConfirmButton>
+              {hasPlayButton ? (
+                <>
+                  <div className="mt-2 flex w-fit max-w-full flex-nowrap justify-start gap-2">
+                    {accidentalButtons}
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-end justify-between gap-3 pb-[0px]">
+                    <button type="button" onClick={playQuestion} disabled={playing} className={window.MLH.PlayButtonClass}>
+                      <span className="text-base leading-none">▶</span>
+                      <span>Play</span>
+                    </button>
+                    <div className={window.MLH.ActionButtonGroupClass}>
+                      <button
+                        type="button"
+                        disabled={Boolean(feedback) || placements.length === 0}
+                        onClick={() => {
+                          setPlacements([]);
+                          setHoverPlacement(null);
+                          setWarning("");
+                        }}
+                        className={window.MLH.ClearButtonClass}
+                      >
+                        Clear
+                      </button>
+                      <window.MLH.ConfirmButton disabled={!canConfirm || Boolean(feedback)} onClick={confirmPlacement} className={window.MLH.AudioConfirmButtonClass}>
+                        Confirm
+                      </window.MLH.ConfirmButton>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+                  <div className="flex w-fit max-w-full flex-nowrap justify-start gap-2">
+                    {accidentalButtons}
+                  </div>
+                  <div className="ml-auto grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={Boolean(feedback) || placements.length === 0}
+                      onClick={() => {
+                        setPlacements([]);
+                        setHoverPlacement(null);
+                        setWarning("");
+                      }}
+                      className={window.MLH.ClearButtonClass}
+                    >
+                      Clear
+                    </button>
+                    <window.MLH.ConfirmButton disabled={!canConfirm || Boolean(feedback)} onClick={confirmPlacement}>
+                      Confirm
+                    </window.MLH.ConfirmButton>
+                  </div>
                 </div>
-              </div>
+              )}
             </>
           )}
         </div>

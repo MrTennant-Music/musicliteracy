@@ -89,6 +89,14 @@ const LEVELS = {
   AH: { label: "Advanced Higher", description: "Dal segno (D.S.) • Fine", types: ["straight-repeat", "first-second", "dc", "ds-fine"] },
 };
 
+function sameEnabledSet(current, defaults) {
+  return current.length === defaults.length && defaults.every(item => current.includes(item));
+}
+
+function taskMatchesLevel(level, enabledTypes) {
+  return sameEnabledSet(enabledTypes, LEVELS[level]?.types || LEVELS.N4.types);
+}
+
 const QUESTION_TYPE_LABELS = {
   "straight-repeat": "Repeat signs",
   "first-second": "1st and 2nd time bars",
@@ -1078,6 +1086,7 @@ function App() {
   const [attempted, setAttempted] = useState(0);
   const [streak, setStreak] = useState(0);
   const [best, setBest] = useState(0);
+  const [confettiKey, setConfettiKey] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [followPlayback, setFollowPlayback] = useState(false);
   const [tempo, setTempo] = useState("andante");
@@ -1092,11 +1101,26 @@ function App() {
   const highlightTimersRef = useRef([]);
   const feedbackFadeTimerRef = useRef(null);
   const feedbackNextTimerRef = useRef(null);
+  const levelTaskStatusRef = useRef(null);
 
   useClickOutside([levelRef, customiseRef], [() => levelOpen && setLevelOpen(false), () => customiseOpen && setCustomiseOpen(false)]);
   useEffect(() => () => stopAudio(), []);
 
   const acc = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medalEligible = taskMatchesLevel(activeLevel, enabledQuestionTypes);
+  const displayedLevel = medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel = medalEligible ? LEVELS[activeLevel].label : "Custom";
+
+  useEffect(() => {
+    if (levelTaskStatusRef.current === null) {
+      levelTaskStatusRef.current = medalEligible;
+      return;
+    }
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
+    setConfettiKey(0);
+  }, [medalEligible]);
 
   function stopAudio(fade = false) {
     clearTimeout(endTimerRef.current);
@@ -1154,6 +1178,8 @@ function App() {
     const url = new URL(window.location.href);
     url.searchParams.set("level", level);
     window.history.replaceState({}, "", url);
+    window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
+    setConfettiKey(0);
     newQuestion(level, levelTypes);
   }
 
@@ -1174,6 +1200,7 @@ function App() {
     setAttempted(0);
     setStreak(0);
     setBest(0);
+    setConfettiKey(0);
     newQuestion(activeLevel);
   }
 
@@ -1193,7 +1220,13 @@ function App() {
 
   function score(ok) {
     const ns = ok ? streak + 1 : 0;
+    const medalBefore = window.MLH?.getStreakMedal?.(streak);
+    const medalAfter = window.MLH?.getStreakMedal?.(ns);
     playFeedbackSound(ok);
+    if (medalEligible && ok && medalAfter && (!medalBefore || medalBefore.sound !== medalAfter.sound)) {
+      setConfettiKey((value) => value + 1);
+      setTimeout(() => playFeedbackSound(true, true, medalAfter.sound), 420);
+    }
     setAttempted(v => v + 1);
     setCorrect(v => v + (ok ? 1 : 0));
     setStreak(ns);
@@ -1371,6 +1404,8 @@ function App() {
         streak={streak}
         bestStreak={best}
         resetScore={resetScore}
+        medalEligible={medalEligible}
+        confettiKey={confettiKey}
       />
     </window.MLH.AppHeader>
 
@@ -1382,8 +1417,9 @@ function App() {
           <div className="hub-menu-anchor relative" ref={levelRef}>
             <window.MLH.LevelButton
               icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
-              activeLevel={activeLevel}
-              activeLabel={LEVELS[activeLevel].label}
+              activeLevel={displayedLevel}
+              activeLabel={displayedLevelLabel}
+              isCustom={!medalEligible}
               onClick={() => { setCustomiseOpen(false); setLevelOpen(v => !v); }}
               dataMenuTrigger={true}
             />

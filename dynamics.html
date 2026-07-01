@@ -161,6 +161,14 @@ function dynamicsForLevel(level) {
   return [...(LEVELS[level]?.dynamics || LEVELS.N3.dynamics)];
 }
 
+function sameEnabledSet(current, defaults) {
+  return current.length === defaults.length && defaults.every(item => current.includes(item));
+}
+
+function taskMatchesLevel(level, enabledTypes, enabledDynamics) {
+  return sameEnabledSet(enabledTypes, QUESTION_TYPES) && sameEnabledSet(enabledDynamics, dynamicsForLevel(level));
+}
+
 function sharedActualSymbolKey(key) {
   if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
   if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
@@ -954,6 +962,7 @@ function App() {
   const [attempted, setAttempted] = useState(0);
   const [streak, setStreak] = useState(0);
   const [best, setBest] = useState(0);
+  const [confettiKey, setConfettiKey] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [followPlayback, setFollowPlayback] = useState(false);
   const [tempo, setTempo] = useState("andante");
@@ -967,6 +976,7 @@ function App() {
   const endTimerRef = useRef(null);
   const highlightTimersRef = useRef([]);
   const feedbackTimersRef = useRef([]);
+  const levelTaskStatusRef = useRef(null);
 
   useClickOutside([levelRef, customiseRef], [() => levelOpen && setLevelOpen(false), () => customiseOpen && setCustomiseOpen(false)]);
   useEffect(() => () => stopAudio(), []);
@@ -980,6 +990,9 @@ function App() {
   }, []);
 
   const acc = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medalEligible = taskMatchesLevel(activeLevel, enabledTypes, enabledDynamics);
+  const displayedLevel = medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel = medalEligible ? LEVELS[activeLevel].label : "Custom";
   const isPlacement = question.type === "apply-score" || question.type === "audio";
   const isChoice = question.type === "multiple-choice";
   const isText = question.type === "definition";
@@ -1002,6 +1015,17 @@ function App() {
     setPlaying(false);
     setActiveNoteId(null);
   }
+  useEffect(() => {
+    if (levelTaskStatusRef.current === null) {
+      levelTaskStatusRef.current = medalEligible;
+      return;
+    }
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
+    setConfettiKey(0);
+  }, [medalEligible]);
+
   function resetTask(q) {
     stopAudio();
     feedbackTimersRef.current.forEach(id => clearTimeout(id));
@@ -1027,7 +1051,7 @@ function App() {
     setStreak(0);
     newQuestion();
   }
-  function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBest(0); newQuestion(); }
+  function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBest(0); setConfettiKey(0); newQuestion(); }
   function applyLevel(level) {
     if (!LEVELS[level]) return;
     const nextDynamics = dynamicsForLevel(level);
@@ -1039,6 +1063,7 @@ function App() {
     url.searchParams.set("level", level);
     window.history.replaceState({}, "", url);
     window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
+    setConfettiKey(0);
     newQuestion(enabledTypes, nextDynamics);
   }
   function fadeToNext() {
@@ -1053,7 +1078,8 @@ function App() {
     const medalBefore = getStreakMedal(streak);
     const medalAfter = getStreakMedal(ns);
     playFeedbackSound(ok);
-    if (ok && medalAfter && (!medalBefore || medalBefore.sound !== medalAfter.sound)) {
+    if (medalEligible && ok && medalAfter && (!medalBefore || medalBefore.sound !== medalAfter.sound)) {
+      setConfettiKey((value) => value + 1);
       setTimeout(() => playFeedbackSound(true, true, medalAfter.sound), 420);
     }
     setAttempted(v => v + 1);
@@ -1197,6 +1223,8 @@ function App() {
         streak={streak}
         bestStreak={best}
         resetScore={resetScore}
+        medalEligible={medalEligible}
+        confettiKey={confettiKey}
       />
     </window.MLH.AppHeader>
 
@@ -1207,8 +1235,9 @@ function App() {
           <div className="hub-menu-anchor relative" ref={levelRef}>
             <window.MLH.LevelButton
               icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
-              activeLevel={activeLevel}
-              activeLabel={LEVELS[activeLevel].label}
+              activeLevel={displayedLevel}
+              activeLabel={displayedLevelLabel}
+              isCustom={!medalEligible}
               onClick={() => { setCustomiseOpen(false); setLevelOpen(v => !v); }}
               dataMenuTrigger={true}
             />

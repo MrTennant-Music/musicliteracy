@@ -272,6 +272,12 @@ const DEFAULT_QUESTION_OPTIONS = {
   octaveLower: true,
 };
 
+function taskMatchesLevel(level, wholeBarMode, questionOptions) {
+  if (wholeBarMode) return false;
+  if (level !== "AH") return true;
+  return Object.keys(DEFAULT_QUESTION_OPTIONS).every((key) => Boolean(questionOptions[key]) === DEFAULT_QUESTION_OPTIONS[key]);
+}
+
 const RHYTHM_BEATS = Object.fromEntries(RHYTHMS.map((rhythm) => [rhythm.id, rhythm.beats]));
 
 const RHYTHM_SPACING = {
@@ -1249,6 +1255,7 @@ function App() {
   const [confettiKey, setConfettiKey] = useState(0);
   const feedbackTimerRef = useRef(null);
   const feedbackFadeTimerRef = useRef(null);
+  const levelTaskStatusRef = useRef(null);
 
   const mode = wholeBarMode ? "exam" : "practice";
   const customiseRef = useRef(null);
@@ -1265,6 +1272,9 @@ function App() {
   );
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medalEligible = taskMatchesLevel(activeLevel, wholeBarMode, questionOptions);
+  const displayedLevel = medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel = medalEligible ? (activeLevel === "AH" ? "Advanced Higher" : "Higher") : "Custom";
   const meaningMode = question.type === "meaning";
   const meaningMarked = meaningMode && feedback;
   const examReady = wholeBarMode && !meaningMode && question.passage.every((_, index) => examSteps[index] != null && selectedRhythms[index] != null);
@@ -1333,6 +1343,22 @@ function App() {
     setConfettiKey(0);
     newQuestion(mode);
   }
+
+  React.useEffect(() => {
+    if (levelTaskStatusRef.current === null) {
+      levelTaskStatusRef.current = medalEligible;
+      return;
+    }
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    window.MLH.resetLevelSessionProgress({
+      setCorrect,
+      setAttempted,
+      setStreak,
+      setBestStreak,
+      setConfettiKey,
+    });
+  }, [medalEligible]);
 
   function fadeToNextQuestion() {
     if (!feedback || feedback.correct || feedbackFading || feedbackTimerRef.current) return;
@@ -1522,7 +1548,7 @@ function App() {
     setBestStreak((value) => Math.max(value, nextStreak));
     setFeedback({ correct: isCorrect });
 
-    if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
+    if (medalEligible && isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
       const medal = safeGetStreakMedal(nextStreak);
       setConfettiKey((value) => value + 1);
       if (medal?.sound) {
@@ -1606,6 +1632,7 @@ function App() {
           bestStreak={bestStreak}
           resetScore={resetScore}
           confettiKey={confettiKey}
+          medalEligible={medalEligible}
         />
       </window.MLH.AppHeader>
 
@@ -1619,8 +1646,9 @@ function App() {
               <div className="relative" ref={levelRef}>
                 <window.MLH.LevelButton
                   icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[21px] w-[21px] object-contain" />}
-                  activeLevel={activeLevel}
-                  activeLabel={activeLevel === "AH" ? "Advanced Higher" : "Higher"}
+                  activeLevel={displayedLevel}
+                  activeLabel={displayedLevelLabel}
+                  isCustom={!medalEligible}
                   onClick={() => setLevelOpen((value) => !value)}
                 />
                 {levelOpen && (

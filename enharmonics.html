@@ -48,6 +48,8 @@ const LEVELS = {
   },
 };
 
+const DEFAULT_OPTIONS = { treble: true, bass: true, eSharpFflat: true, bSharpCflat: true };
+
 const W = 920;
 const H = 420;
 const GAP = 21;
@@ -126,6 +128,10 @@ function randomItem(items) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function taskMatchesLevel(options) {
+  return Object.keys(DEFAULT_OPTIONS).every((key) => Boolean(options[key]) === DEFAULT_OPTIONS[key]);
 }
 
 function noteIndex(letter, octave) {
@@ -288,7 +294,7 @@ function noteLabel(note) {
   return `${note.letter}${accidental}${note.octave}`;
 }
 
-function ScorePanel({ correct, attempted, accuracy, streak, bestStreak, confettiKey, resetScore }) {
+function ScorePanel({ correct, attempted, accuracy, streak, bestStreak, confettiKey, resetScore, medalEligible }) {
   return (
     <window.MLH.ScoreStreakPanel
       assets={ASSET}
@@ -299,6 +305,7 @@ function ScorePanel({ correct, attempted, accuracy, streak, bestStreak, confetti
       bestStreak={bestStreak}
       confettiKey={confettiKey}
       resetScore={resetScore}
+      medalEligible={medalEligible}
     />
   );
 }
@@ -509,8 +516,8 @@ function App() {
   const customiseRef = useRef(null);
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [options, setOptions] = useState({ treble: true, bass: true, eSharpFflat: true, bSharpCflat: true });
-  const [question, setQuestion] = useState(() => makeQuestion({ treble: true, bass: true, eSharpFflat: true, bSharpCflat: true }));
+  const [options, setOptions] = useState(DEFAULT_OPTIONS);
+  const [question, setQuestion] = useState(() => makeQuestion(DEFAULT_OPTIONS));
   const [selectedAccidental, setSelectedAccidental] = useState(null);
   const [placed, setPlaced] = useState(null);
   const [hoverStep, setHoverStep] = useState(null);
@@ -524,9 +531,23 @@ function App() {
   const [bestStreak, setBestStreak] = useState(0);
   const [confettiKey, setConfettiKey] = useState(0);
   const timers = useRef([]);
+  const medalEligible = taskMatchesLevel(options);
+  const displayedLevel = medalEligible ? "AH" : "Custom";
+  const displayedLevelLabel = medalEligible ? LEVELS.AH.label : "Custom";
+  const levelTaskStatusRef = useRef(medalEligible);
 
   useEffect(() => window.MLH?.installPhoneLandscapeLock?.(), []);
   window.MLH?.useClickOutside?.([levelRef, customiseRef], [() => setLevelOpen(false), () => setCustomiseOpen(false)]);
+
+  useEffect(() => {
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+  }, [medalEligible]);
 
   const accuracy = attempted ? Math.round((correct / attempted) * 100) : 0;
   const canConfirm = placed && !feedback;
@@ -586,7 +607,7 @@ function App() {
         const next = value + 1;
         setBestStreak((best) => Math.max(best, next));
         const medal = window.MLH?.getStreakMedal?.(next);
-        if (medal && [10, 15, 20, 30].includes(next)) {
+        if (medalEligible && medal && [10, 15, 20, 30].includes(next)) {
           setConfettiKey((key) => key + 1);
           timers.current.push(setTimeout(() => window.MLH?.playFeedbackSound?.(true, true, medal.sound), 180));
         }
@@ -692,7 +713,7 @@ function App() {
   return (
     <div className={SHELL.pageShellClass}>
       <window.MLH.AppHeader icon={ASSET.appIcon} title="Enharmonic Equivalents" subtitle="Identify and rewrite enharmonic equivalent notes.">
-        <ScorePanel correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} confettiKey={confettiKey} resetScore={resetScore} />
+        <ScorePanel correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} confettiKey={confettiKey} resetScore={resetScore} medalEligible={medalEligible} />
       </window.MLH.AppHeader>
 
       <div className={SHELL.pageContentClass}>
@@ -702,8 +723,9 @@ function App() {
               <div className="relative" ref={levelRef}>
                 <window.MLH.LevelButton
                   icon={<img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain scale-[1.06]" />}
-                  activeLabel={LEVELS.AH.label}
-                  activeLevel="AH"
+                  activeLabel={displayedLevelLabel}
+                  activeLevel={displayedLevel}
+                  isCustom={!medalEligible}
                   onClick={() => {
                     setCustomiseOpen(false);
                     setLevelOpen((value) => !value);

@@ -815,6 +815,7 @@ function App() {
     return options;
   }, {});
   const enabledQuestionTypeIds = (options) => QUESTION_TYPES.filter((type) => options[type.id]).map((type) => type.id);
+  const taskMatchesLevel = (options) => QUESTION_TYPES.every((type) => Boolean(options[type.id]));
 
   const [activeLevel, setActiveLevel] = useState(() => {
     const level = new URLSearchParams(window.location.search).get("level");
@@ -844,6 +845,7 @@ function App() {
   const medalSoundTimerRef = useRef(null);
   const correctFadeTimerRef = useRef(null);
   const correctAdvanceTimerRef = useRef(null);
+  const levelTaskStatusRef = useRef(null);
 
   React.useEffect(() => window.MLH?.installPhoneLandscapeLock?.(), []);
 
@@ -853,6 +855,9 @@ function App() {
   ]);
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medalEligible = taskMatchesLevel(questionTypeOptions);
+  const displayedLevel = medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel = medalEligible ? LEVELS[activeLevel].label : "Custom";
   const canConfirm = selectedId !== null && !feedback;
   const customisePanelStyle = typeof window !== "undefined" && window.innerWidth < 640 && customiseRef.current
     ? { left: `${24 - customiseRef.current.getBoundingClientRect().left}px` }
@@ -895,6 +900,20 @@ function App() {
     setConfettiKey(0);
     newQuestion();
   }
+
+  React.useEffect(() => {
+    if (levelTaskStatusRef.current === null) {
+      levelTaskStatusRef.current = medalEligible;
+      return;
+    }
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+  }, [medalEligible]);
 
   function fadeToNextQuestion() {
     if (!feedback || feedback === "correct" || feedbackFading) return;
@@ -951,7 +970,7 @@ function App() {
     setBestStreak((value) => Math.max(value, nextStreak));
     setFeedback(feedbackType);
 
-    if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
+    if (medalEligible && isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
       const medal = getStreakMedal(nextStreak);
       setConfettiKey((value) => value + 1);
       medalSoundTimerRef.current = window.setTimeout(() => {
@@ -1005,6 +1024,7 @@ function App() {
             bestStreak={bestStreak}
             resetScore={resetScore}
             confettiKey={confettiKey}
+            medalEligible={medalEligible}
           />
         </AppHeader>
 
@@ -1024,8 +1044,9 @@ function App() {
               <div className="hub-menu-anchor relative" ref={levelRef}>
                 <LevelButton
                   icon={<img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain" />}
-                  activeLevel={activeLevel}
-                  activeLabel={LEVELS[activeLevel].label}
+                  activeLevel={displayedLevel}
+                  activeLabel={displayedLevelLabel}
+                  isCustom={!medalEligible}
                   onClick={() => setLevelMenuOpen((value) => !value)}
                   dataMenuTrigger={true}
                 />

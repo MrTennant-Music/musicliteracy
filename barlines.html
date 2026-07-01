@@ -324,6 +324,17 @@ function levelEnabledMap(levelKey) {
   return enabled;
 }
 
+function enabledMapMatchesLevel(levelKey, enabledRhythms) {
+  const official = levelEnabledMap(levelKey);
+  const keys = new Set([...Object.keys(official), ...Object.keys(enabledRhythms)]);
+  return [...keys].every(key => Boolean(enabledRhythms[key]) === Boolean(official[key]));
+}
+
+function taskMatchesLevel(levelKey, enabledRhythms, restsEnabled) {
+  const officialRests = LEVELS[levelKey].rhythmIds.includes("rests");
+  return enabledMapMatchesLevel(levelKey, enabledRhythms) && restsEnabled === officialRests;
+}
+
 function levelTimeTypes(levelKey, enabledRhythms = levelEnabledMap(levelKey)) {
   const level = LEVELS[levelKey] || LEVELS.N3;
   const activeSignatures = level.timeSignatureIds.filter((id) => enabledRhythms[`time-${id}`]);
@@ -1099,6 +1110,7 @@ function App() {
   const levelRef = useRef(null);
   const customiseRef = useRef(null);
   const feedbackTimersRef = useRef([]);
+  const levelTaskStatusRef = useRef(null);
 
   useClickOutside([levelRef, customiseRef], [() => levelOpen && setLevelOpen(false), () => customiseOpen && setCustomiseOpen(false)]);
 
@@ -1107,6 +1119,23 @@ function App() {
   const expectedBoundaryCount = Object.keys(expectedBoundaryTypes).length;
   const canConfirm = placedBoundaryCount > 0;
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medalEligible = taskMatchesLevel(activeLevel, enabledRhythms, restsEnabled);
+  const displayedLevel = medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel = medalEligible ? LEVELS[activeLevel].label : "Custom";
+
+  useEffect(() => {
+    if (levelTaskStatusRef.current === null) {
+      levelTaskStatusRef.current = medalEligible;
+      return;
+    }
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+  }, [medalEligible]);
 
   function clearFeedbackTimers() {
     feedbackTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
@@ -1193,7 +1222,7 @@ function App() {
     setStreak(nextStreak);
     setBestStreak((value) => Math.max(value, nextStreak));
     setFeedback({ correct: isCorrect });
-    if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
+    if (medalEligible && isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
       const medal = getStreakMedal(nextStreak);
       setConfettiKey((value) => value + 1);
       window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
@@ -1221,7 +1250,7 @@ function App() {
   return (
     <div className={window.MLH.shell.pageShellClass}>
       <window.MLH.AppHeader icon={ASSET.appIcon} title="Barlines" subtitle="Insert barlines at the correct place in the music.">
-        <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} />
+        <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} medalEligible={medalEligible} />
       </window.MLH.AppHeader>
 
       <div className={window.MLH.shell.pageContentClass}>
@@ -1232,8 +1261,9 @@ function App() {
                 <div className="hub-menu-anchor relative" ref={levelRef}>
                   <window.MLH.LevelButton
                     icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
-                    activeLevel={activeLevel}
-                    activeLabel={LEVELS[activeLevel].label}
+                    activeLevel={displayedLevel}
+                    activeLabel={displayedLevelLabel}
+                    isCustom={!medalEligible}
                     onClick={() => { setCustomiseOpen(false); setLevelOpen((value) => !value); }}
                     dataMenuTrigger={true}
                   />

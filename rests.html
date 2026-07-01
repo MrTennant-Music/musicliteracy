@@ -160,6 +160,11 @@ function defaultEnabledOptions(levelKey) {
     ...REST_OPTION_IDS.map((id) => [`rest-${id}`, true]),
   ]);
 }
+function taskMatchesLevel(levelKey, enabledOptions) {
+  const official = defaultEnabledOptions(levelKey);
+  const keys = new Set([...Object.keys(official), ...Object.keys(enabledOptions)]);
+  return [...keys].every((key) => Boolean(enabledOptions[key]) === Boolean(official[key]));
+}
 function enabledTimeSignatureIds(levelKey, enabledOptions) {
   const level = LEVELS[levelKey] || LEVELS.H;
   const ids = level.timeSignatureIds.filter((id) => enabledOptions?.[`time-${id}`]);
@@ -951,10 +956,28 @@ function RestsApp() {
   const customiseRef = useRef(null);
   const warningTimeoutRef = useRef(null);
   const feedbackTimersRef = useRef([]);
+  const levelTaskStatusRef = useRef(null);
   useClickOutside([levelRef, customiseRef], [() => levelOpen && setLevelOpen(false), () => customiseOpen && setCustomiseOpen(false)]);
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medalEligible = taskMatchesLevel(activeLevel, enabledOptions);
+  const displayedLevel = medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel = medalEligible ? LEVELS[activeLevel].label : "Custom";
   const allBoxesAnswered = question.missingBoxes.every((box) => placedAnswers[box.id]);
+
+  useEffect(() => {
+    if (levelTaskStatusRef.current === null) {
+      levelTaskStatusRef.current = medalEligible;
+      return;
+    }
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+  }, [medalEligible]);
 
   function clearFeedbackTimers() {
     feedbackTimersRef.current.forEach((timer) => window.clearTimeout(timer));
@@ -987,6 +1010,11 @@ function RestsApp() {
     setEnabledOptions(nextEnabledOptions);
     setLevelOpen(false);
     setCustomiseOpen(false);
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
     resetTask(makeQuestion(levelKey, nextEnabledOptions));
     setQuestionVisible(true);
   }
@@ -1023,7 +1051,7 @@ function RestsApp() {
     setStreak(nextStreak);
     setBestStreak((value) => Math.max(value, nextStreak));
     setFeedback({ correct: isCorrect });
-    if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
+    if (medalEligible && isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
       const medal = getStreakMedal(nextStreak);
       setConfettiKey((value) => value + 1);
       window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
@@ -1047,7 +1075,7 @@ function RestsApp() {
   return (
     <div className={window.MLH.shell.pageShellClass}>
       <window.MLH.AppHeader icon={ASSET.appIcon} title="Rests" subtitle="Identify and apply rests.">
-        <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} />
+        <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} medalEligible={medalEligible} />
       </window.MLH.AppHeader>
 
       <div className={window.MLH.shell.pageContentClass}>
@@ -1058,8 +1086,9 @@ function RestsApp() {
                 <div className="hub-menu-anchor relative" ref={levelRef}>
                   <window.MLH.LevelButton
                     icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
-                    activeLevel={activeLevel}
-                    activeLabel={LEVELS[activeLevel].label}
+                    activeLevel={displayedLevel}
+                    activeLabel={displayedLevelLabel}
+                    isCustom={!medalEligible}
                     onClick={() => { setCustomiseOpen(false); setLevelOpen((value) => !value); }}
                     dataMenuTrigger={true}
                   />

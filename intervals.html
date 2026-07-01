@@ -406,6 +406,12 @@ function pickQuestionMode(enabledModes) {
   return randomItem(availableModes.length ? availableModes : ["identify", "create"]);
 }
 
+const DEFAULT_ENABLED_MODES = { identify: true, create: true };
+
+function taskMatchesLevel(enabledModes) {
+  return Object.keys(DEFAULT_ENABLED_MODES).every(key => Boolean(enabledModes[key]) === DEFAULT_ENABLED_MODES[key]);
+}
+
 const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 
 function sharedSymbolConfig(key) {
@@ -676,7 +682,7 @@ function ScoreArea({ question, mode, showHelp, hoverIndex, selectedIndex, feedba
 
 const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
 
-function ScorePanel({ correct, attempted, accuracy, streak, bestStreak, confettiKey, resetScore }) {
+function ScorePanel({ correct, attempted, accuracy, streak, bestStreak, confettiKey, resetScore, medalEligible }) {
   return (
     <window.MLH.ScoreStreakPanel
       assets={ASSET}
@@ -687,6 +693,7 @@ function ScorePanel({ correct, attempted, accuracy, streak, bestStreak, confetti
       bestStreak={bestStreak}
       resetScore={resetScore}
       confettiKey={confettiKey}
+      medalEligible={medalEligible}
     />
   );
 }
@@ -802,6 +809,7 @@ function App() {
   const feedbackFadeTimerRef = useRef(null);
   const feedbackNextTimerRef = useRef(null);
   const questionTimerRef = useRef(null);
+  const levelTaskStatusRef = useRef(null);
   const keyboard = window.MLH.useKeyboardReset();
 
   React.useEffect(() => window.MLH?.installPhoneLandscapeLock?.(), []);
@@ -812,6 +820,9 @@ function App() {
   );
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
+  const medalEligible = taskMatchesLevel(enabledModes);
+  const displayedLevel = medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel = medalEligible ? LEVELS[activeLevel]?.label || activeLevel : "Custom";
   const canConfirm = mode === "create" ? selectedIndex != null && !feedback : false;
   const instruction = mode === "identify"
     ? <>Name the <strong>interval</strong>.</>
@@ -869,6 +880,21 @@ function App() {
     newQuestion(enabledModes);
   }
 
+  React.useEffect(() => {
+    if (levelTaskStatusRef.current === null) {
+      levelTaskStatusRef.current = medalEligible;
+      return;
+    }
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    clearFeedbackTimers();
+    setCorrect(0);
+    setAttempted(0);
+    setStreak(0);
+    setBestStreak(0);
+    setConfettiKey(0);
+  }, [medalEligible]);
+
   function applyLevel(levelKey) {
     clearFeedbackTimers();
     setActiveLevel(levelKey);
@@ -914,7 +940,7 @@ function App() {
     setBestStreak((value) => Math.max(value, nextStreak));
     setFeedback({ correct: isCorrect });
 
-    if (isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
+    if (medalEligible && isCorrect && [10, 15, 20, 30].includes(nextStreak)) {
       const medal = getStreakMedal(nextStreak);
       setConfettiKey((value) => value + 1);
       window.setTimeout(() => playFeedbackSound(true, true, medal.sound), 180);
@@ -1034,7 +1060,7 @@ function App() {
   return (
     <div className={SHELL.pageShellClass}>
       <window.MLH.AppHeader icon={ASSET.appIcon} title="Intervals" subtitle="Identify and create intervals.">
-        <ScorePanel correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} confettiKey={confettiKey} resetScore={resetScore} />
+        <ScorePanel correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} confettiKey={confettiKey} resetScore={resetScore} medalEligible={medalEligible} />
       </window.MLH.AppHeader>
 
       <div className={SHELL.pageContentClass}>
@@ -1050,8 +1076,9 @@ function App() {
               <div className="relative" ref={levelRef}>
                 <window.MLH.LevelButton
                   icon={<img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain scale-[1.06]" />}
-                  activeLabel={LEVELS[activeLevel]?.label || activeLevel}
-                  activeLevel={activeLevel}
+                  activeLabel={displayedLevelLabel}
+                  activeLevel={displayedLevel}
+                  isCustom={!medalEligible}
                   onClick={() => {
                     setCustomiseOpen(false);
                     setLevelOpen((value) => !value);

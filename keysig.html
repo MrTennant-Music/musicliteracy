@@ -72,6 +72,8 @@ const LEVELS = {
   },
 };
 
+const DEFAULT_MODES = { identify: true, build: true };
+
 const KEYS = {
   "c-major": { id: "c-major", label: "C major", signature: [] },
   "a-minor": { id: "a-minor", label: "A minor", signature: [] },
@@ -115,6 +117,7 @@ const BAR_PATTERNS = [
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
+const taskMatchesLevel = (modes) => Object.keys(DEFAULT_MODES).every((key) => Boolean(modes[key]) === DEFAULT_MODES[key]);
 const noteBase = (note) => String(note || "C5").replace("#", "");
 const noteStep = (note) => NOTE_STEPS[noteBase(note)] ?? NOTE_STEPS.C5;
 const yForStep = (step) => STAFF.top + STAFF.gap * 4 - step * (STAFF.gap / 2);
@@ -515,7 +518,7 @@ function useSession(initialLevel, phoneView = false) {
   const [level, setLevel] = useState(initialLevel);
   const [question, setQuestion] = useState(() => makeQuestion({ level: initialLevel, focusFirstTwoBars: phoneView }));
   const [visible, setVisible] = useState(true);
-  const [modes, setModes] = useState({ identify: true, build: true });
+  const [modes, setModes] = useState(DEFAULT_MODES);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [typed, setTyped] = useState("");
   const [selectedAccidental, setSelectedAccidental] = useState(null);
@@ -529,6 +532,8 @@ function useSession(initialLevel, phoneView = false) {
   const nextTimer = useRef(null);
   const fadeTimer = useRef(null);
   const previousPhoneView = useRef(phoneView);
+  const medalEligible = taskMatchesLevel(modes);
+  const levelTaskStatusRef = useRef(medalEligible);
 
   const locked = Boolean(feedback);
   const expected = question.key.signature;
@@ -563,7 +568,7 @@ function useSession(initialLevel, phoneView = false) {
     playSound(correct);
     setScore((value) => {
       const streak = correct ? value.streak + 1 : 0;
-      if (correct && [10, 15, 20, 30].includes(streak)) {
+      if (medalEligible && correct && [10, 15, 20, 30].includes(streak)) {
         const nextMedal = getStreakMedal(streak);
         setConfetti((count) => count + 1);
         setAutoShowMedals(true);
@@ -587,6 +592,13 @@ function useSession(initialLevel, phoneView = false) {
 
   useEffect(() => () => clearTimers(), []);
   useEffect(() => {
+    if (levelTaskStatusRef.current === medalEligible) return;
+    levelTaskStatusRef.current = medalEligible;
+    setScore({ correct: 0, attempted: 0, streak: 0, best: 0 });
+    setConfetti(0);
+    setAutoShowMedals(false);
+  }, [medalEligible]);
+  useEffect(() => {
     if (previousPhoneView.current === phoneView) return;
     previousPhoneView.current = phoneView;
     nextQuestion(level, modes);
@@ -607,6 +619,7 @@ function useSession(initialLevel, phoneView = false) {
     score,
     confetti,
     autoShowMedals,
+    medalEligible,
     locked,
     expected,
     setTyped,
@@ -986,6 +999,7 @@ function ScorePanel({ session }) {
       resetScore={session.resetScore}
       confettiKey={session.confetti}
       autoShowMedals={session.autoShowMedals}
+      medalEligible={session.medalEligible}
     />
   );
 }
@@ -1041,6 +1055,8 @@ function App() {
   const keyboard = window.MLH.useKeyboardReset();
   const menuRef = useRef(null);
   const [menu, setMenu] = useState(null);
+  const displayedLevel = session.medalEligible ? session.level : "Custom";
+  const displayedLevelLabel = session.medalEligible ? LEVELS[session.level].label : "Custom";
   window.MLH.useClickAway(menuRef, () => setMenu(null));
 
   const isBuild = session.question.type === "build-key";
@@ -1090,8 +1106,9 @@ function App() {
                 <window.MLH.LevelButton
                   dataMenuTrigger
                   icon={<img src={ASSET.level} alt="" className="h-[26px] w-[28px]" />}
-                  activeLabel={LEVELS[session.level].label}
-                  activeLevel={session.level}
+                  activeLabel={displayedLevelLabel}
+                  activeLevel={displayedLevel}
+                  isCustom={!session.medalEligible}
                   onClick={() => setMenu(menu === "level" ? null : "level")}
                 />
                 {menu === "level" && (
