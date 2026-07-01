@@ -926,17 +926,19 @@ function BassClef({top,left=STAFF_LEFT,x=null}){
   const anchorX=x===null ? calibrationAnchorX("fClef",left) : x;
   return <CalibratedSymbol symbolKey="fClef" x={anchorX} y={calibrationAnchorY("fClef",top)}/>;
 }
-function BraceSymbol({x,top,bottom}){
+function BraceSymbol({x,top,bottom,opacity=1}){
   const braceConfig=sharedSymbolConfig("brace");
-  return <CalibratedSymbol
-    symbolKey="brace"
-    x={x-18}
-      y={top+GAP*4+19}
-    settingOverrides={{
-      widthScale:(braceConfig.widthScale||1)*1.16,
-      heightScale:(braceConfig.heightScale||1)*1.12
-    }}
-  />;
+  return <g opacity={opacity}>
+    <CalibratedSymbol
+      symbolKey="brace"
+      x={x-18}
+        y={top+GAP*4+19}
+      settingOverrides={{
+        widthScale:(braceConfig.widthScale||1)*1.16,
+        heightScale:(braceConfig.heightScale||1)*1.12
+      }}
+    />
+  </g>;
 }
 function DotSymbol({x,yy,step,colour}){
   const symbolKey=step%2===0 ? "augmentationDotLine" : "augmentationDotSpace";
@@ -1112,8 +1114,8 @@ function AHChordTypedAnswer({question,answers,setAnswers,feedback}){
 }
 function AHInversionCell({children,status,muted=false,withArrows=false,onPrev,onNext,disabled=false,compact=false,large=false}){
   const colour=status==="correct"?COLOUR.green:status==="incorrect"?COLOUR.red:muted?"#a8a29e":"#111";
-  const arrowSize=large?44:16;
-  const buttonStyle={height:"100%",width:`${arrowSize}px`,border:"0",background:"transparent",fontSize:large?"18px":"10px",fontWeight:muted?650:900,lineHeight:"1",color:muted?"#333":"#111",cursor:disabled?"default":"pointer",padding:"0",display:"flex",alignItems:"center",justifyContent:"center"};
+  const arrowSize=large?56:28;
+  const buttonStyle={height:"100%",width:`${arrowSize}px`,border:"0",background:"rgba(0,0,0,.025)",borderRadius:"4px",fontSize:large?"25px":"17px",fontWeight:muted?650:900,lineHeight:"1",color:muted?"#333":"#111",cursor:disabled?"default":"pointer",padding:"0",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"};
   const cellWeight=muted?500:compact?600:700;
   return <td style={{height:large?"53px":"28px",border:"1.2px solid #111",background:"white",color:colour,fontSize:large?"21px":compact?"11px":"11.5px",fontWeight:cellWeight,lineHeight:"1",whiteSpace:"nowrap",overflow:"hidden",padding:"0",cursor:"default"}}>
     <div className="ah-inversion-cell-inner" style={{height:"100%",display:"grid",gridTemplateColumns:withArrows?`${arrowSize}px 1fr ${arrowSize}px`:"1fr",alignItems:"center"}}>
@@ -1190,7 +1192,7 @@ function AHInversionScore({question,answers,setAnswers,feedback,showNoteNames=fa
       {[0,1,2,3,4].map(line=><line key={line} x1={shiftedStart} x2={shiftedEnd} y1={top+line*GAP} y2={top+line*GAP} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
       <StaffNoteNames visible={showNoteNames} clef={staffIndex===0?"treble":"bass"} top={top} lineX={shiftedStart-11} spaceX={shiftedStart+7}/>
     </g>)}
-        <BraceSymbol x={shiftedStart} top={trebleTop} bottom={bassTop}/>
+          <BraceSymbol x={shiftedStart} top={trebleTop} bottom={bassTop} opacity={showNoteNames ? 0.08 : 1}/>
     <TrebleClef top={trebleTop} left={shiftedStart}/>
     <BassClef top={bassTop} left={shiftedStart}/>
     <GrandKeySignature keySignature={question.key} top={trebleTop} x={keyX} clef="treble"/>
@@ -1234,7 +1236,7 @@ function letterForClefStep(step,clef){
   const base=clef==="bass"?LETTERS.indexOf("G"):LETTERS.indexOf("E");
   return LETTERS[((base+step)%7+7)%7];
 }
-function AHCompletedTable({question,isMobile=false,tableWidth=null,columnWidth=null}){
+function AHCompletedTable({question,isMobile=false,tableWidth=null,columnWidth=null,showScaleDegrees=false}){
   const visibleChords=isMobile?question.chords.slice(0,2):question.chords;
   const resolvedColumnWidth=columnWidth || (isMobile?228:120);
   const resolvedTableWidth=tableWidth || resolvedColumnWidth*visibleChords.length;
@@ -1246,7 +1248,10 @@ function AHCompletedTable({question,isMobile=false,tableWidth=null,columnWidth=n
         {visibleChords.map(item=><col key={`col-${item.index}`} style={{width:`${resolvedColumnWidth}px`}} />)}
       </colgroup>
       <tbody>
-        <tr>{visibleChords.map(item=><AHInversionCell key={`symbol-${item.index}`} large={isMobile}>{`${item.symbol} or ${getChordShortName(item.chord)}`}</AHInversionCell>)}</tr>
+        <tr>{visibleChords.map(item=>{
+          const chordLabel=showScaleDegrees ? item.symbol : `${item.symbol} or ${getChordShortName(item.chord)}`;
+          return <AHInversionCell key={`symbol-${item.index}`} large={isMobile}>{chordLabel}</AHInversionCell>;
+        })}</tr>
         <tr>{visibleChords.map(item=>{
           const position=AH_POSITION_PICKER_OPTIONS.find(option=>option.value===item.inversion)?.label || "Root";
           return <AHInversionCell key={`position-${item.index}`} large={isMobile}>{position}</AHInversionCell>;
@@ -1255,7 +1260,7 @@ function AHCompletedTable({question,isMobile=false,tableWidth=null,columnWidth=n
     </table>
   </div>;
 }
-function AHBassLineScore({question,answers,setAnswers,feedback,showNoteNames=false,isMobile=false}){
+function AHBassLineScore({question,answers,setAnswers,feedback,showNoteNames=false,showScaleDegrees=false,isMobile=false}){
   const scoreYShift=isMobile?-25:0, trebleTop=112+scoreYShift, bassTop=220+scoreYShift, staffStart=250, staffEnd=710, scoreWidth=staffEnd+130-staffStart, staveShift=((W-scoreWidth)/2)-staffStart+(isMobile?100:0), shiftedStart=staffStart+staveShift, shiftedEnd=staffEnd+130+staveShift-(isMobile?220:0), keyX=shiftedStart+68, chordXs=isMobile?[385,525]:[382,500,618,736], fadeId=`ah-bass-staff-fade-${question.id}`;
   const actualChordXs=chordXs.map(x=>x+staveShift);
   const visibleChords=isMobile?question.chords.slice(0,2):question.chords;
@@ -1327,7 +1332,7 @@ function AHBassLineScore({question,answers,setAnswers,feedback,showNoteNames=fal
         {[0,1,2,3,4].map(line=><line key={line} x1={shiftedStart} x2={shiftedEnd} y1={top+line*GAP} y2={top+line*GAP} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
         <StaffNoteNames visible={showNoteNames} clef={staffIndex===0?"treble":"bass"} top={top} lineX={shiftedStart-11} spaceX={shiftedStart+7}/>
       </g>)}
-      <BraceSymbol x={shiftedStart} top={trebleTop} bottom={bassTop}/>
+          <BraceSymbol x={shiftedStart} top={trebleTop} bottom={bassTop} opacity={showNoteNames ? 0.08 : 1}/>
       <TrebleClef top={trebleTop} left={shiftedStart}/>
       <BassClef top={bassTop} left={shiftedStart}/>
       <GrandKeySignature keySignature={question.key} top={trebleTop} x={keyX} clef="treble"/>
@@ -1350,7 +1355,7 @@ function AHBassLineScore({question,answers,setAnswers,feedback,showNoteNames=fal
       </g>}
       <foreignObject x={tableX-tablePadding/2} y={bassTop+72} width={tableWidth+tablePadding} height={isMobile?114:60}>
         <div xmlns="http://www.w3.org/1999/xhtml" style={{padding:`0 ${tablePadding/2}px`,boxSizing:"border-box"}}>
-          <AHCompletedTable question={question} isMobile={isMobile} tableWidth={tableWidth} columnWidth={tableColumnWidth}/>
+          <AHCompletedTable question={question} isMobile={isMobile} tableWidth={tableWidth} columnWidth={tableColumnWidth} showScaleDegrees={showScaleDegrees}/>
         </div>
       </foreignObject>
     </g>
@@ -1780,8 +1785,8 @@ function App(){
           ? <AHListeningScore question={question} activeNoteId={highlightPlayback?activeNoteId:undefined} showNoteNames={showNoteNames}/>
           : question.type==="ahInversionBar"
           ? <AHInversionScore question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} showNoteNames={showNoteNames} isMobile={isMobileView}/>
-          : question.type==="ahBassLine"
-          ? <AHBassLineScore question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} showNoteNames={showNoteNames} isMobile={isMobileView}/>
+        : question.type==="ahBassLine"
+          ? <AHBassLineScore question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} showNoteNames={showNoteNames} showScaleDegrees={showScaleDegrees} isMobile={isMobileView}/>
           : <Score question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} activeNoteId={highlightPlayback?activeNoteId:undefined} activeBarIndex={activeBarIndex} level={activeLevel} showNoteNames={showNoteNames}/>}
       </div>
       {question.type==="n5" ? (
