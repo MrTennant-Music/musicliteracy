@@ -1,7 +1,7 @@
 (function () {
   const MLH = window.MLH || (window.MLH = {});
   const e = React.createElement;
-  const { useEffect } = React;
+  const { useEffect, useLayoutEffect, useRef, useState } = React;
 
   const MENU_PANEL_CLASS = "hub-menu-panel hub-menu-panel-level";
   const MENU_TITLE_CLASS = "hub-menu-title";
@@ -33,6 +33,7 @@
   function useClickOutside(refs, handlers) {
     useEffect(() => {
       function onPointerDown(event) {
+        if (event.target.closest?.("[data-menu-panel]") || event.target.closest?.("[data-menu-trigger]")) return;
         refs.forEach((ref, index) => {
           if (ref.current && !ref.current.contains(event.target)) handlers[index]?.(event);
         });
@@ -45,11 +46,44 @@
 
   function MenuPanel({ title, children, position = "left-0", variant = "level", dataMenuPanel = false }) {
     const className = `${variant === "customise" ? CUSTOMISE_MENU_PANEL_CLASS : MENU_PANEL_CLASS} ${position}`;
+    const anchorRef = useRef(null);
+    const panelRef = useRef(null);
+    const [floatingStyle, setFloatingStyle] = useState(null);
+    const isFloatingCustomise = variant === "customise" && typeof ReactDOM !== "undefined" && ReactDOM.createPortal;
+
+    useLayoutEffect(() => {
+      if (!isFloatingCustomise) return undefined;
+      function updatePosition() {
+        const anchor = anchorRef.current;
+        if (!anchor) return;
+        const rect = anchor.getBoundingClientRect();
+        const panelWidth = panelRef.current?.offsetWidth || 360;
+        const gap = 8;
+        const edge = 16;
+        const rawLeft = window.innerWidth < 640 ? rect.left - 66 : rect.left;
+        const left = Math.max(edge, Math.min(rawLeft, window.innerWidth - panelWidth - edge));
+        const top = Math.max(edge, rect.bottom + gap);
+        setFloatingStyle({ left: `${left}px`, top: `${top}px`, maxHeight: `calc(100dvh - ${top + edge}px)` });
+      }
+
+      updatePosition();
+      window.addEventListener("resize", updatePosition);
+      window.addEventListener("scroll", updatePosition, true);
+      return () => {
+        window.removeEventListener("resize", updatePosition);
+        window.removeEventListener("scroll", updatePosition, true);
+      };
+    }, [isFloatingCustomise]);
+
     const props = { className };
-    if (dataMenuPanel) props["data-menu-panel"] = true;
-    return e(
+    if (dataMenuPanel || isFloatingCustomise) props["data-menu-panel"] = true;
+    const panel = e(
       "div",
-      props,
+      {
+        ...props,
+        ref: isFloatingCustomise ? panelRef : undefined,
+        style: isFloatingCustomise ? floatingStyle || { left: "-9999px", top: "-9999px" } : undefined,
+      },
       e(
         "div",
         { className: MENU_TITLE_CLASS },
@@ -57,6 +91,8 @@
       ),
       children,
     );
+    if (!isFloatingCustomise) return panel;
+    return e(React.Fragment, null, e("span", { ref: anchorRef, className: "hub-menu-portal-anchor", "aria-hidden": true }), ReactDOM.createPortal(panel, document.body));
   }
 
   function AppToolbar({ left, feedback, right, className = "" }) {
