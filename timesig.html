@@ -942,9 +942,28 @@ function AnswerOptions({ activeLevel, enabledRhythms, selectedAnswer, disabled, 
   );
 }
 
-function NoteLegendSymbol({ rhythm }) {
+function NoteLegendSymbol({ rhythm, standalone = false }) {
   const fakeItem = { rhythm, pitch: { name: "B4", step: 4 } };
-  return <svg viewBox="0 0 70 70" className="h-11 w-16 overflow-visible"><g transform="translate(0, 11) scale(1.15)"><Note item={fakeItem} x={32} systemTop={8} /></g></svg>;
+  return <svg viewBox="0 0 70 70" className={`${standalone ? "h-11 w-16" : "h-11 w-12"} overflow-visible`}><g transform="translate(0, 11) scale(1.15)"><Note item={fakeItem} x={standalone ? 32 : 38} systemTop={8} /></g></svg>;
+}
+
+function GuideRestSymbol({ rhythm }) {
+  if (rhythm === "semibreve-rest" || rhythm === "minim-rest") {
+    const glyph = rhythm === "semibreve-rest" ? "\uE4F4" : "\uE4F5";
+    return (
+      <svg viewBox="0 0 70 70" className="h-11 w-9 overflow-visible">
+        <text className="music-symbol" x="22" y={rhythm === "minim-rest" ? 40 : 36} fontSize="44" textAnchor="middle" dominantBaseline="middle">{glyph}</text>
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 70 70" className="h-11 w-9 overflow-visible">
+      <g transform="translate(-12, 7) scale(1.15)">
+        <Rest rhythm={rhythm} x={34} systemTop={8} />
+      </g>
+    </svg>
+  );
 }
 
 function TimeSignatureMenuGlyph({ signatures }) {
@@ -1009,7 +1028,7 @@ function MenuRows({ activeLevel, enabledRhythms, setEnabledRhythms, restsEnabled
   }
   return <>
     <window.MLH.MenuSubheading>Help</window.MLH.MenuSubheading>
-    <window.MLH.MenuToggleRow glyph={<span className="text-[36px] leading-none">♩</span>} label="Show Rhythm Guide" checked={showRhythmGuide} onChange={() => setShowRhythmGuide((value) => !value)} />
+    <window.MLH.MenuToggleRow glyph={<img src="guide.svg" alt="" aria-hidden="true" className="relative -top-px h-9 w-9 object-contain" />} label="Show Rhythm Guide" checked={showRhythmGuide} onChange={() => setShowRhythmGuide((value) => !value)} />
     <window.MLH.MenuSubheading>Time Signatures</window.MLH.MenuSubheading>
     {level.timeSignatureIds.map((signatureId) => (
       <window.MLH.MenuToggleRow key={signatureId} glyph={<TimeSignatureMenuGlyph signatures={[signatureId]} />} label={signatureId} checked={enabledRhythms[`time-${signatureId}`]} onChange={() => toggleEnabled(`time-${signatureId}`)} />
@@ -1044,18 +1063,12 @@ function RhythmGuide() {
     <div className="mb-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
       <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-7">
         {legend.map((item) => (
-          <div key={item.rhythm} className="flex flex-col items-center justify-center rounded-lg bg-white px-2 py-2 text-center">
-            <div className="flex items-center justify-center gap-[-2px]">
-              <NoteLegendSymbol rhythm={item.rhythm} />
-              {item.rest && (
-                <svg viewBox="0 0 70 70" className="h-11 w-10 overflow-visible">
-                  <g transform="translate(0, 11)">
-                    <Rest rhythm={item.rest} x={34} systemTop={8} />
-                  </g>
-                </svg>
-              )}
+          <div key={item.rhythm} className="flex flex-col items-center justify-center rounded-lg border border-stone-200/70 bg-white px-2 py-2 text-center">
+            <div className="flex items-center justify-center gap-0">
+              <NoteLegendSymbol rhythm={item.rhythm} standalone={!item.rest} />
+              {item.rest && <GuideRestSymbol rhythm={item.rest} />}
             </div>
-            <span className="font-semibold">{item.label} beats</span>
+            <span className="block w-full text-center font-semibold">{item.label}</span>
           </div>
         ))}
       </div>

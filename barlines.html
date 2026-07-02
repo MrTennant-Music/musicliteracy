@@ -398,16 +398,24 @@ function addItemsFromRhythms(rhythms, previousIndex, options) {
       }
       const stepwise = ["quaver", "semiquaver", "dotted-quaver"].includes(rhythm);
       noteIndex = nearestMelodicIndex(noteIndex, stepwise, options.range);
-      let pitch = noteByIndex(noteIndex);
-      if (options.key?.scale?.length) {
-        let attempts = 0;
-        while (!options.key.scale.includes(pitch.letter) && attempts < 8) {
-          noteIndex = nearestMelodicIndex(noteIndex, stepwise, options.range);
-          pitch = noteByIndex(noteIndex);
-          attempts += 1;
+      let pitch;
+      if (pendingTieFrom !== null && items[pendingTieFrom]?.pitch) {
+        pitch = { ...items[pendingTieFrom].pitch };
+        const tiedIndex = noteIndexByStep(pitch.step);
+        if (tiedIndex >= 0) noteIndex = tiedIndex;
+      } else {
+        pitch = noteByIndex(noteIndex);
+        if (options.key?.scale?.length) {
+          let attempts = 0;
+          while (!options.key.scale.includes(pitch.letter) && attempts < 8) {
+            noteIndex = nearestMelodicIndex(noteIndex, stepwise, options.range);
+            pitch = noteByIndex(noteIndex);
+            attempts += 1;
+          }
         }
+        pitch = applyKeyAccidental(pitch, options.key);
       }
-      const item = { rhythm, pitch: applyKeyAccidental(pitch, options.key), beamGroupId: options.disableAutoBeam && !beamed ? null : beamGroupId, boundaryAfter: false, tieFromPrevious: pendingTieFrom !== null };
+      const item = { rhythm, pitch, beamGroupId: options.disableAutoBeam && !beamed ? null : beamGroupId, boundaryAfter: false, tieFromPrevious: pendingTieFrom !== null };
       if (pendingTieFrom !== null && items[pendingTieFrom]) items[pendingTieFrom].tieToNext = true;
       pendingTieFrom = null;
       items.push(item);
@@ -525,7 +533,9 @@ function calculateLayout(question) {
         let usedUnits = 0;
         barItems.forEach((item, localIndex) => {
           const duration = item.rhythm === "semibreve-rest" ? unitsPerBar : rhythmInfo(item.rhythm).units;
-          const x = barStartX + padding + ((usedUnits + duration * 0.35) / unitsPerBar) * usableWidth;
+          const x = item.rhythm === "semibreve-rest"
+            ? barStartX + barWidth / 2
+            : barStartX + padding + ((usedUnits + duration * 0.35) / unitsPerBar) * usableWidth;
           itemPositions[item.id] = { x, systemIndex, localIndex };
           usedUnits += duration;
           const isSystemBreakBoundary = question.systemCount > 1 && (barIndex + 1) % question.barsPerSystem === 0;
@@ -541,17 +551,24 @@ function calculateLayout(question) {
     const totalSpacing = items.reduce((sum, item) => sum + rhythmInfo(item.rhythm).spacing, 0);
     const unitWidth = Math.max(1, endX - startX) / Math.max(1, totalSpacing);
     let cursor = startX + unitWidth * 0.4;
+    let currentBarStartX = startX;
     items.forEach((item, localIndex) => {
-      const x = cursor;
-      itemPositions[item.id] = { x, systemIndex, localIndex };
+      let x = cursor;
       cursor += rhythmInfo(item.rhythm).spacing * unitWidth;
       if (item.boundaryAfter) {
         const boundaryX = x + rhythmInfo(item.rhythm).spacing * unitWidth * 0.55;
         const isSystemBreakBoundary = question.systemCount > 1 && (item.barIndex + 1) % question.barsPerSystem === 0;
+        const isFinalBar = item.barIndex >= question.totalBars - 1;
+        const visibleBarEndX = isSystemBreakBoundary || isFinalBar ? STAFF_RIGHT : boundaryX;
+        if (item.rhythm === "semibreve-rest") x = (currentBarStartX + visibleBarEndX) / 2;
+        itemPositions[item.id] = { x, systemIndex, localIndex };
         if (item.barIndex < question.totalBars - 1 && !isSystemBreakBoundary) {
           const boundaryId = `boundary-${item.cumulativeUnits}`;
           boundaryPositions.push({ id: boundaryId, units: item.cumulativeUnits, x: boundaryX, systemIndex, fixed: question.fixedBoundaries?.includes(boundaryId) });
         }
+        currentBarStartX = visibleBarEndX;
+      } else {
+        itemPositions[item.id] = { x, systemIndex, localIndex };
       }
     });
   });
@@ -658,6 +675,18 @@ function TimeSignatureGlyph({ signature, x, systemTop, colour = "currentColor" }
     <g transform={`translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale || 1} ${settings.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`} fill={colour} pointerEvents="none">
       <text className="music-symbol" x={adjustedX} y={adjustedY - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{topText}</text>
       <text className="music-symbol" x={adjustedX} y={adjustedY + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{bottomText}</text>
+    </g>
+  );
+}
+
+function BoxedTimeSignature({ signature, x, systemTop }) {
+  const definition = TIME_SIGNATURE_SYMBOLS[signature.id] || { top: [`timeSig${signature.top}`], bottom: [`timeSig${signature.bottom}`], key: `timeSig${signature.top}${signature.bottom}` };
+  const settings = sharedSymbolConfig(definition.key);
+  const centreX = x + LINE_GAP * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+  return (
+    <g pointerEvents="none">
+      <rect x={centreX - 25} y={systemTop - 16} width="50" height={LINE_GAP * 4 + 32} rx="9" ry="9" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.85" />
+      <TimeSignatureGlyph signature={signature} x={x} systemTop={systemTop} />
     </g>
   );
 }
@@ -834,7 +863,7 @@ function BoundaryMarker({ type, x, systemTop, colour, opacity, dashed }) {
 
 function BarlineToolGlyph({ type }) {
   return (
-    <svg viewBox="0 0 56 48" className="h-10 w-14 overflow-visible" aria-hidden="true">
+    <svg viewBox="0 0 56 48" className="h-14 w-20 overflow-visible" aria-hidden="true">
       <line x1="8" x2="48" y1="10" y2="10" stroke="currentColor" strokeWidth="1.5" />
       <line x1="8" x2="48" y1="17" y2="17" stroke="currentColor" strokeWidth="1.5" />
       <line x1="8" x2="48" y1="24" y2="24" stroke="currentColor" strokeWidth="1.5" />
@@ -889,7 +918,7 @@ function Score({ question, placedBoundaries, selectedBarlineType, hoverBoundaryI
         const showInitialSignature = systemIndex === 0;
         const showChangeSignature = question.changeBarIndex !== null && systemIndex === 1;
         const isLastSystem = systemIndex === question.systemTops.length - 1;
-        return <g key={systemIndex}><StaffLines systemTop={systemTop} /><TrebleClef systemTop={systemTop} />{showInitialSignature && <><KeySignature keySignature={question.key} systemTop={systemTop} /><TimeSignatureGlyph signature={question.timeSignature} x={STAFF_LEFT + LINE_GAP * 12} systemTop={systemTop} /></>}{showChangeSignature && <TimeSignatureGlyph signature={question.nextTimeSignature} x={STAFF_LEFT + LINE_GAP * 10.5} systemTop={systemTop} />}{isLastSystem ? (!question.requiresFinalDouble && <FinalBarline x={STAFF_RIGHT} systemTop={systemTop} />) : <Barline x={STAFF_RIGHT} systemTop={systemTop} />}</g>;
+        return <g key={systemIndex}><StaffLines systemTop={systemTop} /><TrebleClef systemTop={systemTop} />{showInitialSignature && <><KeySignature keySignature={question.key} systemTop={systemTop} /><TimeSignatureGlyph signature={question.timeSignature} x={STAFF_LEFT + LINE_GAP * 12} systemTop={systemTop} /></>}{showChangeSignature && <BoxedTimeSignature signature={question.nextTimeSignature} x={STAFF_LEFT + LINE_GAP * 10.5} systemTop={systemTop} />}{isLastSystem ? (!question.requiresFinalDouble && <FinalBarline x={STAFF_RIGHT} systemTop={systemTop} />) : <Barline x={STAFF_RIGHT} systemTop={systemTop} />}</g>;
       })}
       {question.items.map((item, index) => {
         const position = layout.itemPositions[item.id];
@@ -947,19 +976,38 @@ function FeedbackBanner({ feedback, fading }) {
 }
 
 function TimeSignatureMenuGlyph({ signatures }) {
-  return <span className="inline-flex h-[42px] w-[56px] shrink-0 items-center justify-center gap-[-12px] leading-none">{signatures.map((signature) => { const parts = signature.split("/"); return <svg key={signature} viewBox="0 0 24 34" className="h-[40px] w-[16px] text-stone-800" aria-hidden="true"><text x="12" y="14" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="19" fill="currentColor">{parts[0]}</text><text x="12" y="28" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="19" fill="currentColor">{parts[1]}</text></svg>; })}</span>;
+  return <span className="inline-flex h-[42px] w-[56px] shrink-0 items-center justify-center gap-[-12px] leading-none">{signatures.map((signature) => { const parts = signature.split("/"); return <svg key={signature} viewBox="0 0 24 34" className="h-[48px] w-[20px] text-stone-800" aria-hidden="true"><text x="12" y="14" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="19" fill="currentColor">{parts[0]}</text><text x="12" y="28" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="19" fill="currentColor">{parts[1]}</text></svg>; })}</span>;
 }
 
-function NoteLegendSymbol({ rhythm }) {
+function NoteLegendSymbol({ rhythm, standalone = false }) {
   const fakeItem = { rhythm, pitch: { name: "B4", step: 4 } };
-  return <svg viewBox="0 0 70 70" className="h-11 w-16 overflow-visible"><g transform="translate(0, 11) scale(1.15)"><Note item={fakeItem} x={32} systemTop={8} /></g></svg>;
+  return <svg viewBox="0 0 70 70" className={`${standalone ? "h-11 w-16" : "h-11 w-12"} overflow-visible`}><g transform="translate(0, 11) scale(1.15)"><Note item={fakeItem} x={standalone ? 32 : 38} systemTop={8} /></g></svg>;
+}
+
+function GuideRestSymbol({ rhythm }) {
+  if (rhythm === "semibreve-rest" || rhythm === "minim-rest") {
+    const glyph = rhythm === "semibreve-rest" ? "\uE4F4" : "\uE4F5";
+    return (
+      <svg viewBox="0 0 70 70" className="h-11 w-9 overflow-visible">
+        <text className="music-symbol" x="22" y={rhythm === "minim-rest" ? 40 : 36} fontSize="44" textAnchor="middle" dominantBaseline="middle">{glyph}</text>
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 70 70" className="h-11 w-9 overflow-visible">
+      <g transform="translate(-12, 7) scale(1.15)">
+        <Rest rhythm={rhythm} x={34} systemTop={8} />
+      </g>
+    </svg>
+  );
 }
 
 function MenuRhythmGlyph({ rhythm }) {
-  const dotAdjust = rhythm === "dotted-crotchet" || rhythm === "dotted-quaver" ? 4 : 0;
+  const dotAdjust = rhythm === "dotted-quaver" ? 7 : rhythm === "dotted-crotchet" ? 4 : 0;
   const displayRhythm = rhythm === "dotted-crotchet" ? "crotchet" : rhythm === "dotted-quaver" ? "quaver" : rhythm;
   return (
-    <svg viewBox="0 0 70 70" className="h-10 w-16 overflow-visible">
+    <svg viewBox="0 0 70 70" className="relative -left-[11px] h-12 w-20 overflow-visible">
       <g transform="translate(0, 12) scale(1.05)">
         <Note item={{ rhythm: displayRhythm, pitch: { name: "B4", letter: "B", step: 4, writtenAccidental: null } }} x={32} systemTop={8} />
       </g>
@@ -970,11 +1018,49 @@ function MenuRhythmGlyph({ rhythm }) {
 
 function MenuRestGlyph() {
   return (
-    <svg viewBox="0 0 70 70" className="h-10 w-16 overflow-visible">
+    <svg viewBox="0 0 70 70" className="relative -left-[3px] -top-px h-9 w-9 overflow-visible">
       <g transform="translate(0, 7) scale(1.05)">
         <Rest rhythm="crotchet-rest" x={32} systemTop={8} />
       </g>
     </svg>
+  );
+}
+
+function MenuTieGlyph() {
+  return <span className="music-symbol relative -left-[5px] -top-[6px] inline-flex h-9 w-9 items-center justify-center text-[34px] leading-none">{sharedSymbolForKey("tie")}</span>;
+}
+
+function MenuTimeChangeGlyph() {
+  return (
+    <span className="relative -left-[4px] -top-px inline-flex h-9 w-9 items-center justify-center">
+      <svg viewBox="0 0 52 36" className="h-9 w-9 overflow-visible text-stone-800" aria-hidden="true">
+        <text x="16" y="15" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="20" fill="currentColor">2</text>
+        <text x="16" y="31" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="20" fill="currentColor">4</text>
+        <text x="32" y="15" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="20" fill="currentColor">9</text>
+        <text x="32" y="31" textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="20" fill="currentColor">8</text>
+      </svg>
+    </span>
+  );
+}
+
+function IconOnlyToggleButton({ glyph, label, checked, onChange, visibleLabel = "", className = "", tall = true }) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      className={`hub-toggle-row ${className}`}
+      style={{ marginBottom: 0, height: tall ? "56px" : "44px", minHeight: tall ? "56px" : "44px", padding: tall ? "7px 64px 7px 10px" : "10px 64px 10px 14px", overflow: "visible", position: "relative" }}
+      aria-label={`Toggle ${label}`}
+      title={label}
+    >
+      <span className="flex h-full items-center justify-center">
+        {glyph}
+        {visibleLabel && <span className="absolute left-[46px] top-1/2 -translate-y-1/2 text-sm font-semibold leading-none">{visibleLabel}</span>}
+      </span>
+      <span className={`hub-toggle-track shrink-0 ${checked ? "is-on" : ""}`} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)" }}>
+        <span className="hub-toggle-thumb" />
+      </span>
+    </button>
   );
 }
 
@@ -1002,29 +1088,82 @@ function MenuRows({ activeLevel, enabledRhythms, setEnabledRhythms, restsEnabled
   }
   return <>
       <window.MLH.MenuSubheading>Help</window.MLH.MenuSubheading>
-      <window.MLH.MenuToggleRow glyph={<span className="text-[36px] leading-none">♩</span>} label="Show Rhythm Guide" checked={showRhythmGuide} onChange={() => setShowRhythmGuide((value) => !value)} />
+      <window.MLH.MenuToggleRow glyph={<img src="guide.svg" alt="" aria-hidden="true" className="relative -top-px h-9 w-9 object-contain" />} label="Show Rhythm Guide" checked={showRhythmGuide} onChange={() => setShowRhythmGuide((value) => !value)} />
       <window.MLH.MenuSubheading>Time Signatures</window.MLH.MenuSubheading>
-      {level.timeSignatureIds.map((signatureId) => (
-        <window.MLH.MenuToggleRow key={signatureId} glyph={<TimeSignatureMenuGlyph signatures={[signatureId]} />} label={signatureId} checked={enabledRhythms[`time-${signatureId}`]} onChange={() => toggleEnabled(`time-${signatureId}`)} />
-      ))}
-      <window.MLH.MenuSubheading>Rhythms</window.MLH.MenuSubheading>
-        <div className="space-y-1.5">
-          {RHYTHM_OPTIONS.filter((rhythm) => level.rhythmIds.includes(rhythm.id) && !["ties", "syncopation", "time-changes"].includes(rhythm.id)).map((rhythm) => (
-            <window.MLH.MenuToggleRow
-              key={rhythm.id}
-              glyph={rhythm.id === "rests" ? <MenuRestGlyph /> : <MenuRhythmGlyph rhythm={rhythm.id} />}
-              label={rhythm.label}
-              checked={enabledRhythms[rhythm.id]}
-              onChange={() => {
-                if (rhythm.id === "rests") {
-                  toggleRests();
-                  return;
-                }
-                toggleEnabled(rhythm.id);
-              }}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
+          {level.timeSignatureIds.filter((signatureId) => TIME_SIGNATURES.find((signature) => signature.id === signatureId)?.type === "simple").map((signatureId) => (
+            <IconOnlyToggleButton
+              key={signatureId}
+              glyph={<TimeSignatureMenuGlyph signatures={[signatureId]} />}
+              label={signatureId}
+              checked={enabledRhythms[`time-${signatureId}`]}
+              onChange={() => toggleEnabled(`time-${signatureId}`)}
             />
           ))}
         </div>
+        <div className="space-y-2">
+          {level.timeSignatureIds.filter((signatureId) => TIME_SIGNATURES.find((signature) => signature.id === signatureId)?.type === "compound").map((signatureId) => (
+            <IconOnlyToggleButton
+              key={signatureId}
+              glyph={<TimeSignatureMenuGlyph signatures={[signatureId]} />}
+              label={signatureId}
+              checked={enabledRhythms[`time-${signatureId}`]}
+              onChange={() => toggleEnabled(`time-${signatureId}`)}
+            />
+          ))}
+        </div>
+      </div>
+      <window.MLH.MenuSubheading>Rhythms</window.MLH.MenuSubheading>
+        <div className="grid grid-cols-2 gap-2">
+          {RHYTHM_OPTIONS.filter((rhythm) => level.rhythmIds.includes(rhythm.id) && !["rests", "ties", "syncopation", "time-changes"].includes(rhythm.id)).map((rhythm) => (
+            <IconOnlyToggleButton
+              key={rhythm.id}
+              glyph={<MenuRhythmGlyph rhythm={rhythm.id} />}
+              label={rhythm.label}
+              checked={enabledRhythms[rhythm.id]}
+              onChange={() => toggleEnabled(rhythm.id)}
+            />
+          ))}
+        </div>
+      {(level.rhythmIds.includes("rests") || level.rhythmIds.includes("ties") || level.rhythmIds.includes("time-changes")) && <>
+        <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
+        <div className="space-y-2">
+          {level.rhythmIds.includes("rests") && (
+            <IconOnlyToggleButton
+              glyph={<MenuRestGlyph />}
+              label="Rests"
+              visibleLabel="Rests"
+              className="col-span-2"
+              tall={false}
+              checked={enabledRhythms.rests}
+              onChange={toggleRests}
+            />
+          )}
+          {level.rhythmIds.includes("ties") && (
+            <IconOnlyToggleButton
+              glyph={<MenuTieGlyph />}
+              label="Ties"
+              visibleLabel="Ties"
+              className="col-span-2"
+              tall={false}
+              checked={enabledRhythms.ties}
+              onChange={() => toggleEnabled("ties")}
+            />
+          )}
+          {level.rhythmIds.includes("time-changes") && (
+            <IconOnlyToggleButton
+              glyph={<MenuTimeChangeGlyph />}
+              label="Time Changes"
+              visibleLabel="Time Changes"
+              className="col-span-2"
+              tall={false}
+              checked={enabledRhythms["time-changes"]}
+              onChange={() => toggleEnabled("time-changes")}
+            />
+          )}
+        </div>
+      </>}
       </>;
 }
 
@@ -1044,18 +1183,12 @@ function RhythmGuide() {
     <div className="mb-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
       <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-7">
         {legend.map((item) => (
-          <div key={item.rhythm} className="flex flex-col items-center justify-center rounded-lg bg-white px-2 py-2 text-center">
-            <div className="flex items-center justify-center gap-[-2px]">
-              <NoteLegendSymbol rhythm={item.rhythm} />
-              {item.rest && (
-                <svg viewBox="0 0 70 70" className="h-11 w-10 overflow-visible">
-                  <g transform="translate(0, 11)">
-                    <Rest rhythm={item.rest} x={34} systemTop={8} />
-                  </g>
-                </svg>
-              )}
+          <div key={item.rhythm} className="flex flex-col items-center justify-center rounded-lg border border-stone-200/70 bg-white px-2 py-2 text-center">
+            <div className="flex items-center justify-center gap-0">
+              <NoteLegendSymbol rhythm={item.rhythm} standalone={!item.rest} />
+              {item.rest && <GuideRestSymbol rhythm={item.rest} />}
             </div>
-            <span className="font-semibold">{item.label} beats</span>
+            <span className="block w-full text-center font-semibold">{item.label}</span>
           </div>
         ))}
       </div>
@@ -1242,7 +1375,7 @@ function App() {
   }
 
   const promptText = question.changeBarIndex !== null
-    ? "Bars 1-4 are complete. The time signature changes on line 2; insert the missing barlines for bars 5-8."
+    ? <><strong>Bars 1-4</strong> are complete. The time signature changes on line 2; insert the missing barlines for <strong>bars 5-8</strong>.</>
     : question.activeLevel === "N3"
       ? "Insert the missing barlines and finish with a double barline."
       : "Insert the missing bar lines.";
@@ -1291,7 +1424,7 @@ function App() {
 
           <div className={`relative -top-[18px] flex min-h-[270px] items-center overflow-hidden rounded-xl transition-opacity duration-300 md:min-h-[310px] ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} placedBoundaries={placedBoundaries} selectedBarlineType={selectedBarlineType} hoverBoundaryId={hoverBoundaryId} setHoverBoundaryId={setHoverBoundaryId} toggleBoundary={toggleBoundary} feedback={feedback} /></div>
 
-          <div className={`relative z-10 mt-auto overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3 ${question.systemCount === 1 ? 'md:-mt-[0px]' : 'md:-mt-[10px]'}`}><div className="flex flex-wrap items-center justify-between gap-3 text-stone-900"><div className="min-w-0"><p className="text-base font-semibold leading-tight">{promptText}</p>{question.activeLevel === "N3" && <div className="mt-3 flex flex-wrap gap-2">{BARLINE_TOOLS.map((tool) => <button key={tool.id} type="button" aria-label={tool.label} title={tool.label} onClick={() => setSelectedBarlineType(tool.id)} disabled={!!feedback} className={`flex h-14 w-20 items-center justify-center rounded-xl border ${selectedBarlineType === tool.id ? "border-black bg-black text-white" : "border-stone-300 bg-white text-stone-900"}`}><BarlineToolGlyph type={tool.id} /></button>)}</div>}</div><div className={window.MLH.ActionButtonGroupClass}><button type="button" onClick={clearBarlines} disabled={!!feedback || placedBoundaryCount === 0} className={window.MLH.ClearButtonClass}>Clear</button><window.MLH.ConfirmButton onClick={confirmAnswer} disabled={!canConfirm || !!feedback}>Confirm</window.MLH.ConfirmButton></div></div></div>
+          <div className={`relative z-10 mt-auto overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3 ${question.systemCount === 1 ? 'md:-mt-[0px]' : 'md:-mt-[10px]'}`}><div className="flex flex-wrap items-center justify-between gap-3 text-stone-900"><div className="flex min-w-0 flex-col justify-center"><p className="text-base font-semibold leading-tight">{promptText}</p>{question.activeLevel === "N3" && <div className="mt-3 flex flex-wrap gap-3">{BARLINE_TOOLS.map((tool) => <button key={tool.id} type="button" aria-label={tool.label} title={tool.label} onClick={() => setSelectedBarlineType(tool.id)} disabled={!!feedback} className={`flex h-20 w-28 items-center justify-center rounded-xl border ${selectedBarlineType === tool.id ? "border-black bg-black text-white" : "border-stone-300 bg-white text-stone-900"}`}><BarlineToolGlyph type={tool.id} /></button>)}</div>}</div><div className={`${window.MLH.ActionButtonGroupClass} ml-auto`}><button type="button" onClick={clearBarlines} disabled={!!feedback || placedBoundaryCount === 0} className={window.MLH.ClearButtonClass}>Clear</button><window.MLH.ConfirmButton onClick={confirmAnswer} disabled={!canConfirm || !!feedback}>Confirm</window.MLH.ConfirmButton></div></div></div>
         </main>
       </div>
     </div>
