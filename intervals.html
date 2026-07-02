@@ -250,18 +250,29 @@ function answerMatchesLabel(raw, label, allowTritone = false) {
 }
 
 function typedFeedbackLabel(question) {
-  if (!question.chromatic) return question.answer;
+  if (!question.chromatic) {
+    if (question.answer === "2nd") {
+      const distance = semitoneDistance(question.startIndex, question.endIndex, question.keySignature, question.targetAccidental);
+      if (distance === 1) return "2nd or semitone";
+      if (distance === 2) return "2nd or tone";
+    }
+    return question.answer;
+  }
   if (question.answer === "Augmented 4th" || question.answer === "Diminished 5th") {
     return `Tritone or ${question.answer}`;
   }
   return question.answer;
 }
 
-function intervalAnswerMatches(raw, label) {
+function intervalAnswerMatches(raw, label, question = null) {
   if (answerMatchesLabel(raw, label)) return true;
 
   const compact = normalizeText(raw);
   const target = normalizeText(label);
+  if (target === "2nd" && question && (compact === "tone" || compact === "semitone")) {
+    const distance = semitoneDistance(question.startIndex, question.endIndex, question.keySignature, question.targetAccidental);
+    return (compact === "tone" && distance === 2) || (compact === "semitone" && distance === 1);
+  }
   const simpleAliases = {
     "2nd": ["2", "second"],
     "3rd": ["3", "third"],
@@ -975,7 +986,7 @@ function App() {
 
   function submitTypedAnswer() {
     if (feedback || mode !== "identify" || !question.typedMode) return;
-    const correct = question.chromatic ? answerMatchesLabel(typedAnswer, question.answer, true) : intervalAnswerMatches(typedAnswer, question.answer);
+    const correct = question.chromatic ? answerMatchesLabel(typedAnswer, question.answer, true) : intervalAnswerMatches(typedAnswer, question.answer, question);
     setTypedResult(correct ? null : typedFeedbackLabel(question));
     scoreAnswer(correct);
   }

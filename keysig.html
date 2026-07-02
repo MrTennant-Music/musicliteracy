@@ -40,8 +40,11 @@ const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
 const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
 const SVG = { width: 980, height: 360 };
 const SCORE_VIEWBOX = { x: 20, y: 36, width: 890, height: 210 };
+const TWO_SYSTEM_SCORE_VIEWBOX = { x: 20, y: 36, width: 890, height: 292 };
 const PHONE_SCORE_VIEWBOX = { x: 20, y: 36, width: 535, height: 210 };
+const TWO_SYSTEM_PHONE_SCORE_VIEWBOX = { x: 20, y: 36, width: 535, height: 292 };
 const STAFF = { left: 72, right: 848, top: 90, gap: 10 };
+const SYSTEM_GAP = 139;
 const CALIBRATION_PREVIEW_GAP = 10;
 const BAR_COUNT = 4;
 const KEY_SIGNATURE_SPACING = 14;
@@ -72,7 +75,7 @@ const LEVELS = {
   },
 };
 
-const DEFAULT_MODES = { identify: true, build: true };
+const DEFAULT_MODES = { identify: true, build: false };
 
 const KEYS = {
   "c-major": { id: "c-major", label: "C major", signature: [] },
@@ -120,10 +123,12 @@ const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
 const taskMatchesLevel = (modes) => Object.keys(DEFAULT_MODES).every((key) => Boolean(modes[key]) === DEFAULT_MODES[key]);
 const noteBase = (note) => String(note || "C5").replace("#", "");
 const noteStep = (note) => NOTE_STEPS[noteBase(note)] ?? NOTE_STEPS.C5;
-const yForStep = (step) => STAFF.top + STAFF.gap * 4 - step * (STAFF.gap / 2);
+const systemTopForBar = (barIndex, barCount = BAR_COUNT) => STAFF.top + (barCount > BAR_COUNT && barIndex >= BAR_COUNT ? SYSTEM_GAP : 0);
+const yForStep = (step, top = STAFF.top) => top + STAFF.gap * 4 - step * (STAFF.gap / 2);
 const stemDown = (step) => step > 4;
 const keyList = (level) => (LEVELS[level]?.keyIds || LEVELS.N5.keyIds).map((id) => KEYS[id]);
 const identifyButtons = (level) => BUTTON_ORDER.filter((id) => (LEVELS[level]?.keyIds || LEVELS.N5.keyIds).includes(id)).map((id) => KEYS[id]);
+const signatureId = (key) => key.signature.map((item) => `${item.type}-${item.step}`).join("|") || "none";
 
 function sharedActualSymbolKey(key) {
   if (key === "flatInScore" || key === "flatKeySignature") return "flat";
@@ -182,9 +187,9 @@ function calibrationAnchorX(key, left = STAFF.left) {
   return anchor ? left + anchor.xScale * STAFF.gap : left;
 }
 
-function calibrationAnchorY(key) {
+function calibrationAnchorY(key, top = STAFF.top) {
   const anchor = CALIBRATION_ANCHORS[key];
-  return anchor ? yForStep(anchor.step) : yForStep(4);
+  return anchor ? yForStep(anchor.step, top) : yForStep(4, top);
 }
 
 function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = STAFF.gap, filter = null, settingOverrides = {} }) {
@@ -246,28 +251,29 @@ function passageMusicStart() {
   return calibrationLayoutX("musicStart");
 }
 
-function passageBarWidth() {
-  return (STAFF.right - passageMusicStart()) / BAR_COUNT;
+function passageBarWidth(barCount = BAR_COUNT) {
+  return (STAFF.right - passageMusicStart()) / Math.min(barCount, BAR_COUNT);
 }
 
-function passageBarStart(index) {
-  return passageMusicStart() + passageBarWidth() * index;
+function passageBarStart(index, barCount = BAR_COUNT) {
+  return passageMusicStart() + passageBarWidth(barCount) * (barCount > BAR_COUNT ? index % BAR_COUNT : index);
 }
 
-function passageBarEnd(index) {
-  return passageBarStart(index + 1);
+function passageBarEnd(index, barCount = BAR_COUNT) {
+  if (barCount > BAR_COUNT && (index + 1) % BAR_COUNT === 0) return STAFF.right;
+  return passageBarStart(index + 1, barCount);
 }
 
-function accidentalX(type, index = 0) {
-  return calibrationLayoutX("keySignature") + index * KEY_SIGNATURE_SPACING;
+function accidentalX(type, index = 0, baseX = calibrationLayoutX("keySignature")) {
+  return baseX + index * KEY_SIGNATURE_SPACING;
 }
 
 function scoreAccidentalBaseX(x) {
   return x - STAFF.gap * 2.1;
 }
 
-function Accidental({ item, index, opacity = 1, style = null, context = "keySignature" }) {
-  return <CalibratedSymbol symbolKey={accidentalSymbolKey(item.type, context)} x={accidentalX(item.type, index)} y={yForStep(item.step)} opacity={opacity} filter={style?.filter || null} />;
+function Accidental({ item, index, opacity = 1, style = null, context = "keySignature", baseX = calibrationLayoutX("keySignature"), top = STAFF.top }) {
+  return <CalibratedSymbol symbolKey={accidentalSymbolKey(item.type, context)} x={accidentalX(item.type, index, baseX)} y={yForStep(item.step, top)} opacity={opacity} filter={style?.filter || null} />;
 }
 
 const getStreakMedal = (streak) => window.MLH?.getStreakMedal?.(streak);
@@ -321,20 +327,13 @@ function chooseQuaverPitch(pool, previous) {
   return options.length ? randomItem(options) : chooseNextPitch(pool, previous, 2);
 }
 
-function makeQuestion({ level, identify = true, build = true, focusFirstTwoBars = false }) {
-  const type = identify && build ? (Math.random() < 0.5 ? "build-key" : "identify-key") : build ? "build-key" : "identify-key";
-  const keys = keyList(level);
-  const accidentalKeys = keys.filter((key) => key.signature.length);
-  const plainKeys = keys.filter((key) => !key.signature.length);
-  const key = type === "build-key" && accidentalKeys.length
-    ? (plainKeys.length && Math.random() < 0.1 ? randomItem(plainKeys) : randomItem(accidentalKeys))
-    : randomItem(keys);
+function makeBarsForKey(key, barCount = BAR_COUNT, { focusFirstTwoBars = false } = {}) {
   const pool = POOLS[key.id];
   const bars = [];
   let previous = TONIC[key.id];
 
-  for (let barIndex = 0; barIndex < BAR_COUNT; barIndex += 1) {
-    const patterns = barIndex === BAR_COUNT - 1 ? [...BAR_PATTERNS, ["semibreve"]] : BAR_PATTERNS;
+  for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
+    const patterns = barIndex === barCount - 1 ? [...BAR_PATTERNS, ["semibreve"]] : BAR_PATTERNS;
     const pattern = randomItem(patterns);
     const bar = pattern.map((rhythm, noteIndex) => {
       const pitch = barIndex === 0 && noteIndex === 0
@@ -354,11 +353,33 @@ function makeQuestion({ level, identify = true, build = true, focusFirstTwoBars 
     bars[barIndex][noteIndex] = { ...bars[barIndex][noteIndex], pitch: randomItem(REQUIRED[key.id]) };
   }
 
+  return bars;
+}
+
+function makeQuestion({ level, identify = true, build = true, focusFirstTwoBars = false }) {
+  const keys = keyList(level);
+  const canAskKeyChange = level === "AH" && identify && Math.random() < 0.28;
+  const type = canAskKeyChange ? "identify-key-change" : identify && build ? (Math.random() < 0.5 ? "build-key" : "identify-key") : build ? "build-key" : "identify-key";
+  const accidentalKeys = keys.filter((key) => key.signature.length);
+  const plainKeys = keys.filter((key) => !key.signature.length);
+  const key = type === "build-key" && accidentalKeys.length
+    ? (plainKeys.length && Math.random() < 0.1 ? randomItem(plainKeys) : randomItem(accidentalKeys))
+    : randomItem(keys);
+  const bars = type === "identify-key-change"
+    ? (() => {
+      const startKey = randomItem(keys);
+      const changeChoices = accidentalKeys.filter((candidate) => candidate.id !== startKey.id && signatureId(candidate) !== signatureId(startKey));
+      const changeKey = randomItem(changeChoices.length ? changeChoices : keys.filter((candidate) => candidate.id !== startKey.id));
+      return { startKey, changeKey, bars: [...makeBarsForKey(startKey, 4), ...makeBarsForKey(changeKey, 4)] };
+    })()
+    : { startKey: null, changeKey: key, bars: makeBarsForKey(key, BAR_COUNT, { focusFirstTwoBars }) };
+
   return {
     id: Math.random().toString(36).slice(2),
     type,
-    key,
-    bars,
+    key: bars.changeKey,
+    startKey: bars.startKey,
+    bars: bars.bars,
     identifyMode: type === "identify-key" && Math.random() < 0.35 ? "typed" : "buttons",
     maxBuildAccidentals: level === "AH" ? 2 : Math.max(key.signature.length, 1),
   };
@@ -643,7 +664,7 @@ function useSession(initialLevel, phoneView = false) {
       nextQuestion(nextLevel, modes);
     },
     toggleIdentify() {
-      if (modes.identify && !modes.build) return;
+      if (modes.identify) return;
       const nextModes = { ...modes, identify: !modes.identify };
       setModes(nextModes);
       nextQuestion(level, nextModes);
@@ -694,25 +715,48 @@ function useSession(initialLevel, phoneView = false) {
   };
 }
 
-function Staff() {
+function Staff({ barCount = BAR_COUNT }) {
+  const systemCount = barCount > BAR_COUNT ? 2 : 1;
   return (
     <g>
-      {[0, 1, 2, 3, 4].map((line) => (
-        <line key={line} x1={STAFF.left} x2={STAFF.right} y1={STAFF.top + line * STAFF.gap} y2={STAFF.top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
-      ))}
-      {Array.from({ length: BAR_COUNT - 1 }, (_, index) => {
-        const x = passageBarEnd(index);
-        return <line key={index} x1={x} x2={x} y1={STAFF.top} y2={STAFF.top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />;
+      {Array.from({ length: systemCount }, (_, systemIndex) => {
+        const top = STAFF.top + systemIndex * SYSTEM_GAP;
+        const systemStartBar = systemIndex * BAR_COUNT;
+        const isLastSystem = systemIndex === systemCount - 1;
+        return (
+          <g key={systemIndex}>
+            {[0, 1, 2, 3, 4].map((line) => (
+              <line key={line} x1={STAFF.left} x2={STAFF.right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.5" />
+            ))}
+            {Array.from({ length: BAR_COUNT - 1 }, (_, index) => {
+              const x = passageBarEnd(systemStartBar + index, barCount);
+              return <line key={index} x1={x} x2={x} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />;
+            })}
+            <CalibratedSymbol symbolKey="gClef" x={calibrationAnchorX("gClef")} y={calibrationAnchorY("gClef", top)} />
+            {systemIndex === 0 && <CalibratedTimeSignature signature="4/4" x={calibrationAnchorX("timeSig44")} y={calibrationAnchorY("timeSig44", top)} />}
+            {isLastSystem ? <CalibratedSymbol symbolKey="barlineFinal" x={STAFF.right} y={yForStep(4, top)} /> : <line x1={STAFF.right} x2={STAFF.right} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.5" />}
+          </g>
+        );
       })}
-      <CalibratedSymbol symbolKey="gClef" x={calibrationAnchorX("gClef")} y={calibrationAnchorY("gClef")} />
-      <CalibratedTimeSignature signature="4/4" x={calibrationAnchorX("timeSig44")} y={calibrationAnchorY("timeSig44")} />
-      <CalibratedSymbol symbolKey="barlineFinal" x={STAFF.right} y={yForStep(4)} />
     </g>
   );
 }
 
-function KeySignature({ signature }) {
-  return <g pointerEvents="none">{signature.map((item, index) => <Accidental key={`${item.type}-${index}`} item={item} index={index} />)}</g>;
+function KeySignature({ signature, baseX = calibrationLayoutX("keySignature"), top = STAFF.top }) {
+  return <g pointerEvents="none">{signature.map((item, index) => <Accidental key={`${item.type}-${index}`} item={item} index={index} baseX={baseX} top={top} />)}</g>;
+}
+
+function KeyChangeSignature({ signature, barCount }) {
+  if (!signature?.length) return null;
+  const top = systemTopForBar(4, barCount);
+  const baseX = barCount > BAR_COUNT ? calibrationLayoutX("keySignature") : passageBarStart(4, barCount) + 13;
+  const width = Math.max(56, (signature.length - 1) * KEY_SIGNATURE_SPACING + 52);
+  return (
+    <g pointerEvents="none">
+      <rect x={baseX - 24} y={top - 16} width={width} height={STAFF.gap * 4 + 32} rx="9" ry="9" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.85" />
+      <KeySignature signature={signature} baseX={baseX} top={top} />
+    </g>
+  );
 }
 
 function getStem(x, y, step, forcedDown = null, forcedEndY = null) {
@@ -728,7 +772,7 @@ function getStem(x, y, step, forcedDown = null, forcedEndY = null) {
   };
 }
 
-function LedgerLines({ x, step, colour = "currentColor" }) {
+function LedgerLines({ x, step, colour = "currentColor", top = STAFF.top }) {
   if (step > -2 && step < 10) return null;
   const settings = sharedSymbolConfig("ledgerLines");
   const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
@@ -744,7 +788,7 @@ function LedgerLines({ x, step, colour = "currentColor" }) {
   return (
     <g pointerEvents="none">
       {lines.map((ledgerStep) => {
-        const y = yForStep(ledgerStep) + yOffset;
+        const y = yForStep(ledgerStep, top) + yOffset;
         return <line key={ledgerStep} x1={x - halfWidth + xOffset} x2={x + halfWidth + xOffset} y1={y} y2={y} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" />;
       })}
     </g>
@@ -757,9 +801,9 @@ function Dot({ x, y, step }) {
   return <CalibratedSymbol symbolKey={dotKey} x={x + calibrationOffset(13)} y={dotY} />;
 }
 
-function Note({ note, x, beamedDown = null, forcedEndY = null, showFlag = true, accidental = false }) {
+function Note({ note, x, beamedDown = null, forcedEndY = null, showFlag = true, accidental = false, top = STAFF.top }) {
   const step = noteStep(note.pitch);
-  const y = yForStep(step);
+  const y = yForStep(step, top);
   const down = beamedDown ?? stemDown(step);
   const beamed = note.rhythm === "quaver" && !showFlag;
   const stem = beamed ? getStem(x, y, step, down, forcedEndY) : null;
@@ -768,7 +812,7 @@ function Note({ note, x, beamedDown = null, forcedEndY = null, showFlag = true, 
 
   return (
     <g pointerEvents="none">
-      <LedgerLines x={x} step={step} />
+      <LedgerLines x={x} step={step} top={top} />
       {accidental && <CalibratedSymbol symbolKey="sharpInScore" x={scoreAccidentalBaseX(x)} y={y} />}
       <CalibratedSymbol symbolKey={noteKey} x={x} y={y} />
       {stem && forcedEndY !== null && <line x1={stem.stemX} x2={stem.stemX} y1={stem.startY} y2={forcedEndY} stroke="currentColor" strokeWidth={Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12))} />}
@@ -793,9 +837,10 @@ function quaverGroups(bar) {
   return groups;
 }
 
-function barPositions(bar, startX, endX, barIndex = 0) {
-  const scoreStart = startX + (barIndex === 0 ? 4 : 15);
-  const scoreEnd = barIndex === BAR_COUNT - 1 ? endX - 24 : endX - 4;
+function barPositions(bar, startX, endX, barIndex = 0, barCount = BAR_COUNT) {
+  const localBarIndex = barCount > BAR_COUNT ? barIndex % BAR_COUNT : barIndex;
+  const scoreStart = startX + (localBarIndex === 0 ? 4 : 15);
+  const scoreEnd = barIndex === barCount - 1 ? endX - 24 : endX - 4;
   const units = bar.reduce((sum, note) => sum + RHYTHM_UNITS[note.rhythm], 0);
   const unit = Math.max(1, scoreEnd - scoreStart) / Math.max(1, units);
   let x = scoreStart + unit * 0.38;
@@ -807,10 +852,14 @@ function barPositions(bar, startX, endX, barIndex = 0) {
 }
 
 function Passage({ bars }) {
+  const barCount = bars.length || BAR_COUNT;
   return (
     <g>
       {bars.map((bar, barIndex) => {
-        const positions = barPositions(bar, passageBarStart(barIndex), passageBarEnd(barIndex), barIndex);
+        const top = systemTopForBar(barIndex, barCount);
+        const start = passageBarStart(barIndex, barCount);
+        const end = passageBarEnd(barIndex, barCount);
+        const positions = barPositions(bar, start, end, barIndex, barCount);
         const groups = quaverGroups(bar);
         const altered = new Set();
         const states = bar.map((note, noteIndex) => {
@@ -822,18 +871,19 @@ function Passage({ bars }) {
 
         return (
           <g key={barIndex}>
+            <text x={(barIndex === 0 || barIndex === 4) ? start - 15 : start + 5} y={top - 18} fontSize="13" fontWeight="600">{barIndex + 1}</text>
             {bar.map((note, noteIndex) => {
               const group = groups.find((item) => noteIndex >= item.start && noteIndex <= item.end);
               const down = group ? groupHasDownStems(bar, group) : null;
-              const beam = group ? beamForGroup(bar, group, states.map((state) => state.x), down) : null;
+              const beam = group ? beamForGroup(bar, group, states.map((state) => state.x), down, top) : null;
               const x = states[noteIndex].x;
               const step = noteStep(note.pitch);
-              const y = yForStep(step);
+              const y = yForStep(step, top);
               const stem = beam ? getStem(x, y, step, down) : null;
               const forcedEndY = beam ? beamYAtX(stem.stemX, beam) : null;
               return (
                 <g key={`${barIndex}-${noteIndex}`}>
-                  <Note note={note} x={x} accidental={states[noteIndex].showAccidental} beamedDown={down} forcedEndY={forcedEndY} showFlag={!group} />
+                  <Note note={note} x={x} top={top} accidental={states[noteIndex].showAccidental} beamedDown={down} forcedEndY={forcedEndY} showFlag={!group} />
                   {beam && group.start === noteIndex && <BeamShape beam={beam} />}
                 </g>
               );
@@ -852,7 +902,7 @@ function groupHasDownStems(bar, group) {
   return down > up;
 }
 
-function beamForGroup(bar, group, positions, down) {
+function beamForGroup(bar, group, positions, down, top = STAFF.top) {
   const settings = sharedSymbolConfig("quaverBeam");
   const xOffset = calibrationOffset(Number(settings.xOffsetScale || 0) * CALIBRATION_PREVIEW_GAP);
   const yOffset = calibrationOffset(Number(settings.yOffsetScale || 0) * CALIBRATION_PREVIEW_GAP);
@@ -866,11 +916,11 @@ function beamForGroup(bar, group, positions, down) {
   return {
     start: {
       x: startStemX - beamWidthAdjust,
-      y: yForStep(startStep) + yOffset + (down ? stemLength : -stemLength),
+      y: yForStep(startStep, top) + yOffset + (down ? stemLength : -stemLength),
     },
     end: {
       x: endStemX + beamWidthAdjust,
-      y: yForStep(endStep) + yOffset + (down ? stemLength : -stemLength),
+      y: yForStep(endStep, top) + yOffset + (down ? stemLength : -stemLength),
     },
   };
 }
@@ -954,16 +1004,23 @@ function BuildLayer({ question, selectedAccidental, placed, setHover, hover, onP
 }
 
 function Score({ question, session, phoneView = false }) {
-  const viewBox = phoneView ? PHONE_SCORE_VIEWBOX : SCORE_VIEWBOX;
+  const barCount = question.bars.length || BAR_COUNT;
+  const viewBox = phoneView
+    ? (barCount > BAR_COUNT ? TWO_SYSTEM_PHONE_SCORE_VIEWBOX : PHONE_SCORE_VIEWBOX)
+    : (barCount > BAR_COUNT ? TWO_SYSTEM_SCORE_VIEWBOX : SCORE_VIEWBOX);
+  const openingSignature = question.type === "identify-key-change" ? question.startKey.signature : question.key.signature;
   return (
     <div className={phoneView ? "phone-score-crop w-full" : "w-full"}>
       <svg viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`} className="h-auto w-full select-none overflow-hidden">
       <rect width={SVG.width} height={SVG.height} fill="white" />
-      <Staff />
+      <Staff barCount={barCount} />
       {question.type === "build-key" ? (
         <BuildLayer question={question} selectedAccidental={session.selectedAccidental} placed={session.placed} hover={session.hover} setHover={session.setHover} onPlace={session.placeAccidental} feedback={session.feedback} />
       ) : (
-        <KeySignature signature={question.key.signature} />
+        <>
+          <KeySignature signature={openingSignature} />
+          {question.type === "identify-key-change" && <KeyChangeSignature signature={question.key.signature} barCount={barCount} />}
+        </>
       )}
       <Passage bars={question.bars} />
     </svg>
@@ -1060,6 +1117,7 @@ function App() {
   window.MLH.useClickAway(menuRef, () => setMenu(null));
 
   const isBuild = session.question.type === "build-key";
+  const questionContainerMargin = session.question.type === "identify-key-change" ? "sm:mt-[-20px] md:-mt-[25px]" : "sm:mt-[-63px] md:-mt-[81px]";
   const showNoAccidentals = isBuild && session.feedback && !session.feedback.correct && session.expected.length === 0;
   const skipCorrectFeedback = () => {
     if (!session.feedback || !session.feedback.correct || session.feedbackFading) return;
@@ -1067,7 +1125,9 @@ function App() {
   };
   const instruction = isBuild
     ? <span>Create the key signature of <strong><KeyName label={session.question.key.label} /></strong>.</span>
-    : <span>Name the <strong>key</strong> of this excerpt.</span>;
+    : session.question.type === "identify-key-change"
+      ? <span>The music starts in the key of <strong><KeyName label={session.question.startKey.label} /></strong>. Identify the change of key from <strong>bar 5</strong>.</span>
+      : <span>Name the <strong>key</strong> of this excerpt.</span>;
 
   const answerClass = (keyId) => {
     const base = "rounded-xl border px-4 py-3 text-[1.05rem] font-bold transition disabled:opacity-100";
@@ -1124,8 +1184,9 @@ function App() {
                   onClick={() => setMenu(menu === "customise" ? null : "customise")}
                 />
                 {menu === "customise" && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel>
-                  <ToggleRow glyph={<BravuraGlyph symbolKey="gClef" className="relative top-[5px] text-[18px]" />} label="Identify" enabled={session.modes.identify} disabled={session.modes.identify && !session.modes.build} onToggle={session.toggleIdentify} />
-              <ToggleRow glyph={<span className="relative left-[2px] flex items-center gap-[2px]"><BravuraGlyph symbolKey="sharp" className="text-[24px]" /><BravuraGlyph symbolKey="flat" className="relative left-[2px] text-[24px]" /></span>} label="Create" enabled={session.modes.build} disabled={session.modes.build && !session.modes.identify} onToggle={session.toggleBuild} />
+                  <window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>
+                  <ToggleRow glyph={<BravuraGlyph symbolKey="gClef" className="relative top-[5px] text-[18px]" />} label="Identify Key" enabled={session.modes.identify} disabled={false} onToggle={session.toggleIdentify} />
+                  <ToggleRow glyph={<span className="relative left-[2px] flex items-center gap-[2px]"><BravuraGlyph symbolKey="sharp" className="text-[24px]" /><BravuraGlyph symbolKey="flat" className="relative left-[2px] text-[24px]" /></span>} label="Create Key" enabled={session.modes.build} disabled={session.modes.build && !session.modes.identify} onToggle={session.toggleBuild} />
                 </window.MLH.MenuPanel>}
               </div>
             </div>
@@ -1147,14 +1208,14 @@ function App() {
                 <Score question={session.question} session={session} phoneView={phoneView} />
               </div>
 
-          <div className="relative z-10 mt-auto overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:mt-[-63px] sm:p-4 md:mx-3 md:-mt-[81px]">
+          <div className={`relative z-10 mt-auto overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md sm:p-4 md:mx-3 ${questionContainerMargin}`}>
             <p className="text-base font-semibold leading-tight">{instruction}</p>
-            {showNoAccidentals && <p className="text-sm font-bold text-[#16a34a]">Correct answer: no sharps or flats.</p>}
+            {showNoAccidentals && <p className="text-sm font-bold text-[#16a34a]">Correct answer: no sharps or flats</p>}
 
             {isBuild ? (
               <div className="mt-4 flex flex-wrap items-end gap-2">
-                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("sharp")} className={`flex h-[56px] w-[56px] items-center justify-center rounded-xl border ${session.selectedAccidental === "sharp" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}><BravuraGlyph symbolKey="sharp" className={`text-[42px] ${session.selectedAccidental === "sharp" ? "text-white" : "text-black"}`} /></button>
-                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("flat")} className={`flex h-[56px] w-[56px] items-center justify-center rounded-xl border ${session.selectedAccidental === "flat" ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}><BravuraGlyph symbolKey="flat" className={`relative top-[5px] text-[42px] ${session.selectedAccidental === "flat" ? "text-white" : "text-black"}`} /></button>
+                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("sharp")} className={`flex h-[64px] min-w-[88px] items-center justify-center rounded-xl border px-1 transition sm:h-[74px] ${session.selectedAccidental === "sharp" ? "border-black bg-black text-white" : "border-stone-300 bg-white text-black hover:bg-stone-50"}`}><BravuraGlyph symbolKey="sharp" className="translate-x-[1px] translate-y-[1px] text-[44px]" /></button>
+                <button type="button" disabled={session.locked} onClick={() => session.setSelectedAccidental("flat")} className={`flex h-[64px] min-w-[88px] items-center justify-center rounded-xl border px-1 transition sm:h-[74px] ${session.selectedAccidental === "flat" ? "border-black bg-black text-white" : "border-stone-300 bg-white text-black hover:bg-stone-50"}`}><BravuraGlyph symbolKey="flat" className="-translate-x-[1px] translate-y-[6px] text-[44px]" /></button>
                 <div className="ml-auto flex gap-2">
                   <button type="button" disabled={session.locked || session.placed.length === 0} onClick={session.clearPlaced} className={window.MLH.ClearButtonClass}>Clear</button>
                   <window.MLH.ConfirmButton disabled={session.locked} onClick={session.submitBuild}>Confirm</window.MLH.ConfirmButton>
