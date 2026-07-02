@@ -12,7 +12,7 @@
   <script src="./hub-audio.js?v=1.4"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="./hub-shell.js?v=1.3"></script>
+  <script src="./hub-shell.js?v=1.5"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <script src="./hub-menu.js?v=20260702"></script>
   <script src="./bravura-symbols.js"></script>
@@ -351,10 +351,16 @@
       return 2;
     }
 
+    function stepRangeForLevel(level) {
+      if (level === "N3" || level === "N4") return { min: 0, max: 8 };
+      if (level === "N5" || level === "H") return { min: -2, max: 10 };
+      if (level === "AH") return { min: -4, max: 12 };
+      return { min: NOTE_POOL[0].step, max: NOTE_POOL.at(-1).step };
+    }
+
     function noteAllowedForLevel(level, note) {
-      if (level === "N3" || level === "N4") return note.step >= 0 && note.step <= 8;
-      if (level === "N5") return note.step >= -2 && note.step <= 10;
-      return true;
+      const range = stepRangeForLevel(level);
+      return note.step >= range.min && note.step <= range.max;
     }
 
     function noteInClefRange(note, clef) {
@@ -552,6 +558,21 @@
       };
     }
 
+    function buildCadenceBar({ key, chordSymbol, targetLetter, barIndex, timeSignature, previousIndex, totalBars, level }) {
+      const rhythm = finalRhythmForSignature(timeSignature);
+      const previous = NOTE_POOL[previousIndex] ?? noteByLetter(key.tonic, 6);
+      const options = NOTE_POOL
+        .filter((note) => note.letter === targetLetter && noteAllowedForLevel(level, note));
+      const base = options.reduce((best, note) => Math.abs(note.midi - previous.midi) < Math.abs(best.midi - previous.midi) ? note : best, options[0] ?? noteByLetter(targetLetter, previousIndex));
+      return {
+        barIndex,
+        chordSymbol,
+        notes: [makeNote(base, rhythm, barIndex, 0, 0, key, chordSymbol)],
+        totalBars,
+        pattern: [rhythm],
+      };
+    }
+
     function applyMelodicAccidentals(notes, key) {
       return notes.map((note) => {
         const accidental = melodicAccidentalForLetter(key, note.letter);
@@ -685,6 +706,11 @@
       const bar2 = randomItem(["I", "IV", "V", "VI"]);
       const bar3 = randomItem(["IV", "V"]);
       return ["I", bar2, bar3, "I"];
+    }
+
+    function makeEightBarRepetitionProgression() {
+      const bar2 = randomItem(["I", "IV", "V", "VI"]);
+      return ["I", bar2, "IV", "V", "I", bar2, "V", "I"];
     }
 
     function allowedChordsForBar(barIndex) {
@@ -822,6 +848,84 @@
       return question;
     }
 
+    function makeEightBarRepetitionQuestion(level = "N5", attempt = 0) {
+      const activeBarCount = BAR_COUNT;
+      const timeSignature = randomItem(timeSignaturesForLevel(level));
+      const majorKeys = KEYS.filter((key) => key.id !== "Am");
+      const key = level === "N3" || level === "N4"
+        ? KEYS.find((item) => item.id === "C")
+        : Math.random() < 0.82 ? randomItem(majorKeys) : KEYS.find((item) => item.id === "Am");
+      const progression = makeEightBarRepetitionProgression();
+      const targetBar = randomItem([4, 5]);
+      const bars = [];
+      let previousIndex = noteBaseIndex(tonicStartNoteForLevel(level, key));
+      const mode = "repetition";
+      const availablePatterns = level === "AH" ? ahBarPatternsForSignature(timeSignature, false) : barPatternsForSignature(timeSignature);
+
+      for (let barIndex = 0; barIndex < activeBarCount; barIndex += 1) {
+        const chordSymbol = progression[barIndex];
+        let bar;
+        if (barIndex === 3) {
+          bar = buildCadenceBar({
+            key,
+            chordSymbol,
+            targetLetter: dominantLetterForKey(key),
+            barIndex,
+            timeSignature,
+            previousIndex,
+            totalBars: activeBarCount,
+            level,
+          });
+        } else if (barIndex === 4) {
+          bar = { ...bars[0], barIndex, chordSymbol, totalBars: activeBarCount, notes: cloneNotesForBar(bars[0].notes, barIndex) };
+        } else if (barIndex === 5) {
+          bar = { ...bars[1], barIndex, chordSymbol, totalBars: activeBarCount, notes: cloneNotesForBar(bars[1].notes, barIndex) };
+        } else if (barIndex === activeBarCount - 1) {
+          bar = buildFinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars: activeBarCount, level });
+        } else {
+          const pattern = randomItem(availablePatterns);
+          const built = buildNotesFromPattern({ key, chordSymbol, pattern, barIndex, previousIndex, level, mode });
+          previousIndex = built.lastIndex;
+          bar = { barIndex, chordSymbol, notes: built.notes, totalBars: activeBarCount, pattern };
+        }
+        bars.push(bar);
+        const lastNote = [...bar.notes].reverse().find((note) => !note.rest);
+        if (lastNote) previousIndex = noteBaseIndex(lastNote);
+      }
+
+      const question = {
+        id: Math.random().toString(36).slice(2),
+        key,
+        timeSignature,
+        bars,
+        targetBar,
+        level,
+        mode,
+        questionType: "eightBarRepetition",
+        barCount: activeBarCount,
+        useShortPrompt: true,
+      };
+
+      const targetMaximumInterval = maxStepForLevel(level, mode);
+      if (!targetMovesWithinInterval(bars, targetBar, targetMaximumInterval) && attempt < 160) {
+        return makeEightBarRepetitionQuestion(level, attempt + 1);
+      }
+
+      if ((level === "N3" || level === "N4") && !hasEnoughPitchVariety(bars) && attempt < 160) {
+        return makeEightBarRepetitionQuestion(level, attempt + 1);
+      }
+
+      if (level === "N5" && ((bars[targetBar]?.notes ?? []).filter((note) => !note.rest).length) < 3 && attempt < 160) {
+        return makeEightBarRepetitionQuestion(level, attempt + 1);
+      }
+
+      if (level === "N3" && melodyHasOctaveLeap(bars) && attempt < 160) {
+        return makeEightBarRepetitionQuestion(level, attempt + 1);
+      }
+
+      return question;
+    }
+
     function shuffleItems(items) {
       const next = [...items];
       for (let index = next.length - 1; index > 0; index -= 1) {
@@ -829,6 +933,14 @@
         [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
       }
       return next;
+    }
+
+    function avoidCorrectOptionFirst(options) {
+      if (options[0]?.correct && options.length > 1) {
+        const swapIndex = 1 + Math.floor(Math.random() * (options.length - 1));
+        [options[0], options[swapIndex]] = [options[swapIndex], options[0]];
+      }
+      return options;
     }
 
     function cloneBarsForOption(bars, optionId) {
@@ -1068,7 +1180,7 @@
       }
 
       balanceRestOptions(options, base.key);
-      const shuffledOptions = shuffleItems(options);
+      const shuffledOptions = avoidCorrectOptionFirst(shuffleItems(options));
       return {
         ...base,
         questionType: "identifyMelody",
@@ -1084,6 +1196,9 @@
 
     function makeQuestion(level = "N5", attempt = 0) {
       if (level === "AH") return makeIdentifyMelodyQuestion(level);
+      if ((level === "N3" || level === "N4" || level === "N5") && Math.random() < 0.5) {
+        return makeEightBarRepetitionQuestion(level);
+      }
       return makeCompletionQuestion(level, attempt);
     }
 
@@ -1735,125 +1850,12 @@
       window.MLH?.playFeedbackSound?.(correct, celebration, medal);
     }
 
-    const MISSING_NOTES_MEDALS = [
-      { tier: "bronze", value: 2, icon: ASSET.bronze, className: "text-amber-700", sound: "bronze" },
-      { tier: "silver", value: 4, icon: ASSET.silver, className: "text-slate-500", sound: "silver" },
-      { tier: "gold", value: 6, icon: ASSET.gold, className: "text-yellow-500", sound: "gold" },
-      { tier: "diamond", value: 10, icon: ASSET.diamond, className: "text-cyan-500", sound: "platinum" },
-    ];
-
-    function missingNotesStreakMedal(streak) {
-      return [...MISSING_NOTES_MEDALS].reverse().find((item) => streak >= item.value) ?? null;
-    }
-
-    function medalStyleForStreak(streak) {
-      if (streak >= 10) return { backgroundColor: "rgba(34, 211, 238, .25)", color: "#06b6d4" };
-      if (streak >= 6) return { backgroundColor: "rgba(250, 204, 21, .25)", color: "#eab308" };
-      if (streak >= 4) return { backgroundColor: "rgba(203, 213, 225, .3)", color: "#64748b" };
-      if (streak >= 2) return { backgroundColor: "rgba(180, 83, 9, .2)", color: "#b45309" };
-      return { backgroundColor: "#fafaf9", color: "#000000" };
-    }
-
-    function MissingNotesScoreStreakPanel({
-      correct,
-      attempted,
-      accuracy,
-      streak,
-      bestStreak,
-      resetScore,
-      confettiKey = 0,
-      autoShowMedals = false,
-    }) {
-      const [popover, setPopover] = useState(null);
-      const ref = useRef(null);
-      window.MLH.useClickAway(ref, () => setPopover(null));
-
-      const scoreFill = clamp(accuracy || 0, 0, 100);
-      const scoreColour = scoreFill < 50 ? "rgba(220,38,38,.38)" : scoreFill < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)";
-      const medal = missingNotesStreakMedal(streak);
-      const medalStyle = medalStyleForStreak(streak);
-      const tile = window.MLH?.shell?.scoreTileClass ?? "relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm sm:h-[64px]";
-      const active = window.MLH?.shell?.scoreTileActiveClass ?? "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg";
-
-      return (
-        <div ref={ref} className="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-[112px_98px] lg:grid-cols-[124px_108px]">
-          <section
-            role="button"
-            tabIndex="0"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => setPopover((value) => value === "score" ? null : "score")}
-            className={`${tile} ${popover === "score" ? active : ""}`}
-          >
-            <div className="absolute inset-0 overflow-hidden rounded-xl">
-              <div className="absolute bottom-0 -left-[2px] right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreColour }} />
-            </div>
-            <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
-              <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Score</div>
-              <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{correct}/{attempted}</div>
-              <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Accuracy: {accuracy}%</div>
-            </div>
-            {popover === "score" && (
-              <button
-                type="button"
-                onClick={(event) => { event.stopPropagation(); resetScore(); setPopover(null); }}
-                className="fixed-popover-button score-reset-button absolute left-1/2 top-full z-[120] mt-2 flex min-w-[112px] w-full -translate-x-1/2 items-center justify-center rounded-xl border border-[#dc2626] bg-[#dc2626] px-3 py-2 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(0,0,0,0.28)] sm:w-auto"
-                style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
-              >
-                Reset
-              </button>
-            )}
-          </section>
-          <section
-            role="button"
-            tabIndex="0"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => setPopover((value) => value === "streak" ? null : "streak")}
-            className={`${tile} overflow-visible ${popover === "streak" ? active : ""}`}
-            style={{ backgroundColor: medalStyle.backgroundColor }}
-          >
-            <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-              <div className="absolute inset-0 rounded-xl transition-colors duration-700" style={{ backgroundColor: medalStyle.backgroundColor }} />
-            </div>
-            {confettiKey > 0 && (
-              <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
-                {Array.from({ length: 18 }).map((_, index) => (
-                  <span
-                    key={index}
-                    className="absolute block h-1.5 w-1 rounded-sm"
-                    style={{
-                      left: `${8 + ((index * 19) % 84)}%`,
-                      top: "-8px",
-                      backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5],
-                      animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`,
-                      animationDelay: `${(index % 6) * 0.035}s`,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-            <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
-              <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
-              <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px]" style={{ color: medalStyle.color }}>{streak}</div>
-              <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
-            </div>
-            {(popover === "streak" || autoShowMedals) && (
-              <div
-                className="fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]"
-                style={{ animation: autoShowMedals ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
-              >
-                <div className="flex items-end justify-center gap-3">
-                  {MISSING_NOTES_MEDALS.map((item) => (
-                    <div key={item.value} className={`flex flex-col items-center justify-end ${medal?.tier === item.tier ? "medal-threshold-active" : ""}`}>
-                      <img src={item.icon} alt="" aria-hidden="true" className="h-[22.8px] w-[22.8px] object-contain" />
-                      <span className={`mt-1 text-[11px] font-semibold leading-none ${item.className}`}>{item.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-        </div>
-      );
+    function missingNotesMedalSoundForStreak(streak) {
+      if (streak === 10) return "platinum";
+      if (streak === 6) return "gold";
+      if (streak === 4) return "silver";
+      if (streak === 2) return "bronze";
+      return null;
     }
 
     function App() {
@@ -1874,7 +1876,6 @@
       const [visible, setVisible] = useState(true);
       const [score, setScore] = useState({ correct: 0, attempted: 0, streak: 0, best: 0 });
       const [confetti, setConfetti] = useState(0);
-      const [autoShowMedals, setAutoShowMedals] = useState(false);
       const [menu, setMenu] = useState(null);
       const [prompt, setPrompt] = useState("");
       const [isPlaying, setIsPlaying] = useState(false);
@@ -1944,7 +1945,6 @@
         setActiveLevel(level);
         setScore({ correct: 0, attempted: 0, streak: 0, best: 0 });
         setConfetti(0);
-        setAutoShowMedals(false);
         const url = new URL(window.location.href);
         url.searchParams.set("level", level);
         window.history.replaceState(null, "", url.toString());
@@ -1954,7 +1954,6 @@
       function resetScore() {
         setScore({ correct: 0, attempted: 0, streak: 0, best: 0 });
         setConfetti(0);
-        setAutoShowMedals(false);
         newQuestion();
       }
 
@@ -1980,11 +1979,9 @@
           setScore((current) => {
             const streak = correct ? current.streak + 1 : 0;
             if (correct && [2, 4, 6, 10].includes(streak)) {
-              const medal = missingNotesStreakMedal(streak);
+              const medalSound = missingNotesMedalSoundForStreak(streak);
               setConfetti((value) => value + 1);
-              setAutoShowMedals(true);
-              window.setTimeout(() => setAutoShowMedals(false), 2000);
-              window.setTimeout(() => playSound(true, true, medal?.sound), 180);
+              window.setTimeout(() => playSound(true, true, medalSound), 180);
             }
             return {
               correct: current.correct + (correct ? 1 : 0),
@@ -2012,11 +2009,9 @@
         setScore((current) => {
           const streak = correct ? current.streak + 1 : 0;
           if (correct && [2, 4, 6, 10].includes(streak)) {
-            const medal = missingNotesStreakMedal(streak);
+            const medalSound = missingNotesMedalSoundForStreak(streak);
             setConfetti((value) => value + 1);
-            setAutoShowMedals(true);
-            window.setTimeout(() => setAutoShowMedals(false), 2000);
-            window.setTimeout(() => playSound(true, true, medal?.sound), 180);
+            window.setTimeout(() => playSound(true, true, medalSound), 180);
           }
           return {
             correct: current.correct + (correct ? 1 : 0),
@@ -2219,16 +2214,7 @@
       return (
         <div className="overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12">
           <window.MLH.AppHeader icon={ASSET.appIcon} title="Melodic Dictation" subtitle="Identify and complete melodic patterns.">
-            <MissingNotesScoreStreakPanel
-              correct={score.correct}
-              attempted={score.attempted}
-              accuracy={accuracy}
-              streak={score.streak}
-              bestStreak={score.best}
-              resetScore={resetScore}
-              confettiKey={confetti}
-              autoShowMedals={autoShowMedals}
-            />
+            <window.MLH.ScoreStreakPanel assets={ASSET} correct={score.correct} attempted={score.attempted} accuracy={accuracy} streak={score.streak} bestStreak={score.best} resetScore={resetScore} confettiKey={confetti} medalEligible={true} medalThresholdValues={[2, 4, 6, 10]} />
           </window.MLH.AppHeader>
 
           <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]">
@@ -2283,7 +2269,7 @@
                   <Feedback feedback={feedback} fading={feedbackFading} />
                 </div>
                 <div className="flex justify-end">
-                  <window.MLH.SkipButton onClick={() => newQuestion()} icon={<img src={ASSET.next} alt="" className="h-[27.8px] w-[27.8px] object-contain" />} />
+                  <window.MLH.SkipButton resetStreak={() => setScore((current) => ({ ...current, streak: 0 }))} onClick={() => newQuestion()} icon={<img src={ASSET.next} alt="" className="h-[27.8px] w-[27.8px] object-contain" />} />
                 </div>
               </div>
 
@@ -2293,7 +2279,11 @@
 
               <section className={`relative z-10 rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md md:mx-3 ${isIdentifyMelody ? "mt-4" : "mt-auto md:-mt-[42px]"}`}>
                 <p className="text-base font-semibold leading-tight">
-                  {isIdentifyMelody ? question.prompt : <>Listen to the music and insert the missing notes in <strong>bar {question.targetBar + 1}</strong>. The rhythm is given above the stave.</>}
+                  {isIdentifyMelody
+                    ? question.prompt
+                    : question.useShortPrompt
+                      ? <>Listen to the music and insert the missing notes in <strong>bar {question.targetBar + 1}</strong>.</>
+                      : <>Listen to the music and insert the missing notes in <strong>bar {question.targetBar + 1}</strong>. The rhythm is given above the stave.</>}
                 </p>
                 {prompt && <p className="mt-2 text-sm font-medium text-red-700">{prompt}</p>}
                 <div className={window.MLH.PlayClearConfirmRowClass}>

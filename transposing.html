@@ -272,8 +272,7 @@ const DEFAULT_QUESTION_OPTIONS = {
   octaveLower: true,
 };
 
-function taskMatchesLevel(level, wholeBarMode, questionOptions) {
-  if (wholeBarMode) return false;
+function taskMatchesLevel(level, questionOptions) {
   if (level !== "AH") return true;
   return Object.keys(DEFAULT_QUESTION_OPTIONS).every((key) => Boolean(questionOptions[key]) === DEFAULT_QUESTION_OPTIONS[key]);
 }
@@ -383,13 +382,19 @@ function meaningQuestion(marking) {
   };
 }
 
-function isCorrectMeaningAnswer(answer, direction) {
+function isCorrectMeaningAnswer(answer, direction, marking = null) {
   const normalised = answer.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const words = normalised.split(/\s+/).filter(Boolean);
   const hasOctave = words.includes("octave");
-  const hasDirection = words.includes(direction);
+  const acceptedDirections = marking === "8vb"
+    ? ["lower", "down", "higher", "up"]
+    : direction === "higher"
+      ? ["higher", "up"]
+      : ["lower", "down"];
+  const matchedDirection = acceptedDirections.find((word) => words.includes(word));
+  const hasDirection = Boolean(matchedDirection);
   const hasCount = words.some((word) => ["an", "one", "1"].includes(word));
-  const hasShortPhrase = normalised.includes(`octave ${direction}`);
+  const hasShortPhrase = matchedDirection ? normalised.includes(`octave ${matchedDirection}`) : false;
   return hasOctave && hasDirection && (hasCount || hasShortPhrase);
 }
 
@@ -992,7 +997,14 @@ function ScoreArea({
 
           {activeSingleStep != null && !(feedback && !feedback.correct) && (
             <>
-              <LedgerLines x={singleX} step={activeSingleStep} clef={question.answerClef} top={answerTop} />
+              <LedgerLines
+                x={singleX}
+                step={activeSingleStep}
+                clef={question.answerClef}
+                top={answerTop}
+                colour={lockedStep == null ? COLOUR.preview : "currentColor"}
+                opacity={lockedStep == null ? 0.55 : 1}
+              />
               <RhythmNote
                 x={singleX}
                 y={yForStep(answerTop, activeSingleStep)}
@@ -1092,14 +1104,14 @@ function ScoreArea({
             strokeDasharray="5 5"
             opacity="0.55"
           />
-          <LedgerLines x={touchPreview.x} step={touchPreview.step} clef={question.answerClef} top={answerTop} colour="black" />
+          <LedgerLines x={touchPreview.x} step={touchPreview.step} clef={question.answerClef} top={answerTop} colour={COLOUR.preview} opacity={0.55} />
           <RhythmNote
             x={touchPreview.x}
             y={yForStep(answerTop, touchPreview.step)}
             step={touchPreview.step}
             rhythm={mode === "exam" ? selectedRhythmTool ?? selectedRhythms[touchPreview.targetSlot ?? activeSlot] ?? "crotchet" : "crotchet"}
-            colour="black"
-            opacity={0.86}
+            colour={COLOUR.preview}
+            opacity={0.55}
             preview
             scale={1.65}
           />
@@ -1119,9 +1131,9 @@ function MenuIcon({ type }) {
       </span>
     );
   }
-  if (type === "same-pitch") return <span className="music-symbol relative top-[3px] inline-flex h-[18px] w-[18px] items-center justify-center text-[19px] leading-none text-stone-700">{GLYPH.trebleClef}</span>;
-  if (type === "octave-higher") return <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[18px] font-black leading-none text-stone-700">↑</span>;
-  if (type === "octave-lower") return <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[18px] font-black leading-none text-stone-700">↓</span>;
+  if (type === "same-pitch") return <span className="music-symbol relative top-[3px] inline-flex h-[18px] w-[30px] items-center justify-center gap-[1px] text-[17px] leading-none text-stone-700"><span>{GLYPH.trebleClef}</span><span className="relative -top-[5px]">{GLYPH.bassClef}</span></span>;
+  if (type === "octave-higher") return <span className="music-symbol relative top-[3px] inline-flex h-[18px] w-[18px] items-center justify-center text-[19px] leading-none text-stone-700">{GLYPH.trebleClef}</span>;
+  if (type === "octave-lower") return <span className="music-symbol relative -top-[2px] inline-flex h-[18px] w-[18px] items-center justify-center text-[19px] leading-none text-stone-700">{GLYPH.bassClef}</span>;
   return null;
 }
 
@@ -1162,7 +1174,7 @@ function RhythmChooser({ selected, onSelect, selectedRhythms }) {
             type="button"
             onClick={() => !disabled && onSelect(tool.id)}
             aria-label={tool.label}
-            className={`flex h-[78px] w-[52px] items-center justify-center rounded-xl border transition ${disabled ? "border-stone-200 bg-stone-100 opacity-40" : active ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}
+            className={`flex h-[100px] w-[58px] items-center justify-center rounded-xl border transition ${disabled ? "border-stone-200 bg-stone-100 opacity-40" : active ? "border-stone-950 bg-stone-950" : "border-stone-300 bg-white"}`}
           >
             <ToolGlyph tool={tool} active={active} />
           </button>
@@ -1177,13 +1189,7 @@ function MenuRows({ wholeBarMode, setWholeBarMode, noteNamesVisible, setNoteName
 
   return (
     <>
-      <window.MLH.MenuToggleRow
-        glyph={<MenuIcon type="whole-bar" />}
-        label="Whole Bar Mode"
-        checked={wholeBarMode}
-        onChange={() => setWholeBarMode((value) => !value)}
-      />
-
+      <window.MLH.MenuSubheading>Help</window.MLH.MenuSubheading>
       <window.MLH.MenuToggleRow
         glyph={<MenuIcon type="abc" />}
         label="Show Note Names"
@@ -1191,20 +1197,23 @@ function MenuRows({ wholeBarMode, setWholeBarMode, noteNamesVisible, setNoteName
         onChange={() => setNoteNamesVisible((value) => !value)}
       />
 
+      <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
+      <window.MLH.MenuToggleRow
+        glyph={<MenuIcon type="whole-bar" />}
+        label="Whole Bar Mode"
+        checked={wholeBarMode}
+        onChange={() => setWholeBarMode((value) => !value)}
+      />
+
       {showAdvancedHigherOptions && (
         <>
-          <window.MLH.MenuToggleRow
-            glyph={<MenuIcon type="ottava" />}
-            label="8va and 8vb"
-            checked={questionOptions.ottava}
-            onChange={() => setQuestionOption("ottava")}
-          />
+          <window.MLH.MenuSubheading>Transpose</window.MLH.MenuSubheading>
 
           <window.MLH.MenuToggleRow
-            glyph={<MenuIcon type="same-pitch" />}
-            label="Same Pitch"
-            checked={questionOptions.samePitch}
-            onChange={() => setQuestionOption("samePitch")}
+            glyph={<MenuIcon type="octave-lower" />}
+            label="Octave Lower"
+            checked={questionOptions.octaveLower}
+            onChange={() => setQuestionOption("octaveLower")}
           />
 
           <window.MLH.MenuToggleRow
@@ -1215,10 +1224,17 @@ function MenuRows({ wholeBarMode, setWholeBarMode, noteNamesVisible, setNoteName
           />
 
           <window.MLH.MenuToggleRow
-            glyph={<MenuIcon type="octave-lower" />}
-            label="Octave Lower"
-            checked={questionOptions.octaveLower}
-            onChange={() => setQuestionOption("octaveLower")}
+            glyph={<MenuIcon type="same-pitch" />}
+            label="Same Pitch"
+            checked={questionOptions.samePitch}
+            onChange={() => setQuestionOption("samePitch")}
+          />
+
+          <window.MLH.MenuToggleRow
+            glyph={<MenuIcon type="ottava" />}
+            label="8va • 8vb"
+            checked={questionOptions.ottava}
+            onChange={() => setQuestionOption("ottava")}
           />
         </>
       )}
@@ -1227,9 +1243,9 @@ function MenuRows({ wholeBarMode, setWholeBarMode, noteNamesVisible, setNoteName
 }
 
 function App() {
-  const [wholeBarMode, setWholeBarMode] = useState(false);
+  const [wholeBarMode, setWholeBarMode] = useState(true);
   const [activeLevel, setActiveLevel] = useState(INITIAL_LEVEL);
-  const [question, setQuestion] = useState(() => createQuestion("practice", null, INITIAL_LEVEL));
+  const [question, setQuestion] = useState(() => createQuestion("exam", null, INITIAL_LEVEL));
   const [questionOptions, setQuestionOptions] = useState(DEFAULT_QUESTION_OPTIONS);
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelOpen, setLevelOpen] = useState(false);
@@ -1272,13 +1288,14 @@ function App() {
   );
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const medalEligible = taskMatchesLevel(activeLevel, wholeBarMode, questionOptions);
+  const medalEligible = taskMatchesLevel(activeLevel, questionOptions);
   const displayedLevel = medalEligible ? activeLevel : "Custom";
   const displayedLevelLabel = medalEligible ? (activeLevel === "AH" ? "Advanced Higher" : "Higher") : "Custom";
   const meaningMode = question.type === "meaning";
   const meaningMarked = meaningMode && feedback;
   const examReady = wholeBarMode && !meaningMode && question.passage.every((_, index) => examSteps[index] != null && selectedRhythms[index] != null);
   const canConfirm = meaningMode ? typedAnswer.trim().length > 0 && !feedback : wholeBarMode ? examReady && !feedback : lockedStep != null && !feedback;
+  const canClear = !feedback && (meaningMode ? typedAnswer.trim().length > 0 : wholeBarMode ? examSteps.some((step) => step != null) || selectedRhythms.some((rhythm) => rhythm != null) || userTies.some(Boolean) : lockedStep != null);
   const { answerTop } = getSystemLayout(question);
   const instruction = meaningMode
     ? question.instruction?.[mode]
@@ -1342,6 +1359,32 @@ function App() {
     setBestStreak(0);
     setConfettiKey(0);
     newQuestion(mode);
+  }
+
+  function clearAnswer() {
+    if (feedback) return;
+
+    if (meaningMode) {
+      setTypedAnswer("");
+      setPrompt("");
+      return;
+    }
+
+    if (wholeBarMode) {
+      setExamSteps([]);
+      setSelectedRhythms([]);
+      setUserTies([]);
+      setActiveSlot(0);
+      setHoverStep(null);
+      setTouchPreview(null);
+      setPrompt("");
+      return;
+    }
+
+    setLockedStep(null);
+    setHoverStep(null);
+    setTouchPreview(null);
+    setPrompt("");
   }
 
   React.useEffect(() => {
@@ -1592,7 +1635,7 @@ function App() {
     if (feedback) return;
 
     if (meaningMode) {
-      scoreAnswer(isCorrectMeaningAnswer(typedAnswer, question.correctMeaning));
+      scoreAnswer(isCorrectMeaningAnswer(typedAnswer, question.correctMeaning, question.marking));
       return;
     }
 
@@ -1765,14 +1808,15 @@ function App() {
                     type="text"
                     value={typedAnswer}
                     onChange={(event) => setTypedAnswer(event.target.value)}
+                    disabled={Boolean(feedback)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && typedAnswer.trim() && !feedback) confirmAnswer();
                     }}
                     placeholder="Type your answer"
-                    className={window.MLH.typedAnswerClass(meaningMarked ? feedback : null, "meaning-answer-input max-w-[520px]")}
+                    className={window.MLH.typedAnswerClass(meaningMarked ? feedback : null, "meaning-answer-input max-w-[520px] disabled:cursor-not-allowed disabled:bg-stone-100 disabled:opacity-100")}
                   />
                   {meaningMarked && !feedback.correct && (
-                    <span className="whitespace-nowrap text-sm font-semibold text-green-700">
+                    <span className="min-w-0 text-sm font-semibold leading-tight text-green-700">
                       {meaningCorrectionText(question.correctMeaning)}
                     </span>
                   )}
@@ -1782,6 +1826,9 @@ function App() {
               )}
 
               <div className={`meaning-confirm-wrap ${meaningMode ? "absolute right-4 top-[65px]" : "absolute bottom-4 right-4"} flex shrink-0 justify-end gap-2`}>
+                <button type="button" disabled={!canClear} onClick={clearAnswer} className={window.MLH.ClearButtonClass}>
+                  Clear
+                </button>
                 <window.MLH.ConfirmButton disabled={!canConfirm} onClick={confirmAnswer}>Confirm</window.MLH.ConfirmButton>
               </div>
             </div>

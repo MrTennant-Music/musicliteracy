@@ -84,6 +84,7 @@
     autoShowMedals = false,
     showMedalPopover = false,
     medalEligible = null,
+    medalThresholdValues = null,
   }) {
     const [popover, setPopover] = React.useState(null);
     const [autoMedalEligible, setAutoMedalEligible] = React.useState(true);
@@ -104,12 +105,18 @@
 
     const scoreFill = Math.max(0, Math.min(100, accuracy || 0));
     const scoreColour = scoreFill < 50 ? "rgba(220,38,38,.38)" : scoreFill < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)";
-    const thresholds = [
-      { tier: "bronze", value: 10, icon: assets.bronze, className: "text-amber-700", active: streak >= 10 && streak < 15 },
-      { tier: "silver", value: 15, icon: assets.silver, className: "text-slate-500", active: streak >= 15 && streak < 20 },
-      { tier: "gold", value: 20, icon: assets.gold, className: "text-yellow-500", active: streak >= 20 && streak < 30 },
-      { tier: "diamond", value: 30, icon: assets.diamond, className: "text-cyan-500", active: streak >= 30 },
+    const thresholdValues = Array.isArray(medalThresholdValues) && medalThresholdValues.length === 4 ? medalThresholdValues : [10, 15, 20, 30];
+    const thresholdBase = [
+      { tier: "bronze", icon: assets.bronze, className: "text-amber-700" },
+      { tier: "silver", icon: assets.silver, className: "text-slate-500" },
+      { tier: "gold", icon: assets.gold, className: "text-yellow-500" },
+      { tier: "diamond", icon: assets.diamond, className: "text-cyan-500" },
     ];
+    const thresholds = thresholdBase.map((item, index) => ({
+      ...item,
+      value: thresholdValues[index],
+      active: streak >= thresholdValues[index] && (index === thresholdValues.length - 1 || streak < thresholdValues[index + 1]),
+    }));
     const effectiveMedalEligible = medalEligible ?? autoMedalEligible;
     const medal = effectiveMedalEligible ? thresholds.find((item) => item.active) : null;
     const [autoPopoverKey, setAutoPopoverKey] = React.useState(0);
@@ -123,13 +130,13 @@
     const shouldShowMedalPopover = popover === "streak" || autoMedalPopover;
     const medalStyle = !effectiveMedalEligible
       ? { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-      : streak >= 30
+      : medal?.tier === "diamond"
       ? { backgroundColor: "rgba(34, 211, 238, .25)", color: "#06b6d4" }
-      : streak >= 20
+      : medal?.tier === "gold"
         ? { backgroundColor: "rgba(250, 204, 21, .25)", color: "#eab308" }
-        : streak >= 15
+        : medal?.tier === "silver"
           ? { backgroundColor: "rgba(203, 213, 225, .3)", color: "#64748b" }
-          : streak >= 10
+          : medal?.tier === "bronze"
             ? { backgroundColor: "rgba(180, 83, 9, .2)", color: "#b45309" }
             : { backgroundColor: "#fafaf9", color: "#000000" };
     const tile = MLH.shell.scoreTileClass;
@@ -198,7 +205,12 @@
             React.createElement("div", { className: "flex items-end justify-center gap-3" },
               thresholds.map((item) => React.createElement("div", { key: item.value, className: `flex flex-col items-center justify-end ${effectiveMedalEligible && item.active ? "medal-threshold-active" : ""}` },
                 React.createElement("img", { src: item.icon, alt: "", "aria-hidden": "true", className: `h-[22.8px] w-[22.8px] object-contain ${effectiveMedalEligible ? "" : "grayscale opacity-35"}` }),
-                React.createElement("span", { className: `mt-1 text-[11px] font-semibold leading-none ${effectiveMedalEligible ? item.className : "text-stone-400"}` }, item.value)
+                React.createElement("span", { className: `mt-1 text-[11px] font-semibold leading-none ${effectiveMedalEligible ? item.className : "text-stone-400"}` },
+                  item.value < 10 && React.createElement("span", { "aria-hidden": "true", className: "invisible" }, "0"),
+                  item.value < 10
+                    ? React.createElement("span", { style: { position: "relative", left: "-4px" } }, item.value)
+                    : item.value
+                )
               ))
             )
           )
