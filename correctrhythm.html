@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="https://mrtennant-music.github.io/musicliteracy/correct-the-rhythm-icon.svg" />
   <link rel="apple-touch-icon" href="https://mrtennant-music.github.io/musicliteracy/correct-the-rhythm-icon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="./hub-ui.css?v=1.5" />
+  <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
   <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="./bravura-symbols.js?v=20260629"></script>
@@ -15,7 +15,7 @@
   <script src="./hub-mobile.js?v=20260629"></script>
   <script src="./hub-audio.js?v=20260629"></script>
   <script src="./hub-shell.js?v=20260629"></script>
-  <script src="./hub-menu.js?v=20260702"></script>
+  <script src="./hub-menu.js?v=20260702-menu-fix"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face {
@@ -104,15 +104,16 @@ const LEVELS = {
 const QUESTION_TYPES = [
   { id: "correct", label: "Correct Rhythms" },
   { id: "insert", label: "Insert Rhythms" },
-  { id: "tie", label: "Add Ties" },
+  { id: "triplets", label: "Triplets" },
   { id: "identify", label: "Identify Rhythms" },
-  { id: "scotch", label: "Identify Rhythms" },
+  { id: "tie", label: "Ties" },
+  { id: "scotch", label: "Scotch Snap" },
 ];
 
 const LEVEL_REQUIRED_OPTIONS = {
-  N5: { questionTypes: ["correct", "insert", "scotch"], triplets: false, ties: false },
-  H: { questionTypes: ["correct", "insert"], triplets: true, ties: false },
-  AH: { questionTypes: ["correct", "insert", "identify"], triplets: true, ties: true },
+  N5: { questionTypes: ["correct", "insert", "scotch"], ties: false },
+  H: { questionTypes: ["correct", "insert", "triplets"], ties: false },
+  AH: { questionTypes: ["correct", "insert", "triplets", "tie", "identify"], ties: false },
 };
 
 const TEMPOS = [
@@ -391,7 +392,7 @@ function beatStarts(pattern) { let cursor = 0; return pattern.map((rhythm) => { 
 function isSyncopated(pattern, timeSignature) { if (timeSignature.id === "3/4") return false; const starts = beatStarts(pattern); return pattern.some((rhythm, index) => rhythm === "crotchet" && starts[index] % (timeSignature.compound ? 3 : 1) !== 0); }
 function tripletsAvailableForLevel(level, timeSignature) { return (level === "H" || level === "AH") && !timeSignature.compound; }
 function syncopationAvailableForLevel(level, timeSignature) { return level === "AH" && !timeSignature.compound; }
-function tiesAvailableForLevel(level, timeSignature) { return level === "AH" && !timeSignature.compound; }
+function tiesAvailableForLevel(level, timeSignature) { return level === "AH" && !timeSignature.compound && timeSignature.id !== "2/4"; }
 function insertPatternUsesAvailableTools(pattern, timeSignature) {
   const allowedRhythms = new Set(["crotchet", "quaver", "tripletQuavers", "tripletCrotchets"]);
   if (timeSignature.compound) allowedRhythms.add("dottedCrotchet");
@@ -404,6 +405,9 @@ function insertPatternsForLevel(timeSignature, syncopationOn, level, tripletsOn 
   const normalPatterns = [...base, ...triplets].filter((pattern) => validPattern(pattern, timeSignature, syncopationOn) && insertPatternUsesAvailableTools(pattern, timeSignature));
   const syncopatedPatterns = syncopations.filter((pattern) => validPattern(pattern, timeSignature, true) && insertPatternUsesAvailableTools(pattern, timeSignature));
   return [...normalPatterns, ...syncopatedPatterns].filter((pattern) => !timeSignature.compound || !pattern.every((rhythm) => rhythm === "dottedCrotchet"));
+}
+function isTwoCrotchetPattern(pattern) {
+  return pattern.length === 2 && pattern.every((rhythm) => rhythm === "crotchet");
 }
 function validPattern(pattern, timeSignature, syncopationOn) {
   if (beatTotal(pattern) !== timeSignature.beats) return false;
@@ -541,7 +545,8 @@ function makePercussionBar(barIndex, pattern) {
 }
 
 function selectablePercussionPatterns(timeSignature, syncopationOn, tripletsOn) {
-  return IDENTIFY_PATTERNS[timeSignature.id] ?? IDENTIFY_PATTERNS["4/4"];
+  const patterns = IDENTIFY_PATTERNS[timeSignature.id] ?? IDENTIFY_PATTERNS["4/4"];
+  return patterns.filter((pattern) => pattern.every((rhythm) => !rhythmInfo(rhythm).rest));
 }
 
 function applyPercussionTies(bars, timeSignature, forceTie = false) {
@@ -709,8 +714,10 @@ function makeCorrectQuestion(base) {
 function makeInsertQuestion(base, syncopationOn, tripletsOn = true) {
   const targetBarOptions = [0, 1, 2].filter((barIndex) => !base.timeSignature.compound || !base.bars[barIndex].notes.every((note) => note.rhythm === "dottedCrotchet"));
   const targetBarIndex = randomItem(targetBarOptions.length ? targetBarOptions : [0, 1, 2]);
-  const patterns = insertPatternsForLevel(base.timeSignature, syncopationOn, base.level, tripletsOn);
-  const fallbackPatterns = base.timeSignature.compound ? SIMPLE_PATTERNS[base.timeSignature.id].filter((item) => item.some((rhythm) => rhythm !== "dottedCrotchet")) : SIMPLE_PATTERNS[base.timeSignature.id];
+  const availablePatterns = insertPatternsForLevel(base.timeSignature, syncopationOn, base.level, tripletsOn);
+  const patterns = availablePatterns.filter((item) => !isTwoCrotchetPattern(item));
+  const fallbackSource = base.timeSignature.compound ? SIMPLE_PATTERNS[base.timeSignature.id].filter((item) => item.some((rhythm) => rhythm !== "dottedCrotchet")) : SIMPLE_PATTERNS[base.timeSignature.id];
+  const fallbackPatterns = fallbackSource.filter((item) => !isTwoCrotchetPattern(item));
   const pattern = randomItem(patterns.length ? patterns : fallbackPatterns);
   const expandedPattern = expandTripletPattern(pattern);
   const rhythms = expandedPattern.map((item) => item.rhythm);
@@ -721,23 +728,43 @@ function makeInsertQuestion(base, syncopationOn, tripletsOn = true) {
     const isCompoundDottedCrotchet = base.timeSignature.compound && item.rhythm === "dottedCrotchet";
     return { ...note, id: `${targetBarIndex}-${index}`, noteIndex: index, editable: !isCompoundDottedCrotchet, answerRhythm: item.rhythm, audioRhythm: item.rhythm, answerTripletGroupId: item.tripletGroupId, displayRhythm: isCompoundDottedCrotchet ? "dottedCrotchet" : "notehead" };
   });
-  return { ...base, questionType: "insert", target: { barIndex: targetBarIndex, noteIndices: expandedPattern.map((_, index) => index) }, prompt: `Listen to the music and complete the rhythm in <strong>bar ${targetBarIndex + 1}</strong> to match what you hear.` };
+  return { ...base, questionType: "insert", target: { barIndex: targetBarIndex, noteIndices: expandedPattern.map((_, index) => index) }, prompt: `Listen to the music and insert the rhythm in <strong>bar ${targetBarIndex + 1}</strong> to match what you hear.` };
+}
+
+function makeTripletQuestion(base, syncopationOn) {
+  const targetBarIndex = randomItem([0, 1, 2]);
+  const patterns = (TRIPLET_INSERT_PATTERNS[base.timeSignature.id] ?? [])
+    .filter((pattern) => validPattern(pattern, base.timeSignature, syncopationOn) && insertPatternUsesAvailableTools(pattern, base.timeSignature));
+  const fallbackPatterns = TRIPLET_INSERT_PATTERNS["4/4"];
+  const pattern = randomItem(patterns.length ? patterns : fallbackPatterns);
+  const expandedPattern = expandTripletPattern(pattern);
+  const rhythms = expandedPattern.map((item) => item.rhythm);
+  const previous = targetBarIndex > 0 ? Math.max(0, noteIndex(base.bars[targetBarIndex - 1].notes.at(-1))) : noteByLetter(base.key.tonic, 5).index;
+  const replacement = makeBar(targetBarIndex, rhythms, base.key, previous).bar;
+  base.bars[targetBarIndex] = replacement;
+  base.bars[targetBarIndex].notes = base.bars[targetBarIndex].notes.map((note, index) => {
+    const item = expandedPattern[index];
+    return { ...note, id: `${targetBarIndex}-${index}`, noteIndex: index, editable: true, answerRhythm: item.rhythm, audioRhythm: item.rhythm, answerTripletGroupId: item.tripletGroupId, displayRhythm: "notehead" };
+  });
+  return { ...base, questionType: "insert", tripletQuestion: true, target: { barIndex: targetBarIndex, noteIndices: expandedPattern.map((_, index) => index) }, prompt: `Listen to the music and insert the triplet rhythm in <strong>bar ${targetBarIndex + 1}</strong> to match what you hear.` };
 }
 
 function makeLongInsertQuestion(base) {
   const timeSignature = randomItem(TIME_SIGNATURES.filter((signature) => AH_LONG_INSERT_TIME_SIGNATURE_IDS.includes(signature.id)));
-  const bars = [];
   const patterns = AH_LONG_INSERT_PATTERNS[timeSignature.id] ?? AH_LONG_INSERT_PATTERNS["4/4"];
-  for (let barIndex = 0; barIndex < 8; barIndex += 1) {
-    const pattern = [...randomItem(patterns)];
-    bars.push(makePercussionBar(barIndex, pattern));
-  }
-  const missingBars = shuffleItems([0, 1, 2, 3, 4, 5, 6, 7]).slice(0, 2).sort((a, b) => a - b);
+  const barPatterns = Array.from({ length: 8 }, () => [...randomItem(patterns)]);
+  const phraseStarts = [0, 1, 2, 3, 4, 5];
+  const hiddenPhraseStart = randomItem(phraseStarts);
+  const visiblePhraseStart = randomItem(phraseStarts.filter((start) => Math.abs(start - hiddenPhraseStart) >= 2));
+  barPatterns[hiddenPhraseStart] = [...barPatterns[visiblePhraseStart]];
+  barPatterns[hiddenPhraseStart + 1] = [...barPatterns[visiblePhraseStart + 1]];
+  const bars = barPatterns.map((pattern, barIndex) => makePercussionBar(barIndex, pattern));
+  const missingBars = [hiddenPhraseStart, hiddenPhraseStart + 1];
   const placedRhythmsByBar = {};
   const answerPatternsByBar = {};
   missingBars.forEach((barIndex) => {
-    placedRhythmsByBar[barIndex] = [];
     answerPatternsByBar[barIndex] = bars[barIndex].notes.map((note) => note.rhythm);
+    placedRhythmsByBar[barIndex] = answerPatternsByBar[barIndex].map(() => null);
   });
   return {
     ...base,
@@ -749,7 +776,7 @@ function makeLongInsertQuestion(base) {
     placedRhythmsByBar,
     answerPatternsByBar,
     performedOrder: [0, 1, 2, 3, 4, 5, 6, 7],
-    prompt: "Listen to the music and complete the two missing bars.",
+    prompt: "Listen to the music and complete the rhythm of two missing bars.",
   };
 }
 
@@ -757,17 +784,35 @@ function makeTieQuestion(base) {
   if (!tiesAvailableForLevel(base.level, base.timeSignature)) return makeInsertQuestion(base, true, true);
 
   const targetBarIndex = randomItem([0, 1, 2]);
+  const useQuaverToCrotchetTie = base.timeSignature.id === "4/4" && Math.random() < 0.5;
   const quaverCount = Math.max(4, base.timeSignature.beats * 2);
-  const pattern = Array.from({ length: quaverCount }, () => "quaver");
-  const candidateStarts = [];
-  for (let index = 1; index < quaverCount - 1; index += 2) candidateStarts.push(index);
-  const answerIndex = randomItem(candidateStarts);
+  const pattern = useQuaverToCrotchetTie
+    ? ["quaver", "quaver", "crotchet", "quaver", "quaver", "crotchet"]
+    : Array.from({ length: quaverCount }, () => "quaver");
+  const offBeatCandidateStarts = Array.from({ length: Math.max(0, quaverCount - 2) }, (_, index) => index + 1).filter((index) => index % 2 === 1);
+  const candidateStarts = useQuaverToCrotchetTie
+    ? [1, 4]
+    : Array.from({ length: Math.max(0, quaverCount - 1) }, (_, index) => index);
+  const answerIndex = randomItem(useQuaverToCrotchetTie ? candidateStarts : offBeatCandidateStarts);
   const previous = targetBarIndex > 0 ? Math.max(0, noteIndex(base.bars[targetBarIndex - 1].notes.at(-1))) : noteByLetter(base.key.tonic, 6).index;
 
   base.bars[targetBarIndex] = makeBar(targetBarIndex, pattern, base.key, previous).bar;
+  const tieNotes = base.bars[targetBarIndex].notes;
+  const pitchParent = tieNotes.map((_, index) => index);
+  const findPitchParent = (index) => {
+    while (pitchParent[index] !== index) index = pitchParent[index];
+    return index;
+  };
+  const linkPitch = (left, right) => {
+    const leftRoot = findPitchParent(left);
+    const rightRoot = findPitchParent(right);
+    if (leftRoot !== rightRoot) pitchParent[rightRoot] = leftRoot;
+  };
+  candidateStarts.forEach((startIndex) => linkPitch(startIndex, startIndex + 1));
   const repeatedPitchByIndex = new Map();
-  candidateStarts.forEach((startIndex) => {
-    repeatedPitchByIndex.set(startIndex + 1, { ...base.bars[targetBarIndex].notes[startIndex] });
+  tieNotes.forEach((note, index) => {
+    const source = tieNotes[findPitchParent(index)];
+    if (source && source !== note) repeatedPitchByIndex.set(index, { ...source });
   });
 
   base.bars[targetBarIndex].notes = base.bars[targetBarIndex].notes.map((note, index) => {
@@ -785,9 +830,9 @@ function makeTieQuestion(base) {
       answerTieAfter: isAnswerStart,
       audioTieAfter: isAnswerStart,
       silentAudio: isAnswerEnd,
-      answerRhythm: "quaver",
-      audioRhythm: "quaver",
-      displayRhythm: "quaver",
+      answerRhythm: note.rhythm,
+      audioRhythm: note.rhythm,
+      displayRhythm: note.rhythm,
     };
   });
 
@@ -889,32 +934,36 @@ function makeScotchSnapQuestion(base) {
 function makeQuestion(options = {}) {
   const level = options.level || "N5";
   const requestedTypes = options.enabledQuestionTypes?.length ? options.enabledQuestionTypes : QUESTION_TYPES.map((type) => type.id);
-  const key = randomItem(keysForLevel(level));
-  const insertQuestionsOn = requestedTypes.includes("insert");
-  const availableTimeSignatures = timeSignaturesForLevel(level).filter((signature) => insertQuestionsOn || !signature.compound);
-  const timeSignature = randomItem(availableTimeSignatures.length ? availableTimeSignatures : timeSignaturesForLevel(level));
   const enabled = requestedTypes.filter((type) => {
-    if (type === "tie") return false;
+    if (type === "tie") return level === "AH";
     if (type === "identify") return level === "AH";
+    if (type === "longInsert") return false;
+    if (type === "triplets") return level === "H" || (level === "AH" && requestedTypes.includes("insert"));
     if (type === "scotch") return level === "N5";
     return true;
   });
-  const tieQuestionsOn = requestedTypes.includes("correct") && requestedTypes.includes("tie") && tiesAvailableForLevel(level, timeSignature);
+  const selectedType = randomItem(enabled.length ? enabled : ["correct", "insert"]);
+  const key = randomItem(keysForLevel(level));
+  const insertQuestionsOn = selectedType === "insert" || selectedType === "triplets";
+  const availableTimeSignatures = timeSignaturesForLevel(level).filter((signature) => {
+    if (selectedType === "tie") return tiesAvailableForLevel(level, signature);
+    if (selectedType === "triplets") return tripletsAvailableForLevel(level, signature) && Boolean(TRIPLET_INSERT_PATTERNS[signature.id]?.length);
+    return insertQuestionsOn || !signature.compound;
+  });
+  const timeSignature = randomItem(availableTimeSignatures.length ? availableTimeSignatures : timeSignaturesForLevel(level));
   const syncopationOn = options.syncopationOn ?? true;
-  const tripletsOn = options.tripletsOn ?? true;
   const bars = makeBars(timeSignature, key, syncopationOn);
   const base = { id: Math.random().toString(36).slice(2), level, key, timeSignature, bars, performedOrder: [0, 1, 2, 3] };
-  const selectedType = randomItem(enabled.length ? enabled : ["correct", "insert"]);
   if (selectedType === "identify") {
     const identifyTimeSignature = randomItem(TIME_SIGNATURES.filter((signature) => IDENTIFY_TIME_SIGNATURE_IDS.includes(signature.id)));
     return makeIdentifyQuestion({ ...base, timeSignature: identifyTimeSignature, bars: [] }, syncopationOn, false);
   }
   if (selectedType === "scotch") return makeScotchSnapQuestion({ ...base, timeSignature: TIME_SIGNATURES.find((signature) => signature.id === "4/4") ?? timeSignature });
-  if (selectedType === "insert") {
-    if (level === "AH" && Math.random() < 0.5) return makeLongInsertQuestion(base);
-    return makeInsertQuestion(base, syncopationOn, tripletsOn);
-  }
-  return tieQuestionsOn && Math.random() < 0.35 ? makeTieQuestion(base) : makeCorrectQuestion(base);
+  if (selectedType === "triplets") return makeTripletQuestion(base, syncopationOn);
+  if (selectedType === "insert" && level === "AH") return makeLongInsertQuestion(base);
+  if (selectedType === "insert") return makeInsertQuestion(base, syncopationOn, false);
+  if (selectedType === "tie") return makeTieQuestion(base);
+  return makeCorrectQuestion(base);
 }
 
 function getBarGeometry(barIndex) { const width = barWidth(); const startX = MUSIC_START_X + barIndex * width; return { barIndex, systemTop: SYSTEM_TOP, startX, endX: startX + width, barWidth: width }; }
@@ -947,18 +996,26 @@ function longInsertBarGeometry(barIndex) {
   const startX = MUSIC_START_X + localIndex * barWidth();
   return { barIndex, systemTop, startX, endX: startX + barWidth(), barWidth: barWidth() };
 }
+function singleLineNoteSystemTop(lineY) {
+  return lineY - LINE_GAP * 2;
+}
 function placedPattern(question, barIndex) {
   return question.placedRhythmsByBar?.[barIndex] ?? [];
+}
+function answerPatternForBar(question, barIndex) {
+  return question.answerPatternsByBar?.[barIndex] || [];
 }
 function patternMatches(a, b) {
   if (a.length !== b.length) return false;
   return a.every((item, index) => item === b[index]);
 }
 function longInsertBarComplete(question, barIndex) {
-  return Math.abs(beatTotal(placedPattern(question, barIndex)) - question.timeSignature.beats) < 0.001;
+  const answerPattern = answerPatternForBar(question, barIndex);
+  const placed = placedPattern(question, barIndex);
+  return answerPattern.length > 0 && answerPattern.every((_, index) => Boolean(placed[index]));
 }
 function longInsertHasAnyPlacement(question) {
-  return (question.missingBars || []).some((barIndex) => placedPattern(question, barIndex).length > 0);
+  return (question.missingBars || []).some((barIndex) => placedPattern(question, barIndex).some(Boolean));
 }
 function longInsertAllComplete(question) {
   return (question.missingBars || []).every((barIndex) => longInsertBarComplete(question, barIndex));
@@ -966,9 +1023,10 @@ function longInsertAllComplete(question) {
 function makeDisplayNotesForPattern(question, barIndex, pattern, colourSeed = "placed") {
   const answerNotes = question.bars[barIndex]?.notes || [];
   const fallback = noteByLetter(question.key.tonic, 5);
-  return pattern.map((rhythm, index) => {
+  return pattern.flatMap((rhythm, index) => {
+    if (!rhythm) return [];
     const source = answerNotes[index] || answerNotes[answerNotes.length - 1] || fallback;
-    return {
+    return [{
       id: `${colourSeed}-${barIndex}-${index}`,
       barIndex,
       noteIndex: index,
@@ -982,18 +1040,24 @@ function makeDisplayNotesForPattern(question, barIndex, pattern, colourSeed = "p
       midi: source.midi,
       writtenAccidental: null,
       editable: false,
-    };
+    }];
   });
+}
+function longInsertSlotPositions(question, barIndex, geo) {
+  const slotNotes = makeDisplayNotesForPattern(question, barIndex, answerPatternForBar(question, barIndex), "slot");
+  return getBarNotePositions(slotNotes, geo.startX + 28, geo.endX - 28, barIndex);
+}
+function positionsForLongInsertNotes(question, barIndex, notes, geo) {
+  const slotPositions = longInsertSlotPositions(question, barIndex, geo);
+  return notes.map((note) => slotPositions[note.noteIndex] ?? slotPositions[slotPositions.length - 1] ?? geo.startX + 28);
 }
 function longInsertHoverTarget(pointer, question) {
   const missingBars = question.missingBars || [];
   for (const barIndex of missingBars) {
     const geo = longInsertBarGeometry(barIndex);
     if (pointer.x < geo.startX || pointer.x > geo.endX || pointer.y < geo.systemTop - 54 || pointer.y > geo.systemTop + 66) continue;
-    const current = placedPattern(question, barIndex);
-    const displayNotes = makeDisplayNotesForPattern(question, barIndex, current);
-    const positions = getBarNotePositions(displayNotes, geo.startX + 28, geo.endX - 28, barIndex);
-    let slotIndex = current.length;
+    const positions = longInsertSlotPositions(question, barIndex, geo);
+    let slotIndex = null;
     let best = Infinity;
     positions.forEach((x, index) => {
       const distance = Math.abs(pointer.x - x);
@@ -1009,11 +1073,11 @@ function longInsertHoverTarget(pointer, question) {
 function longInsertPreviewPattern(question, target, tool) {
   if (!target || !tool) return null;
   const rhythm = toolToRhythm(tool);
-  const current = [...placedPattern(question, target.barIndex)];
-  const slotIndex = Math.min(target.slotIndex ?? current.length, current.length);
-  if (slotIndex < current.length) current[slotIndex] = rhythm;
-  else current.push(rhythm);
-  if (beatTotal(current) > question.timeSignature.beats + 0.001) return null;
+  const answerPattern = answerPatternForBar(question, target.barIndex);
+  const current = answerPattern.map((_, index) => placedPattern(question, target.barIndex)[index] ?? null);
+  const slotIndex = target.slotIndex;
+  if (slotIndex === null || slotIndex === undefined || slotIndex < 0 || slotIndex >= answerPattern.length) return null;
+  current[slotIndex] = rhythm;
   return current;
 }
 function getStemData(note, x, systemTop, forcedDown = null) { const y = yForStep(note.step, systemTop); const down = forcedDown ?? stemGoesDown(note.step); const stemX = down ? x - NOTE_RX : x + NOTE_RX; return { y, down, stemX, stemEndY: down ? y + STEM_LENGTH : y - STEM_LENGTH }; }
@@ -1462,8 +1526,8 @@ function TieShape({ fromNote, toNote, fromX, toX, systemTop, colour = "currentCo
   const endY = yForStep(toNote.step, systemTop);
   const averageStep = (fromNote.step + toNote.step) / 2;
   const tieAbove = stemGoesDown(averageStep);
-  const leftX = Math.min(fromX, toX) + NOTE_RX * 0.9;
-  const rightX = Math.max(fromX, toX) - NOTE_RX * 0.9;
+  const leftX = Math.min(fromX, toX) + NOTE_RX * 0.15;
+  const rightX = Math.max(fromX, toX) - NOTE_RX * 0.15;
   const width = Math.max(LINE_GAP * 1.5, rightX - leftX);
   const centreX = (leftX + rightX) / 2 + (config.xOffsetScale || 0) * LINE_GAP + (config.opticalXOffset || 0);
   const noteY = tieAbove ? Math.min(startY, endY) : Math.max(startY, endY);
@@ -1708,7 +1772,7 @@ function IdentifyRhythmScore({ question, feedback, onSelectOption }) {
             <span className="min-w-0 flex-1 text-stone-950">
               <PercussionOptionNotation option={option} timeSignature={question.timeSignature} colour={lineColour} />
             </span>
-            <span className={`ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-lg font-black ${showCorrect ? "border-green-600 bg-green-600 text-white" : showWrong ? "border-red-600 bg-red-600 text-white" : selected ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-transparent"}`}>
+            <span className={`ml-3 mr-[25px] flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-lg font-black ${showCorrect ? "border-green-600 bg-green-600 text-white" : showWrong ? "border-red-600 bg-red-600 text-white" : selected ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-transparent"}`}>
               ✓
             </span>
           </button>
@@ -1777,6 +1841,7 @@ function LongInsertRhythmScore({ question, selectedToolId, hoverTarget, feedback
       <rect width={VIEWBOX_WIDTH} height="246" fill="white" />
       {[0, 1].map((systemIndex) => {
         const systemTop = systemIndex === 0 ? 60 : 152;
+        const noteSystemTop = singleLineNoteSystemTop(systemTop);
         const firstBarIndex = systemIndex * 4;
         const finalX = longInsertBarGeometry(firstBarIndex + 3).endX;
         return (
@@ -1792,9 +1857,9 @@ function LongInsertRhythmScore({ question, selectedToolId, hoverTarget, feedback
               const placed = placedPattern(displayQuestion, barIndex);
               const answerCorrect = !feedback || !isMissing ? null : patternMatches(placed, answerPattern);
               const notes = isMissing ? makeDisplayNotesForPattern(displayQuestion, barIndex, placed, "placed-long") : displayQuestion.bars[barIndex].notes;
-              const positions = getBarNotePositions(notes, geo.startX + 28, geo.endX - 28, barIndex);
+              const positions = isMissing ? positionsForLongInsertNotes(displayQuestion, barIndex, notes, geo) : getBarNotePositions(notes, geo.startX + 28, geo.endX - 28, barIndex);
               const answerNotes = makeDisplayNotesForPattern(displayQuestion, barIndex, answerPattern, "answer-long");
-              const answerPositions = getBarNotePositions(answerNotes, geo.startX + 28, geo.endX - 28, barIndex);
+              const answerPositions = longInsertSlotPositions(displayQuestion, barIndex, geo);
               const colour = isMissing && feedback ? (answerCorrect ? GREEN : RED) : "currentColor";
               return (
                 <g key={`long-bar-${barIndex}`}>
@@ -1803,7 +1868,7 @@ function LongInsertRhythmScore({ question, selectedToolId, hoverTarget, feedback
                   {isMissing && feedback && !answerCorrect && answerNotes.length > 0 && (
                     <NotesGroup notes={answerNotes} positions={answerPositions} systemTop={systemTop - 35} timeSignature={displayQuestion.timeSignature} colour={GREEN} showAccidentals={false} />
                   )}
-                  {notes.length > 0 && <NotesGroup notes={notes} positions={positions} systemTop={systemTop} timeSignature={displayQuestion.timeSignature} colour={colour} showAccidentals={false} />}
+                  {notes.length > 0 && <NotesGroup notes={notes} positions={positions} systemTop={noteSystemTop} timeSignature={displayQuestion.timeSignature} colour={colour} showAccidentals={false} />}
                   {localIndex === 3 ? (
                     <g>
                       <line x1={finalX - 5} x2={finalX - 5} y1={systemTop - 18} y2={systemTop + 18} stroke="currentColor" strokeWidth="1.4" />
@@ -2023,7 +2088,7 @@ function RhythmSymbol({ rhythmId }) { const note = { id: rhythmId, rhythm: rhyth
 function streakMedal(streak) { if (streak >= 10) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" }; if (streak >= 6) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" }; if (streak >= 4) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" }; if (streak >= 2) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" }; return null; }
 function visibleQuestionTypeIdsForLevel(level) {
   return QUESTION_TYPES
-    .filter((type) => type.id !== "tie" && (type.id !== "identify" || level === "AH") && (type.id !== "scotch" || level === "N5"))
+    .filter((type) => (type.id !== "identify" || level === "AH") && (type.id !== "tie" || level === "AH") && (type.id !== "triplets" || level === "H") && (type.id !== "scotch" || level === "N5"))
     .map((type) => type.id);
 }
 function sameSet(a, b) {
@@ -2031,19 +2096,17 @@ function sameSet(a, b) {
   const set = new Set(a);
   return b.every((item) => set.has(item));
 }
-function taskMatchesLevel(level, enabledQuestionTypes, tripletsOn) {
+function taskMatchesLevel(level, enabledQuestionTypes) {
   const required = LEVEL_REQUIRED_OPTIONS[level];
   if (!required) return false;
   const visibleEnabled = visibleQuestionTypeIdsForLevel(level).filter((id) => enabledQuestionTypes.includes(id));
-  if (!sameSet(visibleEnabled, required.questionTypes)) return false;
-  const tiesOn = enabledQuestionTypes.includes("tie");
-  if (required.ties !== tiesOn) return false;
-  if (required.triplets !== Boolean(tripletsOn)) return false;
+  const visibleRequired = visibleQuestionTypeIdsForLevel(level).filter((id) => required.questionTypes.includes(id));
+  if (!sameSet(visibleEnabled, visibleRequired)) return false;
   return true;
 }
 function defaultQuestionTypesForLevel(level) {
   const required = LEVEL_REQUIRED_OPTIONS[level] ?? LEVEL_REQUIRED_OPTIONS.N5;
-  return [...required.questionTypes, ...(required.ties ? ["tie"] : [])];
+  return [...required.questionTypes];
 }
 function StatCard({ label, value, footer, progress = null, medal = null, variant = "default", confettiKey = 0 }) {
   const safeProgress = progress == null ? null : clamp(progress, 0, 100);
@@ -2221,17 +2284,47 @@ function toolFeedbackState(question, toolId, feedback) {
 function QuestionTypeGlyph({ type }) {
   if (type === "correct") {
     return (
-      <span className="flex h-[28px] w-[30px] shrink-0 items-center justify-center" aria-hidden="true">
-        <img src={ASSET.tick} alt="" className="h-[22px] w-[22px] object-contain" />
+      <span className="flex h-[28px] w-[30px] shrink-0 items-center justify-center overflow-visible" aria-hidden="true">
+        <svg viewBox="0 0 64 44" className="h-[28px] w-[42px] overflow-visible">
+          <g fill="currentColor" stroke="currentColor" strokeLinecap="round" transform="translate(-3 0)">
+            <ellipse cx="19" cy="31" rx="5.8" ry="4.2" transform="rotate(-18 19 31)" />
+            <circle cx="29" cy="29.5" r="1.8" stroke="none" />
+            <line x1="24.3" x2="24.3" y1="30" y2="11" strokeWidth="2" />
+            <ellipse cx="43" cy="31" rx="5.8" ry="4.2" transform="rotate(-18 43 31)" />
+            <line x1="48.3" x2="48.3" y1="30" y2="11" strokeWidth="2" />
+            <path d="M48.3 11 C55 14, 55 20, 49.5 23" fill="none" strokeWidth="2" />
+          </g>
+        </svg>
       </span>
     );
   }
-  if (type === "identify" || type === "scotch") {
+  if (type === "scotch") {
+    return (
+      <span className="flex h-[28px] w-[30px] shrink-0 items-center justify-center overflow-visible" aria-hidden="true">
+        <svg viewBox="0 0 64 44" className="h-[28px] w-[42px] overflow-visible">
+          <g fill="currentColor" stroke="currentColor" strokeLinecap="butt" transform="translate(-5 0)">
+            <ellipse cx="21" cy="31" rx="5.8" ry="4.2" transform="rotate(-18 21 31)" />
+            <ellipse cx="43" cy="31" rx="5.8" ry="4.2" transform="rotate(-18 43 31)" />
+            <circle cx="53" cy="29.5" r="1.8" stroke="none" />
+            <line x1="26.3" x2="26.3" y1="30" y2="8" strokeWidth="2" />
+            <line x1="48.3" x2="48.3" y1="30" y2="8" strokeWidth="2" />
+            <polygon points="26.3,6 48.3,6 48.3,10.5 26.3,10.5" stroke="none" />
+            <polygon points="26.3,14 36.5,14 36.5,18.2 26.3,18.2" stroke="none" />
+          </g>
+        </svg>
+      </span>
+    );
+  }
+  if (type === "identify") {
     return (
       <span className="music-symbol flex h-[28px] w-[30px] shrink-0 items-center justify-center text-[28px] leading-none" aria-hidden="true">
         {symbolForKey("wholeNote")}
       </span>
     );
+  }
+  if (type === "tie") return <TieMenuGlyph />;
+  if (type === "triplets") {
+    return <span className="flex h-[34px] w-[30px] shrink-0 -translate-x-[2px] translate-y-[1px] items-center justify-center overflow-visible" aria-hidden="true"><TripletButtonGlyph type="tripletQuavers" className="h-[30px] w-[42px]" /></span>;
   }
   return (
     <span className="flex h-[28px] w-[30px] shrink-0 items-center justify-center" aria-hidden="true">
@@ -2279,10 +2372,8 @@ function TempoDropdownRow({ tempo, setTempo, stopAudioPlayback }) {
   );
 }
 
-function MenuRows({ activeLevel = "N5", enabledQuestionTypes, toggleQuestionType, tripletsOn, setTripletsOn, tempo, setTempo, stopAudioPlayback, metronomeOn, setMetronomeOn, followPlayback, setFollowPlayback }) {
-  const visibleQuestionTypes = QUESTION_TYPES.filter((type) => type.id !== "tie" && (type.id !== "identify" || activeLevel === "AH") && (type.id !== "scotch" || activeLevel === "N5"));
-  const showTriplets = activeLevel === "H" || activeLevel === "AH";
-  const showTies = activeLevel === "AH";
+function MenuRows({ activeLevel = "N5", enabledQuestionTypes, toggleQuestionType, tempo, setTempo, stopAudioPlayback, metronomeOn, setMetronomeOn, followPlayback, setFollowPlayback }) {
+  const visibleQuestionTypes = QUESTION_TYPES.filter((type) => visibleQuestionTypeIdsForLevel(activeLevel).includes(type.id));
   return <>
     <window.MLH.MenuSubheading>Audio</window.MLH.MenuSubheading>
     <TempoDropdownRow tempo={tempo} setTempo={setTempo} stopAudioPlayback={stopAudioPlayback} />
@@ -2308,37 +2399,18 @@ function MenuRows({ activeLevel = "N5", enabledQuestionTypes, toggleQuestionType
         onChange={() => toggleQuestionType(type.id)}
       />
     ))}
-
-    {(showTriplets || showTies) && <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>}
-    {showTriplets && (
-      <window.MLH.MenuToggleRow
-        glyph={<span className="flex h-[34px] w-[30px] shrink-0 translate-y-[1px] items-center justify-center overflow-visible"><TripletButtonGlyph type="tripletQuavers" className="h-[30px] w-[42px]" /></span>}
-        label="Triplets"
-        checked={tripletsOn}
-        onChange={() => setTripletsOn((value) => !value)}
-      />
-    )}
-    {showTies && (
-      <window.MLH.MenuToggleRow
-        glyph={<TieMenuGlyph />}
-        label="Ties"
-        checked={enabledQuestionTypes.includes("tie")}
-        onChange={() => toggleQuestionType("tie")}
-      />
-    )}
   </>;
 }
 
 function App() {
   const initialLevel = initialLevelFromUrl();
   const initialQuestionTypes = defaultQuestionTypesForLevel(initialLevel);
-  const initialTripletsOn = Boolean(LEVEL_REQUIRED_OPTIONS[initialLevel]?.triplets);
   const timerRef = useRef(null), feedbackFadeTimerRef = useRef(null), levelRef = useRef(null), customiseRef = useRef(null), audioContextRef = useRef(null), audioStopTimerRef = useRef(null), highlightTimersRef = useRef([]), playbackFrameRef = useRef(null), playbackBarRef = useRef(null);
-  const [activeLevel, setActiveLevel] = useState(initialLevel), [levelOpen, setLevelOpen] = useState(false), [tempo, setTempo] = useState("medium"), [metronomeOn, setMetronomeOn] = useState(false), [syncopationOn, setSyncopationOn] = useState(false), [tripletsOn, setTripletsOn] = useState(initialTripletsOn), [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => initialQuestionTypes), [question, setQuestion] = useState(() => makeQuestion({ enabledQuestionTypes: initialQuestionTypes, syncopationOn: false, tripletsOn: initialTripletsOn, level: initialLevel })), [selectedToolId, setSelectedToolId] = useState(null), [hoverTarget, setHoverTarget] = useState(null), [feedback, setFeedback] = useState(null), [feedbackFading, setFeedbackFading] = useState(false), [prompt, setPrompt] = useState(""), [correct, setCorrect] = useState(0), [attempted, setAttempted] = useState(0), [streak, setStreak] = useState(0), [bestStreak, setBestStreak] = useState(0), [confettiKey, setConfettiKey] = useState(0), [customiseOpen, setCustomiseOpen] = useState(false), [isAudioPlaying, setIsAudioPlaying] = useState(false), [activePlaybackNoteId, setActivePlaybackNoteId] = useState(null), [playbackElapsed, setPlaybackElapsed] = useState(0), [playbackTotal, setPlaybackTotal] = useState(0), [followPlayback, setFollowPlayback] = useState(false), [questionVisible, setQuestionVisible] = useState(true);
+  const [activeLevel, setActiveLevel] = useState(initialLevel), [levelOpen, setLevelOpen] = useState(false), [tempo, setTempo] = useState("medium"), [metronomeOn, setMetronomeOn] = useState(false), [syncopationOn, setSyncopationOn] = useState(false), [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => initialQuestionTypes), [question, setQuestion] = useState(() => makeQuestion({ enabledQuestionTypes: initialQuestionTypes, syncopationOn: false, level: initialLevel })), [selectedToolId, setSelectedToolId] = useState(null), [hoverTarget, setHoverTarget] = useState(null), [feedback, setFeedback] = useState(null), [feedbackFading, setFeedbackFading] = useState(false), [prompt, setPrompt] = useState(""), [correct, setCorrect] = useState(0), [attempted, setAttempted] = useState(0), [streak, setStreak] = useState(0), [bestStreak, setBestStreak] = useState(0), [confettiKey, setConfettiKey] = useState(0), [customiseOpen, setCustomiseOpen] = useState(false), [isAudioPlaying, setIsAudioPlaying] = useState(false), [activePlaybackNoteId, setActivePlaybackNoteId] = useState(null), [playbackElapsed, setPlaybackElapsed] = useState(0), [playbackTotal, setPlaybackTotal] = useState(0), [followPlayback, setFollowPlayback] = useState(false), [questionVisible, setQuestionVisible] = useState(true);
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
-  const medalEligible = taskMatchesLevel(activeLevel, enabledQuestionTypes, tripletsOn);
+  const medalEligible = taskMatchesLevel(activeLevel, enabledQuestionTypes);
   const levelTaskStatusRef = useRef(medalEligible);
-  const insertTools = [{ id: "crotchet" }, { id: "quaver" }, ...(tripletsOn && tripletsAvailableForLevel(activeLevel, question.timeSignature) ? [{ id: "tripletQuavers" }, { id: "tripletCrotchets" }] : [])];
+  const insertTools = [{ id: "crotchet" }, { id: "quaver" }, ...(question.tripletQuestion && tripletsAvailableForLevel(activeLevel, question.timeSignature) ? [{ id: "tripletQuavers" }, { id: "tripletCrotchets" }] : [])];
   const tools = question.questionType === "identify" || question.questionType === "scotch" ? [] : question.questionType === "longInsert" ? AH_LONG_INSERT_TOOLS : question.questionType === "insert" ? insertTools : question.questionType === "tie" ? [{ id: "tie" }] : [{ id: "dot" }, { id: "tail" }];
   const selectedTempo = TEMPOS.find((item) => item.id === tempo) ?? TEMPOS[1];
   const audioBars = question.questionType === "identify" ? question.options[question.answerIndex].bars : question.bars;
@@ -2355,7 +2427,7 @@ function App() {
     return () => document.removeEventListener("pointerdown", close);
   }, [levelOpen, customiseOpen]);
   useEffect(() => { injectStyles(); return () => stopAudioPlayback(); }, []);
-  useEffect(() => { newQuestion(enabledQuestionTypes, syncopationOn, activeLevel, tripletsOn); }, [syncopationOn, tripletsOn]);
+  useEffect(() => { newQuestion(enabledQuestionTypes, syncopationOn, activeLevel); }, [syncopationOn]);
   useEffect(() => {
     if (levelTaskStatusRef.current === medalEligible) return;
     levelTaskStatusRef.current = medalEligible;
@@ -2366,7 +2438,7 @@ function App() {
   function formatPlaybackTime(seconds) { const safe = Math.max(0, Math.floor(seconds || 0)); return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`; }
   function stopAudioPlayback() { if (audioStopTimerRef.current) window.clearTimeout(audioStopTimerRef.current); if (playbackFrameRef.current) window.cancelAnimationFrame(playbackFrameRef.current); highlightTimersRef.current.forEach((timer) => window.clearTimeout(timer)); highlightTimersRef.current = []; if (audioContextRef.current) { try { if (audioContextRef.current.state !== "closed") audioContextRef.current.close(); } catch {} } audioContextRef.current = null; setIsAudioPlaying(false); setActivePlaybackNoteId(null); setPlaybackElapsed(0); setPlaybackTotal(0); }
   function clearFeedbackTimers() { if (timerRef.current) { window.clearTimeout(timerRef.current); timerRef.current = null; } if (feedbackFadeTimerRef.current) { window.clearTimeout(feedbackFadeTimerRef.current); feedbackFadeTimerRef.current = null; } }
-  function newQuestion(nextTypes = enabledQuestionTypes, nextSyncopation = syncopationOn, nextLevel = activeLevel, nextTriplets = tripletsOn) { clearFeedbackTimers(); stopAudioPlayback(); setQuestionVisible(false); window.setTimeout(() => { setQuestion(makeQuestion({ enabledQuestionTypes: nextTypes, syncopationOn: nextSyncopation, tripletsOn: nextTriplets, level: nextLevel })); setSelectedToolId(null); setHoverTarget(null); setFeedback(null); setFeedbackFading(false); setPrompt(""); setQuestionVisible(true); }, 300); }
+  function newQuestion(nextTypes = enabledQuestionTypes, nextSyncopation = syncopationOn, nextLevel = activeLevel) { clearFeedbackTimers(); stopAudioPlayback(); setQuestionVisible(false); window.setTimeout(() => { setQuestion(makeQuestion({ enabledQuestionTypes: nextTypes, syncopationOn: nextSyncopation, level: nextLevel })); setSelectedToolId(null); setHoverTarget(null); setFeedback(null); setFeedbackFading(false); setPrompt(""); setQuestionVisible(true); }, 300); }
   function fadeToNextQuestion() { if (!feedback || feedbackFading) return; clearFeedbackTimers(); setFeedbackFading(true); timerRef.current = window.setTimeout(() => newQuestion(), 280); }
   function handleFeedbackAdvance() { if (!feedback) return; fadeToNextQuestion(); }
   function resetScoreCounters() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); setConfettiKey(0); }
@@ -2377,27 +2449,19 @@ function App() {
       const visibleEnabledCount = visibleTypes.filter((item) => current.includes(item)).length;
       if (visibleTypes.includes(id) && current.includes(id) && visibleEnabledCount <= 1) return current;
       const updated = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-      window.setTimeout(() => newQuestion(updated, syncopationOn, activeLevel, tripletsOn), 0);
+      window.setTimeout(() => newQuestion(updated, syncopationOn, activeLevel), 0);
       return updated;
-    });
-  }
-  function updateTripletsOn(updater) {
-    setTripletsOn((current) => {
-      const next = typeof updater === "function" ? updater(current) : updater;
-      return next;
     });
   }
   function applyLevel(levelKey) {
     if (!LEVELS[levelKey]) return;
     const nextTypes = defaultQuestionTypesForLevel(levelKey);
-    const nextTriplets = Boolean(LEVEL_REQUIRED_OPTIONS[levelKey]?.triplets);
     setActiveLevel(levelKey);
     setEnabledQuestionTypes(nextTypes);
-    setTripletsOn(nextTriplets);
     setLevelOpen(false);
     setCustomiseOpen(false);
     resetScoreCounters();
-    newQuestion(nextTypes, syncopationOn, levelKey, nextTriplets);
+    newQuestion(nextTypes, syncopationOn, levelKey);
   }
   function handlePointerMove(event) { if (!selectedToolId || feedback) return setHoverTarget(null); setHoverTarget(findHoverTarget(pointerToSvg(event), question)); }
   function handleLockPlacement(event) { if (!selectedToolId || feedback || !hoverTarget) return; event.preventDefault(); setQuestion((current) => applyPlacement(current, hoverTarget, selectedToolId)); setPrompt(""); }
@@ -2428,7 +2492,7 @@ function App() {
         const next = cloneQuestion(current);
         next.placedRhythmsByBar = {};
         (next.missingBars || []).forEach((barIndex) => {
-          next.placedRhythmsByBar[barIndex] = [];
+          next.placedRhythmsByBar[barIndex] = answerPatternForBar(next, barIndex).map(() => null);
         });
         return next;
       });
@@ -2717,7 +2781,7 @@ function confirmAnswer() {
                   />
                   {customiseOpen && (
                     <window.MLH.MenuPanel title="Customise" position="chords-customise-panel -left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}>
-                      <MenuRows activeLevel={activeLevel} enabledQuestionTypes={enabledQuestionTypes} toggleQuestionType={toggleQuestionType} tripletsOn={tripletsOn} setTripletsOn={updateTripletsOn} tempo={tempo} setTempo={setTempo} stopAudioPlayback={stopAudioPlayback} metronomeOn={metronomeOn} setMetronomeOn={setMetronomeOn} syncopationOn={syncopationOn} setSyncopationOn={setSyncopationOn} followPlayback={followPlayback} setFollowPlayback={setFollowPlayback} resetScore={resetScore} />
+                      <MenuRows activeLevel={activeLevel} enabledQuestionTypes={enabledQuestionTypes} toggleQuestionType={toggleQuestionType} tempo={tempo} setTempo={setTempo} stopAudioPlayback={stopAudioPlayback} metronomeOn={metronomeOn} setMetronomeOn={setMetronomeOn} syncopationOn={syncopationOn} setSyncopationOn={setSyncopationOn} followPlayback={followPlayback} setFollowPlayback={setFollowPlayback} resetScore={resetScore} />
                     </window.MLH.MenuPanel>
                   )}
                 </div>

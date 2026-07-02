@@ -20,27 +20,27 @@
 
   function useClickAway(ref, handler) {
     useEffect(() => {
-      function onPointerDown(event) {
+      function onClick(event) {
         if (!ref.current || ref.current.contains(event.target)) return;
         handler(event);
       }
 
-      document.addEventListener("pointerdown", onPointerDown, true);
-      return () => document.removeEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("click", onClick);
+      return () => document.removeEventListener("click", onClick);
     }, [ref, handler]);
   }
 
   function useClickOutside(refs, handlers) {
     useEffect(() => {
-      function onPointerDown(event) {
+      function onClick(event) {
         if (event.target.closest?.("[data-menu-panel]") || event.target.closest?.("[data-menu-trigger]")) return;
         refs.forEach((ref, index) => {
           if (ref.current && !ref.current.contains(event.target)) handlers[index]?.(event);
         });
       }
 
-      document.addEventListener("pointerdown", onPointerDown, true);
-      return () => document.removeEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("click", onClick);
+      return () => document.removeEventListener("click", onClick);
     }, [refs, handlers]);
   }
 
