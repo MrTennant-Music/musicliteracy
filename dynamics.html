@@ -89,9 +89,9 @@ const DYNAMICS = [
 const QUESTION_TYPES = ["multiple-choice", "definition", "apply-score", "audio"];
 const QUESTION_LABELS = {
   "multiple-choice": "Multiple Choice",
-  definition: "Definition",
+  definition: "Text Questions",
   "apply-score": "Apply to Score",
-  audio: "Audio Question",
+  audio: "Audio Questions",
 };
 
 const LEVELS = {
@@ -149,6 +149,15 @@ function r(items) { return items[Math.floor(Math.random() * items.length)]; }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function rhythm(id) { return RH[id] || RH.crotchet; }
 function dyn(id) { return DYNAMICS.find(d => d.id === id) || DYNAMICS[3]; }
+function oppositeStartingDynamic(id) {
+  return { pp: "ff", p: "f", mp: "mf", mf: "mp", f: "p", ff: "pp", crescendo: "p", diminuendo: "f" }[id] || null;
+}
+function dynamicSymbolKey(id) { return { pp: "pianissimo", p: "piano", mp: "mezzoPiano", mf: "mezzoForte", f: "forte", ff: "fortissimo", sfz: "sforzato", crescendo: "crescendo", diminuendo: "diminuendo" }[id]; }
+function dynamicPromptGlyph(id) {
+  const glyph = sharedSymbolForKey(dynamicSymbolKey(id));
+  const topOffset = ["p", "f"].includes(id) ? "-7px" : "-4px";
+  return glyph ? `<span class="music-symbol" style="display:inline-block;position:relative;top:${topOffset};margin:0 0.18em;font-size:1.55em;font-weight:400;line-height:0;vertical-align:-0.18em;">${glyph}</span>` : `<strong><em>${id}</em></strong>`;
+}
 function cleanText(text) { return String(text).toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim(); }
 function y(step, top) { return top + GAP * 4 - step * (GAP / 2); }
 function stemDown(step) { return step > 4; }
@@ -459,7 +468,8 @@ function getSfzTargets(bars, allowedBars = null) {
   bars.forEach(bar => {
     if (allowedBars && !allowedBars.includes(bar.barIndex)) return;
     if (bar.barIndex < 1 || bar.barIndex > 6) return;
-    bar.notes.forEach(note => { if (rhythm(note.rhythm).beats >= LONG_NOTE_MIN_BEATS) targets.push({ barIndex: bar.barIndex, noteIndex: note.noteIndex }); });
+    const firstNote = bar.notes[0];
+    if (firstNote && rhythm(firstNote.rhythm).beats >= LONG_NOTE_MIN_BEATS) targets.push({ barIndex: bar.barIndex, noteIndex: firstNote.noteIndex });
   });
   return targets.length ? targets : [{ barIndex: 1, noteIndex: 0 }];
 }
@@ -492,11 +502,17 @@ function makeApplyQuestion(enabledDynamics, bars) {
   const candidates = [];
   STATIC_DYNAMIC_IDS.filter(id => enabledDynamics.includes(id)).forEach(id => {
     const barIndex = r([0, 1, 2, 3, 4, 5, 6]);
-    candidates.push({ answerId: id, required: [{ symbolId: id, barIndex, endBarIndex: barIndex, anchor: "below" }], prompt: `The music should be played <strong>${dyn(id).description.toLowerCase()}</strong> from <strong>bar ${barIndex + 1}</strong>. Place the appropriate dynamic under that bar.` });
+    const startingDynamic = barIndex > 0 && id === "p" ? "f" : barIndex > 0 && id === "f" ? "p" : null;
+    candidates.push({
+      answerId: id,
+      required: [{ symbolId: id, barIndex, endBarIndex: barIndex, anchor: "below" }],
+      visiblePlacements: startingDynamic ? [{ symbolId: startingDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }] : [],
+      prompt: `The music should be played <strong>${dyn(id).description.toLowerCase()}</strong> from <strong>bar ${barIndex + 1}</strong>. Place the appropriate dynamic under that bar.`
+    });
   });
   if (enabledDynamics.includes("sfz")) {
     const target = r(getSfzTargets(bars));
-    candidates.push({ answerId: "sfz", required: [{ symbolId: "sfz", barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "below-note" }], prompt: `A note in <strong>bar ${target.barIndex + 1}</strong> needs to be <strong>suddenly strongly accented</strong>. Place the appropriate dynamic under that note.` });
+    candidates.push({ answerId: "sfz", required: [{ symbolId: "sfz", barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "below-note" }], prompt: `The first note in <strong>bar ${target.barIndex + 1}</strong> needs to be <strong>suddenly strongly accented</strong>. Place the appropriate dynamic under that note.` });
   }
   if (enabledDynamics.includes("crescendo")) {
     const startBar = r([0, 1, 2, 4, 5, 6]);
@@ -517,18 +533,19 @@ function makeAudioQuestion(enabledDynamics, bars) {
   const changeBar = r([2, 3, 4, 5]);
   if (type === "sfz") {
     const target = r(getSfzTargets(bars, [2, 3, 4, 5]));
-    return { answerId: "sfz", audioQuestionKind: "sfz-location", required: [{ symbolId: "sfz", barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "below-note" }], visiblePlacements: [{ symbolId: r(["p", "f"]), barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }], prompt: "Listen to the excerpt. Place <strong><em>sfz</em></strong> under the note where it occurs.", audioPlan: { kind: "sfz", baseDynamic: r(["p", "f"]), accentBar: target.barIndex, accentNoteIndex: target.noteIndex } };
+    const baseDynamic = r(["p", "mp"]);
+    return { answerId: "sfz", audioQuestionKind: "sfz-location", required: [{ symbolId: "sfz", barIndex: target.barIndex, noteIndex: target.noteIndex, anchor: "below-note" }], visiblePlacements: [{ symbolId: baseDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }], prompt: `Listen to the excerpt. Place ${dynamicPromptGlyph("sfz")} under the note where it occurs.`, audioPlan: { kind: "sfz", baseDynamic, accentBar: target.barIndex, accentNoteIndex: target.noteIndex } };
   }
   if (type === "gradual-change") {
     const dynamicType = enabledDynamics.includes("crescendo") && enabledDynamics.includes("diminuendo") ? r(["crescendo", "diminuendo"]) : enabledDynamics.includes("crescendo") ? "crescendo" : "diminuendo";
     const canUseExtremeDynamics = enabledDynamics.includes("pp") && enabledDynamics.includes("ff");
     const startDynamic = dynamicType === "crescendo" ? canUseExtremeDynamics ? "pp" : "p" : canUseExtremeDynamics ? "ff" : "f";
     const endDynamic = dynamicType === "crescendo" ? canUseExtremeDynamics ? "ff" : "f" : canUseExtremeDynamics ? "pp" : "p";
-    return { answerId: dynamicType, audioQuestionKind: "gradual-location", required: [{ symbolId: dynamicType, barIndex: changeBar, endBarIndex: changeBar, anchor: "below" }], visiblePlacements: [{ symbolId: startDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }], prompt: "Listen to the excerpt. Place <strong><em>crescendo</em></strong> or <strong><em>diminuendo</em></strong> under the bar where it begins.", audioPlan: { kind: dynamicType, startDynamic, endDynamic, changeBar } };
+    return { answerId: dynamicType, audioQuestionKind: "gradual-location", required: [{ symbolId: dynamicType, barIndex: changeBar, endBarIndex: changeBar, anchor: "below" }], visiblePlacements: [{ symbolId: startDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }], prompt: `Listen to the excerpt. Place ${dynamicPromptGlyph("crescendo")} or ${dynamicPromptGlyph("diminuendo")} under the bar where it begins.`, audioPlan: { kind: dynamicType, startDynamic, endDynamic, changeBar } };
   }
   const startDynamic = Math.random() < 0.5 ? "p" : "f";
   const targetDynamic = startDynamic === "p" ? "f" : "p";
-  return { answerId: targetDynamic, audioQuestionKind: targetDynamic === "f" ? "find-f-location" : "find-p-location", required: [{ symbolId: targetDynamic, barIndex: changeBar, endBarIndex: changeBar, anchor: "below" }], visiblePlacements: [{ symbolId: startDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }], prompt: targetDynamic === "f" ? "Listen to the excerpt. The starting dynamic is shown. Place <strong><em>f</em></strong> under the bar where it gets loud." : "Listen to the excerpt. The starting dynamic is shown. Place <strong><em>p</em></strong> under the bar where it gets quiet.", audioPlan: { kind: "sudden-change", startDynamic, targetDynamic, changeBar } };
+  return { answerId: targetDynamic, audioQuestionKind: targetDynamic === "f" ? "find-f-location" : "find-p-location", required: [{ symbolId: targetDynamic, barIndex: changeBar, endBarIndex: changeBar, anchor: "below" }], visiblePlacements: [{ symbolId: startDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }], prompt: targetDynamic === "f" ? `Listen to the excerpt. The starting dynamic is shown. Place ${dynamicPromptGlyph("f")} under the bar where it gets loud.` : `Listen to the excerpt. The starting dynamic is shown. Place ${dynamicPromptGlyph("p")} under the bar where it gets quiet.`, audioPlan: { kind: "sudden-change", startDynamic, targetDynamic, changeBar } };
 }
 function makeQuestion(enabledTypes = QUESTION_TYPES, enabledDynamics = DYNAMICS.map(d => d.id)) {
   const activeTypes = availableQuestionTypes(enabledTypes.length ? enabledTypes : QUESTION_TYPES, enabledDynamics.length ? enabledDynamics : DYNAMICS.map(d => d.id));
@@ -545,19 +562,28 @@ function makeQuestion(enabledTypes = QUESTION_TYPES, enabledDynamics = DYNAMICS.
   let audioQuestionKind = null;
   if (type === "multiple-choice") {
     const barIndex = r([0,1,2,3,4,5,6]);
-    visiblePlacements = [{ symbolId: answerId, barIndex, endBarIndex: barIndex, anchor: "below", localId: "given" }];
+    const startingDynamic = barIndex > 0 ? oppositeStartingDynamic(answerId) : null;
+    visiblePlacements = [
+      ...(startingDynamic ? [{ symbolId: startingDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }] : []),
+      { symbolId: answerId, barIndex, endBarIndex: barIndex, anchor: "below", localId: "given" }
+    ];
     choices = makeChoices(answerId, enabledDynamics);
-    prompt = `The marking in <strong>bar ${barIndex + 1}</strong> is <strong><em>${answerId}</em></strong>. What does it mean?`;
+    prompt = `What does the marking in <strong>bar ${barIndex + 1}</strong> mean?`;
   }
   if (type === "definition") {
     const barIndex = r([0,1,2,3,4,5,6]);
-    visiblePlacements = [{ symbolId: answerId, barIndex, endBarIndex: barIndex, anchor: "below", localId: "given" }];
+    const startingDynamic = barIndex > 0 ? oppositeStartingDynamic(answerId) : null;
+    visiblePlacements = [
+      ...(startingDynamic ? [{ symbolId: startingDynamic, barIndex: 0, endBarIndex: 0, anchor: "below", localId: "starting-dynamic" }] : []),
+      { symbolId: answerId, barIndex, endBarIndex: barIndex, anchor: "below", localId: "given" }
+    ];
     prompt = `Describe the meaning of the dynamic marking in <strong>bar ${barIndex + 1}</strong>.`;
   }
   if (type === "apply-score") {
     const scenario = makeApplyQuestion(enabledDynamics, bars);
     answerId = scenario.answerId;
     required = scenario.required;
+    visiblePlacements = scenario.visiblePlacements || [];
     prompt = scenario.prompt;
   }
   if (type === "audio") {
@@ -636,12 +662,37 @@ function placementPos(placement, layouts = [], isMobile = false) {
     const width = sameSystem ? Math.max(80, endGeo.end - geo.start - 28) : Math.min(140, geo.bw * 0.85);
     return { x: geo.start + 14, y: yy, width, ...geo };
   }
-  if (placement.symbolId === "sfz" && placement.noteX != null) return { x: placement.noteX, y: yy, ...geo };
+  if (placement.symbolId === "sfz" && placement.noteX != null) return { x: placement.noteX + 9, y: yy, ...geo };
   return { x: (firstNoteX ?? geo.start + 24) + 7, y: yy, ...geo };
 }
-function placementsMatch(question, placements) { return question.required.every(req => placements.some(p => placementKey(p) === placementKey(req))); }
-function missingRequired(question, placements) { return question.required.filter(req => !placements.some(p => placementKey(p) === placementKey(req))); }
-function wrongPlacements(question, placements) { return placements.filter(p => !question.required.some(req => placementKey(req) === placementKey(p))); }
+function isGradualPlacement(p) { return p?.symbolId === "crescendo" || p?.symbolId === "diminuendo"; }
+function spanLength(p) { return (p.endBarIndex ?? p.barIndex) - p.barIndex; }
+function shiftedPlacement(p, offset) {
+  const endBarIndex = (p.endBarIndex ?? p.barIndex) + offset;
+  const barIndex = p.barIndex + offset;
+  if (barIndex < 0 || endBarIndex >= BAR_COUNT) return null;
+  return { ...p, barIndex, endBarIndex };
+}
+function allowsGradualTolerance(question) {
+  return question?.type === "audio" && question?.audioQuestionKind === "gradual-location";
+}
+function placementMatchesRequired(req, p, question) {
+  if (placementKey(p) === placementKey(req)) return true;
+  return allowsGradualTolerance(question) && isGradualPlacement(req) && isGradualPlacement(p) && req.symbolId === p.symbolId && req.anchor === p.anchor && spanLength(req) === spanLength(p) && Math.abs(p.barIndex - req.barIndex) <= 1;
+}
+function gradualFeedbackPlacements(question) {
+  if (!allowsGradualTolerance(question)) return [];
+  return question.required.flatMap(req => {
+    if (!isGradualPlacement(req)) return [];
+    return [-1, 0, 1].map(offset => {
+      const shifted = shiftedPlacement(req, offset);
+      return shifted ? { ...shifted, feedbackOpacity: offset === 0 ? 1 : 0.25 } : null;
+    }).filter(Boolean);
+  });
+}
+function placementsMatch(question, placements) { return question.required.every(req => placements.some(p => placementMatchesRequired(req, p, question))); }
+function missingRequired(question, placements) { return question.required.filter(req => !placements.some(p => placementMatchesRequired(req, p, question))); }
+function wrongPlacements(question, placements) { return placements.filter(p => !question.required.some(req => placementMatchesRequired(req, p, question))); }
 function snap(pointer, selectedSymbolId, question, isMobile = false) {
   if (!selectedSymbolId) return null;
   const firstSystemBottom = systemTop(0, isMobile) + GAP * 4;
@@ -703,7 +754,7 @@ function DynamicGlyph({ id, x = 50, yy = 33, colour = "currentColor", opacity = 
   if (id === "crescendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth={compact ? 1.5 : 2.4} strokeLinecap="round"><path d={`M ${x - 32} ${yy - 2} L ${x + 32} ${yy - 12}`} /><path d={`M ${x - 32} ${yy - 2} L ${x + 32} ${yy + 8}`} /></g>;
   if (id === "diminuendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth={compact ? 1.5 : 2.4} strokeLinecap="round"><path d={`M ${x - 32} ${yy - 12} L ${x + 32} ${yy - 2}`} /><path d={`M ${x - 32} ${yy + 8} L ${x + 32} ${yy - 2}`} /></g>;
   const symbolKey = { pp: "pianissimo", p: "piano", mp: "mezzoPiano", mf: "mezzoForte", f: "forte", ff: "fortissimo", sfz: "sforzato" }[id];
-  if (symbolKey) return <CalibratedSymbol symbolKey={symbolKey} x={x} y={yy + (compact ? 3 : 4)} colour={colour} opacity={opacity} settingOverrides={{ fontSizeScale: compact ? 2.97 : 3.65 }} />;
+  if (symbolKey) return <CalibratedSymbol symbolKey={symbolKey} x={x} y={yy + (compact ? 3 : 4)} colour={colour} opacity={opacity} settingOverrides={{ fontSizeScale: compact ? 3.45 : 3.65 }} />;
   return null;
 }
 function PlacementGlyph({ placement, layouts = [], colour = "currentColor", opacity = 1, isMobile = false }) {
@@ -711,7 +762,7 @@ function PlacementGlyph({ placement, layouts = [], colour = "currentColor", opac
   const pos = placementPos(placement, layouts, isMobile);
   if (placement.symbolId === "crescendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth="1.5" strokeLinecap="round"><path d={`M ${pos.x} ${pos.y} L ${pos.x + pos.width} ${pos.y - 7}`} /><path d={`M ${pos.x} ${pos.y} L ${pos.x + pos.width} ${pos.y + 7}`} /></g>;
   if (placement.symbolId === "diminuendo") return <g opacity={opacity} stroke={colour} fill="none" strokeWidth="1.5" strokeLinecap="round"><path d={`M ${pos.x} ${pos.y - 7} L ${pos.x + pos.width} ${pos.y}`} /><path d={`M ${pos.x} ${pos.y + 7} L ${pos.x + pos.width} ${pos.y}`} /></g>;
-  return <DynamicGlyph id={placement.symbolId} x={pos.x} yy={pos.y} colour={colour} opacity={opacity} compact />;
+  return <DynamicGlyph id={placement.symbolId} x={pos.x} yy={pos.y - 5} colour={colour} opacity={opacity} compact />;
 }
 function SymbolGlyph({ id }) { return <svg viewBox="0 0 100 54" className="h-[50px] w-20 overflow-visible" aria-hidden="true"><DynamicGlyph id={id} x={50} yy={33} /></svg>; }
 function QuestionTypeMenuGlyphFrame({ children }) {
@@ -720,6 +771,7 @@ function QuestionTypeMenuGlyphFrame({ children }) {
 
 function QuestionTypeGlyph({ type }) {
   if (type === "multiple-choice") return <QuestionTypeMenuGlyphFrame><span className="text-[14px] font-black leading-none tracking-tight">123</span></QuestionTypeMenuGlyphFrame>;
+  if (type === "definition") return <QuestionTypeMenuGlyphFrame><span className="text-[13px] font-black leading-none tracking-tight">ABC</span></QuestionTypeMenuGlyphFrame>;
   if (type === "apply-score") return <QuestionTypeMenuGlyphFrame><img src={ASSET.hand} alt="" aria-hidden="true" className="h-[22px] w-[22px] object-contain" /></QuestionTypeMenuGlyphFrame>;
   if (type === "audio") return <QuestionTypeMenuGlyphFrame><img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" /></QuestionTypeMenuGlyphFrame>;
   return <div className="flex h-9 w-9 items-center justify-center text-[21px] leading-none" aria-hidden="true">💬</div>;
@@ -727,6 +779,8 @@ function QuestionTypeGlyph({ type }) {
 
 function Score({ question, selectedSymbolId, placements, hoverPlacement, feedback, wrong, missing, activeNoteId, onPointerMove, onPointerLeave, onLockPlacement, isMobile = false }) {
   const ls = useMemo(() => buildLayouts(question, isMobile), [question, isMobile]);
+  const gradualFeedback = feedback ? gradualFeedbackPlacements(question) : [];
+  const hasGradualFeedback = gradualFeedback.length > 0;
   return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none touch-none overflow-visible" aria-label="Dynamics exercise" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerDown={onLockPlacement}>
     <rect width={W} height={H} fill="transparent" />
     {SYSTEM_TOPS.map((_, i) => {
@@ -767,15 +821,43 @@ function Score({ question, selectedSymbolId, placements, hoverPlacement, feedbac
     {(question.visiblePlacements || []).map(p => <PlacementGlyph key={p.localId} placement={p} layouts={ls} colour={COLOUR.black} isMobile={isMobile} />)}
     {placements.map(p => {
       const isWrong = feedback && wrong.some(w => placementKey(w) === placementKey(p));
+      if (hasGradualFeedback && feedback && !isWrong && question.required.some(req => placementMatchesRequired(req, p, question))) return null;
       return <PlacementGlyph key={p.localId} placement={p} layouts={ls} colour={isWrong ? COLOUR.red : feedback ? COLOUR.green : COLOUR.black} isMobile={isMobile} />;
     })}
-    {feedback && missing.map((p, i) => <PlacementGlyph key={`missing-${i}`} placement={wrong.some(w => w.barIndex === p.barIndex && w.anchor === p.anchor) ? { ...p, offsetY: 22 } : p} layouts={ls} colour={COLOUR.green} isMobile={isMobile} />)}
+    {feedback && (hasGradualFeedback ? gradualFeedback.map((p, i) => <PlacementGlyph key={`gradual-feedback-${i}`} placement={p} layouts={ls} colour={COLOUR.green} opacity={p.feedbackOpacity} isMobile={isMobile} />) : missing.map((p, i) => <PlacementGlyph key={`missing-${i}`} placement={wrong.some(w => w.barIndex === p.barIndex && w.anchor === p.anchor) ? { ...p, offsetY: 22 } : p} layouts={ls} colour={COLOUR.green} isMobile={isMobile} />))}
     {!feedback && selectedSymbolId && hoverPlacement && <PlacementGlyph placement={hoverPlacement} layouts={ls} colour={COLOUR.black} opacity={0.45} isMobile={isMobile} />}
   </svg>;
 }
 
 function MenuSvgGlyph({ src, alt = "" }) {
   return <img src={src} alt={alt} className="h-[20px] w-[20px] object-contain" />;
+}
+
+function DynamicMenuGlyph({ id }) {
+  const isWedge = id === "crescendo" || id === "diminuendo";
+  return <svg viewBox="0 0 100 54" className="h-[42px] w-[46px] overflow-visible text-black" aria-hidden="true">
+    <g transform={isWedge ? "translate(6 1) scale(0.76)" : "translate(2 -13) scale(1.32)"}>
+      <DynamicGlyph id={id} x={50} yy={33} colour="#000000" />
+    </g>
+  </svg>;
+}
+
+function DynamicMenuToggleButton({ label, active, onClick, glyph }) {
+  return <button
+    type="button"
+    onClick={onClick}
+    className="hub-toggle-row"
+    style={{ marginBottom: 0, minHeight: "48px", padding: "7px 48px 7px 6px", overflow: "visible", position: "relative", justifyContent: "flex-start" }}
+    aria-label={`Toggle ${label}`}
+    title={label}
+  >
+    <span className="flex h-full w-[42px] items-center justify-center overflow-visible text-black">
+      {glyph}
+    </span>
+    <span className={`hub-toggle-track shrink-0 ${active ? "is-on" : ""}`} style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%) scale(0.84)", transformOrigin: "center" }}>
+      <span className="hub-toggle-thumb" />
+    </span>
+  </button>;
 }
 
 function TempoDropdownRow({ tempo, setTempo, stopAudio }) {
@@ -842,13 +924,15 @@ function MenuRows({ activeLevel, enabledTypes, setEnabledTypes, enabledDynamics,
       onChange={() => setFollowPlayback(v => !v)}
     />
     <window.MLH.MenuSubheading>Dynamics</window.MLH.MenuSubheading>
-    {availableDynamics.map(id => dyn(id)).map(d => <window.MLH.MenuToggleRow
-      key={d.id}
-      glyph={<span className={`relative -top-[3px] ${["crescendo", "diminuendo"].includes(d.id) ? "scale-[0.6]" : "left-[8px] scale-[0.69]"}`}><SymbolGlyph id={d.id} /></span>}
-      label={d.name}
-      checked={enabledDynamics.includes(d.id)}
-      onChange={() => toggleDynamic(d.id)}
-    />)}
+    <div className="grid grid-cols-3 gap-2">
+      {availableDynamics.map(id => dyn(id)).map(d => <DynamicMenuToggleButton
+        key={d.id}
+        label={d.name}
+        active={enabledDynamics.includes(d.id)}
+        onClick={() => toggleDynamic(d.id)}
+        glyph={<DynamicMenuGlyph id={d.id} />}
+      />)}
+    </div>
     <window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>
     {QUESTION_TYPES.map(type => <window.MLH.MenuToggleRow
       key={type}
@@ -870,7 +954,7 @@ function DynamicAnswers({ filteredDynamics, selectedSymbolId, setSelectedSymbolI
   return <div className={wrapperClass}>{filteredDynamics.map(d => {
     const isWedge = ["crescendo", "diminuendo"].includes(d.id);
     const glyphClass = isWedge ? (dense ? "scale-[0.78]" : compact ? "scale-[0.9]" : "scale-[1.15]") : (dense ? "scale-[0.98]" : compact ? "scale-[1.17]" : "scale-[1.5]");
-    return <button key={d.id} disabled={Boolean(feedback)} onClick={() => setSelectedSymbolId(d.id)} className={`relative flex ${sizeClass} shrink-0 items-center justify-center overflow-visible rounded-xl border text-[1.25em] font-bold transition ${feedback ? d.id === answerId ? "border-green-700 bg-green-600 text-white" : selectedSymbolId === d.id ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-900 opacity-50" : selectedSymbolId === d.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}><span className={`relative flex items-center justify-center w-full h-full ${glyphClass}`} style={{ top: isWedge ? '-3px' : '-5px', left: isWedge ? '0px' : '14px' }}><SymbolGlyph id={d.id} /></span></button>;
+    return <button key={d.id} disabled={Boolean(feedback)} onClick={() => setSelectedSymbolId(d.id)} className={`relative flex ${sizeClass} shrink-0 items-center justify-center overflow-visible rounded-xl border text-[1.25em] font-bold transition ${feedback ? d.id === answerId ? "border-green-700 bg-green-600 text-white" : selectedSymbolId === d.id ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-900 opacity-50" : selectedSymbolId === d.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}><span className={`relative flex items-center justify-center w-full h-full ${glyphClass}`} style={{ top: isWedge ? '-3px' : '-5px', left: isWedge ? '0px' : '12px' }}><SymbolGlyph id={d.id} /></span></button>;
   })}</div>;
 }
 function ChoiceAnswers({ choices, selectedChoice, setSelectedChoice, feedback, answerId, onChoose }) { return <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{choices.map(choice => <button key={choice.id} disabled={Boolean(feedback)} onClick={() => { setSelectedChoice(choice.id); onChoose(choice.id); }} className={`min-h-[58px] rounded-xl border px-4 py-3 text-sm font-semibold ${feedback ? choice.id === answerId ? "border-green-700 bg-green-600 text-white" : choice.id === selectedChoice ? "border-red-700 bg-red-600 text-white" : "border-stone-300 bg-white text-stone-500" : selectedChoice === choice.id ? "border-stone-950 bg-stone-950 text-white" : "border-stone-300 bg-white text-stone-900"}`}>{choice.text}</button>)}</div>; }
@@ -903,17 +987,24 @@ function playChordPulse(ctx, gainNode, chordLetters, start, duration, volume = 0
 function playBassPulse(ctx, gainNode, letter, start, duration, volume = 0.04) {
   oscillator(ctx, gainNode, frequencyForLetter(letter, 3), start, duration, volume, "sine", 0.06);
 }
-function playAccompaniment(ctx, gainNode, question, bar, barStart, beatSeconds) {
+function accompanimentVolumes(dynamicGain) {
+  return {
+    bass: dynamicGain * 0.18,
+    chord: dynamicGain * 0.137,
+  };
+}
+function playAccompaniment(ctx, gainNode, question, bar, barStart, beatSeconds, dynamicGain = dyn("mf").gain) {
   const chordLetters = KEY_C.chords[bar.chord] || KEY_C.chords.I;
   if (!chordLetters.length) return;
+  const volumes = accompanimentVolumes(dynamicGain);
   const barSeconds = barDuration(bar, beatSeconds);
   if (bar.barIndex === question.bars.length - 1) {
     const chordDuration = Math.max(0.04, barSeconds * 0.96);
-    playBassPulse(ctx, gainNode, chordLetters[0], barStart, chordDuration, 0.034);
-    playChordPulse(ctx, gainNode, chordLetters, barStart, chordDuration, 0.026);
+    playBassPulse(ctx, gainNode, chordLetters[0], barStart, chordDuration, volumes.bass);
+    playChordPulse(ctx, gainNode, chordLetters, barStart, chordDuration, volumes.chord);
     return;
   }
-  playBassPulse(ctx, gainNode, chordLetters[0], barStart, beatSeconds * 0.88);
+  playBassPulse(ctx, gainNode, chordLetters[0], barStart, beatSeconds * 0.88, volumes.bass);
   if (question.timeSignature.id === "4/4") {
     [
       { beat: 1, type: "chord" },
@@ -922,8 +1013,8 @@ function playAccompaniment(ctx, gainNode, question, bar, barStart, beatSeconds) 
     ].forEach(event => {
       const start = barStart + event.beat * beatSeconds;
       const duration = beatSeconds * 0.42;
-      if (event.type === "bass5") playBassPulse(ctx, gainNode, chordLetters[2] || chordLetters[0], start, duration);
-      else playChordPulse(ctx, gainNode, chordLetters, start, duration);
+      if (event.type === "bass5") playBassPulse(ctx, gainNode, chordLetters[2] || chordLetters[0], start, duration, volumes.bass);
+      else playChordPulse(ctx, gainNode, chordLetters, start, duration, volumes.chord);
     });
     return;
   }
@@ -933,7 +1024,7 @@ function playAccompaniment(ctx, gainNode, question, bar, barStart, beatSeconds) 
   pulseBeats.forEach(beat => {
     const start = barStart + beat * beatSeconds;
     const duration = beatSeconds * (question.timeSignature.id === "6/8" ? 0.72 : 0.42);
-    playChordPulse(ctx, gainNode, chordLetters, start, duration);
+    playChordPulse(ctx, gainNode, chordLetters, start, duration, volumes.chord);
   });
 }
 
@@ -1183,7 +1274,8 @@ function App() {
         }
       }
       const bar = question.bars[barIndex];
-      playAccompaniment(ctx, master, question, bar, t, beatSeconds);
+      const barDynamicGain = gainForNote(barIndex, 0, Math.max(1, bar.notes.length));
+      playAccompaniment(ctx, master, question, bar, t, beatSeconds, barDynamicGain);
       bar.notes.forEach((note, noteIndex) => {
         const dur = rhythm(note.rhythm).beats * beatSeconds;
         const startMs = Math.max(0, (t - ctx.currentTime) * 1000);
@@ -1197,8 +1289,8 @@ function App() {
         o.frequency.setValueAtTime(freqForStep(note.step), t);
         g.gain.setValueAtTime(0.0001, t);
         if (isSfzHit) {
-          g.gain.exponentialRampToValueAtTime(targetGain, t + 0.008);
-          g.gain.exponentialRampToValueAtTime(0.14, t + Math.min(0.22, dur * 0.45));
+          g.gain.exponentialRampToValueAtTime(0.56, t + 0.006);
+          g.gain.exponentialRampToValueAtTime(0.12, t + Math.min(0.22, dur * 0.45));
         } else {
           g.gain.exponentialRampToValueAtTime(Math.max(0.002, targetGain), t + 0.015);
           g.gain.exponentialRampToValueAtTime(Math.max(0.001, targetGain * 0.45), t + dur * 0.86);
@@ -1258,12 +1350,12 @@ function App() {
         right={<window.MLH.SkipButton onClick={skipQuestion} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />}
       />
       <div className={`relative top-[22px] mb-[44px] transition-opacity duration-300 md:-top-[18px] md:mb-0 ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbolId={selectedSymbolId} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} activeNoteId={followPlayback ? activeNoteId : null} onPointerMove={handlePointerMove} onPointerLeave={() => setHoverPlacement(null)} onLockPlacement={handleLockPlacement} isMobile={isMobileScore}/></div>
-            <div className={`relative z-10 mt-8 min-h-[126px] overflow-visible rounded-xl border border-stone-200 bg-stone-50 px-4 pt-2 shadow-md md:-mt-[170px] md:mx-3 md:pb-2 ${isPlacement ? "pb-[78px]" : "pb-4"}`}>
+            <div className={`relative z-10 mt-8 overflow-visible rounded-xl border border-stone-200 bg-stone-50 px-4 pt-2 shadow-md md:-mt-[170px] md:mx-3 md:pb-2 ${isPlacement && question.type === "audio" ? "min-h-[210px] pb-[78px]" : isPlacement ? "min-h-[126px] pb-[78px]" : "min-h-[126px] pb-4"}`}>
         <div className="pr-0 text-stone-900 md:pr-[140px]"><p className="text-base font-semibold leading-tight" dangerouslySetInnerHTML={{ __html: question.prompt }} />{promptMessage && <p className={`mt-2 text-sm ${isStretchPrompt ? "font-normal italic text-stone-950" : "font-bold text-red-600"}`}>{promptMessage}</p>}</div>
         {isChoice && <ChoiceAnswers choices={question.choices} selectedChoice={selectedChoice} setSelectedChoice={setSelectedChoice} feedback={feedback} answerId={question.answerId} onChoose={chooseChoice}/>} 
-        {isText && <div className="mt-4 flex flex-col gap-3 md:absolute md:bottom-5 md:left-4 md:right-4 md:mt-0 md:flex-row md:flex-wrap md:items-center md:justify-between"><input value={typedAnswer} readOnly={Boolean(feedback)} onChange={e => { setTypedAnswer(e.target.value); setPromptMessage(""); }} onKeyDown={e => { if (e.key === "Enter") confirmAnswer(); }} placeholder="Type your answer" className={window.MLH.typedAnswerClass(feedback, "min-w-[240px] text-sm font-medium md:w-1/2")} />{feedback && !feedback.correct && <span className="text-sm font-bold text-green-700 md:mr-auto">{dyn(question.answerId).description}</span>}<window.MLH.ConfirmButton disabled={Boolean(feedback)} onClick={confirmAnswer} className="md:ml-auto">Confirm</window.MLH.ConfirmButton></div>}
+        {isText && <div className="mt-4 flex flex-col gap-3 md:absolute md:bottom-5 md:left-4 md:right-4 md:mt-0 md:flex-row md:items-end md:justify-between"><div className="flex w-full flex-col gap-2 md:flex-row md:items-center"><input value={typedAnswer} readOnly={Boolean(feedback)} onChange={e => { setTypedAnswer(e.target.value); setPromptMessage(""); }} onKeyDown={e => { if (e.key === "Enter") confirmAnswer(); }} placeholder="Type your answer" className={window.MLH.typedAnswerClass(feedback, "min-h-[48px] min-w-[240px] md:max-w-[520px]")} />{feedback && !feedback.correct && <span className="text-sm font-bold text-green-700 md:whitespace-nowrap">{dyn(question.answerId).description}</span>}</div><window.MLH.ConfirmButton disabled={Boolean(feedback)} onClick={confirmAnswer} className="md:ml-auto">Confirm</window.MLH.ConfirmButton></div>}
         {isPlacement && <><div className="mt-4 overflow-visible pb-[2px] pr-0"><DynamicAnswers filteredDynamics={filteredDynamics} selectedSymbolId={selectedSymbolId} setSelectedSymbolId={(id) => { setSelectedSymbolId(id); setPromptMessage(""); }} feedback={feedback} answerId={question.answerId} compact={question.type === "apply-score"}/></div></>}
-        <div className={question.type === "audio" ? "absolute bottom-4 left-4 right-4 flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-between" : "absolute bottom-4 left-4 right-4 flex items-center gap-2 md:left-auto"}>{isPlacement && question.type === "audio" && <button onClick={playExcerpt} disabled={Boolean(feedback)} className={`${window.MLH.PlayButtonClass} ${Boolean(feedback) ? "border-stone-300 bg-stone-200 text-stone-500" : ""}`}><span className="text-lg leading-none">{playing ? "■" : "▶"}</span><span>{playing ? "Stop" : "Play"}</span></button>}{isPlacement && question.type === "audio" ? <div className={window.MLH.ActionButtonGroupClass}><button disabled={Boolean(feedback) || placements.length === 0} onClick={clearPlacements} className={window.MLH.ClearButtonClass}>Clear</button><window.MLH.ConfirmButton disabled={Boolean(feedback) || placements.length === 0} onClick={confirmAnswer} className={window.MLH.AudioConfirmButtonClass}>Confirm</window.MLH.ConfirmButton></div> : <>{isPlacement && <button disabled={Boolean(feedback) || placements.length === 0} onClick={clearPlacements} className={window.MLH.ClearButtonClass}>Clear</button>}{isPlacement && <window.MLH.ConfirmButton disabled={Boolean(feedback) || placements.length === 0} onClick={confirmAnswer}>Confirm</window.MLH.ConfirmButton>}</>}</div>
+        <div className={question.type === "audio" ? "absolute bottom-4 left-4 right-4 flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-between" : "absolute bottom-4 left-4 right-4 flex items-center gap-2 md:left-auto"}>{isPlacement && question.type === "audio" && <button onClick={playExcerpt} disabled={Boolean(feedback)} className={`${window.MLH.PlayButtonClass} disabled:!border-stone-300 disabled:!bg-stone-100 disabled:!text-stone-500 disabled:!opacity-100`}><span className="text-lg leading-none">{playing ? "■" : "▶"}</span><span>{playing ? "Stop" : "Play"}</span></button>}{isPlacement && question.type === "audio" ? <div className={window.MLH.ActionButtonGroupClass}><button disabled={Boolean(feedback) || placements.length === 0} onClick={clearPlacements} className={window.MLH.ClearButtonClass}>Clear</button><window.MLH.ConfirmButton disabled={Boolean(feedback) || placements.length === 0} onClick={confirmAnswer} className={window.MLH.AudioConfirmButtonClass}>Confirm</window.MLH.ConfirmButton></div> : <>{isPlacement && <button disabled={Boolean(feedback) || placements.length === 0} onClick={clearPlacements} className={window.MLH.ClearButtonClass}>Clear</button>}{isPlacement && <window.MLH.ConfirmButton disabled={Boolean(feedback) || placements.length === 0} onClick={confirmAnswer}>Confirm</window.MLH.ConfirmButton>}</>}</div>
       </div>
     </main>
     </div>

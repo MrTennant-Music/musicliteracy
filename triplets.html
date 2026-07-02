@@ -214,6 +214,16 @@ function nextMelodicIndex(previousIndex, stepwise = false) {
   return clamp(previousIndex + move, 0, NOTE_POOL.length - 1);
 }
 
+function avoidFirstNoteMelodicAccidental(index, key) {
+  if (!melodicAccidentalForLetter(key, noteLetterForIndex(index))) return index;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const replacement = nextMelodicIndex(index, false);
+    if (!melodicAccidentalForLetter(key, noteLetterForIndex(replacement))) return replacement;
+    index = replacement;
+  }
+  return index;
+}
+
 function getFillPattern(beats, texture) {
   const roundedBeats = Math.round(beats);
   const preferred = texture === "quaver" ? QUAVER_TEXTURE_PATTERNS[roundedBeats] : CROTCHET_TEXTURE_PATTERNS[roundedBeats];
@@ -227,6 +237,7 @@ function makeNotesFromRhythms(rhythms, previousIndex, barIndex, targetGroupId = 
   const notes = rhythms.map((rhythm, noteIndex) => {
     const isStepwise = rhythm.includes("triplet") || rhythm === "quaver";
     index = nextMelodicIndex(index, isStepwise);
+    if (noteIndex === 0) index = avoidFirstNoteMelodicAccidental(index, key);
     return {
       id: `${barIndex}-${noteIndex}`,
       rhythm,
@@ -614,7 +625,15 @@ function Beam({ beam, colour, glow = false }) {
   const thickness = STAFF.gap * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42) * Number(settings.heightScale || 1);
   const widthScale = Number(settings.widthScale || 1);
   const xExtend = Math.max(1, STAFF.gap * (widthScale - 1));
-  return <line x1={beam.start.x - xExtend} y1={beam.start.y} x2={beam.end.x + xExtend} y2={beam.end.y} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" filter={glow ? "url(#selectedNoteGlow)" : undefined} />;
+  const x1 = beam.start.x - xExtend;
+  const x2 = beam.end.x + xExtend;
+  return (
+    <g>
+      {glow && <line x1={x1} y1={beam.start.y} x2={x2} y2={beam.end.y} stroke="#facc15" strokeWidth={thickness + 7} strokeLinecap="butt" opacity="0.65" />}
+      {glow && <line x1={x1} y1={beam.start.y} x2={x2} y2={beam.end.y} stroke="#eab308" strokeWidth={thickness + 3} strokeLinecap="butt" opacity="0.75" />}
+      <line x1={x1} y1={beam.start.y} x2={x2} y2={beam.end.y} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" />
+    </g>
+  );
 }
 
 function TripletMark({ group, tripletType, colour = COLOUR.green, glow = false }) {
@@ -726,9 +745,6 @@ function ScoreArea({ question, selectedNoteIds, feedback, onToggleNote }) {
         );
       })}
 
-      {!feedback && selectedTripletType?.id === "quaver-triplet" && visibleMarkGroup && (
-        <Beam beam={getBeamData(visibleMarkGroup.notes, visibleMarkGroup.positions, visibleMarkGroup.systemTop)} colour="currentColor" glow={true} />
-      )}
       <TripletMark group={visibleMarkGroup} tripletType={visibleMarkType} colour={feedback ? COLOUR.green : "currentColor"} glow={!feedback && Boolean(visibleMarkGroup)} />
     </svg>
   );
