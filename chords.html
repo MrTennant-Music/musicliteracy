@@ -393,6 +393,37 @@ function inversionLabel(inversion){
   if(inversion===2) return "2nd inv.";
   return "";
 }
+function romanInversionLabel(symbol,inversion){
+  if(inversion===1) return `${symbol}b`;
+  if(inversion===2) return `${symbol}c`;
+  return symbol;
+}
+function accidentalForInterval(rootTone,targetLetter,intervalSemitones){
+  const [rootLetter, rootAccidental=0] = rootTone;
+  const targetPitch = (NATURAL_SEMITONES[rootLetter] + rootAccidental + intervalSemitones + 120) % 12;
+  const naturalTarget = NATURAL_SEMITONES[targetLetter];
+  let accidental = targetPitch - naturalTarget;
+  while(accidental > 6) accidental -= 12;
+  while(accidental < -6) accidental += 12;
+  return accidental;
+}
+function dominantSeventhTone(chord){
+  const rootTone = chord.tones[0];
+  const seventhLetter = LETTERS[(LETTERS.indexOf(rootTone[0]) + 6) % LETTERS.length];
+  return [seventhLetter, accidentalForInterval(rootTone,seventhLetter,10)];
+}
+function maybeDominantSeventh(symbol,chord){
+  if(symbol !== "V" || Math.random() >= 0.1) return { symbol, chord };
+  return {
+    symbol:"V7",
+    chord:{
+      ...chord,
+      shortName:`${chord.shortName}7`,
+      tones:[...chord.tones, dominantSeventhTone(chord)],
+      inversions:[0,1,2],
+    },
+  };
+}
 function ahChordDisplay(item){
   const suffix=inversionLabel(item.inversion);
   return `${item.symbol}${suffix ? ` ${suffix}` : ""}`;
@@ -428,12 +459,19 @@ function ScaleDegreesGuide({keySignature}){
     </div>
   </div>;
 }
-const AH_CHORD_PICKER_OPTIONS = ["I","II","IV","V","VI"];
+const AH_MAJOR_CHORD_PICKER_OPTIONS = ["I","II","IV","V","V7","VI"];
+const AH_MINOR_CHORD_PICKER_OPTIONS = ["I","II","IV","V","V7","VI"];
 const AH_POSITION_PICKER_OPTIONS = [
   { label:"Root", value:0 },
-  { label:"1st Inversion", value:1 },
-  { label:"2nd Inversion", value:2 },
+  { label:"1st inv.", value:1 },
+  { label:"2nd inv.", value:2 },
 ];
+function ahChordPickerOptions(key){
+  return key.major ? AH_MAJOR_CHORD_PICKER_OPTIONS : AH_MINOR_CHORD_PICKER_OPTIONS;
+}
+function ahInversionOptionsForChord(symbol,chord){
+  return symbol==="II" ? [0,1] : (chord.inversions || [0,1,2]);
+}
 function normalizeAHInversionSelection(selection){
   return {
     symbol:selection?.symbol || null,
@@ -465,12 +503,11 @@ function cyclePositionValue(current,direction){
   return cyclePickerValue(values,current,direction);
 }
 function makeAHInversionVoicing(key, chord, inversion, idPrefix){
-  const order = inversion===1 ? [1,2,0] : inversion===2 ? [2,0,1] : [0,1,2];
-  const bassRoot = chord.tones[order[0]];
-  const remaining = [chord.tones[order[1]], chord.tones[order[2]]];
-  const doubled = bassRoot;
+  const bassIndex = inversion===1 ? 1 : inversion===2 ? 2 : 0;
+  const bassRoot = chord.tones[bassIndex];
+  const remaining = chord.tones.filter((_,index)=>index!==bassIndex);
   const bassToneDefs = [bassRoot];
-  const trebleToneDefs = [remaining[0], remaining[1], doubled];
+  const trebleToneDefs = chord.tones.length > 3 ? remaining : [remaining[0], remaining[1], bassRoot];
   const bassOctave = bassRoot[0] === "B" ? 2 : 3;
   const bassStack = bassToneDefs.map((tone,index)=>ahTone(key, tone, index===0?bassOctave:bassOctave+1, "bass"))
     .sort((a,b)=>a.step-b.step);
@@ -493,13 +530,15 @@ function makeAHInversionQuestion(){
   const symbols=key.major ? ["I","II","IV","V","VI"] : ["I","IV","V","VI"];
   const chords=[];
   for(let i=0;i<4;i++){
-    const availableSymbols=symbols.filter(option=>i===0 || option!==chords[i-1].symbol);
-    const symbol=r(availableSymbols.length ? availableSymbols : symbols);
-    const chord=key.chords[symbol];
-    const inversionOptions=chord.inversions || [0,1,2];
+    const previousBaseSymbol=chords[i-1]?.baseSymbol;
+    const availableSymbols=symbols.filter(option=>i===0 || option!==previousBaseSymbol);
+    const baseSymbol=r(availableSymbols.length ? availableSymbols : symbols);
+    const picked=maybeDominantSeventh(baseSymbol,key.chords[baseSymbol]);
+    const {symbol,chord}=picked;
+    const inversionOptions=ahInversionOptionsForChord(baseSymbol,chord);
     const inversion=r(inversionOptions);
     const voicing=makeAHInversionVoicing(key,chord,inversion,`ah-inv-${i}`);
-    chords.push({ index:i, symbol, chord, inversion, ...voicing });
+    chords.push({ index:i, baseSymbol, symbol, chord, inversion, ...voicing });
   }
   return {
     type:"ahInversionBar",
@@ -517,21 +556,23 @@ function makeAHBassLineQuestion(){
   const chords=[];
   for(let i=0;i<4;i++){
     const choices=[];
-    symbols.forEach(symbol=>{
-      if(i>0 && symbol===chords[i-1].symbol) return;
-      const chord=key.chords[symbol];
-      const inversionOptions=chord.inversions || [0,1,2];
+    symbols.forEach(baseSymbol=>{
+      if(i>0 && baseSymbol===chords[i-1].baseSymbol) return;
+      const picked=maybeDominantSeventh(baseSymbol,key.chords[baseSymbol]);
+      const {symbol,chord}=picked;
+      const inversionOptions=ahInversionOptionsForChord(baseSymbol,chord);
       inversionOptions.forEach(inversion=>{
         const voicing=makeAHInversionVoicing(key,chord,inversion,`ah-bass-${i}`);
         const bassTone=voicing.bassNote.stack[0];
-        if(bassTone.writtenAccidental===null) choices.push({symbol,chord,inversion,voicing});
+        if(bassTone.writtenAccidental===null) choices.push({baseSymbol,symbol,chord,inversion,voicing});
       });
     });
-    const picked=r(choices.length?choices:symbols.map(symbol=>{
-      const chord=key.chords[symbol], inversion=0, voicing=makeAHInversionVoicing(key,chord,inversion,`ah-bass-${i}`);
-      return {symbol,chord,inversion,voicing};
+    const picked=r(choices.length?choices:symbols.map(baseSymbol=>{
+      const {symbol,chord}=maybeDominantSeventh(baseSymbol,key.chords[baseSymbol]);
+      const inversion=0, voicing=makeAHInversionVoicing(key,chord,inversion,`ah-bass-${i}`);
+      return {baseSymbol,symbol,chord,inversion,voicing};
     }));
-    chords.push({ index:i, symbol:picked.symbol, chord:picked.chord, inversion:picked.inversion, ...picked.voicing });
+    chords.push({ index:i, baseSymbol:picked.baseSymbol, symbol:picked.symbol, chord:picked.chord, inversion:picked.inversion, ...picked.voicing });
   }
   return {
     type:"ahBassLine",
@@ -946,7 +987,7 @@ function DotSymbol({x,yy,step,colour}){
   return <CalibratedSymbol symbolKey={symbolKey} x={x+13} y={dotY} colour={colour}/>;
 }
 function ChordBox({symbol="", chord=null, x, yy, size=30, highlight=false}){ const stroke=highlight?COLOUR.blue:"#444", textColour=highlight?COLOUR.blue:"#111"; return <g><rect x={x} y={yy} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><rect x={x} y={yy+size} width={size} height={size} fill="white" stroke={stroke} strokeWidth="1.5"/><text x={x+size/2} y={yy+20} textAnchor="middle" fontSize="14.5" fontWeight="900" fill={textColour}>{getChordShortName(chord)}</text><text x={x+size/2} y={yy+size+20} textAnchor="middle" fontSize="14.5" fontWeight="900" fill={textColour}>{symbol}</text></g>; }
-function AnswerInput({value,disabled,status,onChange}){ const border=status==="correct"?COLOUR.green:status==="incorrect"?COLOUR.red:"#444", bg=status==="correct"?"#dcfce7":status==="incorrect"?"#fee2e2":"white"; return <input value={value} disabled={disabled} onChange={e=>onChange(formatHigherAnswer(e.target.value))} style={{width:"34px",height:"36px",border:`1.5px solid ${border}`,background:bg,textAlign:"center",fontWeight:900,fontSize:"16px",outline:"none",animation:disabled?"none":"pulseBorder 1.8s ease-in-out infinite"}}/>; }
+function AnswerInput({value,disabled,status,onChange}){ const border=status==="correct"?COLOUR.green:status==="incorrect"?COLOUR.red:"#444", bg=status==="correct"?"#dcfce7":status==="incorrect"?"#fee2e2":"white"; return <input value={value} disabled={disabled} onChange={e=>onChange(formatHigherAnswer(e.target.value))} style={{width:"100%",height:"100%",boxSizing:"border-box",border:`1.5px solid ${border}`,background:bg,textAlign:"center",fontWeight:900,fontSize:"16px",outline:"none",animation:disabled?"none":"pulseBorder 1.8s ease-in-out infinite"}}/>; }
 function HigherMobileAnswerBoxes({question,answers,setAnswers,feedback}){
   return <div className="higher-mobile-answers mt-4 grid-cols-2 gap-3">
     {question.targetBars.map(barIndex=>{
@@ -1115,9 +1156,10 @@ function AHChordTypedAnswer({question,answers,setAnswers,feedback}){
 function AHInversionCell({children,status,muted=false,withArrows=false,onPrev,onNext,disabled=false,compact=false,large=false}){
   const colour=status==="correct"?COLOUR.green:status==="incorrect"?COLOUR.red:muted?"#a8a29e":"#111";
   const arrowSize=large?56:28;
-  const buttonStyle={height:"100%",width:`${arrowSize}px`,border:"0",background:"rgba(0,0,0,.025)",borderRadius:"4px",fontSize:large?"25px":"17px",fontWeight:muted?650:900,lineHeight:"1",color:muted?"#333":"#111",cursor:disabled?"default":"pointer",padding:"0",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"};
+  const buttonStyle={height:"100%",width:`${arrowSize}px`,border:"0",background:"transparent",borderRadius:"0",fontSize:large?"25px":"17px",fontWeight:muted?650:900,lineHeight:"1",color:muted?"#333":"#111",cursor:disabled?"default":"pointer",padding:"0",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"};
   const cellWeight=muted?500:compact?600:700;
-  return <td style={{height:large?"53px":"28px",border:"1.2px solid #111",background:"white",color:colour,fontSize:large?"21px":compact?"11px":"11.5px",fontWeight:cellWeight,lineHeight:"1",whiteSpace:"nowrap",overflow:"hidden",padding:"0",cursor:"default"}}>
+  const fontSize=large?"23px":compact?"13px":"13.5px";
+  return <td style={{height:large?"53px":"34px",border:"1.2px solid #111",background:"white",color:colour,fontSize,fontWeight:cellWeight,lineHeight:"1",whiteSpace:"nowrap",overflow:"hidden",padding:"0",cursor:"default"}}>
     <div className="ah-inversion-cell-inner" style={{height:"100%",display:"grid",gridTemplateColumns:withArrows?`${arrowSize}px 1fr ${arrowSize}px`:"1fr",alignItems:"center"}}>
       {withArrows&&<button className="ah-inversion-arrow" type="button" disabled={disabled} onClick={event=>{event.stopPropagation();onPrev();}} style={buttonStyle} aria-label="Previous option">◀</button>}
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",minWidth:0,padding:"0 3px"}}>{children}</div>
@@ -1132,36 +1174,36 @@ function AHInversionTable({question,answers,feedback,onCycle,isMobile=false,tabl
       const tableScale=isMobile?0.95:1;
       const tableStyle={borderCollapse:"collapse",tableLayout:"fixed",width:`${resolvedTableWidth}px`,color:"#111",fontSize:isMobile?"21px":"11px",lineHeight:"1"};
       return <div xmlns="http://www.w3.org/1999/xhtml" style={{display:"block",width:`${resolvedTableWidth}px`,transform:`scale(${tableScale})`,transformOrigin:"center center"}}>
-    <table style={tableStyle}>
-      <colgroup>
-        {visibleChords.map(item=><col key={`col-${item.index}`} style={{width:`${resolvedColumnWidth}px`}} />)}
-      </colgroup>
-      <tbody>
-        <tr>
-          {visibleChords.map((item,index)=>{
-            const key=`ah-inv-${index}`, value=answers[key]||null, correct=isAHInversionSelectionCorrect(value,item), status=feedback&&index>0?(correct?"correct":"incorrect"):null, label=index===0?item.symbol:ahPickerLabel(value,"symbol"), muted=index>0&&!normalizeAHInversionSelection(value).symbol;
-            return index===0
-              ? <AHInversionCell key={`symbol-${index}`} large={isMobile}>{label}</AHInversionCell>
-              : <AHInversionCell key={`symbol-${index}`} status={status} muted={muted} withArrows disabled={Boolean(feedback)} onPrev={()=>onCycle(key,"symbol",-1)} onNext={()=>onCycle(key,"symbol",1)} large={isMobile}>{label}</AHInversionCell>;
-          })}
-        </tr>
-        <tr>
-          {visibleChords.map((item,index)=>{
-            const key=`ah-inv-${index}`, value=answers[key]||null, correct=isAHInversionSelectionCorrect(value,item), status=feedback&&index>0?(correct?"correct":"incorrect"):null, position=AH_POSITION_PICKER_OPTIONS.find(option=>option.value===item.inversion)?.label || "Root", label=index===0?position:ahPickerLabel(value,"inversion"), muted=index>0&&!Number.isInteger(normalizeAHInversionSelection(value).inversion);
-            return index===0
-              ? <AHInversionCell key={`position-${index}`} large={isMobile}>{label}</AHInversionCell>
-              : <AHInversionCell key={`position-${index}`} status={status} muted={muted} withArrows disabled={Boolean(feedback)} onPrev={()=>onCycle(key,"inversion",-1)} onNext={()=>onCycle(key,"inversion",1)} large={isMobile}>{label}</AHInversionCell>;
-          })}
-        </tr>
-      </tbody>
-    </table>
+      <table style={tableStyle}>
+        <colgroup>
+          {visibleChords.map(item=><col key={`col-${item.index}`} style={{width:`${resolvedColumnWidth}px`}} />)}
+        </colgroup>
+        <tbody>
+          <tr>
+            {visibleChords.map((item,index)=>{
+              const key=`ah-inv-${index}`, value=answers[key]||null, correct=isAHInversionSelectionCorrect(value,item), status=feedback&&index>0?(correct?"correct":"incorrect"):null, label=index===0?item.symbol:ahPickerLabel(value,"symbol"), muted=index>0&&!normalizeAHInversionSelection(value).symbol;
+              return index===0
+                ? <AHInversionCell key={`symbol-${index}`} large={isMobile}>{label}</AHInversionCell>
+                : <AHInversionCell key={`symbol-${index}`} status={status} muted={muted} withArrows disabled={Boolean(feedback)} onPrev={()=>onCycle(key,"symbol",-1)} onNext={()=>onCycle(key,"symbol",1)} large={isMobile}>{label}</AHInversionCell>;
+            })}
+          </tr>
+          <tr>
+            {visibleChords.map((item,index)=>{
+              const key=`ah-inv-${index}`, value=answers[key]||null, correct=isAHInversionSelectionCorrect(value,item), status=feedback&&index>0?(correct?"correct":"incorrect"):null, position=AH_POSITION_PICKER_OPTIONS.find(option=>option.value===item.inversion)?.label || "Root", label=index===0?position:ahPickerLabel(value,"inversion"), muted=index>0&&!Number.isInteger(normalizeAHInversionSelection(value).inversion);
+              return index===0
+                ? <AHInversionCell key={`position-${index}`} large={isMobile}>{label}</AHInversionCell>
+                : <AHInversionCell key={`position-${index}`} status={status} muted={muted} withArrows disabled={Boolean(feedback)} onPrev={()=>onCycle(key,"inversion",-1)} onNext={()=>onCycle(key,"inversion",1)} large={isMobile}>{label}</AHInversionCell>;
+            })}
+          </tr>
+        </tbody>
+      </table>
   </div>;
 }
 function AHInversionScore({question,answers,setAnswers,feedback,showNoteNames=false,isMobile=false}){
   const scoreYShift=isMobile?-25:0, trebleTop=112+scoreYShift, bassTop=220+scoreYShift, staffStart=250, staffEnd=710, scoreWidth=staffEnd+130-staffStart, staveShift=((W-scoreWidth)/2)-staffStart+(isMobile?100:0), shiftedStart=staffStart+staveShift, shiftedEnd=staffEnd+130+staveShift-(isMobile?220:0), keyX=shiftedStart+68, chordXs=isMobile?[385,525]:[382,500,618,736], fadeId=`ah-inv-staff-fade-${question.id}`;
   const actualChordXs=chordXs.map(x=>x+staveShift);
   const visibleChords=isMobile?question.chords.slice(0,2):question.chords;
-  const tableColumnWidth=isMobile?228:Math.max(120,actualChordXs[1]-actualChordXs[0]);
+  const tableColumnWidth=isMobile?228:actualChordXs[1]-actualChordXs[0];
   const tableWidth=tableColumnWidth*visibleChords.length;
   const tablePadding=8;
   const tableX=isMobile?(W-tableWidth)/2:actualChordXs[0]-tableColumnWidth/2;
@@ -1173,7 +1215,7 @@ function AHInversionScore({question,answers,setAnswers,feedback,showNoteNames=fa
     setAnswers(cur=>{
       const current=cur[key] || {};
       const next={...current};
-      if(field==="symbol") next.symbol=cyclePickerValue(AH_CHORD_PICKER_OPTIONS,current.symbol,direction);
+      if(field==="symbol") next.symbol=cyclePickerValue(ahChordPickerOptions(question.key),current.symbol,direction);
       if(field==="inversion") next.inversion=cyclePositionValue(current.inversion,direction);
       return {...cur,[key]:next};
     });
@@ -1203,24 +1245,21 @@ function AHInversionScore({question,answers,setAnswers,feedback,showNoteNames=fa
       return <g key={key}>
         <Note note={item.trebleNote} x={x} top={trebleTop} stackLayout="lineSpace" stackStemDown={trebleStemDown} showNoteNames={showNoteNames}/>
         <Note note={item.bassNote} x={x} top={bassTop} stackLayout="lineSpace" showNoteNames={showNoteNames}/>
-        {index>0 && (
-          <g>
-            {feedback&&!isMobile&&!correct&&(
-              <foreignObject x={x-55} y={bassTop+50} width="110" height="24">
-                <div xmlns="http://www.w3.org/1999/xhtml" style={{height:"22px",display:"flex",alignItems:"center",justifyContent:"center",color:COLOUR.green,fontSize:"10px",fontWeight:800,textAlign:"center",lineHeight:"1.05",padding:"0 2px"}}>
-                  {ahChordDisplay(item)}
-                </div>
-              </foreignObject>
-            )}
-          </g>
-        )}
       </g>;
     })}
-    <foreignObject x={tableX-tablePadding/2} y={bassTop+72} width={tableWidth+tablePadding} height={isMobile?114:60}>
+    <foreignObject x={tableX-tablePadding/2} y={bassTop+72} width={tableWidth+tablePadding} height={isMobile?114:72}>
       <div xmlns="http://www.w3.org/1999/xhtml" style={{padding:`0 ${tablePadding/2}px`,boxSizing:"border-box"}}>
         <AHInversionTable question={question} answers={answers} feedback={feedback} onCycle={updatePicker} isMobile={isMobile} tableWidth={tableWidth} columnWidth={tableColumnWidth}/>
       </div>
     </foreignObject>
+    {!isMobile&&feedback&&visibleChords.map((item,index)=>{
+      if(index===0 || isAHInversionSelectionCorrect(answers[`ah-inv-${index}`]||null,item)) return null;
+      return <foreignObject key={`feedback-${index}`} x={actualChordXs[index]-tableColumnWidth/2} y={bassTop+150} width={tableColumnWidth} height="24">
+        <div xmlns="http://www.w3.org/1999/xhtml" style={{height:"24px",display:"flex",alignItems:"center",justifyContent:"center",color:COLOUR.green,fontSize:"13.5px",fontWeight:800,textAlign:"center",lineHeight:"1.05",padding:"0 2px"}}>
+          {ahChordDisplay(item)}
+        </div>
+      </foreignObject>;
+    })}
     {mobileFeedbackItems.length>0&&(
       <foreignObject x={(W-460)/2} y={bassTop+172} width="460" height="34">
         <div xmlns="http://www.w3.org/1999/xhtml" style={{height:"34px",display:"flex",alignItems:"center",justifyContent:"center",gap:"12px",color:COLOUR.green,fontSize:"21px",fontWeight:800,textAlign:"center",lineHeight:"1"}}>
@@ -1236,7 +1275,7 @@ function letterForClefStep(step,clef){
   const base=clef==="bass"?LETTERS.indexOf("G"):LETTERS.indexOf("E");
   return LETTERS[((base+step)%7+7)%7];
 }
-function AHCompletedTable({question,isMobile=false,tableWidth=null,columnWidth=null,showScaleDegrees=false}){
+function AHCompletedTable({question,isMobile=false,tableWidth=null,columnWidth=null}){
   const visibleChords=isMobile?question.chords.slice(0,2):question.chords;
   const resolvedColumnWidth=columnWidth || (isMobile?228:120);
   const resolvedTableWidth=tableWidth || resolvedColumnWidth*visibleChords.length;
@@ -1249,22 +1288,19 @@ function AHCompletedTable({question,isMobile=false,tableWidth=null,columnWidth=n
       </colgroup>
       <tbody>
         <tr>{visibleChords.map(item=>{
-          const chordLabel=showScaleDegrees ? item.symbol : `${item.symbol} or ${getChordShortName(item.chord)}`;
-          return <AHInversionCell key={`symbol-${item.index}`} large={isMobile}>{chordLabel}</AHInversionCell>;
+          const position=inversionLabel(item.inversion);
+          return <AHInversionCell key={`chord-${item.index}`} large={isMobile}>{`${getChordShortName(item.chord)}${position ? ` ${position}` : ""}`}</AHInversionCell>;
         })}</tr>
-        <tr>{visibleChords.map(item=>{
-          const position=AH_POSITION_PICKER_OPTIONS.find(option=>option.value===item.inversion)?.label || "Root";
-          return <AHInversionCell key={`position-${item.index}`} large={isMobile}>{position}</AHInversionCell>;
-        })}</tr>
+        <tr>{visibleChords.map(item=><AHInversionCell key={`symbol-${item.index}`} large={isMobile}>{romanInversionLabel(item.symbol,item.inversion)}</AHInversionCell>)}</tr>
       </tbody>
     </table>
   </div>;
 }
-function AHBassLineScore({question,answers,setAnswers,feedback,showNoteNames=false,showScaleDegrees=false,isMobile=false}){
+function AHBassLineScore({question,answers,setAnswers,feedback,showNoteNames=false,isMobile=false}){
   const scoreYShift=isMobile?-25:0, trebleTop=112+scoreYShift, bassTop=220+scoreYShift, staffStart=250, staffEnd=710, scoreWidth=staffEnd+130-staffStart, staveShift=((W-scoreWidth)/2)-staffStart+(isMobile?100:0), shiftedStart=staffStart+staveShift, shiftedEnd=staffEnd+130+staveShift-(isMobile?220:0), keyX=shiftedStart+68, chordXs=isMobile?[385,525]:[382,500,618,736], fadeId=`ah-bass-staff-fade-${question.id}`;
   const actualChordXs=chordXs.map(x=>x+staveShift);
   const visibleChords=isMobile?question.chords.slice(0,2):question.chords;
-  const tableColumnWidth=isMobile?228:Math.max(120,actualChordXs[1]-actualChordXs[0]);
+  const tableColumnWidth=isMobile?228:actualChordXs[1]-actualChordXs[0];
   const tableWidth=tableColumnWidth*visibleChords.length;
   const tablePadding=8;
   const tableX=isMobile?(W-tableWidth)/2:actualChordXs[0]-tableColumnWidth/2;
@@ -1353,9 +1389,9 @@ function AHBassLineScore({question,answers,setAnswers,feedback,showNoteNames=fal
         {preview.dragged&&<line x1={shiftedStart-14} x2={shiftedEnd+14} y1={y(preview.step,bassTop)} y2={y(preview.step,bassTop)} stroke="black" strokeWidth="1.5" strokeDasharray="5 5" opacity="0.55"/>}
         <Note note={{id:"bass-preview",rhythm:"crotchet",step:preview.step,letter:letterForClefStep(preview.step,"bass"),writtenAccidental:null}} x={preview.x} top={bassTop} colour="black"/>
       </g>}
-      <foreignObject x={tableX-tablePadding/2} y={bassTop+72} width={tableWidth+tablePadding} height={isMobile?114:60}>
+      <foreignObject x={tableX-tablePadding/2} y={bassTop+72} width={tableWidth+tablePadding} height={isMobile?114:72}>
         <div xmlns="http://www.w3.org/1999/xhtml" style={{padding:`0 ${tablePadding/2}px`,boxSizing:"border-box"}}>
-          <AHCompletedTable question={question} isMobile={isMobile} tableWidth={tableWidth} columnWidth={tableColumnWidth} showScaleDegrees={showScaleDegrees}/>
+          <AHCompletedTable question={question} isMobile={isMobile} tableWidth={tableWidth} columnWidth={tableColumnWidth}/>
         </div>
       </foreignObject>
     </g>
@@ -1786,7 +1822,7 @@ function App(){
           : question.type==="ahInversionBar"
           ? <AHInversionScore question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} showNoteNames={showNoteNames} isMobile={isMobileView}/>
         : question.type==="ahBassLine"
-          ? <AHBassLineScore question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} showNoteNames={showNoteNames} showScaleDegrees={showScaleDegrees} isMobile={isMobileView}/>
+          ? <AHBassLineScore question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} showNoteNames={showNoteNames} isMobile={isMobileView}/>
           : <Score question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} activeNoteId={highlightPlayback?activeNoteId:undefined} activeBarIndex={activeBarIndex} level={activeLevel} showNoteNames={showNoteNames}/>}
       </div>
       {question.type==="n5" ? (
@@ -1835,39 +1871,42 @@ function App(){
           </div>
         </div>
       ) : question.type==="ahInversionBar" ? (
-        <div className="chords-question-card chords-question-ah-inversion relative z-10 mt-8 flex min-h-[88px] flex-col justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[115px] md:mx-3">
+        <div className="chords-question-card chords-question-ah-inversion relative z-10 mt-8 flex min-h-[88px] flex-col overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[75px] md:mx-3">
           <div className="text-stone-900">
             <p className="text-base font-semibold leading-tight">
               Identify the chords used in this bar. You should indicate the number and, where appropriate, 1st or 2nd inversion. The first chord has been given.
             </p>
-            <p className="mt-3 text-base font-semibold leading-tight">
-              The key is <strong>{question.key.displayName || question.key.name}</strong>.
-            </p>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-base font-semibold leading-tight">
+                The key is <strong>{question.key.displayName || question.key.name}</strong>.
+              </p>
+              <div className={window.MLH.ActionButtonGroupClass}>
+                <button type="button" disabled={Boolean(feedback) || !hasAnyAnswer()} onClick={clearAnswers} className={window.MLH.ClearButtonClass}>Clear</button>
+                <window.MLH.ConfirmButton disabled={Boolean(feedback) || !hasFullAnswer()} onClick={confirmAnswer}>Confirm</window.MLH.ConfirmButton>
+              </div>
+            </div>
             {promptMessage&&<p className="mt-2 text-sm font-bold text-red-600">{promptMessage}</p>}
           </div>
-          <div className={`mt-2 flex gap-3 ${showScaleDegrees?"items-end justify-between":"justify-end"}`}>
-            {showScaleDegrees&&<ScaleDegreesGuide keySignature={question.key}/>} 
-            <div className={window.MLH.ActionButtonGroupClass}>
-              <button type="button" disabled={Boolean(feedback) || !hasAnyAnswer()} onClick={clearAnswers} className={window.MLH.ClearButtonClass}>Clear</button>
-              <window.MLH.ConfirmButton disabled={Boolean(feedback) || !hasFullAnswer()} onClick={confirmAnswer}>Confirm</window.MLH.ConfirmButton>
-            </div>
-          </div>
+          {showScaleDegrees&&<ScaleDegreesGuide keySignature={question.key}/>}
         </div>
       ) : question.type==="ahBassLine" ? (
-        <div className="chords-question-card chords-question-ah-bassline relative z-10 mt-8 flex min-h-[88px] flex-col justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[115px] md:mx-3">
+        <div className="chords-question-card chords-question-ah-bassline relative z-10 mt-8 flex min-h-[88px] flex-col overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[75px] md:mx-3">
           <div className="text-stone-900">
             <p className="text-base font-semibold leading-tight">
               Using the rhythm provided and the chord information printed below the stave, complete the bass line.
             </p>
-            <p className="mt-3 text-base font-semibold leading-tight">
-              The key is <strong>{question.key.displayName || question.key.name}</strong>.
-            </p>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-base font-semibold leading-tight">
+                The key is <strong>{question.key.displayName || question.key.name}</strong>.
+              </p>
+              <div className={window.MLH.ActionButtonGroupClass}>
+                <button type="button" disabled={Boolean(feedback) || !hasAnyAnswer()} onClick={clearAnswers} className={window.MLH.ClearButtonClass}>Clear</button>
+                <window.MLH.ConfirmButton disabled={Boolean(feedback) || !hasFullAnswer()} onClick={confirmAnswer}>Confirm</window.MLH.ConfirmButton>
+              </div>
+            </div>
             {promptMessage&&<p className="mt-2 text-sm font-bold text-red-600">{promptMessage}</p>}
           </div>
-          <div className={`mt-2 flex justify-end ${window.MLH.ActionButtonGroupClass}`}>
-            <button type="button" disabled={Boolean(feedback) || !hasAnyAnswer()} onClick={clearAnswers} className={window.MLH.ClearButtonClass}>Clear</button>
-            <window.MLH.ConfirmButton disabled={Boolean(feedback) || !hasFullAnswer()} onClick={confirmAnswer}>Confirm</window.MLH.ConfirmButton>
-          </div>
+          {showScaleDegrees&&<ScaleDegreesGuide keySignature={question.key}/>}
         </div>
       ) : (
         <div className="chords-question-card chords-question-higher relative z-10 mt-3 flex min-h-[170px] flex-col justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:-mt-[190px] md:mx-3">
