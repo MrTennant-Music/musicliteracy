@@ -56,7 +56,8 @@
       function updatePosition() {
         const anchor = anchorRef.current;
         if (!anchor) return;
-        const rect = anchor.getBoundingClientRect();
+        const trigger = anchor.parentElement?.querySelector?.("[data-menu-trigger]") || anchor;
+        const rect = trigger.getBoundingClientRect();
         const panelWidth = panelRef.current?.offsetWidth || 360;
         const gap = 8;
         const edge = 16;

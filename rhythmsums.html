@@ -15,7 +15,7 @@
   <script src="./hub-mobile.js?v=20260629"></script>
   <script src="./hub-audio.js?v=20260629"></script>
   <script src="./hub-shell.js?v=20260629"></script>
-  <script src="./hub-menu.js?v=20260702-menu-fix"></script>
+  <script src="./hub-menu.js?v=20260702-menu-position"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face {
@@ -164,6 +164,7 @@ function settingsForLevel(levelKey, current = DEFAULT_SETTINGS) {
     ...current,
     enabledItems: level.rhythmIds,
     enabledBeamedItems: level.beamedIds,
+    enabledOperators: DEFAULT_SETTINGS.enabledOperators,
     includeRests: level.includeRests,
     includeBeamedGroups: level.beamedIds.length > 0,
   };
@@ -734,7 +735,7 @@ function RestMenuGlyph() {
   return (
     <CustomiseGlyphSlot>
       <svg viewBox="0 0 90 80" className="h-[56px] w-[66px] overflow-visible text-stone-800">
-        <g transform="translate(3 13) scale(1.08)">
+        <g transform="translate(5 11) scale(1.08)">
           <Rest rhythm="crotchet-rest" x={42} systemTop={12} />
         </g>
       </svg>
@@ -745,7 +746,7 @@ function RestMenuGlyph() {
 function BeamedMenuGlyph({ rhythms = ["quaver", "quaver"], isTriplet = false }) {
   return (
     <CustomiseGlyphSlot>
-      <div className="flex h-[48px] w-[62px] translate-x-[14px] -translate-y-[11px] items-center justify-center overflow-visible text-stone-800">
+      <div className="flex h-[48px] w-[62px] translate-x-[16px] -translate-y-[13px] items-center justify-center overflow-visible text-stone-800">
         {isTriplet ? <TripletNotes rhythms={rhythms} scale={0.42} /> : <BeamedNotes rhythms={rhythms} scale={0.5} />}
       </div>
     </CustomiseGlyphSlot>
@@ -755,7 +756,7 @@ function BeamedMenuGlyph({ rhythms = ["quaver", "quaver"], isTriplet = false }) 
 function OperationMenuGlyph({ operator }) {
   return (
     <CustomiseGlyphSlot>
-      <span className="flex h-full w-full translate-x-[10px] -translate-y-[2px] items-center justify-center text-[32px] font-bold leading-none text-stone-900">{operator}</span>
+      <span className="flex h-full w-full translate-x-[10px] -translate-y-[2px] items-center justify-center text-[26px] font-bold leading-none text-stone-900">{operator}</span>
     </CustomiseGlyphSlot>
   );
 }
@@ -965,7 +966,6 @@ function RhythmSumsGoldenApp() {
     if (fadeTimer.current) clearTimeout(fadeTimer.current);
     setQuestion(nextQuestion);
     setAnswerText("");
-    setAnswerFocused(false);
     setFeedback(null);
     setFeedbackFading(false);
     setWarning("");
@@ -1014,6 +1014,11 @@ function RhythmSumsGoldenApp() {
     if (/^\d*\.?\d*$/.test(value)) setAnswerText(value);
   }
 
+  function clearAnswer() {
+    if (feedback) return;
+    setAnswerText("");
+  }
+
   function scoreAnswer(ok) {
     if (nextTimer.current) clearTimeout(nextTimer.current);
     if (fadeTimer.current) clearTimeout(fadeTimer.current);
@@ -1051,7 +1056,7 @@ function RhythmSumsGoldenApp() {
 
   return (
     <div className={window.MLH.shell.pageShellClass}>
-      <window.MLH.AppHeader icon={ASSET.appIcon} title="Rhythm Sums" subtitle="Solve rhythm value sums.">
+      <window.MLH.AppHeader icon={ASSET.appIcon} title="Rhythm Sums" subtitle="Calculate rhythm values.">
         <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} medalEligible={medalEligible} />
       </window.MLH.AppHeader>
 
@@ -1113,7 +1118,7 @@ function RhythmSumsGoldenApp() {
           )}
 
           <div className={`relative z-10 mt-4 transition-opacity duration-300 ${questionVisible ? "opacity-100" : "opacity-0"}`}>
-            <div className="flex flex-wrap items-center justify-center gap-5 overflow-visible py-7 text-4xl font-medium">
+            <div className="flex flex-wrap items-center justify-center gap-5 overflow-visible py-7 text-4xl font-medium" style={{ transform: "scale(1.14)", transformOrigin: "center" }}>
               <RhythmSlot>
                 <div className="flex flex-col items-center">
                   <RhythmGlyph item={question.left} scale={1.14} />
@@ -1131,19 +1136,26 @@ function RhythmSumsGoldenApp() {
           </div>
 
           <div className="relative z-10 mt-auto rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3">
-            <div className="flex flex-col gap-3 text-stone-900 md:flex-row md:items-center md:justify-between">
+            <div className="text-stone-900">
               <p className="text-base font-semibold leading-tight">{question.prompt}</p>
-              <div className="flex flex-wrap items-center gap-2 md:ml-auto">
-                {feedback && !feedback.correct && <span className="min-w-[2.4rem] text-right text-lg font-semibold text-green-700">{formatBeat(question.answer)}</span>}
-                <input
-                  value={answerText}
-                  onChange={handleInput}
-                  inputMode="decimal"
-                  disabled={Boolean(feedback)}
-                  placeholder="Type your answer"
-                  className={window.MLH.typedAnswerClass(feedback, "w-[116px] px-3 text-center text-base font-normal placeholder:text-[11px]")}
-                />
-                <window.MLH.ConfirmButton onClick={confirmAnswer} disabled={Boolean(feedback) || !hasAnswer}>Confirm</window.MLH.ConfirmButton>
+              <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <input
+                    value={answerText}
+                    onChange={handleInput}
+                    onKeyDown={(event) => { if (event.key === "Enter") confirmAnswer(); }}
+                    inputMode="decimal"
+                    disabled={Boolean(feedback)}
+                    aria-label="Answer"
+                    placeholder="Type your answer"
+                    className={window.MLH.typedAnswerClass(feedback, "w-[260px] max-w-full shrink-0 font-normal")}
+                  />
+                  {feedback && !feedback.correct && <span className="shrink-0 min-w-[2.4rem] text-left text-lg font-semibold text-green-700">{formatBeat(question.answer)}</span>}
+                </div>
+                <div className={window.MLH.ActionButtonGroupClass}>
+                  <button type="button" onClick={clearAnswer} disabled={Boolean(feedback) || !hasAnswer} className={window.MLH.ClearButtonClass}>Clear</button>
+                  <window.MLH.ConfirmButton onClick={confirmAnswer} disabled={Boolean(feedback) || !hasAnswer}>Confirm</window.MLH.ConfirmButton>
+                </div>
               </div>
             </div>
           </div>
