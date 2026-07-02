@@ -97,8 +97,8 @@
       mobileLabel: isCustom ? "" : activeLevel,
       onClick,
       dataMenuTrigger,
-      className: isCustom ? "gap-0" : "gap-1",
-      textClassName: "sm:relative sm:-left-[3px]",
+      className: "gap-1",
+      textClassName: isCustom ? "" : "sm:relative sm:-left-[3px]",
     });
   }
 

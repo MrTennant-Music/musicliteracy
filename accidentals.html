@@ -48,6 +48,10 @@ const NOTE = {
 };
 
 const BAR_COUNT = 4;
+const NOTE_NAME_GUIDE = {
+  lines: [[0, "E"], [2, "G"], [4, "B"], [6, "D"], [8, "F"]],
+  spaces: [[1, "F"], [3, "A"], [5, "C"], [7, "E"]],
+};
 
 const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
 const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
@@ -318,6 +322,19 @@ function noteNameChoices(answer, enabledAccidentals) {
   const primary = [`${letter}b`, letter, `${letter}#`].filter((name) => allowedNames.includes(name));
   const extras = allowedNames.filter((name) => !primary.includes(name)).sort(() => Math.random() - 0.5).slice(0, Math.max(0, 6 - primary.length));
   return [...primary, ...extras].filter((name, index, array) => array.indexOf(name) === index).sort(() => Math.random() - 0.5).map((text) => ({ id: text, text }));
+}
+function NoteNameDisplay({ name }) {
+  const match = /^([A-G])([#b])?$/.exec(name);
+  if (!match) return name;
+  const [, letter, accidental] = match;
+  const symbolKey = accidental === "#" ? "sharpInScore" : accidental === "b" ? "flatInScore" : null;
+  const offsetClass = accidental === "#" ? "-top-[6px]" : "-top-[4px]";
+  return (
+    <span className="inline-flex items-baseline justify-center gap-[2px]">
+      <span>{letter}</span>
+      {symbolKey && <span className={`music-symbol relative ${offsetClass} text-[1.25em] font-normal leading-none`}>{sharedSymbolForKey(symbolKey)}</span>}
+    </span>
+  );
 }
 function applyOctaveCounterparts(bar, target, value, skipIndex) {
   bar.notes.forEach((note) => {
@@ -844,8 +861,8 @@ function AccidentalGlyph({ id, x = 50, y = 32, colour = "currentColor", opacity 
   return <CalibratedSymbol symbolKey={symbolKey} x={x} y={y + STAFF.gap / 2} colour={colour} opacity={opacity} glow={glow} settingOverrides={override} />;
 }
 function ButtonGlyph({ id }) {
-  const yOffset = id === "sharp" ? 2 : id === "natural" ? 1 : 8;
-  return <svg viewBox="0 0 100 74" className="h-[44px] w-14 overflow-visible sm:h-[58px] sm:w-20"><text className="music-symbol" x="50" y={37 + yOffset} fill="currentColor" fontSize="58" textAnchor="middle" dominantBaseline="middle">{sharedSymbolForKey(id)}</text></svg>;
+  const alignment = id === "flat" ? "-translate-x-[1px] translate-y-[6px]" : id === "sharp" ? "translate-x-[1px] translate-y-[1px]" : "translate-y-[2px]";
+  return <span className={`music-symbol block text-[44px] leading-none ${alignment}`}>{sharedSymbolForKey(id)}</span>;
 }
 function Placement({ placement, question, colour = "currentColor", opacity = 1, feedbackOffset = false }) { const pos = placementPosition(placement, question, feedbackOffset); return <AccidentalGlyph id={placement.symbolId} x={pos.x} y={pos.y} colour={colour} opacity={opacity} glow={false} />; }
 function StaffLines({ top, left = STAFF.left, right = STAFF.right, fadeGradientId = null }) {
@@ -853,6 +870,13 @@ function StaffLines({ top, left = STAFF.left, right = STAFF.right, fadeGradientI
   return <g>{[0, 1, 2, 3, 4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke={stroke} strokeWidth="1.2" />)}</g>;
 }
 function TrebleClef({ top, left = STAFF.left }) { return <CalibratedSymbol symbolKey="gClef" x={calibrationAnchorX("gClef", left)} y={calibrationAnchorY("gClef", top)} />; }
+function StaffNoteNames({ visible, top = STAFF.top, lineX = STAFF.left - 11, spaceX = STAFF.left + 7 }) {
+  if (!visible) return null;
+  return <g fontSize="10.5" fontWeight="700" dominantBaseline="middle" pointerEvents="none" fill="black" textAnchor="middle">
+    {NOTE_NAME_GUIDE.lines.map(([step, letter]) => <text key={`treble-line-${step}`} x={lineX + 5} y={yForStep(step, top) + 1}>{letter}</text>)}
+    {NOTE_NAME_GUIDE.spaces.map(([step, letter]) => <text key={`treble-space-${step}`} x={spaceX - 2} y={yForStep(step, top) + 1}>{letter}</text>)}
+  </g>;
+}
 function TimeSignatureGlyph({ signature, top = STAFF.top }) {
   const definition = TIME_SIGNATURE_SYMBOLS[signature.id] ?? { key: `timeSig${signature.top}${signature.bottom}` };
   return <CalibratedTimeSignature signature={signature} x={calibrationAnchorX(definition.key)} y={calibrationAnchorY(definition.key, top)} />;
@@ -904,7 +928,7 @@ function Note({ note, x, top, colour = "currentColor", accidentalColour = "curre
   </g>;
 }
 
-function Score({ question, selectedSymbol, placements, hoverPlacement, feedback, wrong, missing, onMove, onLeave, onLock }) {
+function Score({ question, selectedSymbol, placements, hoverPlacement, feedback, wrong, missing, onMove, onLeave, onLock, showNoteNames = false }) {
   const layouts = useMemo(() => scoreLayouts(question), [question]);
   const left = question.oneBarMode ? 335 : STAFF.left;
   const right = question.oneBarMode ? 535 : STAFF.right;
@@ -936,6 +960,7 @@ function Score({ question, selectedSymbol, placements, hoverPlacement, feedback,
     <g transform={transform}>
       {systemTops.map((top, index) => <g key={top}>
         <StaffLines top={top} left={left} right={right} fadeGradientId={question.oneBarMode ? "oneBarStaffFade" : null} />
+        <StaffNoteNames visible={showNoteNames} top={top} lineX={left - 11} spaceX={left + 7} />
         <TrebleClef top={top} left={left} />
         <KeySignature question={question} top={top} />
         {!question.oneBarMode && index === 0 && <TimeSignatureGlyph signature={question.timeSignature} top={top} />}
@@ -975,7 +1000,7 @@ function medalNameForStreak(streak) {
   if (streak === 30) return "platinum";
   return null;
 }
-function SymbolButton({ accidental, selected, disabled, correct, wrong, onClick }) { let style = "border-stone-300 bg-white text-stone-900"; if (correct) style = "border-green-700 bg-green-600 text-white"; else if (wrong) style = "border-red-700 bg-red-600 text-white"; else if (selected) style = "border-stone-950 bg-stone-950 text-white"; return <button type="button" disabled={disabled} onClick={onClick} className={`flex h-[64px] flex-1 items-center justify-center rounded-xl border px-1 text-sm font-bold transition sm:h-[74px] sm:min-w-[88px] sm:flex-none ${style}`}><ButtonGlyph id={accidental.id} /></button>; }
+function SymbolButton({ accidental, selected, disabled, correct, wrong, onClick }) { let style = "border-stone-300 bg-white text-black hover:bg-stone-50"; if (correct) style = "border-green-700 bg-green-600 text-white"; else if (wrong) style = "border-red-700 bg-red-600 text-white"; else if (selected) style = "border-black bg-black text-white"; return <button type="button" disabled={disabled} onClick={onClick} className={`flex h-[64px] min-w-[88px] items-center justify-center rounded-xl border px-1 transition sm:h-[74px] ${style}`}><ButtonGlyph id={accidental.id} /></button>; }
 
 
 function WarningBanner({ warning = "" }) {
@@ -997,7 +1022,7 @@ function QuestionTypeGlyph({ type }) {
   return <MenuGlyphFrame><img src={ASSET.hand} alt="" aria-hidden="true" className="h-[22px] w-[22px] object-contain" /></MenuGlyphFrame>;
 }
 
-function MenuRows({ enabledAccidentals, setEnabledAccidentals, enabledQuestionTypes, setEnabledQuestionTypes, newQuestion }) {
+function MenuRows({ enabledAccidentals, setEnabledAccidentals, enabledQuestionTypes, setEnabledQuestionTypes, newQuestion, showNoteNames, setShowNoteNames }) {
   function toggleAccidental(id) { setEnabledAccidentals((current) => { if (current.includes(id) && current.length === 1) return current; const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id]; setTimeout(() => newQuestion(enabledQuestionTypes, next), 0); return next; }); }
   function toggleQuestionType(option) {
     setEnabledQuestionTypes((current) => {
@@ -1010,7 +1035,7 @@ function MenuRows({ enabledAccidentals, setEnabledAccidentals, enabledQuestionTy
       return next;
     });
   }
-  return <><window.MLH.MenuSubheading>Accidentals</window.MLH.MenuSubheading>{ACCIDENTALS.map((accidental) => <window.MLH.MenuToggleRow key={accidental.id} glyph={<AccidentalMenuGlyph id={accidental.id} />} label={accidental.name} checked={enabledAccidentals.includes(accidental.id)} onChange={() => toggleAccidental(accidental.id)} />)}<window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>{QUESTION_TYPE_OPTIONS.map((type) => <window.MLH.MenuToggleRow key={type.id} glyph={<QuestionTypeGlyph type={type.glyph} />} label={type.label} checked={type.typeIds.some((id) => enabledQuestionTypes.includes(id))} onChange={() => toggleQuestionType(type)} />)}</>;
+  return <><window.MLH.MenuSubheading>Help</window.MLH.MenuSubheading><window.MLH.MenuToggleRow glyph={<span className="inline-flex h-[22px] min-w-[28px] items-center justify-center text-[12px] font-black leading-none text-black">ABC</span>} label="Show Note Names" checked={showNoteNames} onChange={() => setShowNoteNames((value) => !value)} /><window.MLH.MenuSubheading>Accidentals</window.MLH.MenuSubheading>{ACCIDENTALS.map((accidental) => <window.MLH.MenuToggleRow key={accidental.id} glyph={<AccidentalMenuGlyph id={accidental.id} />} label={accidental.name} checked={enabledAccidentals.includes(accidental.id)} onChange={() => toggleAccidental(accidental.id)} />)}<window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>{QUESTION_TYPE_OPTIONS.map((type) => <window.MLH.MenuToggleRow key={type.id} glyph={<QuestionTypeGlyph type={type.glyph} />} label={type.label} checked={type.typeIds.some((id) => enabledQuestionTypes.includes(id))} onChange={() => toggleQuestionType(type)} />)}</>;
 }
 function useInjectedStyles() {
   useEffect(() => {
@@ -1031,6 +1056,7 @@ function App() {
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [showNoteNames, setShowNoteNames] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState(null);
   const [placements, setPlacements] = useState([]);
   const [hoverPlacement, setHoverPlacement] = useState(null);
@@ -1183,7 +1209,7 @@ function App() {
                 }}
               />
               {customiseOpen && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise">
-                <MenuRows enabledAccidentals={enabledAccidentals} setEnabledAccidentals={setEnabledAccidentals} enabledQuestionTypes={enabledQuestionTypes} setEnabledQuestionTypes={setEnabledQuestionTypes} newQuestion={newQuestion} />
+                <MenuRows enabledAccidentals={enabledAccidentals} setEnabledAccidentals={setEnabledAccidentals} enabledQuestionTypes={enabledQuestionTypes} setEnabledQuestionTypes={setEnabledQuestionTypes} newQuestion={newQuestion} showNoteNames={showNoteNames} setShowNoteNames={setShowNoteNames} />
               </window.MLH.MenuPanel>}
             </div>
           </div>
@@ -1194,7 +1220,7 @@ function App() {
             <window.MLH.SkipButton onClick={() => { setStreak(0); newQuestion(); }} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />} />
           </div>
         </div>
-        <div className={`relative -top-[6px] ${mobileScoreHeight} flex items-center overflow-hidden transition-opacity duration-300 md:block md:h-[280px] md:flex-none ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbol={selectedSymbol} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} onMove={handleMove} onLeave={() => setHoverPlacement(null)} onLock={handleLock} /></div>
+        <div className={`relative -top-[6px] ${mobileScoreHeight} flex items-center overflow-hidden transition-opacity duration-300 md:block md:h-[280px] md:flex-none ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbol={selectedSymbol} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} onMove={handleMove} onLeave={() => setHoverPlacement(null)} onLock={handleLock} showNoteNames={showNoteNames} /></div>
         <div className="relative z-10 mx-0 mb-[10px] mt-auto h-auto min-h-0 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3 md:mb-0 md:mt-[50px]">
           <div className="flex items-start justify-between gap-3 text-stone-900">
             <div className={isPlacement ? "pb-2" : hasPlayButton ? "pb-3" : "pb-1 sm:pb-3"}>
@@ -1226,7 +1252,7 @@ function App() {
                       <span className="text-3xl font-black leading-none">{item.arrow}</span>
                     </span>
                   ) : (
-                    <span className="text-base font-semibold tracking-tight">{item.text}</span>
+                    <span className="text-base font-semibold tracking-tight"><NoteNameDisplay name={item.text} /></span>
                   )}
                 </button>
               ))}

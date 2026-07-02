@@ -119,7 +119,7 @@
       const timer = window.setTimeout(() => setAutoPopoverKey(0), 2000);
       return () => window.clearTimeout(timer);
     }, [confettiKey, effectiveMedalEligible]);
-    const autoMedalPopover = effectiveMedalEligible && (autoShowMedals || showMedalPopover || autoPopoverKey > 0);
+    const autoMedalPopover = effectiveMedalEligible && popover !== "streak" && (autoShowMedals || showMedalPopover || autoPopoverKey > 0);
     const shouldShowMedalPopover = popover === "streak" || autoMedalPopover;
     const medalStyle = !effectiveMedalEligible
       ? { backgroundColor: "#f5f5f4", color: "#a8a29e" }
