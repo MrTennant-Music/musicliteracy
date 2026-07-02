@@ -98,7 +98,7 @@
       onClick,
       dataMenuTrigger,
       className: "gap-1",
-      textClassName: isCustom ? "" : "sm:relative sm:-left-[3px]",
+      textClassName: isCustom ? "sm:relative sm:-left-[1px]" : "sm:relative sm:-left-[1.5px]",
     });
   }
 
