@@ -47,6 +47,8 @@ const NOTE_RX = 6.3;
 const STEM = 32;
 const BAR_COUNT = 8;
 const BARS_PER_SYSTEM = 4;
+const ACCOMP_MAX_MIDI = 67;
+const MEDAL_THRESHOLDS = [2, 4, 6, 10];
 const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS || {};
 const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || { drawing: {}, symbols: {} };
 
@@ -95,6 +97,14 @@ function sameEnabledSet(current, defaults) {
 
 function taskMatchesLevel(level, enabledTypes) {
   return sameEnabledSet(enabledTypes, LEVELS[level]?.types || LEVELS.N4.types);
+}
+
+function medalSoundForStreak(streak) {
+  if (streak >= 10) return "platinum";
+  if (streak >= 6) return "gold";
+  if (streak >= 4) return "silver";
+  if (streak >= 2) return "bronze";
+  return null;
 }
 
 const QUESTION_TYPE_LABELS = {
@@ -227,7 +237,6 @@ function sharedActualSymbolKey(key) {
 }
 
 function sharedSettingsKey(key) {
-  if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return "flatInScore";
   return key;
 }
 
@@ -289,6 +298,12 @@ function pitchForLetter(key, chord, letter, octave) {
   const chordAccidental = chordAccidentalForLetter(chord, letter);
   const accidental = chordAccidental !== null ? chordAccidental : keyAccidentalForLetter(key, letter);
   return naturalMidi + accidental;
+}
+
+function accompanimentChordMidi(key, chord, letter, octave) {
+  let midi = pitchForLetter(key, chord, letter, octave);
+  while (midi > ACCOMP_MAX_MIDI) midi -= 12;
+  return midi;
 }
 
 function CalibratedSymbol({ symbolKey, x, y: yy, colour = "currentColor", opacity = 1, lineGap = GAP, settingOverrides = {} }) {
@@ -936,7 +951,7 @@ function snap(pointer, selectedSymbolId) {
   if (selectedSymbolId === "start-repeat") return { symbolId: selectedSymbolId, barIndex, anchor: "start" };
   if (selectedSymbolId === "end-repeat") return { symbolId: selectedSymbolId, barIndex, anchor: "end" };
   if (selectedSymbolId === "first-time" || selectedSymbolId === "second-time") return { symbolId: selectedSymbolId, barIndex, anchor: "above" };
-  if (selectedSymbolId === "dc" || selectedSymbolId === "ds" || selectedSymbolId === "fine" || selectedSymbolId === "segno") return { symbolId: selectedSymbolId, barIndex, anchor: pointer.y > top + GAP * 4 + 18 ? "below" : "above" };
+  if (selectedSymbolId === "dc" || selectedSymbolId === "ds" || selectedSymbolId === "fine" || selectedSymbolId === "segno") return { symbolId: selectedSymbolId, barIndex, anchor: "above" };
   return null;
 }
 
@@ -960,7 +975,8 @@ function accidentalSymbolKey(value, context = "score") {
 
 function Accidental({ value, x, yy, colour = "currentColor", context = "score" }) {
   const symbolKey = accidentalSymbolKey(value, context);
-  return <CalibratedSymbol symbolKey={symbolKey} x={x} y={yy} colour={colour} settingOverrides={{ fontSizeScale: context === "keySignature" ? 2.8 : 2.55 }} />;
+  const xAdjust = context === "score" && value === 1 ? -4 : 0;
+  return <CalibratedSymbol symbolKey={symbolKey} x={x + xAdjust} y={yy} colour={colour} />;
 }
 
 const KEY_SIG_ORDER = { sharp: ["F", "C", "G", "D", "A", "E", "B"], flat: ["B", "E", "A", "D", "G", "C", "F"] };
@@ -1022,7 +1038,7 @@ function DcGlyph({ placement, colour = "currentColor", opacity = 1 }) {
 
 function DsGlyph({ placement, colour = "currentColor", opacity = 1 }) {
   const pos = placementPos(placement);
-  return <text x={pos.x} y={pos.y} opacity={opacity} fill={colour} fontFamily="Georgia, serif" fontSize="21" fontStyle="italic" fontWeight="700" textAnchor="middle" style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 6, strokeLinejoin: "round" }}>D.S. al Fine</text>;
+  return <text x={pos.x} y={pos.y} opacity={opacity} fill={colour} fontFamily="Georgia, serif" fontSize="18" fontStyle="italic" fontWeight="700" textAnchor="middle" style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 6, strokeLinejoin: "round" }}>D.S. al Fine</text>;
 }
 
 function FineGlyph({ placement, colour = "currentColor", opacity = 1 }) {
@@ -1063,8 +1079,8 @@ function SymbolGlyph({ id }) {
   return <svg viewBox="0 0 100 54" className="h-full w-full overflow-visible" aria-hidden="true">
     {id === "start-repeat" && <g transform="translate(12 1)"><StartRepeatGlyph x={34} y={8} /></g>}
     {id === "end-repeat" && <g transform="translate(-12 1)"><EndRepeatGlyph x={66} y={8} /></g>}
-    {id === "first-time" && <g transform="translate(1 15)" stroke="currentColor" fill="none" strokeWidth="2"><path d="M 20 18 L 20 4 L 76 4" /><text x="28" y="-3" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">1.</text></g>}
-    {id === "second-time" && <g transform="translate(1 15)" stroke="currentColor" fill="none" strokeWidth="2"><path d="M 20 18 L 20 4 L 76 4" /><text x="28" y="-3" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">2.</text></g>}
+    {id === "first-time" && <g transform="translate(1 20)" stroke="currentColor" fill="none" strokeWidth="2"><path d="M 20 18 L 20 4 L 76 4" /><text x="28" y="-3" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">1.</text></g>}
+    {id === "second-time" && <g transform="translate(1 20)" stroke="currentColor" fill="none" strokeWidth="2"><path d="M 20 18 L 20 4 L 76 4" /><text x="28" y="-3" fill="currentColor" stroke="none" fontFamily="serif" fontSize="17" fontWeight="900">2.</text></g>}
     {id === "repeat-pair" && <g transform="translate(0 1)"><StartRepeatGlyph x={21} y={8} /><EndRepeatGlyph x={79} y={8} /></g>}
     {id === "time-bars-pair" && <g stroke="currentColor" fill="none" strokeWidth="2">
       <path d="M 22 31.5 L 22 17.5 L 78 17.5" />
@@ -1075,7 +1091,7 @@ function SymbolGlyph({ id }) {
     {id === "dc" && <CalibratedSymbol symbolKey="daCapo" x={50} y={34} settingOverrides={{ fontSizeScale: 4.2 }} />}
     {id === "ds" && <text x="50" y="32" fill="currentColor" fontFamily="Georgia, serif" fontSize="17" fontStyle="italic" fontWeight="800" textAnchor="middle">D.S. al Fine</text>}
     {id === "fine" && <text x="50" y="33" fill="currentColor" fontFamily="Georgia, serif" fontSize="22" fontStyle="italic" fontWeight="700" textAnchor="middle">Fine</text>}
-    {id === "segno" && <CalibratedSymbol symbolKey="segno" x={50} y={33} settingOverrides={{ fontSizeScale: 2.45 }} />}
+    {id === "segno" && <CalibratedSymbol symbolKey="segno" x={50} y={37} settingOverrides={{ fontSizeScale: 2.9 }} />}
   </svg>;
 }
 
@@ -1193,13 +1209,13 @@ function QuestionTypeGlyph({ type }) {
     </svg>;
   }
   if (type === "dc") {
-    return <svg viewBox="0 0 40 28" className="h-[22px] w-[22px] overflow-visible" aria-hidden="true">
-      <text className={symbolClass} x="20" y="20" fontSize="25" textAnchor="middle">{sharedSymbolForKey("daCapo")}</text>
+    return <svg viewBox="0 0 40 32" className="h-[26px] w-[26px] overflow-visible" aria-hidden="true">
+      <text className={symbolClass} x="20" y="25" fontSize="32" textAnchor="middle">{sharedSymbolForKey("daCapo")}</text>
     </svg>;
   }
   if (type === "ds-fine") {
-    return <svg viewBox="0 0 40 28" className="h-[22px] w-[22px] overflow-visible" aria-hidden="true">
-      <text className={symbolClass} x="20" y="20" fontSize="25" textAnchor="middle">{sharedSymbolForKey("dalSegno")}</text>
+    return <svg viewBox="0 0 40 32" className="h-[26px] w-[26px] overflow-visible" aria-hidden="true">
+      <text className={symbolClass} x="20" y="25" fontSize="32" textAnchor="middle">{sharedSymbolForKey("segno")}</text>
     </svg>;
   }
   return null;
@@ -1324,6 +1340,7 @@ function App() {
   const [streak, setStreak] = useState(0);
   const [best, setBest] = useState(0);
   const [confettiKey, setConfettiKey] = useState(0);
+  const [autoShowMedals, setAutoShowMedals] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [followPlayback, setFollowPlayback] = useState(false);
   const [tempo, setTempo] = useState("andante");
@@ -1338,6 +1355,7 @@ function App() {
   const highlightTimersRef = useRef([]);
   const feedbackFadeTimerRef = useRef(null);
   const feedbackNextTimerRef = useRef(null);
+  const medalTimerRef = useRef(null);
   const levelTaskStatusRef = useRef(null);
 
   useClickOutside([levelRef, customiseRef], [() => levelOpen && setLevelOpen(false), () => customiseOpen && setCustomiseOpen(false)]);
@@ -1357,6 +1375,7 @@ function App() {
     levelTaskStatusRef.current = medalEligible;
     window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
     setConfettiKey(0);
+    setAutoShowMedals(false);
   }, [medalEligible]);
 
   function stopAudio(fade = false) {
@@ -1438,14 +1457,17 @@ function App() {
     setStreak(0);
     setBest(0);
     setConfettiKey(0);
+    setAutoShowMedals(false);
     newQuestion(activeLevel);
   }
 
   function clearFeedbackTimers() {
     clearTimeout(feedbackFadeTimerRef.current);
     clearTimeout(feedbackNextTimerRef.current);
+    clearTimeout(medalTimerRef.current);
     feedbackFadeTimerRef.current = null;
     feedbackNextTimerRef.current = null;
+    medalTimerRef.current = null;
   }
 
   function fadeToNext() {
@@ -1457,12 +1479,16 @@ function App() {
 
   function score(ok) {
     const ns = ok ? streak + 1 : 0;
-    const medalBefore = window.MLH?.getStreakMedal?.(streak);
-    const medalAfter = window.MLH?.getStreakMedal?.(ns);
+    clearFeedbackTimers();
     playFeedbackSound(ok);
-    if (medalEligible && ok && medalAfter && (!medalBefore || medalBefore.sound !== medalAfter.sound)) {
-      setConfettiKey((value) => value + 1);
-      setTimeout(() => playFeedbackSound(true, true, medalAfter.sound), 420);
+    if (ok) {
+      const medalSound = medalSoundForStreak(ns);
+      if (medalEligible && medalSound && MEDAL_THRESHOLDS.includes(ns)) {
+        setAutoShowMedals(true);
+        setConfettiKey((value) => value + 1);
+        medalTimerRef.current = setTimeout(() => setAutoShowMedals(false), 2000);
+        setTimeout(() => playFeedbackSound(true, true, medalSound), 180);
+      }
     }
     setAttempted(v => v + 1);
     setCorrect(v => v + (ok ? 1 : 0));
@@ -1529,7 +1555,6 @@ function App() {
       if (hasFirst && !hasSecond) setPromptMessage("A 1st time bar also needs a 2nd time bar.");
       if (!hasFirst && hasSecond) setPromptMessage("A 2nd time bar needs a matching 1st time bar.");
     }
-    if (question.type === "dc" && placements.some(p => p.symbolId === "dc" && p.anchor === "below")) setPromptMessage("D.C. must be placed above the stave.");
     if (question.type === "ds-fine" && placements.some(p => ["ds", "fine", "segno"].includes(p.symbolId) && p.anchor === "below")) setPromptMessage("D.S., Segno and Fine should be placed above the stave.");
 
     score(placementsMatch(question, placements) && wrongs.length === 0 && miss.length === 0);
@@ -1581,7 +1606,7 @@ function App() {
 
       const chordLetters = bar.chord?.notes || CHORDS.C;
       const bassFrequency = midiToFrequency(pitchForLetter(question.key, bar.chord, chordLetters[0], 2));
-      const chordFrequencies = chordLetters.map((letter, index) => midiToFrequency(pitchForLetter(question.key, bar.chord, letter, index === 0 ? 3 : 3 + index)));
+      const chordFrequencies = chordLetters.map((letter, index) => midiToFrequency(accompanimentChordMidi(question.key, bar.chord, letter, index === 0 ? 3 : 3 + index)));
       if (bar.barIndex === BAR_COUNT - 1) {
         playOscillator(ctx, { frequency: bassFrequency, start: relativeBarStart, duration: chordDur * 0.95, volume: 0.024, type: "sine", destination: master });
         chordFrequencies.forEach(frequency => {
@@ -1623,6 +1648,8 @@ function App() {
         resetScore={resetScore}
         medalEligible={medalEligible}
         confettiKey={confettiKey}
+        autoShowMedals={autoShowMedals}
+        medalThresholdValues={MEDAL_THRESHOLDS}
       />
     </window.MLH.AppHeader>
 

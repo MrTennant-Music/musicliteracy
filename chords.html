@@ -50,6 +50,7 @@ const CLEF_X = STAFF_LEFT + 8;
 const KEY_SIG_X = STAFF_LEFT + 54;
 const TIME_SIG_X = STAFF_LEFT + 82;
 const MUSIC_START_X = STAFF_LEFT + 118;
+const MEDAL_THRESHOLDS = [2, 4, 6, 10];
 const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS || {};
 const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || { drawing:{}, symbols:{} };
 const GLYPHS = {
@@ -93,6 +94,14 @@ const LEVELS = {
   H: { label: "Higher", description: "Identifying chords I, IV, V and VI in major and minor keys in treble and bass clefs" },
   AH: { label: "Advanced Higher", description: "1st and 2nd inversions of major and minor triads in the keys of C, G, F, D and B flat major and A, E and D minor · Chord II and its 1st inversion (major keys as listed above) · Identifying chords at cadence points and under melodies · Inserting chords at cadence points · Creating a bass line using chord information provided · Diminished 7th · Dominant 7th · Added 6th · Augmented triad" },
 };
+
+function medalSoundForStreak(streak) {
+  if (streak >= 10) return "platinum";
+  if (streak >= 6) return "gold";
+  if (streak >= 4) return "silver";
+  if (streak >= 2) return "bronze";
+  return null;
+}
 
 const TIME_SIGNATURES = [
   { id:"2/4", top:2, bottom:4, beats:2 },
@@ -245,6 +254,10 @@ function isN5AnswerCorrect(value, chord){
     ? ["am","amin","aminor"].map(normaliseChordAnswer)
     : [chord.shortName,`${chord.shortName}maj`,`${chord.shortName}major`].map(normaliseChordAnswer);
   return accepted.includes(answer);
+}
+function formatSingleLetterChordAnswer(value){
+  const text=String(value||"");
+  return /^[a-g]$/i.test(text) ? text.toUpperCase() : text;
 }
 function formatHigherAnswer(value){
   return String(value||"")
@@ -1094,14 +1107,15 @@ function N5ChoiceAnswers({question,answers,feedback,onSelect}){
     })}
   </div>;
 }
-function N5TypedAnswer({question,answers,setAnswers,feedback}){
+function N5TypedAnswer({question,answers,setAnswers,feedback,onConfirm}){
   const value=answers.n5Typed||"";
   const ok=isN5AnswerCorrect(value,question.chord);
   return <div className="flex flex-col gap-3 md:flex-row md:items-center">
     <input
       value={value}
       disabled={Boolean(feedback)}
-      onChange={e=>setAnswers(cur=>({...cur,n5Typed:e.target.value}))}
+      onChange={e=>setAnswers(cur=>({...cur,n5Typed:formatSingleLetterChordAnswer(e.target.value)}))}
+      onKeyDown={e=>{ if(e.key==="Enter" && !feedback && String(value||"").trim()){ e.preventDefault(); onConfirm?.(); } }}
       placeholder="Type your answer"
       className={window.MLH.typedAnswerClass(feedback ? {correct:ok} : null, "md:max-w-[320px]")}
     />
@@ -1139,14 +1153,15 @@ function AHChordChoiceAnswers({question,answers,feedback,onSelect}){
     })}
   </div>;
 }
-function AHChordTypedAnswer({question,answers,setAnswers,feedback}){
+function AHChordTypedAnswer({question,answers,setAnswers,feedback,onConfirm}){
   const value=answers.ahTyped||"";
   const ok=isAHChordTypeCorrect(value,question.chordType);
   return <div className="flex flex-col gap-3 md:flex-row md:items-center">
     <input
       value={value}
       disabled={Boolean(feedback)}
-      onChange={e=>setAnswers(cur=>({...cur,ahTyped:e.target.value}))}
+      onChange={e=>setAnswers(cur=>({...cur,ahTyped:formatSingleLetterChordAnswer(e.target.value)}))}
+      onKeyDown={e=>{ if(e.key==="Enter" && !feedback && String(value||"").trim()){ e.preventDefault(); onConfirm?.(); } }}
       placeholder="Type your answer"
       className={window.MLH.typedAnswerClass(feedback ? {correct:ok} : null, "md:max-w-[360px]")}
     />
@@ -1583,12 +1598,12 @@ function App(){
     setBest(v=>Math.max(v,ns));
     setFeedback({correct:ok});
     if(ok){
-      const medal=window.MLH?.getStreakMedal?.(ns);
-      if(medalEligible&&medal&&[10,15,20,30].includes(ns)){
+      const medalSound=medalSoundForStreak(ns);
+      if(medalEligible&&medalSound&&MEDAL_THRESHOLDS.includes(ns)){
         setConfettiKey(v=>v+1);
         setAutoShowMedals(true);
         feedbackTimersRef.current.push(setTimeout(()=>setAutoShowMedals(false),2000));
-        feedbackTimersRef.current.push(setTimeout(()=>playFeedbackSound(true,true,medal.sound),180));
+        feedbackTimersRef.current.push(setTimeout(()=>playFeedbackSound(true,true,medalSound),180));
       }
       feedbackTimersRef.current.push(setTimeout(()=>setFeedbackFading(true),1700));
       feedbackTimersRef.current.push(setTimeout(()=>newQuestion(),2000));
@@ -1774,6 +1789,7 @@ function App(){
         confettiKey={confettiKey}
         autoShowMedals={autoShowMedals}
         medalEligible={medalEligible}
+        medalThresholdValues={MEDAL_THRESHOLDS}
       />
     </window.MLH.AppHeader>
     <div className={SHELL.pageContentClass || "mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]"}>
@@ -1835,7 +1851,7 @@ function App(){
             {question.answerMode==="choice"
               ? <N5ChoiceAnswers question={question} answers={answers} feedback={feedback} onSelect={selectN5Choice}/>
               : <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                  <div className="min-w-0 flex-1"><N5TypedAnswer question={question} answers={answers} setAnswers={setAnswers} feedback={feedback}/></div>
+                  <div className="min-w-0 flex-1"><N5TypedAnswer question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} onConfirm={confirmAnswer}/></div>
                   <window.MLH.ConfirmButton disabled={Boolean(feedback) || !hasFullAnswer()} onClick={confirmAnswer}>Confirm</window.MLH.ConfirmButton>
                 </div>}
           </div>
@@ -1856,7 +1872,7 @@ function App(){
                   </button>
                 </div>
               : <div className="flex flex-col gap-3">
-                  <div className="min-w-0"><AHChordTypedAnswer question={question} answers={answers} setAnswers={setAnswers} feedback={feedback}/></div>
+                  <div className="min-w-0"><AHChordTypedAnswer question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} onConfirm={confirmAnswer}/></div>
                   <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <button onClick={()=>playQuestionAudio(0)} disabled={Boolean(feedback)} className={window.MLH.PlayButtonClass}>
                       <span className="text-lg leading-none">{playing?"■":"▶"}</span>

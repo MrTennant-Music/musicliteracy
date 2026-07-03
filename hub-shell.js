@@ -82,14 +82,21 @@
     resetScore,
     confettiKey = 0,
     autoShowMedals = false,
+    autoMedalPopoverMs = 2000,
     showMedalPopover = false,
     medalEligible = null,
     medalThresholdValues = null,
   }) {
     const [popover, setPopover] = React.useState(null);
+    const [autoPopoverKey, setAutoPopoverKey] = React.useState(0);
+    const [dismissedAutoPopoverKey, setDismissedAutoPopoverKey] = React.useState(0);
     const [autoMedalEligible, setAutoMedalEligible] = React.useState(true);
     const ref = React.useRef(null);
-    useClickAway(ref, () => setPopover(null));
+    useClickAway(ref, () => {
+      setPopover(null);
+      setAutoPopoverKey(0);
+      setDismissedAutoPopoverKey(confettiKey);
+    });
 
     React.useEffect(() => {
       const updateMedalEligibility = () => {
@@ -106,6 +113,8 @@
     const scoreFill = Math.max(0, Math.min(100, accuracy || 0));
     const scoreColour = scoreFill < 50 ? "rgba(220,38,38,.38)" : scoreFill < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)";
     const thresholdValues = Array.isArray(medalThresholdValues) && medalThresholdValues.length === 4 ? medalThresholdValues : [10, 15, 20, 30];
+    const autoPopoverDuration = Math.max(360, Number(autoMedalPopoverMs) || 2000);
+    const autoPopoverOutDelay = Math.max(0.28, (autoPopoverDuration - 240) / 1000);
     const thresholdBase = [
       { tier: "bronze", icon: assets.bronze, className: "text-amber-700" },
       { tier: "silver", icon: assets.silver, className: "text-slate-500" },
@@ -119,14 +128,15 @@
     }));
     const effectiveMedalEligible = medalEligible ?? autoMedalEligible;
     const medal = effectiveMedalEligible ? thresholds.find((item) => item.active) : null;
-    const [autoPopoverKey, setAutoPopoverKey] = React.useState(0);
     React.useEffect(() => {
       if (!effectiveMedalEligible || confettiKey <= 0) return;
+      setDismissedAutoPopoverKey(0);
       setAutoPopoverKey(confettiKey);
-      const timer = window.setTimeout(() => setAutoPopoverKey(0), 2000);
+      const timer = window.setTimeout(() => setAutoPopoverKey(0), autoPopoverDuration);
       return () => window.clearTimeout(timer);
-    }, [confettiKey, effectiveMedalEligible]);
-    const autoMedalPopover = effectiveMedalEligible && popover !== "streak" && (autoShowMedals || showMedalPopover || autoPopoverKey > 0);
+    }, [confettiKey, effectiveMedalEligible, autoPopoverDuration]);
+    const autoPopoverDismissed = confettiKey > 0 && dismissedAutoPopoverKey === confettiKey;
+    const autoMedalPopover = effectiveMedalEligible && popover !== "streak" && !autoPopoverDismissed && (autoShowMedals || showMedalPopover || autoPopoverKey > 0);
     const shouldShowMedalPopover = popover === "streak" || autoMedalPopover;
     const medalStyle = !effectiveMedalEligible
       ? { backgroundColor: "#f5f5f4", color: "#a8a29e" }
@@ -200,7 +210,7 @@
           ),
           shouldShowMedalPopover && React.createElement("div", {
             className: "fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]",
-            style: { animation: autoMedalPopover ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" },
+            style: { animation: autoMedalPopover ? `medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in ${autoPopoverOutDelay}s forwards` : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" },
           },
             React.createElement("div", { className: "flex items-end justify-center gap-3" },
               thresholds.map((item) => React.createElement("div", { key: item.value, className: `flex flex-col items-center justify-end ${effectiveMedalEligible && item.active ? "medal-threshold-active" : ""}` },
