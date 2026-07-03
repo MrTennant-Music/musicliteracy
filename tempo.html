@@ -11,14 +11,39 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-mobile.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=1.4"></script>
+  <script src="./hub-audio.js?v=20260703-metronome"></script>
   <script src="./hub-shell.js?v=1.3"></script>
   <script src="./hub-menu.js?v=20260702-menu-position"></script>
   <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
-    .music-symbol { font-family: "Bravura", serif; text-rendering: geometricPrecision; }
+    .music-symbol { font-family: "Bravura", serif; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
+    .chords-question-card > div.mt-3 {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .chords-question-card > div.mt-3 > div.mt-3 {
+      margin-top: 0;
+    }
+    @media (min-width: 768px) {
+      .chords-question-card > div.mt-3:not(:has(.justify-end)) {
+        position: absolute;
+        right: 1rem;
+        bottom: 1rem;
+        margin-top: 0;
+      }
+      .chords-question-card > div.mt-3:has(> div):not(:has(.justify-end)) {
+        position: static;
+        right: auto;
+        bottom: auto;
+        margin-top: 0.75rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -26,11 +51,13 @@
 <script type="text/babel">
 const { useEffect, useMemo, useRef, useState } = React;
 const useClickOutside = window.MLH.useClickOutside;
-const W = 920, H = 430, GAP = 10, BAR_COUNT = 8, BARS_PER_SYSTEM = 4;
-const STAFF_LEFT = 58, STAFF_RIGHT = 870, MUSIC_START = 142, SYSTEM_TOPS = [82, 214];
+const W = 920, H = 430, GAP = 11, BAR_COUNT = 8, BARS_PER_SYSTEM = 4;
+const STAFF_LEFT = 58, STAFF_RIGHT = 870, CLEF_X = STAFF_LEFT + 32, KEY_SIG_X = STAFF_LEFT + 62, TIME_SIG_X = STAFF_LEFT + 116, MUSIC_START = STAFF_LEFT + 126, SYSTEM_TOPS = [92, 224];
 const COLOUR = { green: "#16a34a", red: "#dc2626", blue: "#2563eb", black: "#000" };
+const NOTE = { rx: 8.2, stemLength: 21 };
 const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS || {};
-const MEDAL_THRESHOLDS = [2, 4, 6, 10];
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || { symbols: {}, drawing: {} };
+const MEDAL_THRESHOLDS = [10, 15, 20, 30];
 const ASSET = { appIcon: "./tempo-icon.svg", level: "https://mrtennant-music.github.io/musicliteracy/levels.svg", customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg", next: "https://mrtennant-music.github.io/musicliteracy/next.svg", eye: "./eye.svg", metronome: "./metronome.svg", tempo: "./tempo.svg", bronze: "https://mrtennant-music.github.io/musicliteracy/bronze.svg", silver: "https://mrtennant-music.github.io/musicliteracy/silver.svg", gold: "https://mrtennant-music.github.io/musicliteracy/gold.svg", diamond: "https://mrtennant-music.github.io/musicliteracy/diamond.svg" };
 function r(items) { return items[Math.floor(Math.random() * items.length)]; }
 function shuffle(items) { const a = [...items]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -40,34 +67,305 @@ function yForStep(step, top) { return top + GAP * 4 - step * (GAP / 2); }
 function barWidth() { return (STAFF_RIGHT - MUSIC_START) / BARS_PER_SYSTEM; }
 function getSystemTop(barIndex) { return barIndex < 4 ? SYSTEM_TOPS[0] : SYSTEM_TOPS[1]; }
 function getBarStart(barIndex) { return MUSIC_START + (barIndex % 4) * barWidth(); }
-function medalSoundForStreak(streak) { if (streak >= 10) return "platinum"; if (streak >= 6) return "gold"; if (streak >= 4) return "silver"; if (streak >= 2) return "bronze"; return null; }
+function medalSoundForStreak(streak) { if (streak >= 30) return "platinum"; if (streak >= 20) return "gold"; if (streak >= 15) return "silver"; if (streak >= 10) return "bronze"; return null; }
 function playFeedbackSound(correct, celebration = false, medal = null) { window.MLH?.playFeedbackSound?.(correct, celebration, medal); }
-function oscillator(ctx, frequency, start, duration, volume = 0.045, type = "triangle", destination = null) { const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = type; osc.frequency.value = frequency; gain.gain.setValueAtTime(0.0001, start); gain.gain.exponentialRampToValueAtTime(volume, start + 0.018); gain.gain.setValueAtTime(volume, Math.max(start + 0.02, start + duration - 0.06)); gain.gain.exponentialRampToValueAtTime(0.0001, start + duration); osc.connect(gain); gain.connect(destination || ctx.destination); osc.start(start); osc.stop(start + duration + 0.03); }
-function playClick(ctx, start, accented, destination) { const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = "square"; osc.frequency.value = accented ? 1400 : 950; gain.gain.setValueAtTime(accented ? 0.04 : 0.026, start); gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.045); osc.connect(gain); gain.connect(destination || ctx.destination); osc.start(start); osc.stop(start + 0.05); }
-function TrebleClef({ top }) { return <text className="music-symbol" x="76" y={top + 58} fontSize="86" textAnchor="middle">{SHARED_SYMBOLS.gClef || "𝄞"}</text>; }
-function TimeSignature({ top }) { return <g className="music-symbol" fontSize="32" textAnchor="middle" fontWeight="900"><text x="126" y={top + 18}>4</text><text x="126" y={top + 45}>4</text></g>; }
-function Staff({ top }) { return <g>{[0,1,2,3,4].map(i => <line key={i} x1="58" x2="870" y1={top + i * GAP} y2={top + i * GAP} stroke="currentColor" strokeWidth="1.4"/> )}<TrebleClef top={top}/><TimeSignature top={top}/>{[0,1,2,3,4].map(i => <line key={i} x1={MUSIC_START + i * barWidth()} x2={MUSIC_START + i * barWidth()} y1={top} y2={top + GAP * 4} stroke="currentColor" strokeWidth={i === 4 ? 2.3 : 1.4}/> )}</g>; }
-function Note({ note, active=false }) { const yy = yForStep(note.step, getSystemTop(note.bar)); const stemDown = note.step > 4; const stemX = note.x + (stemDown ? -6 : 6); const stemEnd = yy + (stemDown ? 30 : -30); return <g opacity={active ? 1 : 0.98}><ellipse cx={note.x} cy={yy} rx="6.4" ry="4.5" fill={note.open ? "white" : active ? COLOUR.blue : "black"} stroke="black" strokeWidth="2" transform={`rotate(-18 ${note.x} ${yy})`}/>{!note.whole && <line x1={stemX} x2={stemX} y1={yy} y2={stemEnd} stroke="black" strokeWidth="1.8"/>}</g>; }
-function Score({ question, activeNoteId=null, placement=null, hoverPlacement=null, onPointerMove, onPointerLeave, onPointerDown }) { return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none overflow-visible touch-none" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerDown={onPointerDown}><rect width={W} height={H} fill="transparent"/>{SYSTEM_TOPS.map((top, i) => <Staff key={i} top={top}/> )}{question.notes.map(note => <Note key={note.id} note={note} active={activeNoteId === note.id}/> )}<text x="154" y="70" fontSize="16" fontWeight="800">1</text><text x="336" y="70" fontSize="16" fontWeight="800">2</text><text x="518" y="70" fontSize="16" fontWeight="800">3</text><text x="700" y="70" fontSize="16" fontWeight="800">4</text><text x="154" y="202" fontSize="16" fontWeight="800">5</text><text x="336" y="202" fontSize="16" fontWeight="800">6</text><text x="518" y="202" fontSize="16" fontWeight="800">7</text><text x="700" y="202" fontSize="16" fontWeight="800">8</text>{hoverPlacement && <TempoMark placement={hoverPlacement} opacity="0.45"/>}{placement && <TempoMark placement={placement}/>}</svg>; }
-function TempoMark({ placement, opacity = 1 }) { if (!placement?.term) return null; const x = getBarStart(placement.barIndex) + barWidth() / 2; const y = getSystemTop(placement.barIndex) - 22; return <text x={x} y={y} opacity={opacity} fill="black" fontFamily="Georgia, serif" fontSize="21" fontStyle="italic" fontWeight="800" textAnchor="middle" style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 5, strokeLinejoin: "round" }}>{placement.term.label}</text>; }
+function oscillator(ctx, gainNode, frequency, start, duration, volume = 0.035, type = "sine", release = 0.08) { const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = type; osc.frequency.setValueAtTime(frequency, start); gain.gain.setValueAtTime(0.0001, start); gain.gain.exponentialRampToValueAtTime(volume, start + 0.03); gain.gain.setValueAtTime(volume * 0.92, start + Math.max(0.04, duration)); gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + release); osc.connect(gain); gain.connect(gainNode); osc.start(start); osc.stop(start + duration + release + 0.02); }
+function playClick(ctx, gainNode, start, accented) { window.MLH?.playMetronomeClick?.(ctx, gainNode, start, accented); }
+function sharedActualSymbolKey(key) { if (key === "flatInScore" || key === "flatKeySignature") return "flat"; if (key === "naturalInScore") return "natural"; if (key === "sharpInScore" || key === "sharpKeySignature") return "sharp"; if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack"; if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot"; return key; }
+function sharedSettingsKey(key) { if (key === "flatKeySignature" || key === "sharpKeySignature") return SHARED_CONFIG.symbols?.keySignatureAccidentals ? "keySignatureAccidentals" : key; if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return SHARED_CONFIG.symbols?.scoreAccidentals ? "scoreAccidentals" : key; return key; }
+function sharedSymbolConfig(key) { const symbols = SHARED_CONFIG.symbols || {}; const settingsKey = sharedSettingsKey(key); return symbols[settingsKey] || symbols[sharedActualSymbolKey(settingsKey)] || { fontSizeScale: 3.4, xOffsetScale: 0, yOffsetScale: 0, widthScale: 1, heightScale: 1, opticalXOffset: 0, opticalYOffset: 0 }; }
+function sharedSymbolForKey(key) { return SHARED_SYMBOLS[sharedActualSymbolKey(key)] || ""; }
+function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = GAP, settingOverrides = {} }) { const glyph = sharedSymbolForKey(symbolKey); if (!glyph) return null; const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides }; const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0); const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0); const fontSize = lineGap * Number(settings.fontSizeScale || 3.4); const widthScale = Number(settings.widthScale || 1); const heightScale = Number(settings.heightScale || 1); return <text className="music-symbol" x={adjustedX} y={adjustedY} fill={colour} opacity={opacity} fontSize={fontSize} textAnchor="middle" transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`} pointerEvents="none">{glyph}</text>; }
+function CalibratedTimeSignature({ x, y }) { const settings = sharedSymbolConfig("timeSig44"); const adjustedX = x + GAP * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0); const adjustedY = y + GAP * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0); const fontSize = GAP * Number(settings.fontSizeScale || 3.5); const widthScale = Number(settings.widthScale || 1); const heightScale = Number(settings.heightScale || 1); return <g transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`} fill="currentColor"><text className="music-symbol" x={adjustedX} y={adjustedY - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{sharedSymbolForKey("timeSig4")}</text><text className="music-symbol" x={adjustedX} y={adjustedY + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{sharedSymbolForKey("timeSig4")}</text></g>; }
+function noteSymbolKey(rhythm, down, beamed = false) { if (rhythm === "semibreve") return "wholeNote"; if (rhythm === "minim" || rhythm === "dottedMinim") return down ? "halfNoteStemDown" : "halfNoteStemUp"; if (rhythm === "quaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp"; if (rhythm === "quaver") return down ? "eighthNoteStemDown" : "eighthNoteStemUp"; return down ? "quarterNoteStemDown" : "quarterNoteStemUp"; }
+function LedgerLines({ x, step, top, colour = "currentColor" }) { const ledgerSteps = []; for (let s = -2; s >= step; s -= 2) ledgerSteps.push(s); for (let s = 10; s <= step; s += 2) ledgerSteps.push(s); const settings = sharedSymbolConfig("ledgerLines"); const halfWidth = (GAP * Number(SHARED_CONFIG.drawing?.ledgerLineWidthScale || 2.4) * Number(settings.widthScale || 1)) / 2; const thickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11) * Number(settings.heightScale || 1)); return <g>{ledgerSteps.map(s => <line key={s} x1={x - halfWidth} x2={x + halfWidth} y1={yForStep(s, top)} y2={yForStep(s, top)} stroke={colour} strokeWidth={thickness}/>)}</g>; }
+function Accidental({ value, x, y, colour = "currentColor" }) { if (!value) return null; return <CalibratedSymbol symbolKey={value === 1 ? "sharpInScore" : "flatInScore"} x={x + (value === 1 ? -2 : 0)} y={y} colour={colour}/>; }
+function KeySignature({ keySignature, top }) { return <g>{(keySignature.signature || []).map((item, index) => <CalibratedSymbol key={`${item.type}-${index}`} symbolKey={item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature"} x={KEY_SIG_X + index * 14} y={yForStep(item.step, top)}/>)}</g>; }
+function TimeSignature({ top }) { return <CalibratedTimeSignature x={TIME_SIG_X} y={top + 14.8}/>; }
+function Staff({ top, question, systemIndex, hiddenBarNumber }) { const finalX = MUSIC_START + BARS_PER_SYSTEM * barWidth(); return <g>{[0,1,2,3,4].map(i => <line key={i} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={top + i * GAP} y2={top + i * GAP} stroke="currentColor" strokeWidth="1.2"/>)}<CalibratedSymbol symbolKey="gClef" x={CLEF_X} y={yForStep(2, top)}/><KeySignature keySignature={question.key} top={top}/><TimeSignature top={top}/>{[0,1,2,3].map(localBar => { const barIndex = systemIndex * BARS_PER_SYSTEM + localBar; if (barIndex === hiddenBarNumber) return null; const start = getBarStart(barIndex); return <text key={`bar-number-${barIndex}`} x={localBar === 0 ? start - 15 : start + 5} y={top - 18} fontSize="13" fontWeight="600">{barIndex + 1}</text>; })}{[1,2,3].map(i => <line key={i} x1={MUSIC_START + i * barWidth()} x2={MUSIC_START + i * barWidth()} y1={top} y2={top + GAP * 4} stroke="currentColor" strokeWidth="1.2"/>)}{systemIndex === 1 ? <><line x1={finalX - 5} x2={finalX - 5} y1={top - 0.5} y2={top + GAP * 4 + 0.5} stroke="currentColor" strokeWidth="1.4"/><line x1={finalX} x2={finalX} y1={top - 0.5} y2={top + GAP * 4 + 0.5} stroke="currentColor" strokeWidth="4"/></> : <line x1={finalX} x2={finalX} y1={top} y2={top + GAP * 4} stroke="currentColor" strokeWidth="1.2"/>}</g>; }
+function stemData(note, x, y, stemDownOverride = null, forcedStemEndY = null) { const stemDown = stemDownOverride ?? note.step > 4; const isDownQuaver = stemDown && note.rhythm === "quaver"; let stemX = stemDown ? x - NOTE.rx + 2 : x + NOTE.rx; if (stemDown) { stemX += 1.25; if (note.rhythm === "minim") stemX -= 1; else if (note.rhythm === "quaver") stemX -= 2; else if (note.rhythm === "crotchet" || note.rhythm === "dottedCrotchet") stemX -= 1; } else { stemX -= 1.65; } const naturalStemEndY = stemDown ? y + NOTE.stemLength : y - NOTE.stemLength; const naturalAdjustedStemEndY = stemDown ? naturalStemEndY + (isDownQuaver ? 3 : 5) : naturalStemEndY - 4; return { down:stemDown, stemDown, stemX:isDownQuaver ? stemX + 1 : stemX, startY:y, stemEndY:forcedStemEndY ?? naturalAdjustedStemEndY }; }
+function getQuaverGroup(notes, index) { if (notes[index]?.rhythm !== "quaver") return null; let start = index, end = index; while (start > 0 && notes[start - 1]?.rhythm === "quaver") start--; while (end < notes.length - 1 && notes[end + 1]?.rhythm === "quaver") end++; return end > start ? { start, end } : null; }
+function beamYAtX(x, start, end) { if (!start || !end || start.x === end.x) return start?.y ?? end?.y ?? 0; return start.y + ((x - start.x) / (end.x - start.x)) * (end.y - start.y); }
+function notesWithBarAccidentals(notes) { const shown = new Set(); return notes.map(note => { if (!note.writtenAccidental) return note; const key = `${note.letter}:${note.writtenAccidental}`; if (shown.has(key)) return { ...note, writtenAccidental:null }; shown.add(key); return note; }); }
+function calculateBarPositions(notes, startX, endX) { const totalSpacing = notes.reduce((sum, note, index) => { const isGroupedQuaver = note.rhythm === "quaver" && (notes[index - 1]?.rhythm === "quaver" || notes[index + 1]?.rhythm === "quaver"); const boost = isGroupedQuaver ? 1.15 : 1; const accidentalSpace = note.writtenAccidental ? 0.45 : 0; return sum + rhythmInfo(note.rhythm).spacing * boost + accidentalSpace; }, 0); const unit = Math.max(1, endX - startX - 18) / Math.max(1, totalSpacing); let cursor = startX + 12; return notes.map((note, index) => { if (note.writtenAccidental) cursor += unit * 0.45; const x = cursor; const isGroupedQuaver = note.rhythm === "quaver" && (notes[index - 1]?.rhythm === "quaver" || notes[index + 1]?.rhythm === "quaver"); const boost = isGroupedQuaver ? 1.15 : 1; cursor += rhythmInfo(note.rhythm).spacing * unit * boost; return x; }); }
+function getLayout(question) { const width = barWidth(); const positions = {}; question.bars.forEach((bar, barIndex) => { const displayNotes = notesWithBarAccidentals(bar.notes); const system = Math.floor(barIndex / BARS_PER_SYSTEM); const localBar = barIndex % BARS_PER_SYSTEM; const startX = MUSIC_START + localBar * width + 10; const endX = MUSIC_START + (localBar + 1) * width - 7; const xs = calculateBarPositions(displayNotes, startX, endX); bar.notes.forEach((note, noteIndex) => { positions[note.id] = { x:xs[noteIndex], y:yForStep(note.step, SYSTEM_TOPS[system]), step:note.step }; }); }); return { positions, barWidth:width }; }
+function getPositionedNotes(bar, layout) { return notesWithBarAccidentals(bar.notes).map(note => ({ ...note, x:layout.positions[note.id].x })); }
+function getBeamData(notes, group, top) { const groupNotes = notes.slice(group.start, group.end + 1); const steps = groupNotes.map(note => note.step); const averageStep = steps.reduce((sum, step) => sum + step, 0) / steps.length; const down = averageStep > 4; const stems = groupNotes.map(note => stemData(note, note.x, yForStep(note.step, top), down)); const directions = steps.slice(1).map((step, index) => Math.sign(step - steps[index])).filter(direction => direction !== 0); const changesDirection = directions.some((direction, index) => index > 0 && direction !== directions[index - 1]); const isStepwise = steps.every((step, index) => index === 0 || Math.abs(step - steps[index - 1]) <= 2); const extend = 0.5; if (changesDirection || !isStepwise) { const anchorY = stems.reduce((sum, stem) => sum + stem.stemEndY, 0) / stems.length; return { down, stemDown:down, start:{ x:stems[0].stemX - extend, y:anchorY }, end:{ x:stems.at(-1).stemX + extend, y:anchorY } }; } const sortedSteps = [...steps].sort((a, b) => a - b); const anchorStep = sortedSteps[Math.floor(sortedSteps.length / 2)]; const anchorIndex = steps.findIndex(step => step === anchorStep); const anchorStem = stems[anchorIndex]; const firstStem = stems[0]; const lastStem = stems.at(-1); const slope = clamp((steps.at(-1) - steps[0]) * -1.2, -4, 4); const slopePerX = slope / Math.max(1, lastStem.stemX - firstStem.stemX); return { down, stemDown:down, start:{ x:firstStem.stemX - extend, y:anchorStem.stemEndY - slopePerX * (anchorStem.stemX - firstStem.stemX) }, end:{ x:lastStem.stemX + extend, y:anchorStem.stemEndY + slopePerX * (lastStem.stemX - anchorStem.stemX) } }; }
+function NoteGlyph({ note, position, active=false, beamed=false, stemDownOverride=null, forcedStemEndY=null }) { const top = getSystemTop(note.barIndex); const xx = position.x; const yy = position.y - 1; const down = stemDownOverride ?? position.step > 4; const colour = active ? COLOUR.blue : "currentColor"; const dotKey = Math.abs(position.step % 2) === 1 ? "augmentationDotSpace" : "augmentationDotLine"; const dotY = Math.abs(position.step % 2) === 1 ? yy : yy - GAP * 0.25; const stem = stemData(note, xx, yy, down, forcedStemEndY); const stemThickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12)); return <g opacity={active ? 1 : 0.98}><LedgerLines x={xx} step={position.step} top={top} colour={colour}/><Accidental value={note.writtenAccidental} x={xx - GAP * 1.75} y={yy + 2} colour={colour}/><CalibratedSymbol symbolKey={noteSymbolKey(note.rhythm, stem.stemDown, beamed)} x={xx} y={yy + 1} colour={colour}/>{beamed && <line x1={stem.stemX} x2={stem.stemX} y1={yy} y2={stem.stemEndY} stroke={colour} strokeWidth={stemThickness}/>} {(note.rhythm === "dottedMinim" || note.rhythm === "dottedCrotchet") && <CalibratedSymbol symbolKey={dotKey} x={xx + GAP * 1.35} y={dotY} colour={colour}/>}</g>; }
+function beamYOffset(beam) { return beam.stemDown ? 5.5 : -1.5; }
+function Beam({ beam }) { const beamShift = beam.stemDown ? -1 : 1; const yOffset = beamYOffset(beam); const beamStartX = beam.stemDown ? beam.start.x + beamShift + 1 : beam.start.x + beamShift - 1; const beamEndX = beam.stemDown ? beam.end.x + beamShift + 1 : beam.end.x + beamShift - 1; const beamSettings = sharedSymbolConfig("quaverBeam"); const beamThickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42) * Number(beamSettings.fontSizeScale || 1)); return <line x1={beamStartX} y1={beam.start.y + yOffset} x2={beamEndX} y2={beam.end.y + yOffset} stroke="currentColor" strokeWidth={beamThickness} strokeLinecap="butt"/>; }
+function Score({ question, activeNoteId=null, placement=null, hoverPlacement=null, feedback=null, onPointerMove, onPointerLeave, onPointerDown }) { const layout = getLayout(question); return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none overflow-visible touch-none" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerDown={onPointerDown}><rect width={W} height={H} fill="transparent"/>{SYSTEM_TOPS.map((top, index) => <Staff key={index} top={top} question={question} systemIndex={index} hiddenBarNumber={placement?.barIndex}/>)}{question.bars.map(bar => { const rendered = new Set(); const notes = getPositionedNotes(bar, layout); const top = getSystemTop(bar.barIndex); return <g key={bar.barIndex}>{notes.map((note, index) => { const group = getQuaverGroup(notes, index); const beam = group ? getBeamData(notes, group, top) : null; const position = layout.positions[note.id]; const stem = beam ? stemData(note, position.x, position.y, beam.stemDown) : null; let forcedStemEndY = beam && stem ? beamYAtX(stem.stemX, beam.start, beam.end) + beamYOffset(beam) : null; if (beam && stem && forcedStemEndY !== null) { const stemLength = Math.abs(forcedStemEndY - position.y); if (stemLength < 15) forcedStemEndY = stem.stemDown ? position.y + 15 : position.y - 15; } return <React.Fragment key={note.id}><NoteGlyph note={note} position={position} active={activeNoteId === note.id} beamed={Boolean(group)} stemDownOverride={beam?.stemDown ?? null} forcedStemEndY={forcedStemEndY}/>{group && group.start === index && !rendered.has(`${bar.barIndex}-${group.start}`) && (() => { rendered.add(`${bar.barIndex}-${group.start}`); return <Beam beam={beam}/>; })()}</React.Fragment>; })}</g>; })}{hoverPlacement && <TempoMark placement={hoverPlacement} opacity="0.45"/>}{placement && <TempoMark placement={placement} feedback={feedback}/>}</svg>; }
+function TempoMark({ placement, opacity = 1, feedback = null }) { if (!placement?.term) return null; const x = placement.barIndex === 0 ? KEY_SIG_X - GAP * 0.15 : getBarStart(placement.barIndex) + GAP * 0.35; const y = getSystemTop(placement.barIndex) - 22; const colour = feedback ? (feedback.correct ? COLOUR.green : COLOUR.red) : "black"; return <text x={x} y={y} opacity={opacity} fill={colour} fontFamily="Georgia, serif" fontSize="17" fontStyle="italic" fontWeight="800" textAnchor="start" style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 4, strokeLinejoin: "round" }}>{placement.term.label}</text>; }
 
-const LEVELS = { N3:{label:"National 3", description:"Allegro and Adagio"}, N4:{label:"National 4", description:"Andante"}, N5:{label:"National 5", description:"Moderato"} };
-const TERMS = { adagio:{label:"Adagio", bpm:60, levels:["N3","N4","N5"], group:"slow", aliases:["adagio","slow"]}, allegro:{label:"Allegro", bpm:130, levels:["N3","N4","N5"], group:"fast", aliases:["allegro","fast"]}, andante:{label:"Andante", bpm:90, levels:["N4","N5"], group:"middle", aliases:["andante","moderato","walkingpace","moderate"]}, moderato:{label:"Moderato", bpm:90, levels:["N5"], group:"middle", aliases:["moderato","andante","moderate"]} };
-const LEVEL_TERMS = { N3:["adagio","allegro"], N4:["adagio","allegro","andante"], N5:["adagio","allegro","andante","moderato"] };
-const NOTE_STEPS = { C:-2, D:-1, E:0, F:1, G:2, A:3, B:4 };
-const NOTE_MIDI = { C:60, D:62, E:64, F:65, G:67, A:69, B:71 };
-const PATTERNS = [["C","D","E","G"],["G","E","D","C"],["E","G","A","G"],["C","E","G","E"]];
+const LEVELS = { N3:{label:"National 3", description:"Allegro • Adagio"}, N4:{label:"National 4", description:"Andante"}, N5:{label:"National 5", description:"Moderato"} };
+const TERMS = { adagio:{label:"Adagio", bpm:60, bpmOptions:[50,60], levels:["N3","N4","N5"], group:"slow", aliases:["adagio","slow"]}, allegro:{label:"Allegro", bpm:130, bpmOptions:[130,140], levels:["N3","N4","N5"], group:"fast", aliases:["allegro","fast"]}, andante:{label:"Andante", bpm:90, bpmOptions:[90], levels:["N4","N5"], group:"middle", aliases:["andante","moderato","walkingpace","moderate"]}, moderato:{label:"Moderato", bpm:90, bpmOptions:[90], levels:["N5"], group:"middle", aliases:["moderato","andante","moderate"]} };
+const LEVEL_TERMS = { N3:["adagio","allegro"], N4:["adagio","andante","allegro"], N5:["adagio","andante","moderato","allegro"] };
+const TEMPOS = [{ id:"slow", label:"Adagio", bpm:60 }, { id:"middle", label:"Andante", bpm:90 }, { id:"fast", label:"Allegro", bpm:130 }];
+const RHYTHMS = {
+  quaver: { beats: 0.5, spacing: 1.45 },
+  crotchet: { beats: 1, spacing: 2.25 },
+  dottedCrotchet: { beats: 1.5, spacing: 3.1 },
+  minim: { beats: 2, spacing: 4 },
+  dottedMinim: { beats: 3, spacing: 6 },
+  semibreve: { beats: 4, spacing: 8 },
+};
+const BAR_PATTERNS = [
+  ["crotchet", "crotchet", "crotchet", "crotchet"],
+  ["minim", "crotchet", "crotchet"],
+  ["crotchet", "crotchet", "minim"],
+  ["dottedMinim", "crotchet"],
+  ["crotchet", "dottedMinim"],
+  ["dottedCrotchet", "quaver", "minim"],
+  ["minim", "dottedCrotchet", "quaver"],
+  ["quaver", "quaver", "quaver", "quaver", "minim"],
+  ["minim", "quaver", "quaver", "quaver", "quaver"],
+  ["quaver", "quaver", "crotchet", "crotchet", "crotchet"],
+  ["crotchet", "quaver", "quaver", "crotchet", "crotchet"],
+];
+const ACCOMPANIMENT_PATTERNS = ["bassChord", "bassTwoChords", "bassChordBassChord", "offbeatChords", "lightPulse"];
+const NOTE_POOL = [
+  { letter: "C", octave: 4, step: -2, midi: 60 },
+  { letter: "D", octave: 4, step: -1, midi: 62 },
+  { letter: "E", octave: 4, step: 0, midi: 64 },
+  { letter: "F", octave: 4, step: 1, midi: 65 },
+  { letter: "G", octave: 4, step: 2, midi: 67 },
+  { letter: "A", octave: 4, step: 3, midi: 69 },
+  { letter: "B", octave: 4, step: 4, midi: 71 },
+  { letter: "C", octave: 5, step: 5, midi: 72 },
+  { letter: "D", octave: 5, step: 6, midi: 74 },
+  { letter: "E", octave: 5, step: 7, midi: 76 },
+  { letter: "F", octave: 5, step: 8, midi: 77 },
+  { letter: "G", octave: 5, step: 9, midi: 79 },
+  { letter: "A", octave: 5, step: 10, midi: 81 },
+];
+const KEYS = [
+  { id:"C", name:"C major", major:true, tonic:"C", signature:[], chords:{ I:["C", "E", "G"], IV:["F", "A", "C"], V:["G", "B", "D"], VI:["A", "C", "E"] } },
+  { id:"F", name:"F major", major:true, tonic:"F", signature:[{ type:"flat", step:4 }], chords:{ I:["F", "A", "C"], IV:["B", "D", "F"], V:["C", "E", "G"], VI:["D", "F", "A"] } },
+  { id:"G", name:"G major", major:true, tonic:"G", signature:[{ type:"sharp", step:8 }], chords:{ I:["G", "B", "D"], IV:["C", "E", "G"], V:["D", "F", "A"], VI:["E", "G", "B"] } },
+  { id:"Am", name:"A minor", major:false, tonic:"A", signature:[], chords:{ I:["A", "C", "E"], IV:["D", "F", "A"], V:["E", "G", "B"], VI:["F", "A", "C"] }, raised:{ V:{ G:1 } } },
+];
 function levelFromUrl(){ const raw = new URLSearchParams(location.search).get("level") || "N3"; return LEVELS[raw] ? raw : "N3"; }
 function equivalent(a,b){ return TERMS[a]?.group === TERMS[b]?.group; }
 function termIdsForLevel(level){ return LEVEL_TERMS[level] || LEVEL_TERMS.N3; }
 function safeEnabled(ids, level){ const available=termIdsForLevel(level); const filtered=ids.filter(id=>available.includes(id)); return level === "N3" ? available : filtered.length >= 2 ? filtered : available; }
+function taskMatchesLevel(level, enabledIds){ const expected = termIdsForLevel(level); const actual = safeEnabled(enabledIds, level); return expected.length === actual.length && expected.every(id => actual.includes(id)); }
+function chooseAnswerId(level, enabledIds){
+  const ids = safeEnabled(enabledIds, level);
+  const groups = [...new Set(ids.map(id => TERMS[id].group))];
+  const group = r(groups);
+  return r(ids.filter(id => TERMS[id].group === group));
+}
 function normalize(value){ return String(value||"").toLowerCase().replace(/[\s\-]+/g,""); }
 function isCorrectText(value, id){ const answer=normalize(value); return TERMS[id].aliases.map(normalize).includes(answer); }
-function makeNote(id, bar, beat, letter, beats=1, open=false){ return { id, bar, beat, letter, step:NOTE_STEPS[letter], midi:NOTE_MIDI[letter], x:getBarStart(bar) + 28 + beat * (barWidth()/4), open, whole: beats >= 4, beats }; }
-function buildQuestion(level, enabled){ const answerId=r(safeEnabled(enabled,level)); const notes=[]; for(let bar=0;bar<BAR_COUNT;bar++){ const pattern=PATTERNS[bar%PATTERNS.length]; pattern.forEach((letter,i)=>notes.push(makeNote(`${bar}-${i}`,bar,i,letter,i===3?1:1,false))); } return { id:Date.now()+Math.random(), level, answerId, answer:TERMS[answerId], mode:r(["choice","text","place"]), notes }; }
-function TempoMenuRows({ level, enabled, setEnabled, metronome, setMetronome, follow, setFollow }){ const available=termIdsForLevel(level); function toggle(id){ if(level==="N3") return; const checked=enabled.includes(id); const next=checked?enabled.filter(x=>x!==id):[...enabled,id]; if(next.length<2)return; setEnabled(safeEnabled(next,level)); } return <><div className="px-2 pb-1 text-xs font-black uppercase tracking-[0.16em] text-stone-400">Audio</div><window.MLH.MenuToggleRow glyph={<img src={ASSET.metronome} alt="" className="h-6 w-6"/>} label="Metronome" checked={metronome} onChange={()=>setMetronome(v=>!v)}/><window.MLH.MenuToggleRow glyph={<img src={ASSET.eye} alt="" className="h-6 w-6"/>} label="Follow Playback" checked={follow} onChange={()=>setFollow(v=>!v)}/>{level!=="N3"&&<><div className="px-2 pb-1 pt-4 text-xs font-black uppercase tracking-[0.16em] text-stone-400">Tempos</div>{available.map(id=><window.MLH.MenuToggleRow key={id} glyph={<span className="text-sm font-black">{TERMS[id].label[0]}</span>} label={TERMS[id].label} checked={enabled.includes(id)} disabled={enabled.includes(id)&&enabled.length<=2} onChange={()=>toggle(id)}/>)}</>}</>; }
-function pointerToPlacement(event, term){ const rect=event.currentTarget.getBoundingClientRect(); const x=((event.clientX-rect.left)/rect.width)*W; const y=((event.clientY-rect.top)/rect.height)*H; const system=y < (SYSTEM_TOPS[0]+SYSTEM_TOPS[1])/2 ? 0 : 1; const barIndex=system*4+clamp(Math.floor((x-MUSIC_START)/barWidth()),0,3); return { barIndex, term }; }
-function App(){ const [activeLevel,setActiveLevel]=useState(levelFromUrl()); const [enabled,setEnabled]=useState(()=>termIdsForLevel(levelFromUrl())); const [question,setQuestion]=useState(()=>buildQuestion(levelFromUrl(),termIdsForLevel(levelFromUrl()))); const [selected,setSelected]=useState(null), [typed,setTyped]=useState(""), [placement,setPlacement]=useState(null), [hover,setHover]=useState(null); const [feedback,setFeedback]=useState(null), [feedbackFading,setFeedbackFading]=useState(false), [prompt,setPrompt]=useState(""); const [correct,setCorrect]=useState(0), [attempted,setAttempted]=useState(0), [streak,setStreak]=useState(0), [best,setBest]=useState(0), [confetti,setConfetti]=useState(0), [autoShowMedals,setAutoShowMedals]=useState(false); const [levelOpen,setLevelOpen]=useState(false), [customiseOpen,setCustomiseOpen]=useState(false), [metronome,setMetronome]=useState(false), [follow,setFollow]=useState(false), [playing,setPlaying]=useState(false), [activeNoteId,setActiveNoteId]=useState(null); const levelRef=useRef(null), customiseRef=useRef(null), audioRef=useRef(null), timers=useRef([]); useClickOutside([levelRef,customiseRef],[()=>setLevelOpen(false),()=>setCustomiseOpen(false)]); useEffect(()=>()=>stopAudio(),[]); function clearTimers(){timers.current.forEach(clearTimeout);timers.current=[];} function stopAudio(){clearTimers(); if(audioRef.current){try{audioRef.current.close();}catch{}} audioRef.current=null; setPlaying(false); setActiveNoteId(null);} function newQuestion(level=activeLevel, ids=enabled){stopAudio(); setQuestion(buildQuestion(level,safeEnabled(ids,level))); setSelected(null); setTyped(""); setPlacement(null); setHover(null); setFeedback(null); setFeedbackFading(false); setPrompt("");} function applyLevel(level){setActiveLevel(level); const ids=termIdsForLevel(level); setEnabled(ids); const url=new URL(location.href); url.searchParams.set("level",level); history.replaceState(null,"",url.toString()); newQuestion(level,ids); setLevelOpen(false);} function score(ok){ const ns=ok?streak+1:0; playFeedbackSound(ok); setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){const medal=medalSoundForStreak(ns); if(medal&&MEDAL_THRESHOLDS.includes(ns)){setConfetti(v=>v+1); setAutoShowMedals(true); timers.current.push(setTimeout(()=>setAutoShowMedals(false),2000)); timers.current.push(setTimeout(()=>playFeedbackSound(true,true,medal),180));} timers.current.push(setTimeout(()=>setFeedbackFading(true),1700)); timers.current.push(setTimeout(()=>newQuestion(),2000));}} function confirm(){ if(feedback)return; let ok=false; if(question.mode==="choice"){ if(!selected){setPrompt("Select one tempo first.");return;} ok=equivalent(selected,question.answerId); } else if(question.mode==="text"){ if(!typed.trim()){setPrompt("Type your answer first.");return;} ok=isCorrectText(typed,question.answerId); } else { if(!placement){setPrompt("Select a tempo and place it above the music.");return;} ok=placement.barIndex===0 && equivalent(placement.term.id,question.answerId); } score(ok); } function play(){ if(playing){stopAudio();return;} const AC=window.AudioContext||window.webkitAudioContext; if(!AC){setPrompt("Audio playback is not supported in this browser.");return;} stopAudio(); const ctx=new AC(); audioRef.current=ctx; const master=ctx.createGain(); master.gain.value=0.9; master.connect(ctx.destination); const beat=60/question.answer.bpm; const start=ctx.currentTime+0.08; setPlaying(true); question.notes.forEach(note=>{ const t=start+(note.bar*4+note.beat)*beat; const dur=beat*.82; timers.current.push(setTimeout(()=>setActiveNoteId(note.id),Math.max(0,(t-ctx.currentTime)*1000))); timers.current.push(setTimeout(()=>setActiveNoteId(null),Math.max(0,(t-ctx.currentTime+dur)*1000))); oscillator(ctx,midiToFrequency(note.midi),t,dur,0.05,"triangle",master); }); if(metronome){ for(let b=0;b<32;b++) playClick(ctx,start+b*beat,b%4===0,master); } timers.current.push(setTimeout(stopAudio,32*beat*1000+300)); } const acc=attempted?Math.round(correct/attempted*100):0; const disabledConfirm=feedback || (question.mode==="choice"?!selected:question.mode==="text"?!typed.trim():!placement); const termButtons=safeEnabled(enabled,activeLevel); return <div className={window.MLH.shell.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Tempo" subtitle="Identify tempo markings by listening and notation."><window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={acc} streak={streak} bestStreak={best} resetScore={()=>{setCorrect(0);setAttempted(0);setStreak(0);setBest(0);setConfetti(0);}} confettiKey={confetti} autoShowMedals={autoShowMedals} medalEligible={true} medalThresholdValues={MEDAL_THRESHOLDS}/></window.MLH.AppHeader><div className={window.MLH.shell.pageContentClass}><main className={window.MLH.shell.mainShellClass} onPointerDown={e=>{if(feedback&&!e.target.closest("button,input,[data-menu-trigger],[data-menu-panel]"))newQuestion();}}><div className="hub-toolbar relative z-20"><div className="hub-toolbar-left"><div className="hub-menu-anchor relative" ref={levelRef}><window.MLH.LevelButton icon={<img src={ASSET.level} alt="" className="h-[26px] w-[28px]"/>} activeLevel={activeLevel} activeLabel={LEVELS[activeLevel].label} onClick={()=>{setCustomiseOpen(false);setLevelOpen(v=>!v);}} dataMenuTrigger={true}/>{levelOpen&&<window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS}/></window.MLH.MenuPanel>}</div><div className="hub-menu-anchor relative" ref={customiseRef}><window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" className="h-[26px] w-[26px]"/>} onClick={()=>{setLevelOpen(false);setCustomiseOpen(v=>!v);}} dataMenuTrigger={true}/>{customiseOpen&&<window.MLH.MenuPanel title="Customise" position="chords-customise-panel -left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}><TempoMenuRows level={activeLevel} enabled={enabled} setEnabled={(ids)=>{setEnabled(ids);newQuestion(activeLevel,ids);}} metronome={metronome} setMetronome={setMetronome} follow={follow} setFollow={setFollow}/></window.MLH.MenuPanel>}</div></div><div className="hub-toolbar-feedback"><window.MLH.FeedbackBadge feedback={feedback} fading={feedbackFading} animationPrefix="note"/></div><div className="hub-toolbar-right"><window.MLH.SkipButton resetStreak={()=>setStreak(0)} onClick={()=>newQuestion()} icon={<img src={ASSET.next} alt="" className="h-[27.8px] w-[27.8px]"/>}/></div></div><div className="relative -top-[45px]"><Score question={question} activeNoteId={follow?activeNoteId:null} placement={placement} hoverPlacement={hover} onPointerMove={e=>{ if(question.mode==="place"&&selected&&!feedback) setHover(pointerToPlacement(e,TERMS[selected])); }} onPointerLeave={()=>setHover(null)} onPointerDown={e=>{ if(question.mode==="place"&&selected&&!feedback) setPlacement(pointerToPlacement(e,TERMS[selected])); }}/></div><div className="chords-question-card relative z-10 -mt-[72px] flex min-h-[142px] flex-col justify-between rounded-xl border border-stone-200 bg-stone-50 px-4 py-4 shadow-md md:mx-3"><div><p className="text-base font-semibold leading-tight">{question.mode==="place"?"Select the tempo and place it above bar 1 of the music.":"Listen to the music and identify the tempo."}</p>{prompt&&<p className="mt-2 text-sm font-bold text-red-600">{prompt}</p>}</div><div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div className="flex min-w-0 flex-1 flex-col gap-3">{question.mode==="text"?<input value={typed} disabled={Boolean(feedback)} onChange={e=>setTyped(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!disabledConfirm){e.preventDefault();confirm();}}} placeholder="Type the tempo" className={window.MLH.typedAnswerClass(feedback?{correct:isCorrectText(typed,question.answerId)}:null,"w-full")}/>:<div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{termButtons.map(id=><button key={id} disabled={Boolean(feedback)} onClick={()=>setSelected(id)} className={`min-h-12 rounded-xl border px-3 py-2 text-sm font-bold ${selected===id?"border-black bg-black text-white":"border-stone-300 bg-white text-black"}`}>{TERMS[id].label}</button>)}</div>} {feedback&&!feedback.correct&&<div className="text-base font-bold text-green-600">{question.answer.group==="middle"?"Andante or Moderato":question.answer.label}</div>}</div><div className="flex items-center gap-3"><button onClick={play} disabled={Boolean(feedback)} className={window.MLH.PlayButtonClass}><span>{playing?"■":"▶"}</span><span>{playing?"Stop":"Play"}</span></button><window.MLH.ConfirmButton disabled={disabledConfirm} onClick={confirm}>Confirm</window.MLH.ConfirmButton></div></div></div></main></div></div>; }
+const rhythmInfo = (rhythm) => RHYTHMS[rhythm] || RHYTHMS.crotchet;
+const noteBaseIndex = (note) => NOTE_POOL.findIndex(item => item.letter === note?.letter && item.octave === note?.octave);
+const noteByLetter = (letter, preferredOctave = 4) => {
+  const options = NOTE_POOL.map((note, index) => ({ ...note, index })).filter(note => note.letter === letter);
+  return options.reduce((best, item) => Math.abs(item.octave - preferredOctave) < Math.abs(best.octave - preferredOctave) ? item : best, options[0]);
+};
+const keyAccidentalForLetter = (key, letter) => key?.id === "F" && letter === "B" ? -1 : key?.id === "G" && letter === "F" ? 1 : 0;
+const chordAccidentalForLetter = (key, chordSymbol, letter) => key?.raised?.[chordSymbol]?.[letter] ?? null;
+const melodicAccidentalForLetter = (key, letter) => key?.id === "Am" && letter === "G" ? 1 : null;
+const effectiveMidiForNote = (question, bar, note) => note.midi + keyAccidentalForLetter(question.key, note.letter) + (note.writtenAccidental ?? 0);
+function pitchForChordLetter(question, bar, letter, preferredOctave = 4) {
+  let note = noteByLetter(letter, preferredOctave);
+  let midi = note.midi + keyAccidentalForLetter(question.key, letter) + (chordAccidentalForLetter(question.key, bar.chordSymbol, letter) ?? 0);
+  while (midi > 67) midi -= 12;
+  return midi;
+}
+function makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol) {
+  const writtenAccidental = melodicAccidentalForLetter(key, base.letter) ?? chordAccidentalForLetter(key, chordSymbol, base.letter);
+  return { ...base, id:`${barIndex}-${noteIndex}`, bar:barIndex, barIndex, noteIndex, rhythm, beats:rhythmInfo(rhythm).beats, beat, writtenAccidental };
+}
+function chooseNextNote({ key, chordSymbol, previous, rhythm, strongBeat }) {
+  const chordLetters = key.chords[chordSymbol] || key.chords.I;
+  const previousIndex = Math.max(0, noteBaseIndex(previous));
+  const longRhythm = rhythmInfo(rhythm).beats >= 2;
+  const candidates = NOTE_POOL.map((candidate, index) => {
+    const distance = Math.abs(index - previousIndex);
+    const isChordTone = chordLetters.includes(candidate.letter);
+    if (distance > 3) return null;
+    if ((strongBeat || longRhythm) && !isChordTone) return null;
+    let weight = isChordTone ? 8 : 2;
+    if (strongBeat) weight *= 2.6;
+    if (distance === 0) weight *= 1.2;
+    if (distance === 1) weight *= 7;
+    if (distance === 2) weight *= 1.1;
+    if (distance >= 3) weight *= 0.2;
+    if (candidate.step > 5) weight *= 0.35;
+    if (candidate.step >= 8) weight *= 0.2;
+    if (candidate.step >= 0 && candidate.step <= 4) weight *= 1.7;
+    if (rhythm === "quaver" && distance > 1) return null;
+    return { candidate, weight };
+  }).filter(Boolean);
+  let roll = Math.random() * candidates.reduce((sum, item) => sum + item.weight, 0);
+  for (const item of candidates) { roll -= item.weight; if (roll <= 0) return item.candidate; }
+  return candidates.at(-1)?.candidate || previous;
+}
+function buildBar({ key, chordSymbol, pattern, barIndex, previous }) {
+  let beat = 0;
+  let current = previous;
+  const notes = pattern.map((rhythm, noteIndex) => {
+    const strongBeat = beat === 0 || beat === 2;
+    const base = barIndex === 0 && noteIndex === 0 ? noteByLetter(key.tonic, 4) : chooseNextNote({ key, chordSymbol, previous: current, rhythm, strongBeat });
+    const note = makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol);
+    current = base;
+    beat += rhythmInfo(rhythm).beats;
+    return note;
+  });
+  return { barIndex, chordSymbol, pattern, notes, last: current };
+}
+function buildFinalBar({ key, chordSymbol, barIndex, previous }) {
+  const chord = key.chords[chordSymbol] || key.chords.I;
+  const options = NOTE_POOL.filter(note => note.letter === chord[0]);
+  const base = options.reduce((best, note) => Math.abs(note.midi - previous.midi) < Math.abs(best.midi - previous.midi) ? note : best, options[0] || noteByLetter(chord[0], 4));
+  const note = makeNote(base, "semibreve", barIndex, 0, 0, key, chordSymbol);
+  return { barIndex, chordSymbol, pattern:["semibreve"], notes:[note], last: base };
+}
+function repeatBar(sourceBar, barIndex) {
+  const notes = sourceBar.notes.map((note, noteIndex) => ({
+    ...note,
+    id:`${barIndex}-${noteIndex}`,
+    bar:barIndex,
+    barIndex,
+    noteIndex,
+  }));
+  return { ...sourceBar, barIndex, notes, last:notes.at(-1) };
+}
+function buildQuestion(level, enabled){
+  const answerId=chooseAnswerId(level,enabled);
+  const key=r(KEYS);
+  const bars=[];
+  let previous=noteByLetter(key.tonic,4);
+  const firstPhrase = ["I","V"].map((chordSymbol, index) => {
+    const bar = buildBar({ key, chordSymbol, pattern:r(BAR_PATTERNS), barIndex:index, previous });
+    previous = bar.last;
+    return bar;
+  });
+  bars.push(...firstPhrase);
+  const imperfectPhrase = [r(["I","IV","VI"]), "V"];
+  imperfectPhrase.forEach((chordSymbol, offset) => {
+    const barIndex = offset + 2;
+    const bar = buildBar({ key, chordSymbol, pattern:r(BAR_PATTERNS), barIndex, previous });
+    bars.push(bar);
+    previous = bar.last;
+  });
+  const repeatedPhrase = firstPhrase.map((bar, index) => repeatBar(bar, index + 4));
+  bars.push(...repeatedPhrase);
+  previous = repeatedPhrase.at(-1).last;
+  const perfectLead = buildBar({ key, chordSymbol:"V", pattern:r(BAR_PATTERNS), barIndex:6, previous });
+  bars.push(perfectLead);
+  previous = perfectLead.last;
+  bars.push(buildFinalBar({ key, chordSymbol:"I", barIndex:7, previous }));
+  const answer = TERMS[answerId];
+  return { id:Date.now()+Math.random(), level, key, answerId, answer, bpm:r(answer.bpmOptions || [answer.bpm]), mode:r(["choice","text","place"]), accompanimentPattern:r(ACCOMPANIMENT_PATTERNS), bars, notes:bars.flatMap(bar=>bar.notes) };
+}
+function MenuSvgGlyph({ src, alt = "" }) {
+  return <img src={src} alt={alt} className="h-[20px] w-[20px] object-contain" />;
+}
+function TempoMenuRows({ level, enabled, setEnabled, metronome, setMetronome, follow, setFollow, stopAudio }){
+  const available=termIdsForLevel(level);
+  function toggle(id){
+    if(level==="N3") return;
+    const checked=enabled.includes(id);
+    const next=checked?enabled.filter(x=>x!==id):[...enabled,id];
+    if(next.length<2)return;
+    setEnabled(safeEnabled(next,level));
+  }
+  return <>
+    <window.MLH.MenuSubheading>Audio</window.MLH.MenuSubheading>
+    <window.MLH.MenuToggleRow glyph={<MenuSvgGlyph src={ASSET.metronome} alt="" />} label="Metronome" checked={metronome} onChange={()=>{setMetronome(v=>!v);stopAudio();}}/>
+    <window.MLH.MenuToggleRow glyph={<MenuSvgGlyph src={ASSET.eye} alt="" />} label="Follow Playback" checked={follow} onChange={()=>setFollow(v=>!v)}/>
+    {level!=="N3"&&<>
+      <window.MLH.MenuSubheading>Tempos</window.MLH.MenuSubheading>
+      {available.map(id=><window.MLH.MenuToggleRow key={id} glyph={<MenuSvgGlyph src={ASSET.metronome} alt="" />} label={TERMS[id].label} checked={enabled.includes(id)} disabled={enabled.includes(id)&&enabled.length<=2} onChange={()=>toggle(id)}/>)}
+    </>}
+  </>;
+}
+function pointerToPlacement(event, term){ const rect=event.currentTarget.getBoundingClientRect(); const x=((event.clientX-rect.left)/rect.width)*W; const y=((event.clientY-rect.top)/rect.height)*H; const system=y < (SYSTEM_TOPS[0]+SYSTEM_TOPS[1])/2 ? 0 : 1; const barIndex=system*4+clamp(Math.floor((x-MUSIC_START)/barWidth()),0,3); const id=Object.keys(TERMS).find(termId=>TERMS[termId]===term); return { barIndex, term:{...term,id} }; }
+function App(){
+  const [activeLevel,setActiveLevel]=useState(levelFromUrl());
+  const [enabled,setEnabled]=useState(()=>termIdsForLevel(levelFromUrl()));
+  const [question,setQuestion]=useState(()=>buildQuestion(levelFromUrl(),termIdsForLevel(levelFromUrl())));
+  const [selected,setSelected]=useState(null), [typed,setTyped]=useState(""), [placement,setPlacement]=useState(null), [hover,setHover]=useState(null);
+  const [feedback,setFeedback]=useState(null), [feedbackFading,setFeedbackFading]=useState(false), [prompt,setPrompt]=useState("");
+  const [correct,setCorrect]=useState(0), [attempted,setAttempted]=useState(0), [streak,setStreak]=useState(0), [best,setBest]=useState(0), [confetti,setConfetti]=useState(0), [autoShowMedals,setAutoShowMedals]=useState(false);
+  const [levelOpen,setLevelOpen]=useState(false), [customiseOpen,setCustomiseOpen]=useState(false), [metronome,setMetronome]=useState(false), [follow,setFollow]=useState(false), [playing,setPlaying]=useState(false), [activeNoteId,setActiveNoteId]=useState(null);
+  const levelRef=useRef(null), customiseRef=useRef(null), audioRef=useRef(null), timers=useRef([]), levelTaskStatusRef=useRef(null);
+  useClickOutside([levelRef,customiseRef],[()=>setLevelOpen(false),()=>setCustomiseOpen(false)]);
+  useEffect(()=>()=>stopAudio(),[]);
+
+  const medalEligible=taskMatchesLevel(activeLevel, enabled);
+  const displayedLevel=medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel=medalEligible ? LEVELS[activeLevel].label : "Custom";
+  const acc=attempted?Math.round(correct/attempted*100):0;
+  const disabledConfirm=feedback || (question.mode==="choice"?!selected:question.mode==="text"?!typed.trim():!placement);
+  const termButtons=safeEnabled(enabled,activeLevel);
+
+  useEffect(()=>{
+    if(levelTaskStatusRef.current===null){ levelTaskStatusRef.current=medalEligible; return; }
+    if(levelTaskStatusRef.current===medalEligible) return;
+    levelTaskStatusRef.current=medalEligible;
+    if(window.MLH.resetLevelSessionProgress){ window.MLH.resetLevelSessionProgress({ setCorrect, setAttempted, setStreak, setBest }); }
+    else { setCorrect(0); setAttempted(0); setStreak(0); setBest(0); }
+    setConfetti(0);
+    setAutoShowMedals(false);
+  },[medalEligible]);
+
+  function clearTimers(){timers.current.forEach(clearTimeout);timers.current=[];}
+  function stopAudio(){clearTimers(); if(audioRef.current){try{audioRef.current.close();}catch{}} audioRef.current=null; setPlaying(false); setActiveNoteId(null);}
+  function newQuestion(level=activeLevel, ids=enabled){stopAudio(); setQuestion(buildQuestion(level,safeEnabled(ids,level))); setSelected(null); setTyped(""); setPlacement(null); setHover(null); setFeedback(null); setFeedbackFading(false); setPrompt("");}
+  function applyLevel(level){setActiveLevel(level); setCorrect(0); setAttempted(0); setStreak(0); setBest(0); setConfetti(0); setAutoShowMedals(false); const ids=termIdsForLevel(level); setEnabled(ids); const url=new URL(location.href); url.searchParams.set("level",level); history.replaceState(null,"",url.toString()); newQuestion(level,ids); setLevelOpen(false);}
+  function score(ok){ stopAudio(); const ns=ok?streak+1:0; playFeedbackSound(ok); setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){const medal=medalSoundForStreak(ns); if(medalEligible&&medal&&MEDAL_THRESHOLDS.includes(ns)){setConfetti(v=>v+1); setAutoShowMedals(true); timers.current.push(setTimeout(()=>setAutoShowMedals(false),2000)); timers.current.push(setTimeout(()=>playFeedbackSound(true,true,medal),180));} timers.current.push(setTimeout(()=>setFeedbackFading(true),1700)); timers.current.push(setTimeout(()=>newQuestion(),2000));}}
+  function confirm(){ if(feedback)return; let ok=false; if(question.mode==="choice"){ if(!selected){setPrompt("Select one tempo first.");return;} ok=equivalent(selected,question.answerId); } else if(question.mode==="text"){ if(!typed.trim()){setPrompt("Type your answer first.");return;} ok=isCorrectText(typed,question.answerId); } else { if(!placement){setPrompt("Select a tempo and place it above the music.");return;} ok=placement.barIndex===0 && equivalent(placement.term.id,question.answerId); } score(ok); }
+  function clearAnswer(){ setSelected(null); setTyped(""); setPlacement(null); setHover(null); setPrompt(""); }
+  function playMelodyNote(ctx, gainNode, frequency, start, duration) { oscillator(ctx, gainNode, frequency, start, duration, 0.078, "triangle", 0.1); oscillator(ctx, gainNode, frequency * 2, start, duration * 0.94, 0.012, "sine", 0.08); }
+  function playAccompaniment(ctx, gainNode, bar, barStart, beat, startTime) {
+    const chordLetters = question.key.chords[bar.chordSymbol] || [];
+    if (!chordLetters.length) return;
+    const bass = pitchForChordLetter(question, bar, chordLetters[0], 3) - 12;
+    const chord = chordLetters.map(letter => pitchForChordLetter(question, bar, letter, 4)).filter(midi => midi <= 67);
+    const bassStart = startTime + barStart * beat;
+    const playBass = (offset, duration = 0.82, volume = 0.028) => oscillator(ctx, gainNode, midiToFrequency(bass), bassStart + offset * beat, beat * duration, volume, "sine", 0.1);
+    const playChord = (offset, duration = 0.72, volume = 0.014) => chord.forEach(midi => oscillator(ctx, gainNode, midiToFrequency(midi), bassStart + offset * beat, beat * duration, volume, "triangle", 0.08));
+    switch (question.accompanimentPattern) {
+      case "bassTwoChords":
+        playBass(0);
+        [1, 3].forEach(offset => playChord(offset, 0.72, 0.015));
+        break;
+      case "bassChordBassChord":
+        playBass(0, 0.76, 0.026);
+        playChord(1, 0.68, 0.013);
+        playBass(2, 0.76, 0.024);
+        playChord(3, 0.68, 0.013);
+        break;
+      case "offbeatChords":
+        playBass(0, 0.9, 0.027);
+        [0.5, 1.5, 2.5].forEach(offset => playChord(offset, 0.5, 0.012));
+        break;
+      case "lightPulse":
+        playBass(0, 0.7, 0.024);
+        [1, 2, 3].forEach(offset => playChord(offset, 0.38, 0.011));
+        break;
+      default:
+        playBass(0);
+        [1, 2, 3].forEach(offset => playChord(offset));
+    }
+  }
+  function play(){ if(playing){stopAudio();return;} const AC=window.AudioContext||window.webkitAudioContext; if(!AC){setPrompt("Audio playback is not supported in this browser.");return;} stopAudio(); const ctx=new AC(); audioRef.current=ctx; const master=ctx.createGain(); master.gain.value=0.86; master.connect(ctx.destination); const beat=60/(question.bpm || question.answer.bpm); const start=ctx.currentTime+0.08; setPlaying(true); question.bars.forEach(bar=>playAccompaniment(ctx,master,bar,bar.barIndex*4,beat,start)); question.notes.forEach(note=>{ const bar=question.bars[note.barIndex]; const t=start+(note.barIndex*4+note.beat)*beat; const dur=Math.max(0.12,note.beats*beat*0.96); timers.current.push(setTimeout(()=>setActiveNoteId(note.id),Math.max(0,(t-ctx.currentTime)*1000))); timers.current.push(setTimeout(()=>setActiveNoteId(null),Math.max(0,(t-ctx.currentTime+dur)*1000))); playMelodyNote(ctx,master,midiToFrequency(effectiveMidiForNote(question,bar,note)),t,dur); }); if(metronome){ for(let b=0;b<BAR_COUNT*4;b++) playClick(ctx,master,start+b*beat,b%4===0); } timers.current.push(setTimeout(stopAudio,BAR_COUNT*4*beat*1000+300)); }
+  function answerButtonClass(id){
+    const base="min-h-12 rounded-xl border px-3 py-2 text-sm font-bold transition";
+    if(!feedback) return `${base} ${selected===id?"border-black bg-black text-white":"border-stone-300 bg-white text-black hover:border-black"}`;
+    const correct=equivalent(id,question.answerId);
+    if(correct) return `${base} border-[#16a34a] bg-[#16a34a] text-white`;
+    if(selected===id) return `${base} border-[#dc2626] bg-[#dc2626] text-white`;
+    return `${base} border-stone-200 bg-white text-stone-400`;
+  }
+  function PlayButton() { return <button type="button" onClick={play} disabled={Boolean(feedback)} className={window.MLH.PlayButtonClass}><span className="text-lg leading-none">{playing?"■":"▶"}</span><span>{playing?"Stop":"Play"}</span></button>; }
+  function TempoAnswerButtons({ className = "grid w-full grid-cols-4 gap-2 md:w-1/2" }) { return <div className={className}>{termButtons.map(id=><button key={id} disabled={Boolean(feedback)} onClick={()=>{setSelected(id); if(question.mode==="choice") score(equivalent(id,question.answerId));}} className={answerButtonClass(id)}>{TERMS[id].label}</button>)}</div>; }
+
+  return <div className={window.MLH.shell.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Tempo" subtitle="Identify tempo markings by listening and notation."><window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={acc} streak={streak} bestStreak={best} resetScore={()=>{setCorrect(0);setAttempted(0);setStreak(0);setBest(0);setConfetti(0);}} confettiKey={confetti} autoShowMedals={autoShowMedals} medalEligible={medalEligible} medalThresholdValues={MEDAL_THRESHOLDS}/></window.MLH.AppHeader><div className={window.MLH.shell.pageContentClass}><main className={window.MLH.shell.mainShellClass} onPointerDown={e=>{if(feedback&&!e.target.closest("button,input,[data-menu-trigger],[data-menu-panel]"))newQuestion();}}><div className="hub-toolbar relative z-20"><div className="hub-toolbar-left"><div className="hub-menu-anchor relative" ref={levelRef}><window.MLH.LevelButton icon={<img src={ASSET.level} alt="" className="h-[26px] w-[28px]"/>} activeLevel={displayedLevel} activeLabel={displayedLevelLabel} isCustom={!medalEligible} onClick={()=>{setCustomiseOpen(false);setLevelOpen(v=>!v);}} dataMenuTrigger={true}/>{levelOpen&&<window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS}/></window.MLH.MenuPanel>}</div><div className="hub-menu-anchor relative" ref={customiseRef}><window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" className="h-[26px] w-[26px]"/>} onClick={()=>{setLevelOpen(false);setCustomiseOpen(v=>!v);}} dataMenuTrigger={true}/>{customiseOpen&&<window.MLH.MenuPanel title="Customise" position="chords-customise-panel -left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}><TempoMenuRows level={activeLevel} enabled={enabled} setEnabled={(ids)=>{setEnabled(ids);newQuestion(activeLevel,ids);}} metronome={metronome} setMetronome={setMetronome} follow={follow} setFollow={setFollow} stopAudio={stopAudio}/></window.MLH.MenuPanel>}</div></div><div className="hub-toolbar-feedback"><window.MLH.FeedbackBadge feedback={feedback} fading={feedbackFading} animationPrefix="note"/></div><div className="hub-toolbar-right"><window.MLH.SkipButton resetStreak={()=>setStreak(0)} onClick={()=>newQuestion()} icon={<img src={ASSET.next} alt="" className="h-[27.8px] w-[27.8px]"/>}/></div></div><div className="relative -top-[20px]"><Score question={question} activeNoteId={follow?activeNoteId:null} placement={placement} hoverPlacement={hover} feedback={feedback} onPointerMove={e=>{ if(question.mode==="place"&&selected&&!feedback) setHover(pointerToPlacement(e,TERMS[selected])); }} onPointerLeave={()=>setHover(null)} onPointerDown={e=>{ if(question.mode==="place"&&selected&&!feedback) setPlacement(pointerToPlacement(e,TERMS[selected])); }}/></div><div className="chords-question-card relative z-10 -mt-[47px] flex flex-col rounded-xl border border-stone-200 bg-stone-50 px-4 py-4 shadow-md md:mx-3"><div><p className="text-base font-semibold leading-tight">{question.mode==="place"?"Identify the tempo by inserting it into the correct place in the music.":"Listen to the music and identify the tempo."}</p>{prompt&&<p className="mt-2 text-sm font-bold text-red-600">{prompt}</p>}<div className="mt-2">{question.mode==="text"?<div className="flex flex-wrap items-center gap-3"><input value={typed} disabled={Boolean(feedback)} onChange={e=>setTyped(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!disabledConfirm){e.preventDefault();confirm();}}} placeholder="Type your answer" className={window.MLH.typedAnswerClass(feedback?{correct:isCorrectText(typed,question.answerId)}:null,"w-full md:w-1/2")}/>{feedback&&!feedback.correct&&<div className="text-base font-bold text-green-600">{question.answer.group==="middle"?"Andante or Moderato":question.answer.label}</div>}</div>:<div className="grid w-full grid-cols-4 gap-2 md:w-1/2">{termButtons.map(id=><button key={id} disabled={Boolean(feedback)} onClick={()=>{setSelected(id); if(question.mode==="choice") score(equivalent(id,question.answerId));}} className={answerButtonClass(id)}>{TERMS[id].label}</button>)}</div>}</div></div>{question.mode==="text"?<div className={window.MLH.PlayClearConfirmRowClass}><button type="button" onClick={play} disabled={Boolean(feedback)} className={window.MLH.PlayButtonClass}><span className="text-lg leading-none">{playing?"■":"▶"}</span><span>{playing?"Stop":"Play"}</span></button><div className={window.MLH.ActionButtonGroupClass}><button type="button" disabled={Boolean(feedback) || !typed.trim()} onClick={clearAnswer} className={window.MLH.ClearButtonClass}>Clear</button><window.MLH.ConfirmButton disabled={disabledConfirm} onClick={confirm} className={window.MLH.AudioConfirmButtonClass}>Confirm</window.MLH.ConfirmButton></div></div>:<div className="mt-3"><button type="button" onClick={play} disabled={Boolean(feedback)} className={window.MLH.PlayButtonClass}><span className="text-lg leading-none">{playing?"■":"▶"}</span><span>{playing?"Stop":"Play"}</span></button>{question.mode==="place"&&<div className="mt-3 flex justify-end gap-3"><button type="button" disabled={Boolean(feedback) || !placement} onClick={clearAnswer} className={window.MLH.ClearButtonClass}>Clear</button><window.MLH.ConfirmButton disabled={disabledConfirm} onClick={confirm} className={window.MLH.AudioConfirmButtonClass}>Confirm</window.MLH.ConfirmButton></div>}</div>}</div></main></div></div>;
+}
 const root=document.getElementById("root"); if(ReactDOM.createRoot) ReactDOM.createRoot(root).render(<App/>); else ReactDOM.render(<App/>,root);
 
 </script>

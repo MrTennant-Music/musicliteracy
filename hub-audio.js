@@ -107,12 +107,37 @@
     return null;
   }
 
+  function playMetronomeClick(context, destination, start, accented = false) {
+    if (!context || !destination || !Number.isFinite(start)) return;
+    const duration = accented ? 0.032 : 0.024;
+    const buffer = context.createBuffer(1, Math.max(1, Math.floor(context.sampleRate * duration)), context.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2.4);
+    }
+    const noise = context.createBufferSource();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    noise.buffer = buffer;
+    filter.type = "highpass";
+    filter.frequency.setValueAtTime(accented ? 1800 : 2200, start);
+    gain.gain.setValueAtTime(accented ? 0.08 : 0.052, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(destination);
+    noise.start(start);
+    noise.stop(start + duration);
+  }
+
   MLH.audio = {
     ...(MLH.audio || {}),
     playFeedbackSound,
     getStreakMedal,
+    playMetronomeClick,
   };
   MLH.playFeedbackSound = playFeedbackSound;
   MLH.getStreakMedal = getStreakMedal;
+  MLH.playMetronomeClick = playMetronomeClick;
   window.MLH = MLH;
 })();
