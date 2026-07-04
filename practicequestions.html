@@ -881,6 +881,17 @@
         "4/4": [["dottedCrotchet", "quaver", "crotchet", "crotchet"], ["crotchet", "dottedCrotchet", "quaver", "crotchet"]],
         "6/8": [["dottedCrotchet", "dottedCrotchet"], ["dottedCrotchet", "quaver", "quaver", "quaver"]],
       },
+      dottedCrotchetQuaverFix: {
+        "2/4": [{ display: ["crotchet", "crotchet"], answer: ["dottedCrotchet", "quaver"], startIndex: 0 }],
+        "3/4": [
+          { display: ["crotchet", "crotchet", "crotchet"], answer: ["dottedCrotchet", "quaver", "crotchet"], startIndex: 0 },
+          { display: ["crotchet", "crotchet", "crotchet"], answer: ["crotchet", "dottedCrotchet", "quaver"], startIndex: 1 },
+        ],
+        "4/4": [
+          { display: ["crotchet", "crotchet", "crotchet", "crotchet"], answer: ["dottedCrotchet", "quaver", "crotchet", "crotchet"], startIndex: 0 },
+          { display: ["crotchet", "crotchet", "crotchet", "crotchet"], answer: ["crotchet", "dottedCrotchet", "quaver", "crotchet"], startIndex: 1 },
+        ],
+      },
       scotchSnap: {
         "2/4": [["semiquaver", "dottedQuaver", "crotchet"], ["crotchet", "semiquaver", "dottedQuaver"]],
         "3/4": [["semiquaver", "dottedQuaver", "crotchet", "crotchet"], ["crotchet", "semiquaver", "dottedQuaver", "crotchet"]],
@@ -943,13 +954,32 @@
         .map((bar) => bar.barIndex);
       if (!barCandidates.length) return null;
 
-      const preferredVariant = randomItem(["dottedCrotchet", "scotchSnap"]);
-      const variants = preferredVariant === "dottedCrotchet" ? ["dottedCrotchet", "scotchSnap"] : ["scotchSnap", "dottedCrotchet"];
+      const preferredVariant = randomItem(["dottedCrotchet", "scotchSnap", "dottedCrotchetQuaverFix"]);
+      const variants = [
+        preferredVariant,
+        ...["dottedCrotchet", "scotchSnap", "dottedCrotchetQuaverFix"].filter((variant) => variant !== preferredVariant),
+      ];
       for (const variant of variants) {
         const patterns = RHYTHM_IDENTIFICATION_PATTERNS[variant]?.[question.timeSignature.id] ?? RHYTHM_IDENTIFICATION_PATTERNS[variant]?.["4/4"];
         if (!patterns?.length) continue;
         const barIndex = randomItem(barCandidates);
         const pattern = randomItem(patterns);
+        if (variant === "dottedCrotchetQuaverFix") {
+          const bar = applyPracticeRhythmPattern(question, barIndex, pattern.display);
+          return {
+            variant,
+            barIndex,
+            startIndex: pattern.startIndex,
+            noteIndices: [pattern.startIndex, pattern.startIndex + 1],
+            displayPattern: pattern.display,
+            targetPattern: pattern.answer,
+            targetRhythms: {
+              [pattern.startIndex]: pattern.answer[pattern.startIndex],
+              [pattern.startIndex + 1]: pattern.answer[pattern.startIndex + 1],
+            },
+            barNoteCount: bar.notes.length,
+          };
+        }
         const bar = applyPracticeRhythmPattern(question, barIndex, pattern);
         if (variant === "dottedCrotchet") {
           const noteIndex = bar.notes.findIndex((note) => note.rhythm === "dottedCrotchet");
@@ -1752,7 +1782,7 @@
       return question;
     }
 
-    function chooseChordQuestionBar(question) {
+    function chooseChordQuestionBar(question, usedQuestionBars = new Set()) {
       const finalBarIndex = question.bars.length - 1;
       const isAllowedChordQuestionBar = (bar) => PRACTICE_CHORD_ANSWERS.has(chordAnswerForQuestion(question, bar.chordSymbol));
       const canShowFullChord = (bar) => {
@@ -1761,7 +1791,7 @@
         return chordLetters.length >= 3 && soundingNotes.length >= 3;
       };
       const candidates = question.bars
-        .filter((bar) => bar.barIndex !== question.targetBar && bar.barIndex !== finalBarIndex)
+        .filter((bar) => bar.barIndex !== question.targetBar && bar.barIndex !== finalBarIndex && !usedQuestionBars.has(bar.barIndex))
         .filter(isAllowedChordQuestionBar)
         .filter(canShowFullChord);
       return randomItem(candidates)?.barIndex ?? null;
@@ -2025,6 +2055,7 @@
       const selectedSourceIds = new Set(selectedPracticeQuestionTypeIds(enabledQuestionTypes));
       const needsMissing = selectedSourceIds.has("missing");
       const needsChord = selectedSourceIds.has("chord");
+      const needsCadence = selectedSourceIds.has("cadence");
       const needsDynamic = selectedSourceIds.has("dynamic");
       const needsInterval = selectedSourceIds.has("interval");
       const needsNoteIdentification = selectedSourceIds.has("noteIdentification");
@@ -2043,8 +2074,9 @@
       const unusedQuestionBars = (barIndexes) => barIndexes.filter((barIndex) => !usedQuestionBars.has(barIndex));
       if (needsMissing) reserveQuestionBar(question.targetBar);
       if (needsMissing) reserveQuestionBar(question.missingSourceBar);
+      if (needsCadence) [6, 7].forEach(reserveQuestionBar);
 
-      const chordBar = needsChord ? chooseChordQuestionBar(question) : null;
+      const chordBar = needsChord ? chooseChordQuestionBar(question, usedQuestionBars) : null;
       if (needsChord && chordBar === null) {
         return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
       }
@@ -2116,6 +2148,7 @@
       const barQuestionTargets = [
         ...(needsMissing ? [question.targetBar] : []),
         ...(needsChord ? [chordBar] : []),
+        ...(needsCadence ? [6, 7] : []),
         ...(needsDynamic ? [dynamicBar] : []),
         ...(needsRepeatSigns ? [repeatTarget.barIndex] : []),
         ...(needsRepeatSigns ? givenRepeatPlacements.map((placement) => placement.barIndex) : []),
@@ -2237,6 +2270,14 @@
           answer: "Scotch snap circled correctly",
           type: "scotchSnap",
         }] : []),
+        ...(needsRhythmIdentification && rhythmIdentificationTarget.variant === "dottedCrotchetQuaverFix" ? [{
+          id: "rhythmIdentification",
+          sourceId: "rhythmIdentification",
+          prompt: `Correct the rhythm in bar ${rhythmIdentificationTarget.barIndex + 1}.`,
+          answer: "Rhythm corrected",
+          type: "rhythmFix",
+          rhythmOptions: ["dottedCrotchet", "quaver"],
+        }] : []),
         ...(needsTempoQuestion ? [{
           id: "tempoQuestion",
           sourceId: "tempoQuestion",
@@ -2270,9 +2311,43 @@
         selectedSubquestions.push({ ...fillSubquestions[fillIndex % fillSubquestions.length] });
         fillIndex += 1;
       }
-      const subquestions = selectedSubquestions.slice(0, 6).map((part, index) => ({
+
+      const noteQuestionBeat = (barIndex, noteIndex) => question.bars[barIndex]?.notes?.[noteIndex]?.beat ?? 0;
+      const subquestionMusicOrder = (part, fallbackIndex) => {
+        const sourceId = part.sourceId ?? part.id;
+        if (sourceId === "key") return -0.3;
+        if (sourceId === "time") return -0.2;
+        if (sourceId === "tempoQuestion") return -0.1;
+        if (sourceId === "missing") return question.targetBar + 0.05;
+        if (sourceId === "chord") return chordBar + 0.2;
+        if (sourceId === "cadence") return 6.75;
+        if (sourceId === "dynamic") return dynamicBar + 0.45;
+        if (sourceId === "interval") return intervalTarget.bar.barIndex + noteQuestionBeat(intervalTarget.bar.barIndex, intervalTarget.firstIndex) / 10;
+        if (sourceId === "noteIdentification") return noteTarget.bar.barIndex + noteQuestionBeat(noteTarget.bar.barIndex, noteTarget.noteIndex) / 10;
+        if (sourceId === "barlines") return (barlineTargets[0]?.barIndex ?? 4) + 0.95;
+        if (sourceId === "rhythmicDictation") return rhythmTargetBar + 0.05;
+        if (sourceId === "rhythmIdentification") {
+          const target = rhythmIdentificationTarget;
+          const targetNoteIndex = target.noteIndex ?? target.startIndex ?? target.noteIndices?.[0] ?? 0;
+          return target.barIndex + noteQuestionBeat(target.barIndex, targetNoteIndex) / 10;
+        }
+        if (sourceId === "repeatSigns") {
+          const anchorOffset = repeatTarget.anchor === "end" ? 0.95 : repeatTarget.anchor === "above" ? 0.25 : 0;
+          return repeatTarget.barIndex + anchorOffset;
+        }
+        return 99 + fallbackIndex / 100;
+      };
+      const orderedSubquestions = selectedSubquestions
+        .slice(0, 6)
+        .map((part, index) => ({ part, index }))
+        .sort((first, second) => {
+          const orderDifference = subquestionMusicOrder(first.part, first.index) - subquestionMusicOrder(second.part, second.index);
+          return orderDifference || first.index - second.index;
+        })
+        .map(({ part }) => part);
+      const subquestions = orderedSubquestions.map((part, index) => ({
         ...part,
-        id: index === 0 || !selectedSubquestions.slice(0, index).some((previous) => previous.sourceId === part.sourceId) ? part.sourceId : `${part.sourceId}-${index}`,
+        id: index === 0 || !orderedSubquestions.slice(0, index).some((previous) => previous.sourceId === part.sourceId) ? part.sourceId : `${part.sourceId}-${index}`,
         label: String.fromCharCode(97 + index),
       }));
 
@@ -2824,7 +2899,7 @@
       return null;
     }
 
-    function MissingNotesScore({ question, userNotes, setUserNotes, practiceAnswers = {}, setPracticeAnswers, feedback, activeNoteId, hoverNote, setHoverNote }) {
+    function MissingNotesScore({ question, userNotes, setUserNotes, practiceAnswers = {}, setPracticeAnswers, feedback, activeIndex = 0, activeNoteId, hoverNote, setHoverNote }) {
       const [draggingNote, setDraggingNote] = useState(null);
       const [hoverBarlineSlot, setHoverBarlineSlot] = useState(null);
       const [hoverRhythmTarget, setHoverRhythmTarget] = useState(null);
@@ -2993,11 +3068,18 @@
         return closest;
       }
 
+      function activeRhythmPlacementPart() {
+        const activePart = question.subquestions?.[activeIndex];
+        if (activePart?.type === "rhythm" || activePart?.type === "rhythmFix") return activePart;
+        return question.subquestions?.find((part) => part.type === "rhythm" || part.type === "rhythmFix") ?? null;
+      }
+
       function placeRhythm(noteIndex) {
-        const part = findPartBySource("rhythmicDictation");
+        const part = activeRhythmPlacementPart();
         if (!part || feedback) return;
         const current = placementValue(part, { selectedRhythm: null, placements: {} });
         if (!current.selectedRhythm) return;
+        if (part.type === "rhythmFix" && !question.rhythmIdentificationTarget?.noteIndices?.includes(noteIndex)) return;
         setPracticeAnswers((answers) => ({
           ...answers,
           [part.id]: {
@@ -3047,6 +3129,25 @@
           >
             {label}
           </text>
+        );
+      }
+
+      function MarkingBox({ x, y, width, labelSourceId, label }) {
+        return (
+          <g pointerEvents="none">
+            <rect
+              x={x}
+              y={y}
+              width={width}
+              height={MARKING_BOX_HEIGHT}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.15"
+              rx="0"
+              shapeRendering="crispEdges"
+            />
+            <BoxLabel label={labelledBoxText(labelSourceId, label)} x={x} y={y} width={width} />
+          </g>
         );
       }
 
@@ -3137,29 +3238,42 @@
             const isPracticePaper = question.questionType === "practicePaper";
             const dynamicNoteX = (positions[0] ?? start + 30) + 8;
             const dynamicNoteY = top + STAFF.gap * 7.2;
+            const missingBoxX = start + 4;
+            const missingBoxY = top - 62;
+            const missingBoxWidth = Math.max(58, end - start - 8);
             const repeatPart = findPartBySource("repeatSigns");
             const repeatAnswer = placementValue(repeatPart, { placements: [] });
             const repeatHoverPlacement = hoverRepeatPlacement?.barIndex === bar.barIndex ? hoverRepeatPlacement : null;
             const barlinePart = findPartBySource("barlines");
             const barlineAnswer = placementValue(barlinePart, { placements: [] });
-            const rhythmPart = findPartBySource("rhythmicDictation");
-            const rhythmAnswer = placementValue(rhythmPart, { placements: {} });
+            const rhythmDictationPart = findPartBySource("rhythmicDictation");
             const rhythmIdentificationPart = findPartBySource("rhythmIdentification");
             const rhythmIdentificationAnswer = placementValue(rhythmIdentificationPart, { circleSelected: false, selected: null });
             const rhythmIdentificationTarget = question.rhythmIdentificationTarget?.barIndex === bar.barIndex ? question.rhythmIdentificationTarget : null;
             const isScotchSnapTargetBar = rhythmIdentificationTarget?.variant === "scotchSnap";
+            const isRhythmFixTargetBar = rhythmIdentificationTarget?.variant === "dottedCrotchetQuaverFix";
+            const rhythmPart = isRhythmFixTargetBar ? rhythmIdentificationPart : rhythmDictationPart;
+            const rhythmAnswer = placementValue(rhythmPart, { placements: {} });
             const scotchSnapCanInteract = rhythmIdentificationPart?.type === "scotchSnap" && rhythmIdentificationAnswer.circleSelected && !feedback;
             const selectedScotchSnap = rhythmIdentificationAnswer.selected?.barIndex === bar.barIndex ? rhythmIdentificationAnswer.selected : null;
             const hoveredScotchSnap = hoverScotchSnap?.barIndex === bar.barIndex ? hoverScotchSnap : null;
-            const isRhythmTarget = rhythmPart && bar.barIndex === question.rhythmTargetBar;
+            const isRhythmTarget = Boolean(
+              (rhythmDictationPart && bar.barIndex === question.rhythmTargetBar)
+              || (rhythmIdentificationPart?.type === "rhythmFix" && isRhythmFixTargetBar)
+            );
+            const rhythmFixNoteIndices = isRhythmFixTargetBar ? rhythmIdentificationTarget.noteIndices ?? [] : [];
             const hoveredRhythmIndex = isRhythmTarget && hoverRhythmTarget?.barIndex === bar.barIndex ? hoverRhythmTarget.noteIndex : null;
             const rhythmDisplayNotes = isRhythmTarget
               ? bar.notes.map((note, index) => {
                 const placedRhythm = rhythmAnswer.placements?.[index];
                 if (!feedback && hoveredRhythmIndex === index && rhythmAnswer.selectedRhythm) return { ...note, rhythm: rhythmAnswer.selectedRhythm };
                 if (placedRhythm) return { ...note, rhythm: placedRhythm };
+                if (feedback && isRhythmFixTargetBar) {
+                  const correctRhythm = rhythmIdentificationTarget.targetRhythms?.[index];
+                  return correctRhythm ? { ...note, rhythm: correctRhythm, id: `rhythm-fix-correct-${index}` } : note;
+                }
                 if (feedback) return { ...note, id: `rhythm-correct-${index}` };
-                return { ...note, displayRhythm: "notehead" };
+                return isRhythmFixTargetBar ? note : { ...note, displayRhythm: "notehead" };
               })
               : bar.notes;
             const hideBarNumber = question.hiddenBarNumbers?.includes(bar.barIndex);
@@ -3171,6 +3285,44 @@
             const barlineExpected = question.barlineTargets?.some((target) => target.barIndex === bar.barIndex);
             const hasExpectedBarline = barlinePlacements.some((placement) => (placement.slot ?? "end") === "end");
             const showMissingBarline = feedback && barlineExpected && !hasExpectedBarline;
+            const chordPart = findPartBySource("chord");
+            const cadencePart = findPartBySource("cadence");
+            const chordTarget = chordPart && question.chordBar === bar.barIndex;
+            const chordLetters = question.key.chords[bar.chordSymbol] ?? [];
+            const chordTripleStart = chordTarget && chordLetters.length >= 3
+              ? bar.notes.findIndex((note, noteIndex) => {
+                const first = bar.notes[noteIndex];
+                const second = bar.notes[noteIndex + 1];
+                const third = bar.notes[noteIndex + 2];
+                return Boolean(first && second && third
+                  && !first.rest && !second.rest && !third.rest
+                  && first.letter === chordLetters[0]
+                  && second.letter === chordLetters[1]
+                  && third.letter === chordLetters[2]);
+              })
+              : -1;
+            const chordBoxUsesTriple = chordTripleStart >= 0;
+            const chordBoxX = chordTarget
+              ? chordBoxUsesTriple
+                ? positions[chordTripleStart] - (bar.notes[chordTripleStart]?.writtenAccidental ? 26 : 18)
+                : start + 4
+              : 0;
+            const chordBoxRight = chordTarget
+              ? chordBoxUsesTriple
+                ? positions[chordTripleStart + 2] + 24
+                : end - 4
+              : 0;
+            const chordBoxWidth = Math.max(58, chordBoxRight - chordBoxX);
+            const chordBoxY = top - 42 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
+            const rhythmFixBoxX = start + 4;
+            const rhythmFixBoxY = top - 42 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
+            const rhythmFixBoxWidth = Math.max(58, end - start - 8);
+            const showCadenceBox = cadencePart && bar.barIndex === 6;
+            const cadenceBoxX = showCadenceBox
+              ? barStart(6) + (barWidth(6) * Math.max(0, question.timeSignature.beats - 1)) / Math.max(1, question.timeSignature.beats)
+              : 0;
+            const cadenceBoxRight = showCadenceBox ? barStart(7) + barWidth(7) - 4 : 0;
+            const cadenceBoxY = systemTop(6) - 42 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
             const intervalTarget = question.intervalTarget?.barIndex === bar.barIndex ? question.intervalTarget : null;
             const intervalFirstNote = intervalTarget ? bar.notes[intervalTarget.firstIndex] : null;
             const intervalSecondNote = intervalTarget ? bar.notes[intervalTarget.secondIndex] : null;
@@ -3196,25 +3348,34 @@
               <g key={bar.barIndex}>
                 {!hideBarNumber && <text x={(bar.barIndex === 0 || bar.barIndex === 4) ? start - 15 : start + 5} y={top - 17} fontSize="12" fontWeight="700">{bar.barIndex + 1}</text>}
                 {isMissingTarget && <rect ref={targetInputRef} x={start} y={top - 62} width={end - start} height="122" fill="transparent" pointerEvents="all" className="touch-none" style={{ touchAction: "none", WebkitUserSelect: "none", userSelect: "none", overscrollBehavior: "contain" }} onPointerMove={handleMove} onPointerLeave={() => { if (!draggingNote) setHoverNote(null); }} onPointerDown={handlePointerDown} onPointerUp={handlePointerUp} onPointerCancel={() => { setDraggingNote(null); setHoverNote(null); }} />}
+                {isMissingTarget && <MarkingBox x={missingBoxX} y={missingBoxY} width={missingBoxWidth} labelSourceId="missing" label="Notes" />}
+                {isRhythmFixTargetBar && <MarkingBox x={rhythmFixBoxX} y={rhythmFixBoxY} width={rhythmFixBoxWidth} labelSourceId="rhythmIdentification" label="Rhythm of the whole bar" />}
                 {isMissingTarget && <RhythmGuide bar={bar} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} clef={question.clef} />}
                 {isMissingTarget
                   ? <BarNotes bar={bar} notes={targetUserNotes} positions={positions} top={top} hidden feedback={feedback} timeSignature={question.timeSignature} clef={question.clef} />
                   : <BarNotes bar={bar} notes={rhythmDisplayNotes} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} clef={question.clef} />}
                 {intervalTarget && (
                   <g>
-                    <rect
-                      x={intervalBoxX}
-                      y={intervalBoxTop}
-                      width={intervalBoxWidth}
-                      height={MARKING_BOX_HEIGHT}
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.15"
-                      rx="0"
-                      shapeRendering="crispEdges"
-                    />
-                    <BoxLabel label={labelledBoxText("interval", "Interval")} x={intervalBoxX} y={intervalBoxTop} width={intervalBoxWidth} />
+                    <MarkingBox x={intervalBoxX} y={intervalBoxTop} width={intervalBoxWidth} labelSourceId="interval" label="Interval" />
                   </g>
+                )}
+                {showCadenceBox && (
+                  <MarkingBox
+                    x={cadenceBoxX}
+                    y={cadenceBoxY}
+                    width={cadenceBoxRight - cadenceBoxX}
+                    labelSourceId="cadence"
+                    label="Cadence"
+                  />
+                )}
+                {chordTarget && (
+                  <MarkingBox
+                    x={chordBoxX}
+                    y={chordBoxY}
+                    width={chordBoxWidth}
+                    labelSourceId="chord"
+                    label="Chord"
+                  />
                 )}
                 {question.noteTarget?.barIndex === bar.barIndex && (
                   <text x={positions[question.noteTarget.noteIndex] + 3} y={top - 25} textAnchor="middle" fontSize="24" fontWeight="300" fill="currentColor">X</text>
@@ -3228,18 +3389,7 @@
                   const valueBoxWidth = 58;
                   return (
                     <g>
-                      <rect
-                        x={valueBoxX}
-                        y={valueBoxY}
-                        width={valueBoxWidth}
-                        height={MARKING_BOX_HEIGHT}
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.15"
-                        rx="0"
-                        shapeRendering="crispEdges"
-                      />
-                      <BoxLabel label={labelledBoxText("rhythmIdentification", "Value")} x={valueBoxX} y={valueBoxY} width={valueBoxWidth} />
+                      <MarkingBox x={valueBoxX} y={valueBoxY} width={valueBoxWidth} labelSourceId="rhythmIdentification" label="Value" />
                     </g>
                   );
                 })()}
@@ -3361,33 +3511,36 @@
                     onClick={() => toggleBarlinePlacement(slot)}
                   />
                 ))}
-                {isRhythmTarget && positions.map((x, index) => (
-                  <rect
-                    key={`rhythm-hit-top-${index}`}
-                    x={x - 22}
-                    y={top - 24}
-                    width="44"
-                    height="92"
-                    fill="transparent"
-                    pointerEvents="all"
-                    onPointerMove={(event) => {
-                      if (feedback || !rhythmAnswer.selectedRhythm) {
-                        setHoverRhythmTarget(null);
-                        return;
-                      }
-                      setHoverRhythmTarget(rhythmTargetFromPointer(event, bar, positions, top));
-                    }}
-                    onPointerLeave={() => setHoverRhythmTarget(null)}
-                    onPointerDown={(event) => {
-                      if (feedback || !rhythmAnswer.selectedRhythm) return;
-                      const target = rhythmTargetFromPointer(event, bar, positions, top);
-                      if (!target) return;
-                      event.preventDefault();
-                      setHoverRhythmTarget(target);
-                      placeRhythm(target.noteIndex);
-                    }}
-                  />
-                ))}
+                {isRhythmTarget && positions.map((x, index) => {
+                  if (isRhythmFixTargetBar && !rhythmFixNoteIndices.includes(index)) return null;
+                  return (
+                    <rect
+                      key={`rhythm-hit-top-${index}`}
+                      x={x - 22}
+                      y={top - 24}
+                      width="44"
+                      height="92"
+                      fill="transparent"
+                      pointerEvents="all"
+                      onPointerMove={(event) => {
+                        if (feedback || !rhythmAnswer.selectedRhythm) {
+                          setHoverRhythmTarget(null);
+                          return;
+                        }
+                        setHoverRhythmTarget(rhythmTargetFromPointer(event, bar, positions, top));
+                      }}
+                      onPointerLeave={() => setHoverRhythmTarget(null)}
+                      onPointerDown={(event) => {
+                        if (feedback || !rhythmAnswer.selectedRhythm) return;
+                        const target = rhythmTargetFromPointer(event, bar, positions, top);
+                        if (!target) return;
+                        event.preventDefault();
+                        setHoverRhythmTarget(target);
+                        placeRhythm(target.noteIndex);
+                      }}
+                    />
+                  );
+                })}
                 {rhythmIdentificationPart?.type === "scotchSnap" && positions.slice(0, -1).map((x, index) => {
                   const bounds = scotchSelectionBounds(positions, index, top);
                   return (
@@ -3805,7 +3958,7 @@
           onPlaceDynamic(null);
           return;
         }
-        if (["repeatSigns", "barlines", "rhythmicDictation"].includes(sourceId) || part.type === "scotchSnap") {
+        if (["repeatSigns", "barlines", "rhythmicDictation", "rhythmIdentification"].includes(sourceId) || part.type === "scotchSnap" || part.type === "rhythmFix") {
           setPracticeAnswers((current) => ({ ...current, [part.id]: null }));
           return;
         }
@@ -3824,7 +3977,7 @@
         if (activePart.type === "dynamic") return Boolean(question.placedDynamic);
         if (activePart.type === "repeat") return Boolean(makePlacementAnswer(practiceAnswers[activePart.id], { placements: [] }).placements?.length);
         if (activePart.type === "barlines") return Boolean(makePlacementAnswer(practiceAnswers[activePart.id], { placements: [] }).placements?.length);
-        if (activePart.type === "rhythm") return Boolean(Object.keys(makePlacementAnswer(practiceAnswers[activePart.id], { placements: {} }).placements ?? {}).length);
+        if (activePart.type === "rhythm" || activePart.type === "rhythmFix") return Boolean(Object.keys(makePlacementAnswer(practiceAnswers[activePart.id], { placements: {} }).placements ?? {}).length);
         if (activePart.type === "scotchSnap") return Boolean(makePlacementAnswer(practiceAnswers[activePart.id], { selected: null }).selected);
         return Boolean(String(practiceAnswers[activePart.id] ?? "").trim());
       }
@@ -4026,9 +4179,9 @@
             </button>
           );
         }
-        if (part.type === "rhythm") {
+        if (part.type === "rhythm" || part.type === "rhythmFix") {
           const value = makePlacementAnswer(practiceAnswers[part.id], { selectedRhythm: null, placements: {} });
-          const rhythmOptions = ["quaver", "crotchet"];
+          const rhythmOptions = part.rhythmOptions?.length ? part.rhythmOptions : ["quaver", "crotchet"];
           return (
             <div className="flex flex-wrap gap-2">
               {rhythmOptions.map((rhythm) => (
@@ -4454,10 +4607,16 @@
         const rhythmComplete = question.subquestions
           .filter((part) => part.type === "rhythm")
           .every((part) => Object.keys(makePlacementAnswer(practiceAnswers[part.id], { placements: {} }).placements ?? {}).length >= (question.rhythmTargetPattern?.length ?? 0));
+        const rhythmFixComplete = question.subquestions
+          .filter((part) => part.type === "rhythmFix")
+          .every((part) => {
+            const placements = makePlacementAnswer(practiceAnswers[part.id], { placements: {} }).placements ?? {};
+            return (question.rhythmIdentificationTarget?.noteIndices ?? []).every((index) => placements[index]);
+          });
         const scotchSnapComplete = question.subquestions
           .filter((part) => part.type === "scotchSnap")
           .every((part) => Boolean(makePlacementAnswer(practiceAnswers[part.id], { selected: null }).selected));
-        return missingComplete && textComplete && choicesComplete && dynamicComplete && repeatComplete && barlineComplete && rhythmComplete && scotchSnapComplete;
+        return missingComplete && textComplete && choicesComplete && dynamicComplete && repeatComplete && barlineComplete && rhythmComplete && rhythmFixComplete && scotchSnapComplete;
       }
 
       function submitPracticeQuestion({ requireComplete = true } = {}) {
@@ -4501,6 +4660,12 @@
           if (part.type === "rhythm") {
             const placements = makePlacementAnswer(practiceAnswers[part.id], { placements: {} }).placements ?? {};
             results[part.id] = { correct: (question.rhythmTargetPattern ?? []).every((rhythm, index) => placements[index] === rhythm) };
+            return;
+          }
+          if (part.type === "rhythmFix") {
+            const placements = makePlacementAnswer(practiceAnswers[part.id], { placements: {} }).placements ?? {};
+            const expected = question.rhythmIdentificationTarget?.targetRhythms ?? {};
+            results[part.id] = { correct: Object.entries(expected).every(([index, rhythm]) => placements[index] === rhythm) };
             return;
           }
           if (part.type === "scotchSnap") {
@@ -5064,7 +5229,7 @@
               </div>
 
               <div className={`relative -mt-[35px] mx-auto flex w-full items-center justify-center transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}>
-                <Score question={question} userNotes={userNotes} setUserNotes={setUserNotes} practiceAnswers={practiceAnswers} setPracticeAnswers={setPracticeAnswers} feedback={feedback} activeNoteId={activeNoteId} hoverNote={hoverNote} setHoverNote={setHoverNote} onSelectOption={selectMelodyOption} />
+                <Score question={question} userNotes={userNotes} setUserNotes={setUserNotes} practiceAnswers={practiceAnswers} setPracticeAnswers={setPracticeAnswers} feedback={feedback} activeIndex={activePracticePart} activeNoteId={activeNoteId} hoverNote={hoverNote} setHoverNote={setHoverNote} onSelectOption={selectMelodyOption} />
               </div>
 
               {question.questionType === "practicePaper" ? (
