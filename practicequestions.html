@@ -69,7 +69,7 @@
     const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
 
     const SVG = { width: 920, height: 420 };
-    const STAFF = { left: 58, right: 862, topA: 82, topB: 313, gap: 11 };
+    const STAFF = { left: 58, right: 862, topA: 82, topB: 242, gap: 11 };
     const BAR_COUNT = 8;
     const BARS_PER_SYSTEM = 4;
     const KEY_SIGNATURE_SPACING = 14;
@@ -3024,10 +3024,8 @@
     }
 
     function makeTranspositionTarget(question, excludedBars = []) {
-      const allowedBars = new Set([0, 1, 2]);
       const excluded = new Set([...excludedBars]);
       const eligibleBars = question.bars
-        .filter((bar) => allowedBars.has(bar.barIndex))
         .filter((bar) => (bar.notes ?? []).filter((note) => !note.rest).length >= 3)
         .filter((bar) => bar.notes.every((note, noteIndex) => {
           const transposed = transposedOneOctaveLower(note, bar.barIndex, noteIndex);
@@ -3035,7 +3033,7 @@
         }));
       const candidates = eligibleBars
         .filter((bar) => !excluded.has(bar.barIndex));
-      const bar = randomItem(candidates.length ? candidates : eligibleBars);
+      const bar = randomItem(candidates);
       if (!bar) return null;
       return {
         barIndex: bar.barIndex,
@@ -3283,8 +3281,8 @@
       const cadenceBarIndexes = [question.bars.length - 2, question.bars.length - 1];
       if (needsCadence) cadenceBarIndexes.forEach(reserveQuestionBar);
 
-      const chordBar = needsChord ? (level === "H" ? 3 : chooseChordQuestionBar(question, usedQuestionBars)) : null;
-      const higherChordAnswerBars = needsChord && level === "H" ? [4, 5] : [];
+      const chordBar = needsChord ? (level === "H" ? 8 : chooseChordQuestionBar(question, usedQuestionBars)) : null;
+      const higherChordAnswerBars = needsChord && level === "H" ? [9, 10] : [];
       if (needsChord && chordBar === null) {
         return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
       }
@@ -4395,7 +4393,12 @@
       const isOneSystem = question.bars.length <= BARS_PER_SYSTEM;
       const systemCount = Math.max(1, Math.ceil(question.bars.length / BARS_PER_SYSTEM));
       const systems = Array.from({ length: systemCount }, (_, index) => STAFF.topA + index * (STAFF.topB - STAFF.topA));
-      const scoreHeight = isOneSystem ? 154 : Math.max(SVG.height, systems.at(-1) + 160);
+      const lastSystemIndex = systemCount - 1;
+      const transpositionSystemIndex = Number.isInteger(question.transpositionTarget?.barIndex)
+        ? Math.floor(question.transpositionTarget.barIndex / BARS_PER_SYSTEM)
+        : -1;
+      const bottomPadding = transpositionSystemIndex === lastSystemIndex ? 160 : STAFF.topA;
+      const scoreHeight = isOneSystem ? 154 : Math.max(SVG.height, systems.at(-1) + bottomPadding);
       const scoreOffsetY = isOneSystem ? -30 : 0;
       const timeSignaturePart = question.subquestions?.find((part) => part.type === "timeChoice");
       const tempoQuestionPart = question.subquestions?.find((part) => part.sourceId === "tempoQuestion");
@@ -5042,7 +5045,7 @@
       }
 
       return (
-        <svg viewBox={`0 0 ${SVG.width} ${scoreHeight}`} className="h-auto w-[84%] select-none overflow-visible">
+        <svg viewBox={`0 0 ${SVG.width} ${scoreHeight}`} className={`h-auto ${question.questionType === "practicePaper" && question.bars.length > 8 ? "w-[840px] max-w-none shrink-0" : "w-[84%]"} select-none overflow-visible`}>
           <rect width={SVG.width} height={scoreHeight} fill="white" />
           <g transform={scoreOffsetY ? `translate(0 ${scoreOffsetY})` : undefined}>
           {systems.map((top, systemIndex) => <Staff key={systemIndex} top={top} systemIndex={systemIndex} question={question} showTimeSignature={showWrittenTimeSignature} />)}
@@ -5127,7 +5130,7 @@
             const transpositionAnswer = placementValue(transpositionPart, { selectedRhythm: null, notes: {}, ties: {} });
             const transpositionCanInteract = Boolean(transpositionPart && activeSourceId === "transposition" && !feedback);
             const transpositionBassTop = top + 82;
-            const transpositionBoxY = top - 64 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
+            const transpositionBoxY = top - 49 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
             const transpositionBoxHeight = transpositionBassTop + STAFF.gap * 6 - transpositionBoxY;
             const transpositionStartsSystem = bar.barIndex === 0 || bar.barIndex === 4;
             const transpositionClefX = transpositionStartsSystem ? STAFF.left + 47 : start - 19;
@@ -5833,28 +5836,11 @@
             scrollbar-gutter: stable;
             scrollbar-width: auto;
             scrollbar-color: #9ca3af #f5f5f4;
-            -webkit-mask-image:
-              linear-gradient(to bottom, transparent 0, black 42px, black calc(100% - 58px), transparent 100%),
-              linear-gradient(to right, transparent 0, black 34px, black calc(100% - 48px), transparent 100%);
-            -webkit-mask-composite: source-in;
-            mask-image:
-              linear-gradient(to bottom, transparent 0, black 42px, black calc(100% - 58px), transparent 100%),
-              linear-gradient(to right, transparent 0, black 34px, black calc(100% - 48px), transparent 100%);
-            mask-composite: intersect;
+            overscroll-behavior: contain;
           }
           .practice-score-scroll::-webkit-scrollbar { width: 14px; }
           .practice-score-scroll::-webkit-scrollbar-track { background: #f5f5f4; border-left: 1px solid #e7e5e4; }
           .practice-score-scroll::-webkit-scrollbar-thumb { background: #9ca3af; border: 3px solid #f5f5f4; border-radius: 999px; }
-          .practice-score-scroll-wrap::after {
-            content: "";
-            position: absolute;
-            left: 4px;
-            right: 14px;
-            bottom: 0;
-            top: 0;
-            pointer-events: none;
-            box-shadow: inset 0 0 42px 34px rgba(255,255,255,.96);
-          }
           .footer { width: min(1180px, calc(100% - 36px)); margin: 0 auto; padding: 22px 0 32px; border-top: 1px solid #e2e8f0; color: #475569; font-size: .86rem; }
         `;
         document.head.appendChild(style);
@@ -6494,8 +6480,8 @@
         return active ? "border-black bg-black text-white" : "border-stone-300 bg-white text-black hover:bg-stone-50";
       }
 
-      function ScoreApplyHint() {
-        return <p className="text-sm font-medium italic text-stone-500">Select the button first, then apply to the score.</p>;
+      function ScoreApplyHint({ children = "Select the button first, then apply to the score." } = {}) {
+        return <p className="text-sm font-medium italic text-stone-500">{children}</p>;
       }
 
       function answerControl(part, partIndex) {
@@ -6618,7 +6604,7 @@
                   </button>
                 ))}
               </div>
-              <ScoreApplyHint />
+              <ScoreApplyHint>Select a rhythm first, then apply to the score.</ScoreApplyHint>
             </div>
           );
         }
@@ -6721,7 +6707,7 @@
                   </button>
                 ))}
               </div>
-              <ScoreApplyHint />
+              <ScoreApplyHint>Select a rhythm first, then apply to the score.</ScoreApplyHint>
             </div>
           );
         }
@@ -6756,7 +6742,11 @@
           return <>Insert the missing notes in <strong>bar {question.targetBar + 1}</strong>. The rhythm is given.</>;
         }
         if (sourceId === "chord") {
-          if (question.level === "H") return part.prompt;
+          if (question.level === "H") {
+            const answerBars = question.higherChordTargets ?? [];
+            const answerBarText = answerBars.map((barIndex) => barIndex + 1).join(" and ");
+            return <>Name the chords played in <strong>bars {answerBarText}</strong>. You may use letter names or numbers. The chord in <strong>bar {question.chordBar + 1}</strong> is given.</>;
+          }
           return <>Name the chord outlined in <strong>bar {question.chordBar + 1}</strong>.</>;
         }
         if (sourceId === "dynamic") {
@@ -6835,17 +6825,21 @@
         if (part.type !== "higherChord" || question.level !== "H") return null;
         const keyName = KEY_ANSWERS[question.key.id]?.label ?? question.key.id;
         return (
-          <div className="ml-[48px] mt-5 max-w-[560px] text-black">
-            <p className="mb-4 text-base font-bold sm:text-lg">Choose from the following:</p>
-            <div className="grid w-fit grid-cols-[72px_128px] gap-x-6 gap-y-1 text-base font-semibold sm:text-lg">
-              {higherChordOptionPairs(question).map((option) => (
-                <React.Fragment key={option.symbol}>
-                  <span>{option.shortName}</span>
-                  <span>Chord {option.symbol}</span>
-                </React.Fragment>
-              ))}
+          <div className="ml-[48px] mt-2 max-w-none text-black">
+            <div className="flex items-start gap-6">
+              <div className="grid w-fit grid-cols-[52px_92px] gap-x-1 gap-y-0 text-base font-semibold leading-[0.92]">
+                {higherChordOptionPairs(question).map((option) => (
+                  <React.Fragment key={option.symbol}>
+                    <span>{option.shortName}</span>
+                    <span>Chord {option.symbol}</span>
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
-            <p className="mt-5 text-base font-bold sm:text-lg">The key of the music is <strong>{keyName}</strong>.</p>
+            <div className="mt-2 flex flex-nowrap items-baseline gap-x-6">
+              <p className="shrink-0 text-base font-semibold leading-tight">The key of the music is <strong>{keyName}</strong>.</p>
+              <p className="whitespace-nowrap text-sm font-medium italic text-stone-500">Insert your answers in the boxes provided in the score.</p>
+            </div>
           </div>
         );
       }
@@ -6856,12 +6850,12 @@
         const feedbackColour = revealed ? (partResult.correct ? "text-green-700" : "text-red-700") : "text-stone-950";
         const answer = answerControl(part, index);
         const nextQuestionButton = finalFeedbackNextQuestionButton(part, index);
-        const scoreDirectAnswerHint = !answer && !feedback
+        const scoreDirectAnswerHint = !answer && !feedback && part.type !== "higherChord"
           ? <p className="text-sm font-medium italic text-stone-500">Use the score above to enter your answer.</p>
           : null;
         const content = (
           <>
-            <p className={`mb-3 grid grid-cols-[36px_1fr] items-baseline gap-x-3 text-base font-semibold leading-tight ${feedbackColour}`}>
+            <p className={`${part.type === "higherChord" ? "mb-1" : "mb-3"} grid grid-cols-[36px_1fr] items-baseline gap-x-3 text-base font-semibold leading-tight ${feedbackColour}`}>
               <span>({part.label})</span>
               <span className="relative top-px flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
                 <span>{questionPrompt(part)}{questionAudioGlyph(part)}{questionFeedbackIcon(part.id)}</span>
@@ -6898,7 +6892,7 @@
       }
 
       return (
-        <section className="relative z-10 mt-[21px] rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md md:mx-3">
+        <section className="relative z-10 mt-[10px] rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md md:mx-3">
           <div className="relative mb-3 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 px-1 pb-3 md:flex-nowrap">
             <div className={`flex flex-wrap items-center gap-3 ${playsAvailable ? "" : "opacity-45 grayscale"}`}>
               <button
@@ -6992,7 +6986,7 @@
       useStyles();
       const initialLevel = useMemo(() => {
         const requested = new URLSearchParams(window.location.search).get("level");
-        return LEVELS[requested] ? requested : "N5";
+        return LEVELS[requested] ? requested : "H";
       }, []);
       const [activeLevel, setActiveLevel] = useState(initialLevel);
       const [tempo, setTempo] = useState("medium");
@@ -7884,7 +7878,7 @@
                 advanceAfterFeedback();
               }}
             >
-              <div className="relative z-[90] mb-2.5 grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+              <div className="relative z-[90] mb-[10px] grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
                 <div className="relative flex items-center gap-2" ref={menuRef}>
                   <div className="hub-menu-anchor relative">
                     <window.MLH.LevelButton
@@ -7945,7 +7939,7 @@
               </div>
 
               <div
-                className={`relative mt-0 mx-auto flex w-full justify-center transition-opacity duration-300 ${question.questionType === "practicePaper" && question.bars.length > 8 ? "practice-score-scroll practice-score-scroll-wrap max-h-[375px] items-start overflow-y-scroll rounded-xl border border-stone-200 bg-white p-2 md:w-[calc(100%-1.5rem)]" : "items-center overflow-visible"} ${visible ? "opacity-100" : "opacity-0"}`}
+                className={`relative mt-0 mx-auto flex w-full justify-center transition-opacity duration-300 ${question.questionType === "practicePaper" && question.bars.length > 8 ? "practice-score-scroll max-h-[365px] items-start overflow-x-hidden overflow-y-scroll rounded-xl border border-stone-200 bg-white p-2 md:w-[84%]" : "items-center overflow-visible"} ${visible ? "opacity-100" : "opacity-0"}`}
               >
                 <Score question={question} userNotes={userNotes} setUserNotes={setUserNotes} practiceAnswers={practiceAnswers} setPracticeAnswers={setPracticeAnswers} feedback={feedback} activeIndex={activePracticePart} activeNoteId={activeNoteId} hoverNote={hoverNote} setHoverNote={setHoverNote} onSelectOption={selectMelodyOption} />
               </div>
