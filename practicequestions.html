@@ -115,10 +115,40 @@
       { id: "2/4", top: 2, bottom: 4, beats: 2 },
       { id: "3/4", top: 3, bottom: 4, beats: 3 },
       { id: "4/4", top: 4, bottom: 4, beats: 4 },
+      { id: "5/4", top: 5, bottom: 4, beats: 5, weight: 1.33 },
       { id: "6/8", top: 6, bottom: 8, beats: 3 },
       { id: "9/8", top: 9, bottom: 8, beats: 4.5, rare: true },
       { id: "12/8", top: 12, bottom: 8, beats: 6, rare: true },
     ];
+    const FIVE_FOUR_GROUPINGS = [
+      { id: "2+3", label: "2 + 3", beatGroups: [2, 3], secondaryAccentBeat: 2, feel: "ONE two THREE four five" },
+    ];
+    function fiveFourGroupingById(id) {
+      return FIVE_FOUR_GROUPINGS.find((grouping) => grouping.id === id) ?? null;
+    }
+    function withFiveFourGrouping(signature, groupingId = null) {
+      if (signature?.id !== "5/4") return signature;
+      const grouping = fiveFourGroupingById(groupingId) ?? FIVE_FOUR_GROUPINGS[0];
+      return {
+        ...signature,
+        grouping: grouping.id,
+        groupingLabel: grouping.label,
+        beatGroups: grouping.beatGroups,
+        secondaryAccentBeat: grouping.secondaryAccentBeat,
+        pupilExplanation: `5 crotchet beats grouped as ${grouping.label}`,
+      };
+    }
+    function groupStartBeatsForTimeSignature(timeSignature) {
+      if (timeSignature?.id === "5/4") {
+        const beatGroups = timeSignature.beatGroups?.length ? timeSignature.beatGroups : [5];
+        return beatGroups.reduce((starts, beats) => [...starts, starts.at(-1) + beats], [0]).slice(0, -1);
+      }
+      if (timeSignature?.bottom === 8) {
+        const numerator = Number(timeSignature?.top ?? String(timeSignature?.id ?? "6/8").split("/")[0] ?? 6);
+        return Array.from({ length: Math.max(1, Math.round(numerator / 3)) }, (_, index) => index * 1.5);
+      }
+      return Array.from({ length: Math.max(1, Math.round(timeSignature?.beats ?? 4)) }, (_, index) => index);
+    }
     function classifyMeter(timeSignature) {
       const numerator = Number(timeSignature?.top ?? String(timeSignature?.id ?? "4/4").split("/")[0] ?? 4);
       const denominator = Number(timeSignature?.bottom ?? String(timeSignature?.id ?? "4/4").split("/")[1] ?? 4);
@@ -132,9 +162,12 @@
           beatUnit: "dottedCrotchet",
           subdivisionUnit: "quaver",
           beatGroups: compoundGroups[numerator],
+          groupStartBeats: groupStartBeatsForTimeSignature(timeSignature),
         };
       }
-      const simpleGroups = numerator === 4 ? [2, 2] : [numerator];
+      const simpleGroups = timeSignature?.id === "5/4" && timeSignature?.beatGroups?.length
+        ? timeSignature.beatGroups
+        : numerator === 4 ? [2, 2] : [numerator];
       return {
         numerator,
         denominator,
@@ -143,6 +176,7 @@
         beatUnit: denominator === 2 ? "minim" : "crotchet",
         subdivisionUnit: "quaver",
         beatGroups: simpleGroups,
+        groupStartBeats: groupStartBeatsForTimeSignature(timeSignature),
       };
     }
     const durationToBeats = {
@@ -236,6 +270,7 @@
       simple_2: 2,
       simple_3: 3,
       simple_4: 4,
+      simple_5: 5,
       compound_2: 3,
       compound_3: 4.5,
       compound_4: 6,
@@ -331,6 +366,7 @@
       simple_2: build(FULL_METER_BEATS.simple_2),
       simple_3: build(FULL_METER_BEATS.simple_3),
       simple_4: build(FULL_METER_BEATS.simple_4),
+      simple_5: build(FULL_METER_BEATS.simple_5),
     });
     const fullCompoundVariants = (build) => ({
       compound_2: build([3, 3]),
@@ -449,6 +485,16 @@
         ["crotchet", "crotchet", "quaver", "quaver", "crotchet"],
         ["minim", "minim"],
       ],
+      "5/4": [
+        ["semibreve", "crotchet"],
+        ["crotchet", "semibreve"],
+        ["minim", "minim", "crotchet"],
+        ["crotchet", "minim", "minim"],
+        ["crotchet", "crotchet", "crotchet", "crotchet", "crotchet"],
+        ["dottedCrotchet", "quaver", "minim", "crotchet"],
+        ["crotchet", "dottedCrotchet", "quaver", "minim"],
+        ["quaver", "quaver", "crotchet", "crotchet", "minim"],
+      ],
       "6/8": [
         ["dottedMinim"],
         ["dottedCrotchet", "dottedCrotchet"],
@@ -538,6 +584,14 @@
         ["crotchet", "quaver", "quaver", "crotchetRest", "crotchet"],
         ["minim", "quaver", "quaver", "crotchet"],
         ["quaverRest", "quaver", "crotchet", "minim"],
+      ],
+      "5/4": [
+        ["quaver", "quaver", "crotchet", "quaver", "quaver", "minim"],
+        ["dottedCrotchet", "quaver", "crotchet", "minim"],
+        ["minim", "quaver", "quaver", "crotchet", "crotchet"],
+        ["crotchet", "quaver", "quaver", "crotchetRest", "minim"],
+        ["quaverRest", "quaver", "crotchet", "minim", "crotchet"],
+        ["crotchet", "crotchet", "crotchet", "crotchet", "crotchet"],
       ],
       "6/8": [
         ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
@@ -743,13 +797,21 @@
       return randomItem(weighted.length ? weighted : items);
     }
     const timeSignaturesForLevel = (level) => {
-      if (isHigherLevel(level)) {
+      if (level === "AH") {
         return TIME_SIGNATURES.filter((signature) => signature.id !== "12/8");
       }
-      return TIME_SIGNATURES.filter((signature) => !["6/8", "9/8", "12/8"].includes(signature.id));
+      if (isHigherLevel(level)) {
+        return TIME_SIGNATURES.filter((signature) => !["5/4", "12/8"].includes(signature.id));
+      }
+      return TIME_SIGNATURES.filter((signature) => !["5/4", "6/8", "9/8", "12/8"].includes(signature.id));
     };
     const simpleTimeSignaturesForLevel = (level) => timeSignaturesForLevel(level)
       .filter((signature) => classifyMeter(signature).meterFamily.startsWith("simple_"));
+    const timeSignatureAnswerOptionsForLevel = (level) => {
+      if (level === "AH") return ["2/4", "3/4", "4/4", "5/4", "6/8", "9/8", "12/8"];
+      if (level === "H") return ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8"];
+      return ["2/4", "3/4", "4/4"];
+    };
     const allowedRhythmsForLevel = (level) => {
       if (level === "N3") return new Set(["semibreve", "dottedMinim", "minim", "crotchet"]);
       if (level === "N4") return new Set(["semibreve", "dottedMinim", "minim", "crotchet", "quaver", "semiquaver"]);
@@ -796,7 +858,7 @@
       if (level === "N3") return PRACTICE_QUESTION_TYPES.filter((type) => NATIONAL3_PRACTICE_QUESTION_TYPE_IDS.has(type.id));
       if (level === "N4") return PRACTICE_QUESTION_TYPES.filter((type) => NATIONAL4_PRACTICE_QUESTION_TYPE_IDS.has(type.id));
       if (level === "N5") return PRACTICE_QUESTION_TYPES.filter((type) => !HIGHER_ONLY_PRACTICE_QUESTION_TYPE_IDS.has(type.id));
-      if (level === "H") return PRACTICE_QUESTION_TYPES.filter((type) => HIGHER_PRACTICE_QUESTION_TYPE_IDS.has(type.id));
+      if (level === "H" || level === "AH") return PRACTICE_QUESTION_TYPES.filter((type) => HIGHER_PRACTICE_QUESTION_TYPE_IDS.has(type.id));
       return PRACTICE_QUESTION_TYPES;
     };
     const defaultPracticeQuestionTypesForLevel = (level) => Object.fromEntries(PRACTICE_QUESTION_TYPES.map((type) => [
@@ -2232,6 +2294,15 @@
         ["dottedCrotchet", "quaver", "crotchet", "crotchet"],
         ["minim", "quaver", "quaver", "crotchet"],
       ],
+      "5/4": [
+        ["quaver", "quaver", "crotchet", "quaver", "quaver", "minim"],
+        ["dottedCrotchetRest", "quaver", "crotchet", "minim"],
+        ["crotchetRest", "quaver", "quaver", "crotchet", "minim"],
+        ["quaverRest", "quaver", "crotchet", "crotchet", "crotchet", "crotchet"],
+        ["crotchet", "quaver", "quaver", "crotchet", "minim"],
+        ["dottedCrotchet", "quaver", "crotchet", "minim"],
+        ["minim", "quaver", "quaver", "crotchet", "crotchet"],
+      ],
       "6/8": [
         ["quaver", "quaver", "quaver", "dottedCrotchet"],
         ["dottedCrotchetRest", "quaver", "quaver", "quaver"],
@@ -2293,6 +2364,7 @@
     }
 
     function higherFinalPatternForSignature(timeSignature) {
+      if (timeSignature.id === "5/4") return ["semibreve", "crotchet"];
       if (timeSignature.id === "9/8") return ["dottedCrotchet", "dottedCrotchet", "dottedCrotchet"];
       return [finalRhythmForSignature(timeSignature)];
     }
@@ -2338,14 +2410,16 @@
       return clamp(tonic + contour[barIndex], range.min, range.max);
     }
 
-    function chooseHigherPhrasePitch({ key, chordSymbol, previous, allNotes, rhythm, beat, barIndex, motif, motifIndex, cadenceLetter = null }) {
+    function chooseHigherPhrasePitch({ key, chordSymbol, previous, allNotes, rhythm, beat, barIndex, motif, motifIndex, cadenceLetter = null, timeSignature = null }) {
       const chordLetters = key.chords[chordSymbol] ?? key.chords.I;
       const previousStep = previous?.step ?? tonicStartNoteForLevel("H", key).step;
       const range = higherMelodyRange(key);
       const previousInterval = allNotes.length > 1 ? previousStep - allNotes.at(-2).step : 0;
       const recoveringLeap = Math.abs(previousInterval) > 2;
       const repeatedRun = currentRepeatedPitchRun(allNotes);
-      const strongBeat = beat === 0 || beat === 2 || beat === 3 || beat === 1.5;
+      const strongBeat = timeSignature?.id === "5/4"
+        ? groupStartBeatsForTimeSignature(timeSignature).some((groupBeat) => Math.abs(beat - groupBeat) < 0.001)
+        : beat === 0 || beat === 2 || beat === 3 || beat === 1.5;
       const targetStep = higherContourTargetStep(key, barIndex);
       const motifStep = motif?.[motifIndex % motif.length]?.step ?? targetStep;
 
@@ -2410,6 +2484,7 @@
           motif,
           motifIndex: noteIndex + phraseOffset,
           cadenceLetter: isLastSound ? cadenceLetter : null,
+          timeSignature,
         });
         if (barIndex === 0 && noteIndex === 0) base = higherTonicStartNote(key);
         const note = makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol);
@@ -2511,9 +2586,10 @@
       return true;
     }
 
-    function generateHigherPhraseQuestion(attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false) {
+    function generateHigherPhraseQuestion(attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = "H") {
       const activeBarCount = 16;
-      const timeSignature = weightedRandomItem(requireSimpleTime ? simpleTimeSignaturesForLevel("H") : timeSignaturesForLevel("H"));
+      const timeSignature = withFiveFourGrouping(weightedRandomItem(requireSimpleTime ? simpleTimeSignaturesForLevel(timeSignatureLevel) : timeSignaturesForLevel(timeSignatureLevel)));
+      const canRetryPhrase = canRetryForLevel("H", attempt) && timeSignatureLevel !== "AH";
       const majorKeys = KEYS.filter((key) => key.id !== "Am");
       const key = Math.random() < 0.82 ? randomItem(majorKeys) : KEYS.find((item) => item.id === "Am");
       const progression = generateChordProgression16(cadenceId, key);
@@ -2563,12 +2639,12 @@
         barCount: activeBarCount,
         useShortPrompt: true,
       };
-      if (requireMissingCopy && !makePreviousBarStepVariation(question) && canRetryForLevel("H", attempt)) {
-        return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+      if (requireMissingCopy && !makePreviousBarStepVariation(question) && canRetryPhrase) {
+        return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel);
       }
       Object.assign(question, chooseMissingNoteScope(question));
-      if (!strongBeatsUseChordTones(question) && canRetryForLevel("H", attempt)) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
-      if (!validateMelodyStructure(question) && canRetryForLevel("H", attempt)) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+      if (!strongBeatsUseChordTones(question) && canRetryPhrase) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel);
+      if (!validateMelodyStructure(question) && canRetryPhrase) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel);
       return question;
     }
 
@@ -2641,20 +2717,23 @@
       }, 0);
     }
 
-    function noteIsOnStrongBeat(note) {
+    function noteIsOnStrongBeat(note, timeSignature = null) {
       if (!note || note.rest) return false;
+      if (timeSignature?.id === "5/4") {
+        return groupStartBeatsForTimeSignature(timeSignature).some((beat) => Math.abs((note.beat ?? 0) - beat) < 0.001);
+      }
       return note.beat === 0 || note.beat === 2 || note.beat === 3 || (note.beat === 1.5 && rhythmInfo(note.rhythm).beats >= 1);
     }
 
     function pitchFitsStrongBeatChord(question, bar, note, pitch) {
-      if (!noteIsOnStrongBeat(note)) return true;
+      if (!noteIsOnStrongBeat(note, question.timeSignature)) return true;
       const chordLetters = question.key?.chords?.[bar.chordSymbol] ?? [];
       return chordLetters.includes(pitch.letter);
     }
 
-    function chordForStrongBeatNotes(key, notes, fallbackSymbol = "I") {
+    function chordForStrongBeatNotes(key, notes, fallbackSymbol = "I", timeSignature = null) {
       const strongBeatLetters = (notes ?? [])
-        .filter(noteIsOnStrongBeat)
+        .filter((note) => noteIsOnStrongBeat(note, timeSignature))
         .map((note) => note.letter);
       const chordSymbols = Object.keys(key?.chords ?? {});
       const fallbackLetters = key?.chords?.[fallbackSymbol] ?? [];
@@ -2668,7 +2747,7 @@
     function strongBeatsUseChordTones(question) {
       return question.bars.every((bar) => {
         const chordLetters = question.key?.chords?.[bar.chordSymbol] ?? [];
-        return (bar.notes ?? []).every((note) => !noteIsOnStrongBeat(note) || chordLetters.includes(note.letter));
+        return (bar.notes ?? []).every((note) => !noteIsOnStrongBeat(note, question.timeSignature) || chordLetters.includes(note.letter));
       });
     }
 
@@ -2773,7 +2852,7 @@
 
     function makeCompletionQuestion(level = "N5", attempt = 0, allowDenseAhPatterns = false) {
       const activeBarCount = barCountForLevel(level);
-      const timeSignature = weightedRandomItem(timeSignaturesForLevel(level));
+      const timeSignature = withFiveFourGrouping(weightedRandomItem(timeSignaturesForLevel(level)));
       const majorKeys = KEYS.filter((key) => key.id !== "Am");
       const key = level === "N3" || level === "N4"
         ? KEYS.find((item) => item.id === "C")
@@ -2887,10 +2966,10 @@
       interval: [8, 9, 10, 11],
     };
 
-    function makeEightBarRepetitionQuestion(level = "N5", attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false) {
-      if (level === "H") return generateHigherPhraseQuestion(attempt, cadenceId, requireMissingCopy, requireSimpleTime);
+    function makeEightBarRepetitionQuestion(level = "N5", attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = level) {
+      if (level === "H") return generateHigherPhraseQuestion(attempt, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel);
       const activeBarCount = level === "H" ? 16 : BAR_COUNT;
-      const timeSignature = weightedRandomItem(requireSimpleTime ? simpleTimeSignaturesForLevel(level) : timeSignaturesForLevel(level));
+      const timeSignature = withFiveFourGrouping(weightedRandomItem(requireSimpleTime ? simpleTimeSignaturesForLevel(level) : timeSignaturesForLevel(level)));
       const majorKeys = KEYS.filter((key) => key.id !== "Am");
       const key = level === "N3" || level === "N4"
         ? KEYS.find((item) => item.id === "C")
@@ -2990,7 +3069,7 @@
           .filter((offset) => canTransposeBarByStep(source, offset, level))
           .map((offset) => {
             const notes = sequenceBarByStep(source, targetBar, offset, key, bars[targetBar]?.chordSymbol);
-            const chordSymbol = chordForStrongBeatNotes(key, notes, bars[targetBar]?.chordSymbol);
+            const chordSymbol = chordForStrongBeatNotes(key, notes, bars[targetBar]?.chordSymbol, timeSignature);
             return notes && chordSymbol ? { notes, chordSymbol } : null;
           })
           .filter(Boolean);
@@ -4433,7 +4512,7 @@
     }
 
     function selectedPracticeQuestionTypeIds(enabledQuestionTypes, level = "N5") {
-      if (level === "H") return selectedHigherPracticeQuestionTypeIds(enabledQuestionTypes);
+      if (level === "H" || level === "AH") return selectedHigherPracticeQuestionTypeIds(enabledQuestionTypes);
       const balancedOptions = practiceQuestionSelectionOptions(enabledQuestionTypes, level);
       if (balancedOptions.length) return randomItem(balancedOptions);
       const options = customPracticeQuestionSelectionOptions(enabledQuestionTypes, level);
@@ -4467,10 +4546,12 @@
       return `Insert the missing barline between bars ${firstBar} and ${lastBar}.`;
     }
 
-    function makePracticePaperQuestion(level = "N5", attempt = 0, enabledQuestionTypes = DEFAULT_PRACTICE_QUESTION_TYPES) {
+    function makePracticePaperQuestion(level = "N5", attempt = 0, enabledQuestionTypes = DEFAULT_PRACTICE_QUESTION_TYPES, timeSignatureLevel = level) {
+      const canRetryPracticeQuestion = canRetryForLevel(level, attempt) && timeSignatureLevel !== "AH";
+      const retryPracticeQuestion = () => makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes, timeSignatureLevel);
       const selectedSourceIds = new Set(selectedPracticeQuestionTypeIds(enabledQuestionTypes, level));
-      if (hasQuestionTypeConflict([...selectedSourceIds], level) && hasConflictFreePracticeQuestionSelection(enabledQuestionTypes, level) && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (hasQuestionTypeConflict([...selectedSourceIds], level) && hasConflictFreePracticeQuestionSelection(enabledQuestionTypes, level) && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
       const needsMissing = selectedSourceIds.has("missing");
       const needsChord = selectedSourceIds.has("chord");
@@ -4491,13 +4572,14 @@
       const needsArticulation = selectedSourceIds.has("articulation");
       const needsTransposition = selectedSourceIds.has("transposition");
       let cadenceId = choosePracticeCadenceId(level);
-      let question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsTriplets);
+      const needsSimpleTime = needsTriplets || (level === "H" && needsRhythmicDictation);
+      let question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel);
       if (level === "H" && question.key.id === "Am" && ["plagal", "interrupted"].includes(cadenceId)) {
         cadenceId = randomItem(["perfect", "imperfect"]);
-        question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsTriplets);
+        question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel);
       }
-      if (needsTime && needsMissing && (question.targetBar === 0 || question.missingSourceBar === 0) && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsTime && needsMissing && (question.targetBar === 0 || question.missingSourceBar === 0) && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
       const finalBarIndex = question.bars.length - 1;
       const usedQuestionBars = new Set();
@@ -4515,7 +4597,7 @@
       const higherChordAnswerBars = needsChord && level === "H" ? [12, 13] : [];
       const higherChordGuideProtectedBars = needsChord && level === "H" ? [chordBar - 1, chordBar] : [];
       if (needsChord && chordBar === null) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+        return retryPracticeQuestion();
       }
       if (needsChord) reserveQuestionBar(chordBar);
       higherChordGuideProtectedBars.forEach(reserveQuestionBar);
@@ -4523,7 +4605,7 @@
       if (needsChord && level !== "H") outlineChordInBar(question, chordBar);
       forceFirstNoteToTonic(question.bars, level, question.key);
       const barlineTarget = needsBarlines ? chooseBarlineTarget(question, usedQuestionBars) : null;
-      if (needsBarlines && !barlineTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsBarlines && !barlineTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       const barlineTargets = needsBarlines && barlineTarget ? [barlineTarget] : [];
       const hiddenBarNumbers = needsBarlines ? barlineTargets.flatMap((target) => target.hiddenBarNumbers ?? []) : [];
       const displayHiddenBarNumbers = needsBarlines
@@ -4611,7 +4693,7 @@
       ensureAminorHasGSharp(question, excludedBars);
       forceFirstNoteToTonic(question.bars, level, question.key);
       const transpositionTarget = needsTransposition ? makeTranspositionTarget(question, [...usedQuestionBars]) : null;
-      if (needsTransposition && !transpositionTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsTransposition && !transpositionTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsTransposition && transpositionTarget) {
         reserveQuestionBar(transpositionTarget.barIndex);
         excludedBars.push(transpositionTarget.barIndex);
@@ -4630,56 +4712,56 @@
           ? level === "N3" || level === "N4" ? plantNational3IntervalTarget(question, looseExcludedBars) : plantIntervalTarget(question, looseExcludedBars, higherIntervalBars)
           : null;
       }
-      if (needsInterval && !intervalTarget && !intervalInsertTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsInterval && !intervalTarget && !intervalInsertTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       const intervalQuestionBar = intervalInsertTarget?.barIndex ?? intervalTarget?.bar?.barIndex ?? null;
       if (needsInterval && Number.isInteger(intervalQuestionBar)) reserveQuestionBar(intervalQuestionBar);
       if (needsInterval && Number.isInteger(intervalQuestionBar)) ensureAminorHasGSharp(question, [...excludedBars, intervalQuestionBar]);
       const intervalAnswer = intervalTarget ? intervalAnswerForTarget(question, intervalTarget) : null;
       const restTarget = needsRests ? plantRestTarget(question, [...usedQuestionBars], higherRestBars) : null;
-      if (needsRests && !restTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsRests && !restTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsRests && restTarget) reserveQuestionBar(restTarget.barIndex);
       const wantsNoteValueCircle = needsNoteIdentification && (level === "N3" || level === "N4") && Math.random() < 0.5;
       const noteValueCircleTarget = wantsNoteValueCircle ? chooseCircleNoteValueTarget(question, level, [...usedQuestionBars]) : null;
       const noteTarget = needsNoteIdentification && !noteValueCircleTarget ? chooseNoteIdentificationTarget(question, [...usedQuestionBars]) : null;
-      if (needsNoteIdentification && !noteValueCircleTarget && !noteTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsNoteIdentification && !noteValueCircleTarget && !noteTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       const noteIdentificationQuestionBar = noteValueCircleTarget?.barIndex ?? noteTarget?.bar?.barIndex ?? null;
       if (needsNoteIdentification && Number.isInteger(noteIdentificationQuestionBar)) reserveQuestionBar(noteIdentificationQuestionBar);
       const rhythmIdentificationTarget = needsRhythmIdentification
         ? level === "N3" || level === "N4" ? plantLevelRhythmIdentificationTarget(question, level, [...usedQuestionBars]) : plantRhythmIdentificationTarget(question, [...usedQuestionBars])
         : null;
-      if (needsRhythmIdentification && !rhythmIdentificationTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsRhythmIdentification && !rhythmIdentificationTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsRhythmIdentification && rhythmIdentificationTarget) reserveQuestionBar(rhythmIdentificationTarget.barIndex);
       const scaleDegreeTarget = needsScaleDegrees ? chooseScaleDegreeTarget(question, [...usedQuestionBars]) : null;
-      if (needsScaleDegrees && !scaleDegreeTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsScaleDegrees && !scaleDegreeTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       const scaleDegreeAnswerBars = needsScaleDegrees && scaleDegreeTarget ? scaleDegreeAnswerBoxBars(question, scaleDegreeTarget.barIndex).bars : [];
       if (needsScaleDegrees) scaleDegreeAnswerBars.forEach((barIndex) => reserveQuestionBar(barIndex));
       const tripletTarget = needsTriplets ? plantTripletTarget(question, [...usedQuestionBars]) : null;
-      if (needsTriplets && !tripletTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsTriplets && !tripletTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       const tripletAnswerBars = needsTriplets && tripletTarget ? tripletAnswerBoxBars(question, tripletTarget.barIndex).bars : [];
       if (needsTriplets && tripletTarget) plantTripletAnswerBoxRhythmContext(question, tripletTarget);
       const givenTriplets = needsTriplets && tripletTarget ? plantGivenTriplets(question, tripletTarget, [...usedQuestionBars], 2) : [];
-      if (needsTriplets && tripletTarget && givenTriplets.length < 2 && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsTriplets && tripletTarget && givenTriplets.length < 2 && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
       if (needsTriplets) tripletAnswerBars.forEach((barIndex) => reserveQuestionBar(barIndex));
       if (needsTriplets) givenTriplets.forEach((placement) => reserveQuestionBar(placement.barIndex));
       const accidentalTarget = needsAccidentals ? makeAccidentalQuestionTarget(question, [...usedQuestionBars]) : null;
-      if (needsAccidentals && !accidentalTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsAccidentals && !accidentalTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsAccidentals && accidentalTarget) reserveQuestionBar(accidentalTarget.barIndex);
       const articulationTarget = needsArticulation ? makeArticulationTarget(question, [...usedQuestionBars]) : null;
-      if (needsArticulation && !articulationTarget && canRetryForLevel(level, attempt)) return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsArticulation && !articulationTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsArticulation && articulationTarget) reserveQuestionBar(articulationTarget.barIndex);
       const preferRhythmFix = needsRhythmicDictation && (level === "H" || Math.random() < 0.5);
       const rhythmFixTarget = preferRhythmFix ? plantRhythmFixTarget(question, [...usedQuestionBars]) : null;
       if (rhythmFixTarget) reserveQuestionBar(rhythmFixTarget.barIndex);
-      if (needsRhythmicDictation && level === "H" && !rhythmFixTarget && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsRhythmicDictation && level === "H" && !rhythmFixTarget && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
       const rhythmCandidates = [0, 1, 2, 4, 5, 6].filter((barIndex) =>
         !usedQuestionBars.has(barIndex)
       );
-      if (needsRhythmicDictation && !rhythmFixTarget && !rhythmCandidates.length && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsRhythmicDictation && !rhythmFixTarget && !rhythmCandidates.length && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
       const rhythmTargetBar = needsRhythmicDictation && !rhythmFixTarget && level !== "H"
         ? randomItem(rhythmCandidates.length ? rhythmCandidates : unusedQuestionBars([0, 1, 2, 4, 5, 6]))
@@ -4706,8 +4788,8 @@
         ...(rhythmFixTarget ? [rhythmFixTarget.barIndex] : []),
         ...(Number.isInteger(rhythmTargetBar) ? [rhythmTargetBar] : []),
       ].filter((barIndex) => Number.isInteger(barIndex));
-      if (new Set(barQuestionTargets).size !== barQuestionTargets.length && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (new Set(barQuestionTargets).size !== barQuestionTargets.length && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
       const rhythmTargetPattern = Number.isInteger(rhythmTargetBar) ? applyRhythmDictationPattern(question, rhythmTargetBar) : null;
       if (needsRhythmIdentification && level !== "N3" && level !== "N4") {
@@ -4731,20 +4813,20 @@
         ...(needsRests && restTarget ? [restTarget.barIndex] : []),
       ];
       if (level !== "N3" && level !== "N4") refitQuestionChordsToMelody(question, chordRefitProtectedBars);
-      if (needsMissing && level === "H" && !targetIsPreviousBarWithOneStepChange(question) && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsMissing && level === "H" && !targetIsPreviousBarWithOneStepChange(question) && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
-      if (needsMissing && level !== "H" && requiresExactMissingCopy(level, true) && !targetMatchesSelectedSource(question) && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsMissing && level !== "H" && requiresExactMissingCopy(level, true) && !targetMatchesSelectedSource(question) && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
-      if (needsMissing && level === "N4" && !targetIsOneStepSequenceFromPrevious(question) && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (needsMissing && level === "N4" && !targetIsOneStepSequenceFromPrevious(question) && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
-      if (!strongBeatsUseChordTones(question) && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (!strongBeatsUseChordTones(question) && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
-      if ((level === "N5" || isHigherLevel(level)) && !melodyPassesQualityRules(question) && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if ((level === "N5" || isHigherLevel(level)) && !melodyPassesQualityRules(question) && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
       const protectedPitchBars = [
         0,
@@ -4756,8 +4838,8 @@
         ...(needsNoteIdentification && Number.isInteger(noteIdentificationQuestionBar) ? [noteIdentificationQuestionBar] : []),
       ].filter((barIndex) => Number.isInteger(barIndex));
       ensureAminorHasGSharp(question, protectedPitchBars, false);
-      if (question.key.id === "Am" && !hasVisibleGSharp(question, protectedPitchBars) && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (question.key.id === "Am" && !hasVisibleGSharp(question, protectedPitchBars) && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
       const keyAnswer = KEY_ANSWERS[question.key.id] ?? KEY_ANSWERS.C;
       const timeAnswer = question.timeSignature.id;
@@ -4792,7 +4874,7 @@
           sourceId: "time",
           prompt: "Identify the time signature.",
           answer: timeAnswer,
-          options: TIME_SIGNATURES.filter((signature) => (level === "H" ? ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8"] : ["2/4", "3/4", "4/4"]).includes(signature.id)),
+          options: TIME_SIGNATURES.filter((signature) => timeSignatureAnswerOptionsForLevel(timeSignatureLevel).includes(signature.id)),
           type: "timeChoice",
         },
         {
@@ -4878,7 +4960,7 @@
         ...(needsRhythmicDictation && rhythmFixTarget ? [{
           id: "rhythmicDictation",
           sourceId: "rhythmicDictation",
-          prompt: `Correct the rhythm in bar ${rhythmFixTarget.barIndex + 1}.`,
+          prompt: `Correct the rhythm in the box in bar ${rhythmFixTarget.barIndex + 1} to match what you hear.`,
           answer: "Rhythm corrected",
           type: "rhythmFix",
           rhythmOptions: ["dottedCrotchet", "quaver"],
@@ -5008,8 +5090,8 @@
       const missingSelectedSourceIds = [...selectedSourceIds].filter((sourceId) =>
         !baseSubquestions.some((part) => part.sourceId === sourceId)
       );
-      if (missingSelectedSourceIds.length && canRetryForLevel(level, attempt)) {
-        return makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes);
+      if (missingSelectedSourceIds.length && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
       }
       const fillSubquestions = baseSubquestions.filter((part) => {
         if (selectedSourceIds.has(part.sourceId)) return false;
@@ -5137,7 +5219,7 @@
       if (level === "N4") return makePracticePaperQuestion(level, 0, enabledQuestionTypes);
       if (level === "N5") return makePracticePaperQuestion(level, 0, enabledQuestionTypes);
       if (level === "H") return makePracticePaperQuestion(level, 0, enabledQuestionTypes);
-      if (level === "AH") return makeIdentifyMelodyQuestion(level);
+      if (level === "AH") return makePracticePaperQuestion("H", 0, enabledQuestionTypes, "AH");
       if ((level === "N3" || level === "N4" || level === "N5") && Math.random() < 0.5) {
         return makeEightBarRepetitionQuestion(level);
       }
@@ -5196,6 +5278,40 @@
       return note?.displayRhythm ?? note?.rhythm;
     }
 
+    function internalGroupingBoundaries(timeSignature) {
+      const starts = groupStartBeatsForTimeSignature(timeSignature);
+      const barBeats = timeSignature?.beats ?? 0;
+      return starts.filter((beat) => beat > 0 && beat < barBeats);
+    }
+
+    function beatGroupIndexForBeat(beat, timeSignature) {
+      const starts = groupStartBeatsForTimeSignature(timeSignature);
+      let groupIndex = 0;
+      starts.forEach((start, index) => {
+        if (beat + 0.001 >= start) groupIndex = index;
+      });
+      return groupIndex;
+    }
+
+    function noteCrossesInternalBoundary(note, timeSignature) {
+      if (!note) return false;
+      const start = note.beat ?? 0;
+      const end = start + (note.beats ?? rhythmInfo(displayRhythmForNote(note)).beats);
+      return internalGroupingBoundaries(timeSignature).some((boundary) => start + 0.001 < boundary && end > boundary + 0.001);
+    }
+
+    function notesShareBeamGroup(first, second, timeSignature) {
+      if (!timeSignature) return true;
+      if (timeSignature.id === "5/4") {
+        if (noteCrossesInternalBoundary(first, timeSignature) || noteCrossesInternalBoundary(second, timeSignature)) return false;
+        return beatGroupIndexForBeat(first.beat ?? 0, timeSignature) === beatGroupIndexForBeat(second.beat ?? 0, timeSignature);
+      }
+      if (timeSignature.id === "6/8") {
+        return beatGroupIndexForBeat(first.beat ?? 0, timeSignature) === beatGroupIndexForBeat(second.beat ?? 0, timeSignature);
+      }
+      return true;
+    }
+
     function getQuaverGroups(notes, timeSignature = null) {
       const groups = [];
       let index = 0;
@@ -5206,17 +5322,13 @@
         }
         const start = index;
         while (isBeamableRhythm(displayRhythmForNote(notes[index + 1]))) {
-          if (timeSignature?.id === "6/8") {
-            const currentGroup = Math.floor((notes[index].beat + 0.001) / 1.5);
-            const nextGroup = Math.floor((notes[index + 1].beat + 0.001) / 1.5);
-            if (currentGroup !== nextGroup) break;
-          }
+          if (!notesShareBeamGroup(notes[index], notes[index + 1], timeSignature)) break;
           index += 1;
         }
         let groupStart = start;
         while (groupStart <= index) {
           const remaining = index - groupStart + 1;
-          const groupSize = remaining === 5 ? 3 : remaining >= 4 ? 4 : remaining;
+          const groupSize = timeSignature?.id === "5/4" ? remaining : remaining === 5 ? 3 : remaining >= 4 ? 4 : remaining;
           const groupEnd = groupStart + groupSize - 1;
           if (groupEnd > groupStart) groups.push({ start: groupStart, end: groupEnd });
           groupStart = groupEnd + 1;
@@ -5450,6 +5562,7 @@
           <CalibratedSymbol symbolKey={clef === "bass" ? "fClef" : "gClef"} x={STAFF.left + 32} y={clef === "bass" ? yForStep(6, top) : yForStep(2, top)} colour={colour} />
           <KeySignature keySignature={question.key} top={top} clef={clef} colour={colour} />
           {systemIndex === 0 && shouldShowTimeSignature && <TimeSignature signature={question.timeSignature} top={top} colour={colour} />}
+          {systemIndex === 0 && shouldShowTimeSignature && <FiveFourGroupingLabel signature={question.timeSignature} top={top} colour={colour} />}
         </g>
       );
     }
@@ -5470,6 +5583,17 @@
       const y = calibrationAnchorY(key, top) + STAFF.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
       const fontSize = STAFF.gap * Number(settings.fontSizeScale || 3.4);
       return <g pointerEvents="none"><text className="music-symbol" x={x} y={y - fontSize * 0.14} fill={colour} fontSize={fontSize} textAnchor="middle">{topGlyph}</text><text className="music-symbol" x={x} y={y + fontSize * 0.43} fill={colour} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text></g>;
+    }
+
+    function FiveFourGroupingLabel({ signature, top, colour = "currentColor" }) {
+      if (signature?.id !== "5/4" || !signature.groupingLabel) return null;
+      const key = `timeSig${signature.top}${signature.bottom}`;
+      const x = calibrationAnchorX(key) + 32;
+      return (
+        <text x={x} y={top - 11} fill={colour} fontSize="12" fontWeight="700" fontStyle="italic" textAnchor="start" pointerEvents="none">
+          {signature.groupingLabel}
+        </text>
+      );
     }
 
     function BarNotes({ bar, notes, positions, top, colour = "currentColor", feedback = null, hidden = false, activeNoteId = null, forceStemUp = false, timeSignature = null, clef = "treble", visualScale = 1 }) {
@@ -5685,7 +5809,7 @@
       const transpositionSystemIndex = Number.isInteger(question.transpositionTarget?.barIndex)
         ? Math.floor(question.transpositionTarget.barIndex / BARS_PER_SYSTEM)
         : -1;
-      const transpositionLinePush = transpositionSystemIndex >= 0 ? 65 : 0;
+      const transpositionLinePush = transpositionSystemIndex === 1 ? 65 : transpositionSystemIndex >= 0 ? 30 : 0;
       const systems = Array.from({ length: systemCount }, (_, index) => (
         STAFF.topA + index * (STAFF.topB - STAFF.topA + EXTRA_SYSTEM_SPACING) + (index > transpositionSystemIndex ? transpositionLinePush : 0)
       ));
@@ -5693,6 +5817,16 @@
       const bottomPadding = transpositionSystemIndex === lastSystemIndex ? 160 : standardBottomPadding;
       const scoreHeight = isOneSystem ? 154 : systems.at(-1) + bottomPadding;
       const scoreOffsetY = isOneSystem ? -30 : 0;
+      useEffect(() => {
+        setHoverBarlineSlot(null);
+        setHoverRhythmTarget(null);
+        setHoverRepeatPlacement(null);
+        setHoverScotchSnap(null);
+        setHoverAccidentalPlacement(null);
+        setHoverArticulationSelection(null);
+        setHoverTripletPlacement(null);
+        setHoverTranspositionNote(null);
+      }, [activeIndex, question.id]);
       const timeSignaturePart = question.subquestions?.find((part) => part.type === "timeChoice");
       const tempoQuestionPart = question.subquestions?.find((part) => part.sourceId === "tempoQuestion");
       const asksTimeSignature = Boolean(timeSignaturePart);
@@ -6256,7 +6390,7 @@
         const targetPartIndex = partIndexForSourceId(labelSourceId);
         const canSelectBox = layer !== "label" && targetPartIndex >= 0 && targetPartIndex !== activeIndex;
         return (
-          <g>
+          <g data-score-question-source={labelSourceId}>
             {layer !== "box" && <BoxLabel label={labelledBoxText(labelSourceId, label)} x={x} y={y} width={width} />}
             {layer !== "label" && (
               <rect
@@ -6284,7 +6418,7 @@
         );
       }
 
-      function HigherChordGivenBox({ x, y, question, bar, size = 42 }) {
+      function HigherChordGivenBox({ x, y, question, bar, size = 30 }) {
         const textY = y + size / 2 + 5;
         return (
           <g pointerEvents="none">
@@ -6698,7 +6832,7 @@
             const activeSourceId = activePart?.sourceId ?? activePart?.id;
             const notePlacementPart = notePlacementPartForBar(bar.barIndex);
             const notePlacementCanInteract = Boolean(notePlacementPart && !feedback);
-            const repeatCanInteract = Boolean(repeatPart && !feedback);
+            const repeatCanInteract = Boolean(repeatPart && activeSourceId === "repeatSigns" && !feedback);
             const repeatSelectedSymbolId = repeatAnswer.selectedSymbolId;
             const repeatSelectedIsTimeBar = repeatSelectedSymbolId === "first-time" || repeatSelectedSymbolId === "second-time";
             const repeatHitBox = repeatSelectedSymbolId === "dc"
@@ -7004,12 +7138,12 @@
               : 0;
             const chordBoxWidth = Math.max(58, chordBoxRight - chordBoxX);
             const chordBoxY = question.level === "H" ? top - 98 : sharedBoxY;
-            const higherChordGivenBoxY = chordBoxY - 15;
+            const higherChordGivenBoxY = chordBoxY + 10;
             const chordQuestionBoxX = chordQuestionBoxTarget && question.level === "H"
-              ? barStart(firstHigherChordAnswerBar) + 4
+              ? barStart(firstHigherChordAnswerBar) + 1
               : chordBoxX;
             const chordQuestionBoxRight = chordQuestionBoxTarget && question.level === "H"
-              ? barStart(lastHigherChordAnswerBar) + barWidth(lastHigherChordAnswerBar) - 4
+              ? barStart(lastHigherChordAnswerBar) + barWidth(lastHigherChordAnswerBar) - 7
               : chordBoxRight;
             const chordQuestionBoxY = chordQuestionBoxTarget && question.level === "H" ? top - 95 : chordBoxY;
             const chordQuestionBoxWidth = Math.max(58, chordQuestionBoxRight - chordQuestionBoxX);
@@ -8517,8 +8651,8 @@
         return active ? "border-black bg-black text-white" : "border-stone-300 bg-white text-black hover:bg-stone-50";
       }
 
-      function ScoreApplyHint({ children = "Select the button first, then apply to the score." } = {}) {
-        return <p className="text-sm font-medium italic text-stone-500">{children}</p>;
+      function ScoreApplyHint({ children = "Select the button first, then apply to the score.", className = "", style = null } = {}) {
+        return <p className={`text-sm font-medium italic text-stone-500 ${className}`} style={style}>{children}</p>;
       }
 
       function answerControl(part, partIndex) {
@@ -8664,12 +8798,12 @@
           const value = makePlacementAnswer(practiceAnswers[part.id], { selectedRhythm: null, placements: {} });
           const rhythmOptions = part.rhythmOptions?.length ? part.rhythmOptions : ["quaver", "crotchet"];
           const isRestsQuestion = (part.sourceId ?? part.id) === "rests";
-          const rhythmButtonSizeClass = isRestsQuestion
-            ? "h-[58px] w-[96px] px-2"
-            : `${ANSWER_BUTTON_SIZE_CLASS} px-3`;
+          const rhythmButtonSizeClass = `${ANSWER_BUTTON_SIZE_CLASS} px-3`;
+          const rhythmAnswerLayoutClass = isRestsQuestion ? "flex flex-nowrap items-center gap-3" : "flex flex-wrap items-center gap-3";
+          const rhythmOptionsLayoutClass = isRestsQuestion ? "flex shrink-0 flex-nowrap gap-2" : "flex flex-wrap gap-2";
           return (
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex flex-wrap gap-2">
+            <div className={rhythmAnswerLayoutClass}>
+              <div className={rhythmOptionsLayoutClass}>
                 {rhythmOptions.map((rhythm) => {
                   const chooseRhythm = () => {
                     setActiveIndex(partIndex);
@@ -8690,7 +8824,12 @@
                   );
                 })}
               </div>
-              <ScoreApplyHint>Select a rhythm first, then apply to the score.</ScoreApplyHint>
+              <ScoreApplyHint
+                className={isRestsQuestion ? "min-w-[96px] shrink whitespace-nowrap leading-tight" : ""}
+                style={isRestsQuestion ? { fontSize: "clamp(13px, 0.95vw, 16px)" } : null}
+              >
+                Select a rhythm first, then apply to the score.
+              </ScoreApplyHint>
             </div>
           );
         }
@@ -8874,7 +9013,7 @@
         }
         if (sourceId === "rhythmicDictation") {
           if (part.type === "rhythmFix") {
-            return <>Correct the rhythm in <strong>bar {question.rhythmFixTarget.barIndex + 1}</strong>.</>;
+            return <>Correct the rhythm in the box in <strong>bar {question.rhythmFixTarget.barIndex + 1}</strong> to match what you hear.</>;
           }
           return <>Complete the rhythm for the notes in <strong>bar {question.rhythmTargetBar + 1}</strong>.</>;
         }
@@ -9821,7 +9960,7 @@
 
         safePattern.forEach((event) => {
           const duration = accompanimentDurationBeats(event.duration, meterInfo);
-          const eventVelocity = Math.round(((event.velocity ?? dynamicVelocity) + (accompanimentIsAccent ? 12 : 0)) * (meterInfo.beatGroups.some((_, index) => Math.abs(event.time - index * (meterInfo.beatUnit === "dottedCrotchet" ? 1.5 : 1)) < 0.001) ? 1.04 : 1));
+          const eventVelocity = Math.round(((event.velocity ?? dynamicVelocity) + (accompanimentIsAccent ? 12 : 0)) * (meterInfo.groupStartBeats.some((beat) => Math.abs(event.time - beat) < 0.001) ? 1.04 : 1));
           lowerAccompanimentMidiValues(event.notes.flatMap(tokenMidi)).forEach((midi) => scheduleTone(midi, event.time, duration, event.volume ?? 0.016, event.hand, eventVelocity));
         });
       }
@@ -10103,6 +10242,34 @@
         });
         window.requestAnimationFrame(updateScoreScrollFade);
       }
+
+      function scrollPracticeScoreToSource(sourceId, behavior = "smooth") {
+        const element = scoreScrollRef.current;
+        if (!element || !sourceId) return;
+        const target = [...element.querySelectorAll("[data-score-question-source]")]
+          .find((node) => node.dataset.scoreQuestionSource === sourceId);
+        if (!target) return;
+        const elementBounds = element.getBoundingClientRect();
+        const targetBounds = target.getBoundingClientRect();
+        const targetMiddle = element.scrollTop + targetBounds.top - elementBounds.top + targetBounds.height / 2;
+        const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+        element.scrollTo({
+          top: clamp(targetMiddle - element.clientHeight / 2, 0, maxScrollTop),
+          behavior,
+        });
+        window.requestAnimationFrame(updateScoreScrollFade);
+      }
+
+      useEffect(() => {
+        if (!hasScrollablePracticeScore || !visible || question.questionType !== "practicePaper") return undefined;
+        const activePart = question.subquestions?.[activePracticePart];
+        const sourceId = activePart?.sourceId ?? activePart?.id;
+        if (!sourceId) return undefined;
+        const animationFrame = window.requestAnimationFrame(() => {
+          scrollPracticeScoreToSource(sourceId);
+        });
+        return () => window.cancelAnimationFrame(animationFrame);
+      }, [activePracticePart, hasScrollablePracticeScore, question.id, visible]);
 
       return (
         <div className="overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12">
