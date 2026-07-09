@@ -4373,12 +4373,15 @@ function advancedHigherInversionAnswerLabel(inversion) {
       };
     }
 
-    function setFirstSoundingNoteToScaleDegree(question, barIndex, degree, options = {}) {
+    function setSoundingNoteToScaleDegree(question, barIndex, degree, options = {}) {
       const bar = question.bars?.[barIndex];
       if (!bar) return;
-      const noteIndex = bar.notes.findIndex((note) => !note.rest);
+      const target = options.target ?? "first";
+      const noteIndex = target === "last"
+        ? bar.notes.reduce((lastIndex, note, index) => note.rest ? lastIndex : index, -1)
+        : bar.notes.findIndex((note) => !note.rest);
       if (noteIndex < 0) return;
-      const spelling = scaleDegreeToneSpelling(question, degree, options);
+      const spelling = scaleDegreeToneSpelling(question, degree, { ...options, target: undefined });
       if (!spelling) return;
       const [letter, octave, accidental] = spelling;
       const base = noteBaseForLetterOctave(letter, octave);
@@ -4389,6 +4392,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
         absoluteAccidental: accidental,
       };
     }
+
+    const setFirstSoundingNoteToScaleDegree = (question, barIndex, degree, options = {}) => (
+      setSoundingNoteToScaleDegree(question, barIndex, degree, { ...options, target: "first" })
+    );
+
+    const setLastSoundingNoteToScaleDegree = (question, barIndex, degree, options = {}) => (
+      setSoundingNoteToScaleDegree(question, barIndex, degree, { ...options, target: "last" })
+    );
 
     function applyAdvancedHigherChordTypeContext(question, barIndex, chordType, spelling) {
       if (chordType.id === "add6") {
@@ -4427,7 +4438,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         question.bars[barIndex - 1] = { ...question.bars[barIndex - 1], chordSymbol: "I" };
         question.bars[barIndex] = { ...question.bars[barIndex], chordSymbol: "I" };
         question.bars[barIndex + 1] = { ...question.bars[barIndex + 1], chordSymbol: resolutionChordSymbol };
-        setFirstSoundingNoteToScaleDegree(question, barIndex - 1, 5);
+        setLastSoundingNoteToScaleDegree(question, barIndex - 1, 5);
         setBarToChordTypeStack(question, barIndex, spelling, chordType, "I");
         setFirstSoundingNoteToScaleDegree(question, barIndex + 1, 6);
         return [barIndex - 1, barIndex, barIndex + 1].filter((index) => question.bars?.[index]);
