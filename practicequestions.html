@@ -1013,12 +1013,15 @@
     const tempoTermIdsForLevel = (level) => level === "N3" ? ["adagio", "allegro"] : level === "N4" ? ["adagio", "andante", "allegro"] : N5_TEMPO_TERM_IDS;
     const hasSemiquaverGroup = (pattern) => pattern.includes("semiquaver");
     const isRestRhythm = (rhythm) => ["semibreveRest", "minimRest", "dottedCrotchetRest", "crotchetRest", "dottedQuaverRest", "quaverRest"].includes(rhythm);
+    const patternUsesRestRhythm = (pattern) => pattern.some(isRestRhythm);
     const barsHaveRest = (bars) => bars.some((bar) => bar.notes.some((note) => note.rest));
-    const ahBarPatternsForSignature = (signature, allowSemiquaverGroups = false) => {
+    const ahBarPatternsForSignature = (signature, allowSemiquaverGroups = false, allowRests = true) => {
       const patterns = AH_BAR_PATTERNS[signature.id] ?? AH_BAR_PATTERNS["4/4"];
       const generatedPatterns = patterns.filter((pattern) => !patternUsesRemovedGeneratedRhythm(pattern));
       const safePatterns = generatedPatterns.length ? generatedPatterns : patterns;
-      return allowSemiquaverGroups ? safePatterns : safePatterns.filter((pattern) => !hasSemiquaverGroup(pattern));
+      const rhythmFiltered = allowRests ? safePatterns : safePatterns.filter((pattern) => !patternUsesRestRhythm(pattern));
+      const semiquaverFiltered = allowSemiquaverGroups ? rhythmFiltered : rhythmFiltered.filter((pattern) => !hasSemiquaverGroup(pattern));
+      return semiquaverFiltered.length ? semiquaverFiltered : rhythmFiltered.length ? rhythmFiltered : safePatterns;
     };
     const noteBaseIndex = (note) => NOTE_POOL.findIndex((item) => item.letter === note?.letter && item.octave === note?.octave);
     const clefStepOffset = (clef) => clef === "bass" ? 12 : 0;
@@ -3184,7 +3187,7 @@
       return true;
     }
 
-    function generateHigherPhraseQuestion(attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = "H", allowedTimeSignatureIds = null) {
+    function generateHigherPhraseQuestion(attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = "H", allowedTimeSignatureIds = null, allowRests = true) {
       higherPhraseGenerationLevel = timeSignatureLevel === "AH" ? "AH" : "H";
       const activeBarCount = 16;
       const timeSignatureOptions = requireSimpleTime ? simpleTimeSignaturesForLevel(timeSignatureLevel) : timeSignaturesForLevel(timeSignatureLevel);
@@ -3197,7 +3200,9 @@
       const progression = generateChordProgression16(cadenceId, key);
       const targetBarCandidates = [1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14];
       const targetBar = randomItem(targetBarCandidates);
-      const patterns = higherPhrasePatterns(timeSignature);
+      const phrasePatterns = higherPhrasePatterns(timeSignature);
+      const patternsWithoutRests = phrasePatterns.filter((pattern) => !patternUsesRestRhythm(pattern));
+      const patterns = timeSignatureLevel === "AH" && !allowRests && patternsWithoutRests.length ? patternsWithoutRests : phrasePatterns;
       const motif = generateMotif(key);
       const phraseA = Array.from({ length: 4 }, () => randomHigherPhrasePattern(patterns));
       const phraseAVariation = phraseA.map((pattern, index) => index === 3 ? randomHigherPhrasePattern(patterns) : pattern);
@@ -3242,11 +3247,11 @@
         useShortPrompt: true,
       };
       if (requireMissingCopy && !makePreviousBarStepVariation(question) && canRetryPhrase) {
-        return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds);
+        return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
       Object.assign(question, chooseMissingNoteScope(question));
-      if (!strongBeatsUseChordTones(question) && canRetryPhrase) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds);
-      if (!validateMelodyStructure(question) && canRetryPhrase) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds);
+      if (!strongBeatsUseChordTones(question) && canRetryPhrase) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+      if (!validateMelodyStructure(question) && canRetryPhrase) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       return question;
     }
 
@@ -3490,7 +3495,7 @@
           bar = buildFinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars: activeBarCount, level });
           previousIndex = noteBaseIndex(bar.notes[0]);
         } else {
-          const availablePatterns = level === "AH" ? ahBarPatternsForSignature(timeSignature, allowDenseAhPatterns) : barPatternsForSignature(timeSignature, level);
+          const availablePatterns = level === "AH" ? ahBarPatternsForSignature(timeSignature, allowDenseAhPatterns, false) : barPatternsForSignature(timeSignature, level);
           const missingSafePatterns = barIndex === targetBar && level !== "H" ? availablePatterns.filter(missingTaskPatternFits) : availablePatterns;
           const pattern = randomBarPatternForSignature(missingSafePatterns.length ? missingSafePatterns : availablePatterns);
           const built = buildNotesFromPattern({ key, chordSymbol, pattern, barIndex, previousIndex, level, mode, previousNotes: melodyNotes(bars) });
@@ -3583,8 +3588,8 @@
       interval: [8, 9, 10, 11],
     };
 
-    function makeEightBarRepetitionQuestion(level = "N5", attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = level, allowedTimeSignatureIds = null) {
-      if (level === "H") return generateHigherPhraseQuestion(attempt, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds);
+    function makeEightBarRepetitionQuestion(level = "N5", attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = level, allowedTimeSignatureIds = null, allowRests = true) {
+      if (level === "H") return generateHigherPhraseQuestion(attempt, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       const activeBarCount = level === "H" ? 16 : BAR_COUNT;
       const timeSignature = withFiveFourGrouping(weightedRandomItem(requireSimpleTime ? simpleTimeSignaturesForLevel(level) : timeSignaturesForLevel(level)));
       const key = level === "N3" || level === "N4"
@@ -3602,7 +3607,7 @@
       let missingSourceBar = null;
       let previousIndex = noteBaseIndex(tonicStartNoteForLevel(level, key));
       const mode = "repetition";
-      const availablePatterns = level === "AH" ? ahBarPatternsForSignature(timeSignature, false) : barPatternsForSignature(timeSignature, level);
+      const availablePatterns = level === "AH" ? ahBarPatternsForSignature(timeSignature, false, allowRests) : barPatternsForSignature(timeSignature, level);
       resetNational5PhraseMemory();
       const tonicStep = tonicStartNoteForLevel(level, key).step;
       const contourTargets = [tonicStep, tonicStep + 2, tonicStep + 1, tonicStep + 2, tonicStep + 2, tonicStep + 4, tonicStep + 5, tonicStep];
@@ -3690,7 +3695,7 @@
           })
           .filter(Boolean);
         const selectedSequence = sequenceOptions[0];
-        if (!selectedSequence && canRetryForLevel(level, attempt)) return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        if (!selectedSequence && canRetryForLevel(level, attempt)) return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
         if (selectedSequence) {
           bars[targetBar] = {
             ...bars[targetBar],
@@ -3712,7 +3717,7 @@
             && (bar.notes ?? []).some((note) => !note.rest)
           ));
         const source = level === "N3" ? sourceBars[0] : randomItem(sourceBars);
-        if (!source && canRetryForLevel(level, attempt)) return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        if (!source && canRetryForLevel(level, attempt)) return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
         if (source) {
           bars[targetBar] = {
             ...bars[targetBar],
@@ -3740,21 +3745,21 @@
       };
       const usesPreviousBarStepVariation = level === "H" && requireMissingCopy;
       if (usesPreviousBarStepVariation && !makePreviousBarStepVariation(question) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
       Object.assign(question, chooseMissingNoteScope(question));
 
       const targetMaximumInterval = level === "N5" ? national5MelodicLeapLimit() : maxStepForLevel(level, mode);
       if (!targetMovesWithinInterval(bars, targetBar, targetMaximumInterval) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
 
       if ((level === "N3" || level === "N4") && !hasEnoughPitchVariety(bars) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
 
       if (level === "N5" && requireMissingCopy && ((bars[targetBar]?.notes ?? []).filter((note) => !note.rest).length) < 3 && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
 
       if (
@@ -3762,27 +3767,27 @@
         && ((question.missingNoteIndices?.length ?? missingTaskNoteCount(bars, targetBar)) < MIN_MISSING_NOTES_PER_TASK || (question.missingNoteIndices?.length ?? missingTaskNoteCount(bars, targetBar)) > MAX_MISSING_NOTES_PER_TASK)
         && canRetryForLevel(level, attempt)
       ) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
 
       if (usesPreviousBarStepVariation && !targetIsPreviousBarWithOneStepChange(question) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
 
       if (!usesPreviousBarStepVariation && requiresExactMissingCopy(level, requireMissingCopy) && !targetHasSourcePattern(bars, targetBar, hasExactBarCopy) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
 
       if (!strongBeatsUseChordTones(question) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
 
       if ((level === "N3" || level === "N4") && melodyHasOctaveLeap(bars) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
 
       if ((level === "N5" || isHigherLevel(level)) && !melodyPassesQualityRules(question) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime);
+        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
       }
 
       return question;
@@ -6151,6 +6156,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const needsTempoQuestion = selectedSourceIds.has("tempoQuestion");
       const needsRepeatSigns = selectedSourceIds.has("repeatSigns");
       const needsRests = selectedSourceIds.has("rests");
+      const allowGeneratedRests = questionSelectionLevel !== "AH" || needsRests;
       const needsScaleDegrees = selectedSourceIds.has("scaleDegrees");
       const needsAccidentals = selectedSourceIds.has("accidentals");
       const needsEnharmonics = selectedSourceIds.has("enharmonics");
@@ -6164,11 +6170,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
         : null;
       let cadenceId = choosePracticeCadenceId(level);
       const needsSimpleTime = needsTriplets || (level === "H" && needsRhythmicDictation);
-      let question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, allowedTimeSignatureIds);
+      let question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowGeneratedRests);
       question.practiceLevel = questionSelectionLevel;
       if (level === "H" && isMinorKey(question.key) && ["plagal", "interrupted"].includes(cadenceId)) {
         cadenceId = randomItem(["perfect", "imperfect"]);
-        question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, allowedTimeSignatureIds);
+        question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowGeneratedRests);
         question.practiceLevel = questionSelectionLevel;
       }
       const timeChangeTarget = needsTime && questionSelectionLevel === "AH" && Math.random() < 0.5
