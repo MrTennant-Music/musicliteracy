@@ -1230,25 +1230,28 @@
         : 0;
       return effectiveMidiForStackTone(question, bar, tone) + octaveShift;
     };
-    const articulationMarkingForPlayback = (question, bar, noteIndex) => (
-      question.articulationTarget?.variant === "applyArticulation"
-        && question.articulationTarget.barIndex === bar.barIndex
-        && question.articulationTarget.noteIndices?.includes(noteIndex)
-        ? question.articulationTarget.marking.id
-        : null
-    );
+    const articulationTargetForPlayback = (question, bar) => {
+      const target = question.articulationTarget;
+      return target
+        && target.barIndex === bar.barIndex
+        && target.marking?.id !== "phrase"
+        ? target
+        : null;
+    };
+    const articulationMarkingForPlayback = (question, bar, noteIndex) => {
+      const target = articulationTargetForPlayback(question, bar);
+      return target?.noteIndices?.includes(noteIndex) ? target.marking.id : null;
+    };
     const isStaccatoArticulationBar = (question, bar) => (
-      question.articulationTarget?.variant === "applyArticulation"
-        && question.articulationTarget.barIndex === bar.barIndex
-        && question.articulationTarget.marking.id === "staccato"
+      articulationTargetForPlayback(question, bar)?.marking.id === "staccato"
     );
     const isAccentArticulationBar = (question, bar) => (
-      question.articulationTarget?.variant === "applyArticulation"
-        && question.articulationTarget.barIndex === bar.barIndex
-        && question.articulationTarget.marking.id === "accent"
+      articulationTargetForPlayback(question, bar)?.marking.id === "accent"
     );
     const MELODY_SAMPLE_VELOCITY_V8 = 64;
     const MELODY_SAMPLE_VELOCITY_V12 = 96;
+    const ARTICULATION_ACCENT_VELOCITY_BOOST = 20;
+    const ARTICULATION_ACCENT_GAIN_SCALE = 2;
     const pitchForChordLetter = (question, bar, letter, preferredIndex = 4) => {
       const base = noteByLetter(letter, preferredIndex);
       const raised = chordAccidentalForLetter(question.key, bar.chordSymbol, letter);
@@ -13340,8 +13343,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
           ? pattern
           : getPatternVariant("bassChord", meterInfo);
         const accompanimentIsAccent = isAccentArticulationBar(question, bar);
-        const accompanimentVelocity = dynamicVelocity + (accompanimentIsAccent ? 12 : 0);
-        const accompanimentGainScale = accompanimentIsAccent ? 1.6 : 1;
+        const accompanimentVelocity = dynamicVelocity + (accompanimentIsAccent ? ARTICULATION_ACCENT_VELOCITY_BOOST : 0);
+        const accompanimentGainScale = accompanimentIsAccent ? ARTICULATION_ACCENT_GAIN_SCALE : 1;
         const rootMidi = chordMidi[0];
         const thirdMidi = chordMidi[1] ?? rootMidi;
         const fifthMidi = chordMidi[2] ?? rootMidi;
@@ -13380,7 +13383,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
         safePattern.forEach((event) => {
           const duration = accompanimentDurationBeats(event.duration, meterInfo);
-          const eventVelocity = Math.round(((event.velocity ?? dynamicVelocity) + (accompanimentIsAccent ? 12 : 0)) * (meterInfo.groupStartBeats.some((beat) => Math.abs(event.time - beat) < 0.001) ? 1.04 : 1));
+          const eventVelocity = Math.round(((event.velocity ?? dynamicVelocity) + (accompanimentIsAccent ? ARTICULATION_ACCENT_VELOCITY_BOOST : 0)) * (meterInfo.groupStartBeats.some((beat) => Math.abs(event.time - beat) < 0.001) ? 1.04 : 1));
           lowerAccompanimentMidiValues(event.notes.flatMap(tokenMidi)).forEach((midi) => scheduleTone(midi, event.time, duration, event.volume ?? 0.016, event.hand, eventVelocity));
         });
       }
@@ -13394,8 +13397,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
           return;
         }
         const accompanimentIsAccent = isAccentArticulationBar(question, bar);
-        const accompanimentVelocity = dynamicVelocity + (accompanimentIsAccent ? 12 : 0);
-        const accompanimentGainScale = accompanimentIsAccent ? 1.6 : 1;
+        const accompanimentVelocity = dynamicVelocity + (accompanimentIsAccent ? ARTICULATION_ACCENT_VELOCITY_BOOST : 0);
+        const accompanimentGainScale = accompanimentIsAccent ? ARTICULATION_ACCENT_GAIN_SCALE : 1;
 
         if (bar.barIndex === question.bars.length - 1 && question.questionType === "identifyMelody" && question.bars.length === 2) {
           const finalNote = [...bar.notes].reverse().find((note) => !note.rest);
@@ -13518,7 +13521,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           if (layer) layers.push(layer);
         };
         playbackBars.forEach((bar) => {
-          const accompanimentVelocity = accompanimentVelocityForBar(question, bar.barIndex) + (isAccentArticulationBar(question, bar) ? 12 : 0);
+          const accompanimentVelocity = accompanimentVelocityForBar(question, bar.barIndex) + (isAccentArticulationBar(question, bar) ? ARTICULATION_ACCENT_VELOCITY_BOOST : 0);
           bar.notes.forEach((note, noteIndex) => {
             const articulationTargetMarking = articulationMarkingForPlayback(question, bar, noteIndex);
             const playbackVelocity = articulationTargetMarking === "accent" ? MELODY_SAMPLE_VELOCITY_V12 : MELODY_SAMPLE_VELOCITY_V8;
@@ -13574,7 +13577,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
               return map[token] ?? rootMidi;
             };
             safePattern.forEach((event) => {
-              const eventVelocity = Math.round((event.velocity ?? accompanimentVelocityForBar(question, bar.barIndex)) + (isAccentArticulationBar(question, bar) ? 12 : 0));
+              const eventVelocity = Math.round((event.velocity ?? accompanimentVelocityForBar(question, bar.barIndex)) + (isAccentArticulationBar(question, bar) ? ARTICULATION_ACCENT_VELOCITY_BOOST : 0));
               lowerAccompanimentMidiValues(event.notes.flatMap(tokenMidi)).forEach((midi) => addMidi(midi, eventVelocity));
             });
           }
@@ -13638,7 +13641,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
               ? note.stack.map((tone) => effectivePlaybackMidiForStackTone(question, bar, tone))
               : [effectivePlaybackMidiForNote(question, bar, note, noteIndex)];
             playbackMidis.forEach((midi) => {
-              playMelodyNote(ctx, master, midi, startTime + audibleStart, audibleDuration, articulationTargetMarking === "accent" ? noteDynamicGain * 1.6 : noteDynamicGain, playbackVelocity, playbackRelease);
+              playMelodyNote(ctx, master, midi, startTime + audibleStart, audibleDuration, articulationTargetMarking === "accent" ? noteDynamicGain * ARTICULATION_ACCENT_GAIN_SCALE : noteDynamicGain, playbackVelocity, playbackRelease);
             });
             if (followPlayback) {
               const highlightTimer = window.setTimeout(() => {
