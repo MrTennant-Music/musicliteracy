@@ -1207,13 +1207,22 @@
     );
     const effectivePlaybackMidiForNote = (question, bar, note, noteIndex) => {
       const accidentalTarget = question.accidentalTarget;
+      const octaveShift = question.transpositionTarget?.type === "meaning" && question.transpositionTarget.barIndex === bar.barIndex
+        ? question.transpositionTarget.symbol === "8vb" ? -12 : 12
+        : 0;
       if (accidentalTarget
         && accidentalTarget.barIndex === bar.barIndex
         && accidentalTarget.noteIndex === noteIndex
       ) {
-        return effectiveMidiForNote(question, bar, { ...note, writtenAccidental: accidentalTarget.value });
+        return effectiveMidiForNote(question, bar, { ...note, writtenAccidental: accidentalTarget.value }) + octaveShift;
       }
-      return effectiveMidiForNote(question, bar, note);
+      return effectiveMidiForNote(question, bar, note) + octaveShift;
+    };
+    const effectivePlaybackMidiForStackTone = (question, bar, tone) => {
+      const octaveShift = question.transpositionTarget?.type === "meaning" && question.transpositionTarget.barIndex === bar.barIndex
+        ? question.transpositionTarget.symbol === "8vb" ? -12 : 12
+        : 0;
+      return effectiveMidiForStackTone(question, bar, tone) + octaveShift;
     };
     const articulationMarkingForPlayback = (question, bar, noteIndex) => (
       question.articulationTarget?.variant === "applyArticulation"
@@ -13257,7 +13266,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const playbackVelocity = articulationTargetMarking === "accent" ? MELODY_SAMPLE_VELOCITY_V12 : MELODY_SAMPLE_VELOCITY_V8;
             if (!shouldSkipMelodyPlaybackNote(bar, note, noteIndex)) {
               const playbackMidis = note.stack?.length
-                ? note.stack.map((tone) => effectiveMidiForStackTone(question, bar, tone))
+                ? note.stack.map((tone) => effectivePlaybackMidiForStackTone(question, bar, tone))
                 : [effectivePlaybackMidiForNote(question, bar, note, noteIndex)];
               playbackMidis.forEach((midi) => addMidi(midi, playbackVelocity));
             }
@@ -13367,7 +13376,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const noteDynamicGain = dynamicGainForPoint(question, bar.barIndex, note.beat);
             const playbackVelocity = articulationTargetMarking === "accent" ? MELODY_SAMPLE_VELOCITY_V12 : MELODY_SAMPLE_VELOCITY_V8;
             const playbackMidis = note.stack?.length
-              ? note.stack.map((tone) => effectiveMidiForStackTone(question, bar, tone))
+              ? note.stack.map((tone) => effectivePlaybackMidiForStackTone(question, bar, tone))
               : [effectivePlaybackMidiForNote(question, bar, note, noteIndex)];
             playbackMidis.forEach((midi) => {
               playMelodyNote(ctx, master, midi, startTime + audibleStart, audibleDuration, articulationTargetMarking === "accent" ? noteDynamicGain * 1.6 : noteDynamicGain, playbackVelocity, noteIndex === finalSoundingNoteIndex ? 0.42 : 0.1);
