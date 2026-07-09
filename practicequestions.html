@@ -7657,6 +7657,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const [hoverTranspositionNote, setHoverTranspositionNote] = useState(null);
       const [draggingTranspositionNote, setDraggingTranspositionNote] = useState(null);
       const [hoverEnharmonicNote, setHoverEnharmonicNote] = useState(null);
+      const [draggingEnharmonicNote, setDraggingEnharmonicNote] = useState(null);
       const [hoverAhChordBassNote, setHoverAhChordBassNote] = useState(null);
       const targetInputRef = useRef(null);
       const isOneSystem = question.bars.length <= BARS_PER_SYSTEM;
@@ -7799,6 +7800,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         setHoverNote(null);
         setDraggingTranspositionNote(null);
         setHoverTranspositionNote(null);
+        setDraggingEnharmonicNote(null);
+        setHoverEnharmonicNote(null);
       }, [activeIndex, question.id]);
 
       function pointerToSvg(event) {
@@ -9984,7 +9987,10 @@ function advancedHigherInversionAnswerLabel(inversion) {
                       />
                     )}
                     {hoverEnharmonicNote?.barIndex === bar.barIndex && !feedback && (
-                      <Note note={hoverEnharmonicNote} x={enharmonicAnswerX} top={enharmonicAnswerTop} colour="#444" faint clef={enharmonicTarget.clef} />
+                      <>
+                        {draggingEnharmonicNote && <Note note={{ ...hoverEnharmonicNote, id: `ghost-${hoverEnharmonicNote.id}` }} x={enharmonicAnswerX} top={enharmonicAnswerTop} colour="#666" faint clef={enharmonicTarget.clef} />}
+                        <Note note={hoverEnharmonicNote} x={enharmonicAnswerX} top={enharmonicAnswerTop} colour="#444" faint={!draggingEnharmonicNote} scale={draggingEnharmonicNote ? 1.6 : 1} clef={enharmonicTarget.clef} />
+                      </>
                     )}
                   </g>
                 )}
@@ -10576,9 +10582,20 @@ function advancedHigherInversionAnswerLabel(inversion) {
                     className={enharmonicCanInteract ? "cursor-pointer" : ""}
                     onPointerMove={(event) => {
                       if (!enharmonicCanInteract) return;
+                      if (draggingEnharmonicNote) {
+                        event.preventDefault();
+                        const nextNote = enharmonicNoteFromPointer(event, enharmonicTarget, enharmonicAnswerX, enharmonicAnswerTop);
+                        if (nextNote) {
+                          setDraggingEnharmonicNote(nextNote);
+                          setHoverEnharmonicNote(nextNote);
+                        }
+                        return;
+                      }
                       setHoverEnharmonicNote(enharmonicNoteFromPointer(event, enharmonicTarget, enharmonicAnswerX, enharmonicAnswerTop));
                     }}
-                    onPointerLeave={() => setHoverEnharmonicNote(null)}
+                    onPointerLeave={() => {
+                      if (!draggingEnharmonicNote) setHoverEnharmonicNote(null);
+                    }}
                     onPointerDown={(event) => {
                       if (!enharmonicCanInteract) return;
                       if (enharmonicAnswer.selectedAccidental === null || enharmonicAnswer.selectedAccidental === undefined) {
@@ -10588,8 +10605,22 @@ function advancedHigherInversionAnswerLabel(inversion) {
                       const note = enharmonicNoteFromPointer(event, enharmonicTarget, enharmonicAnswerX, enharmonicAnswerTop);
                       if (!note) return;
                       event.preventDefault();
+                      event.currentTarget.setPointerCapture?.(event.pointerId);
+                      setDraggingEnharmonicNote(note);
+                      setHoverEnharmonicNote(note);
+                    }}
+                    onPointerUp={(event) => {
+                      if (!draggingEnharmonicNote) return;
+                      event.preventDefault();
+                      event.currentTarget.releasePointerCapture?.(event.pointerId);
+                      const note = enharmonicNoteFromPointer(event, enharmonicTarget, enharmonicAnswerX, enharmonicAnswerTop) ?? draggingEnharmonicNote;
                       setHoverEnharmonicNote(null);
                       placeEnharmonicNote(note);
+                      setDraggingEnharmonicNote(null);
+                    }}
+                    onPointerCancel={() => {
+                      setHoverEnharmonicNote(null);
+                      setDraggingEnharmonicNote(null);
                     }}
                   />
                 )}
