@@ -5373,11 +5373,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const degree = randomItem(["tonic", "subdominant", "dominant"]);
       const targetLetter = scaleDegreeLetterForKey(question.key, degree);
       const excluded = new Set([...excludedBars, question.targetBar, question.bars.length - 1]);
+      const boxIsAvailable = (barIndex) => scaleDegreeAnswerBoxBars(question, barIndex)
+        .bars
+        .every((boxBarIndex) => !excluded.has(boxBarIndex));
       let candidates = question.bars
         .flatMap((bar) => (bar.notes ?? []).map((note, noteIndex) => ({ bar, note, noteIndex })))
-        .filter(({ bar, note }) => !excluded.has(bar.barIndex) && !note.rest && note.letter === targetLetter);
+        .filter(({ bar, note }) => boxIsAvailable(bar.barIndex) && !note.rest && note.letter === targetLetter);
       if (!candidates.length) {
-        const bar = question.bars.find((item) => !excluded.has(item.barIndex) && item.notes?.some((note) => !note.rest));
+        const bar = question.bars.find((item) => boxIsAvailable(item.barIndex) && item.notes?.some((note) => !note.rest));
         const noteIndex = Math.max(0, bar?.notes?.findIndex((note) => !note.rest) ?? 0);
         if (bar?.notes?.[noteIndex]) {
           const base = noteByLetter(targetLetter, noteBaseIndex(bar.notes[noteIndex]));
@@ -6148,7 +6151,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
     function chooseBarlineTarget(question, usedQuestionBars = new Set()) {
       const possibleBarIndexes = [4, 5, 6].filter((barIndex) => barlineWindowHasRest(question, barIndex));
       const candidates = possibleBarIndexes.filter((barIndex) => !usedQuestionBars.has(barIndex) && !usedQuestionBars.has(barIndex + 1));
-      const barIndex = randomItem(candidates.length ? candidates : possibleBarIndexes);
+      const barIndex = randomItem(candidates);
       if (!Number.isInteger(barIndex)) return null;
       return { barIndex, slot: "end", type: "single", hiddenBarNumbers: [barIndex, barIndex + 1] };
     }
@@ -6508,7 +6511,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ...(advancedHigherChordTypeTarget ? (advancedHigherChordTypeTarget.reservedBars ?? [advancedHigherChordTypeTarget.barIndex]) : []),
         ...(Number.isInteger(rhythmTargetBar) ? [rhythmTargetBar] : []),
       ].filter((barIndex) => Number.isInteger(barIndex));
-      if (new Set(barQuestionTargets).size !== barQuestionTargets.length && canRetryQualityPracticeQuestion) {
+      if (new Set(barQuestionTargets).size !== barQuestionTargets.length && canRetryPracticeQuestion) {
         return retryPracticeQuestion();
       }
       const rhythmTargetPattern = Number.isInteger(rhythmTargetBar) ? applyRhythmDictationPattern(question, rhythmTargetBar) : null;
