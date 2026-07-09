@@ -1270,7 +1270,10 @@
       "2/4": "minim",
       "3/4": "dottedMinim",
       "4/4": "semibreve",
+      "5/4": "semibreve",
       "6/8": "dottedMinim",
+      "9/8": "dottedMinim",
+      "12/8": "dottedMinim",
     }[signature.id] ?? "semibreve");
 
     function makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol) {
@@ -1786,11 +1789,7 @@
 
     function buildNational3FinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars }) {
       const tonic = NOTE_POOL.find((note) => note.letter === "C" && note.octave === 5) ?? noteByLetter("C", 5);
-      const rhythm = {
-        "2/4": "minim",
-        "3/4": "dottedMinim",
-        "4/4": "semibreve",
-      }[timeSignature.id] ?? "semibreve";
+      const rhythm = finalRhythmForSignature(timeSignature);
       return {
         barIndex,
         chordSymbol,
@@ -1798,6 +1797,14 @@
         totalBars,
         pattern: [rhythm],
       };
+    }
+
+    function nonFinalCadencePatternForSignature(timeSignature) {
+      return {
+        "5/4": ["semibreve", "crotchet"],
+        "9/8": ["dottedMinim", "dottedCrotchet"],
+        "12/8": ["dottedMinim", "dottedMinim"],
+      }[timeSignature.id] ?? [finalRhythmForSignature(timeSignature)];
     }
 
     function forceNational3BarSevenApproach(bars, key) {
@@ -1823,18 +1830,40 @@
     }
 
     function buildCadenceBar({ key, chordSymbol, targetLetter, barIndex, timeSignature, previousIndex, totalBars, level }) {
-      const rhythm = finalRhythmForSignature(timeSignature);
+      const pattern = barIndex === totalBars - 1
+        ? [finalRhythmForSignature(timeSignature)]
+        : nonFinalCadencePatternForSignature(timeSignature);
       const previous = NOTE_POOL[previousIndex] ?? noteByLetter(key.tonic, 6);
       const options = NOTE_POOL
         .filter((note) => note.letter === targetLetter && noteAllowedForLevel(level, note));
       const base = options.reduce((best, note) => Math.abs(note.midi - previous.midi) < Math.abs(best.midi - previous.midi) ? note : best, options[0] ?? noteByLetter(targetLetter, previousIndex));
+      let beat = 0;
+      const notes = pattern.map((rhythm, noteIndex) => {
+        const note = makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol);
+        beat += rhythmInfo(rhythm).beats;
+        return note;
+      });
       return {
         barIndex,
         chordSymbol,
-        notes: [makeNote(base, rhythm, barIndex, 0, 0, key, chordSymbol)],
+        notes,
         totalBars,
+        pattern,
+      };
+    }
+
+    function enforceFinalBarLongestRhythm(question) {
+      const finalBar = question.bars?.at(-1);
+      if (!finalBar?.notes?.length) return question;
+      const rhythm = finalRhythmForSignature(question.timeSignature);
+      const finalNote = finalSoundingNote(finalBar) ?? finalBar.notes[0];
+      if (!finalNote || finalNote.rest) return question;
+      question.bars[question.bars.length - 1] = {
+        ...finalBar,
+        notes: [makeNote(finalNote, rhythm, finalBar.barIndex, 0, 0, question.key, finalBar.chordSymbol)],
         pattern: [rhythm],
       };
+      return question;
     }
 
     function national5PatternsForBar(timeSignature, barIndex) {
@@ -2974,8 +3003,6 @@
     }
 
     function higherFinalPatternForSignature(timeSignature) {
-      if (timeSignature.id === "5/4") return ["semibreve", "crotchet"];
-      if (timeSignature.id === "9/8") return ["dottedCrotchet", "dottedCrotchet", "dottedCrotchet"];
       return [finalRhythmForSignature(timeSignature)];
     }
 
@@ -3156,7 +3183,13 @@
     }
 
     function validateRhythmBars(question) {
-      return question.bars.every((bar) => Math.abs(barRhythmTotalBeats(bar) - question.timeSignature.beats) < 0.001);
+      const finalRhythmBeats = rhythmInfo(finalRhythmForSignature(question.timeSignature)).beats;
+      return question.bars.every((bar) => {
+        const expectedBeats = bar.barIndex === question.bars.length - 1
+          ? Math.min(question.timeSignature.beats, finalRhythmBeats)
+          : question.timeSignature.beats;
+        return Math.abs(barRhythmTotalBeats(bar) - expectedBeats) < 0.001;
+      });
     }
 
     function finalSoundingNote(bar) {
@@ -6699,6 +6732,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ...(needsAccidentals && Number.isInteger(accidentalTarget?.resolutionBarIndex) ? [accidentalTarget.resolutionBarIndex] : []),
       ];
       if (level !== "N3" && level !== "N4") refitQuestionChordsToMelody(question, chordRefitProtectedBars);
+      enforceFinalBarLongestRhythm(question);
       if (needsMissing && level === "H" && timeSignatureLevel !== "AH" && !targetIsPreviousBarWithOneStepChange(question) && canRetryQualityPracticeQuestion) {
         return retryPracticeQuestion();
       }
