@@ -6336,14 +6336,22 @@ function advancedHigherInversionAnswerLabel(inversion) {
           ],
         };
       };
+      const dsFineTargetOptions = [
+        makeDsFineTarget("start-to-four"),
+        makeDsFineTarget("five-to-seven"),
+        makeDsFineTarget("start-to-four"),
+        makeDsFineTarget("five-to-seven"),
+        makeDsFineTarget("start-to-four"),
+        makeDsFineTarget("five-to-seven"),
+        makeDsFineTarget("start-to-four"),
+        makeDsFineTarget("five-to-seven"),
+        makeDsFineTarget("start-to-four"),
+      ];
       const higherRepeatTargetOptions = level === "H"
         ? timeSignatureLevel === "AH"
           ? [
             { symbolId: "dc", barIndex: randomItem(dcLineEndBarIndexes), anchor: "above" },
-            makeDsFineTarget("start-to-four"),
-            makeDsFineTarget("five-to-seven"),
-            makeDsFineTarget("start-to-four"),
-            makeDsFineTarget("five-to-seven"),
+            ...dsFineTargetOptions,
           ]
           : [{ symbolId: "dc", barIndex: randomItem(dcLineEndBarIndexes), anchor: "above" }]
         : repeatTargetOptions;
@@ -6362,10 +6370,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
           { symbolId: "end-repeat", barIndex: endBarIndex, anchor: "end" },
         ],
       }));
-      const repeatTargetFitsUsedBars = (target) => [
+      const repeatTargetOccupiedPlacements = (target) => [
         ...(target.placements ?? [target]),
-        ...(target.givenPlacements ?? []),
-      ].every((placement) => !usedQuestionBars.has(placement.barIndex));
+        ...(target.symbolId === "ds-fine" ? [] : (target.givenPlacements ?? [])),
+      ];
+      const repeatTargetFitsUsedBars = (target) => repeatTargetOccupiedPlacements(target).every((placement) => !usedQuestionBars.has(placement.barIndex));
       const unusedNational4RepeatTargets = national4RepeatTargets.filter(repeatTargetFitsUsedBars);
       const unusedRepeatTargetOptions = higherRepeatTargetOptions.filter(repeatTargetFitsUsedBars);
       const repeatTarget = needsRepeatSigns
@@ -6383,10 +6392,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           : repeatTarget.symbolId === "ds-fine" ? repeatTarget.givenPlacements ?? []
             : []
         : [];
-      if (needsRepeatSigns) [
-        ...(repeatTarget.placements ?? [repeatTarget]),
-        ...(givenRepeatPlacements ?? []),
-      ].forEach((placement) => reserveQuestionBar(placement.barIndex));
+      if (needsRepeatSigns) repeatTargetOccupiedPlacements(repeatTarget).forEach((placement) => reserveQuestionBar(placement.barIndex));
       const excludedBars = [0, finalBarIndex];
       if (needsMissing) excludedBars.push(question.targetBar, question.missingSourceBar);
       if (needsChord) excludedBars.push(chordBar);
@@ -6490,7 +6496,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ...(needsCadence && !(needsChord && level === "H") ? cadenceBarIndexes : []),
         ...(needsDynamic ? [dynamicBar] : []),
         ...(needsRepeatSigns ? (repeatTarget.placements ?? [repeatTarget]).map((placement) => placement.barIndex) : []),
-        ...(needsRepeatSigns ? givenRepeatPlacements.map((placement) => placement.barIndex) : []),
+        ...(needsRepeatSigns && repeatTarget.symbolId !== "ds-fine" ? givenRepeatPlacements.map((placement) => placement.barIndex) : []),
         ...(needsBarlines ? hiddenBarNumbers : []),
         ...(needsInterval && Number.isInteger(intervalQuestionBar) ? [intervalQuestionBar] : []),
         ...(needsNoteIdentification && Number.isInteger(noteIdentificationQuestionBar) ? [noteIdentificationQuestionBar] : []),
