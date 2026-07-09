@@ -138,6 +138,18 @@
         pupilExplanation: `5 crotchet beats grouped as ${grouping.label}`,
       };
     }
+    function timeSignatureForBar(question, barOrIndex) {
+      const barIndex = typeof barOrIndex === "number" ? barOrIndex : barOrIndex?.barIndex;
+      if (typeof barOrIndex === "object" && barOrIndex?.timeSignature) return barOrIndex.timeSignature;
+      if (
+        question?.timeChangeTarget
+        && Number.isInteger(barIndex)
+        && barIndex >= question.timeChangeTarget.barIndex
+      ) {
+        return question.timeChangeTarget.signature;
+      }
+      return question?.timeSignature;
+    }
     function groupStartBeatsForTimeSignature(timeSignature) {
       if (timeSignature?.id === "5/4") {
         const beatGroups = timeSignature.beatGroups?.length ? timeSignature.beatGroups : [5];
@@ -1858,7 +1870,7 @@
     function enforceFinalBarLongestRhythm(question) {
       const finalBar = question.bars?.at(-1);
       if (!finalBar?.notes?.length) return question;
-      const rhythm = finalRhythmForSignature(question.timeSignature);
+      const rhythm = finalRhythmForSignature(timeSignatureForBar(question, finalBar));
       const finalNote = finalSoundingNote(finalBar) ?? finalBar.notes[0];
       if (!finalNote || finalNote.rest) return question;
       question.bars[question.bars.length - 1] = {
@@ -3186,11 +3198,12 @@
     }
 
     function validateRhythmBars(question) {
-      const finalRhythmBeats = rhythmInfo(finalRhythmForSignature(question.timeSignature)).beats;
       return question.bars.every((bar) => {
+        const timeSignature = timeSignatureForBar(question, bar);
+        const finalRhythmBeats = rhythmInfo(finalRhythmForSignature(timeSignature)).beats;
         const expectedBeats = bar.barIndex === question.bars.length - 1
-          ? Math.min(question.timeSignature.beats, finalRhythmBeats)
-          : question.timeSignature.beats;
+          ? Math.min(timeSignature.beats, finalRhythmBeats)
+          : timeSignature.beats;
         return Math.abs(barRhythmTotalBeats(bar) - expectedBeats) < 0.001;
       });
     }
@@ -3387,7 +3400,7 @@
     }
 
     function pitchFitsStrongBeatChord(question, bar, note, pitch) {
-      if (!noteIsOnStrongBeat(note, question.timeSignature)) return true;
+      if (!noteIsOnStrongBeat(note, timeSignatureForBar(question, bar))) return true;
       const chordLetters = question.key?.chords?.[bar.chordSymbol] ?? [];
       return chordLetters.includes(pitch.letter);
     }
@@ -3417,7 +3430,7 @@
     function strongBeatsUseChordTones(question, advancedHigherChordTarget = null) {
       return question.bars.every((bar) => {
         return (bar.notes ?? []).every((note) => {
-          if (!noteIsOnStrongBeat(note, question.timeSignature)) return true;
+          if (!noteIsOnStrongBeat(note, timeSignatureForBar(question, bar))) return true;
           return chordLettersForStrongBeatCheck(question, bar, note, advancedHigherChordTarget).includes(note.letter);
         });
       });
@@ -5657,6 +5670,23 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return question.bars[barIndex];
     }
 
+    function setMelodyNoteToLetter(question, barIndex, noteIndex, letter, chordSymbol, writtenAccidental = null) {
+      const bar = question.bars?.[barIndex];
+      const note = bar?.notes?.[noteIndex];
+      if (!bar || !note || note.rest) return null;
+      const preferredIndex = noteBaseIndex(note) >= 0 ? noteBaseIndex(note) - LEGACY_NOTE_INDEX_OFFSET : 6;
+      const replacement = makeNote(noteByLetter(letter, preferredIndex), note.rhythm, barIndex, noteIndex, note.beat ?? 0, question.key, chordSymbol);
+      question.bars[barIndex] = {
+        ...bar,
+        notes: (bar.notes ?? []).map((item, index) => (
+          index === noteIndex
+            ? { ...replacement, writtenAccidental }
+            : item
+        )),
+      };
+      return question.bars[barIndex].notes[noteIndex];
+    }
+
     function barHasSingleLetterTarget(bar, letter) {
       return (bar.notes ?? []).filter((note) => !note.rest && note.letter === letter).length === 1;
     }
@@ -5705,15 +5735,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
       ];
       const target = weightedRandomItem(candidates);
       if (!target) return null;
-      const targetBar = setBarHarmony(question, target.bar.barIndex, target.chordSymbol);
+      setBarHarmony(question, target.bar.barIndex, target.chordSymbol);
       if (target.resolutionChordSymbol) {
         setBarHarmony(question, target.bar.barIndex + 1, target.resolutionChordSymbol);
         setFirstNoteOfBarToLetter(question, target.bar.barIndex + 1, target.resolutionLetter, target.resolutionChordSymbol);
       }
-      targetBar.notes[target.noteIndex] = {
-        ...targetBar.notes[target.noteIndex],
-        writtenAccidental: target.value,
-      };
+      const targetLetter = target.direction === "flat" ? harmony.minorIvThird : harmony.mode === "minor" ? harmony.minorSixth : harmony.secondaryThird;
+      setMelodyNoteToLetter(question, target.bar.barIndex, target.noteIndex, targetLetter, target.chordSymbol, target.value);
       return {
         barIndex: target.bar.barIndex,
         resolutionBarIndex: target.resolutionChordSymbol ? target.bar.barIndex + 1 : null,
@@ -6310,6 +6338,44 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ?? practiceQuestionTypesForLevel(level).slice(0, PRACTICE_QUESTION_COUNT).map((type) => type.id);
     }
 
+    function rebuildPracticeBarsAfterTimeChange(question, barIndex, signature) {
+      const patterns = higherPhrasePatterns(signature);
+      if (!patterns.length) return false;
+      const motif = generateMotif(question.key);
+      let previous = finalSoundingNote(question.bars[barIndex - 1]) ?? higherTonicStartNote(question.key);
+      buildHigherPhraseBar.allNotes = melodyNotes(question.bars.slice(0, barIndex));
+      for (let index = barIndex; index < question.bars.length; index += 1) {
+        const cadenceLetter = cadenceLetterForHigherBar(index, question.bars.map((bar) => bar.chordSymbol), question.key, question.cadenceId);
+        const pattern = index === question.bars.length - 1
+          ? higherFinalPatternForSignature(signature)
+          : randomHigherPhrasePattern(patterns);
+        const rebuilt = buildHigherPhraseBar({
+          key: question.key,
+          chordSymbol: question.bars[index].chordSymbol,
+          pattern,
+          barIndex: index,
+          previous,
+          totalBars: question.bars.length,
+          timeSignature: signature,
+          motif,
+          phraseOffset: Math.floor(index / BARS_PER_SYSTEM),
+          cadenceLetter,
+        });
+        question.bars[index] = {
+          ...rebuilt,
+          timeSignature: signature,
+          timeChangeQuestion: index === barIndex,
+        };
+        previous = finalSoundingNote(rebuilt) ?? previous;
+      }
+      forceHigherCadenceNotes(question.bars, question.key, question.cadenceId);
+      question.bars.slice(barIndex).forEach((bar) => {
+        bar.timeSignature = signature;
+        bar.pattern = bar.notes.map((note) => note.rhythm);
+      });
+      return true;
+    }
+
     function makePracticeTimeChangeTarget(question, timeSignatureLevel) {
       if (timeSignatureLevel !== "AH" || question.bars.length <= 8) return null;
       const options = TIME_SIGNATURES
@@ -6319,7 +6385,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const signature = withFiveFourGrouping(randomItem(options));
       if (!signature) return null;
       const barIndex = 8;
-      question.bars[barIndex] = { ...question.bars[barIndex], timeChangeQuestion: true };
+      if (!rebuildPracticeBarsAfterTimeChange(question, barIndex, signature)) return null;
       return { barIndex, signature };
     }
 
@@ -6736,6 +6802,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
       ];
       if (level !== "N3" && level !== "N4") refitQuestionChordsToMelody(question, chordRefitProtectedBars);
       enforceFinalBarLongestRhythm(question);
+      if (!validateRhythmBars(question) && canRetryQualityPracticeQuestion) {
+        return retryPracticeQuestion();
+      }
       if (needsMissing && level === "H" && timeSignatureLevel !== "AH" && !targetIsPreviousBarWithOneStepChange(question) && canRetryQualityPracticeQuestion) {
         return retryPracticeQuestion();
       }
@@ -9057,7 +9126,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       function articulationStemDownForNote(bar, positions, noteIndex, top) {
         const note = bar.notes[noteIndex];
         const noteStep = displayStep(note, question.clef);
-        const group = groupContaining(getQuaverGroups(bar.notes, question.timeSignature), noteIndex);
+        const group = groupContaining(getQuaverGroups(bar.notes, timeSignatureForBar(question, bar)), noteIndex);
         if (!group) return stemDown(noteStep);
         const groupNotes = bar.notes.slice(group.start, group.end + 1);
         const groupPositions = positions.slice(group.start, group.end + 1);
@@ -9237,6 +9306,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const start = barStart(bar.barIndex);
             const end = start + barWidth(bar.barIndex);
             const positions = displayPositionsForBar(bar);
+            const barTimeSignature = timeSignatureForBar(question, bar);
             const isTarget = bar.barIndex === question.targetBar;
             const missingNotesPart = question.subquestions?.find((part) => part.type === "notes");
             const intervalInsertPart = question.subquestions?.find((part) => part.type === "intervalInsert");
@@ -10026,14 +10096,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
                 {ahChordTypeTarget && <MarkingBox x={ahChordTypeBoxX} y={ahChordTypeBoxY} width={ahChordTypeBoxWidth} height={ahChordTypeBoxHeight} labelSourceId="ahChordTypes" label="Chord" layer="box" />}
                 {valueTargetNote && <MarkingBox x={valueBoxX} y={valueBoxY} width={valueBoxWidth} height={valueBoxHeight} labelSourceId="rhythmIdentification" label={valueBoxLabel} layer="box" />}
                 {transpositionMeaningTarget && <MarkingBox x={transpositionSignBoxX} y={transpositionSignBoxY} width={transpositionSignBoxWidth} height={transpositionSignBoxHeight} labelSourceId="transposition" label="Sign" layer="box" />}
-                {isMissingTarget && <RhythmGuide bar={bar} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} clef={question.clef} guideNoteIndices={isIntervalInsertTarget ? [question.intervalInsertTarget.answerIndex] : missingNoteIndices} />}
+                {isMissingTarget && <RhythmGuide bar={bar} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={barTimeSignature} clef={question.clef} guideNoteIndices={isIntervalInsertTarget ? [question.intervalInsertTarget.answerIndex] : missingNoteIndices} />}
                 {transpositionMeaningTarget && <OctaveMeaningMarker target={transpositionMeaningTarget} start={start} end={end} top={top} />}
                 {transpositionAnswerOnMain ? (
                   <>
                     <MarkingBox x={start + 4} y={transpositionBoxY} width={Math.max(58, end - start - 8)} height={transpositionBoxHeight} labelSourceId="transposition" label="Transpose" layer="full" />
-                    <BarNotes bar={bar} notes={transpositionUserFeedbackNotes} positions={positions} top={top} colour="currentColor" timeSignature={question.timeSignature} clef={question.clef} />
+                    <BarNotes bar={bar} notes={transpositionUserFeedbackNotes} positions={positions} top={top} colour="currentColor" timeSignature={barTimeSignature} clef={question.clef} />
                     {transpositionFeedback && transpositionHasCorrections && (
-                      <BarNotes bar={bar} notes={transpositionCorrectionNotes} positions={transpositionCorrectionPositions} top={top} colour={COLOUR.green} timeSignature={question.timeSignature} clef={question.clef} />
+                      <BarNotes bar={bar} notes={transpositionCorrectionNotes} positions={transpositionCorrectionPositions} top={top} colour={COLOUR.green} timeSignature={barTimeSignature} clef={question.clef} />
                     )}
                     {hoverTranspositionNote?.barIndex === bar.barIndex && !feedback && (
                       <>
@@ -10043,8 +10113,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
                     )}
                   </>
                 ) : isMissingTarget
-                  ? <BarNotes bar={bar} notes={targetUserNotes} positions={positions} top={top} hidden feedback={isIntervalInsertTarget ? intervalInsertFeedback : missingFeedback} timeSignature={question.timeSignature} clef={question.clef} />
-                  : <BarNotes bar={bar} notes={visibleDisplayNotes} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} clef={question.clef} />}
+                  ? <BarNotes bar={bar} notes={targetUserNotes} positions={positions} top={top} hidden feedback={isIntervalInsertTarget ? intervalInsertFeedback : missingFeedback} timeSignature={barTimeSignature} clef={question.clef} />
+                  : <BarNotes bar={bar} notes={visibleDisplayNotes} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={barTimeSignature} clef={question.clef} />}
                 {valueTargetCrossBarTie && <TieShape firstNote={valueTargetNote} secondNote={valueTargetEndNote} firstX={valueLeftX} secondX={valueRightX} top={top} clef={question.clef} colour="currentColor" widthScale={1} />}
                 {rhythmTiePlacements.map((noteIndex) => {
                   const first = bar.notes[noteIndex];
@@ -10115,7 +10185,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                     positions={restCorrectionPositions}
                     top={top}
                     colour={COLOUR.green}
-                    timeSignature={question.timeSignature}
+                    timeSignature={barTimeSignature}
                     clef={question.clef}
                   />
                 )}
@@ -10137,7 +10207,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                       positions={transpositionPositions}
                       top={transpositionLowerTop}
                       colour="currentColor"
-                      timeSignature={question.timeSignature}
+                      timeSignature={barTimeSignature}
                       clef={transpositionLowerClef}
                     />
                     {transpositionFeedback && transpositionLowerHasCorrections && (
@@ -10147,7 +10217,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                         positions={transpositionCorrectionPositions}
                         top={transpositionLowerTop}
                         colour={COLOUR.green}
-                        timeSignature={question.timeSignature}
+                        timeSignature={barTimeSignature}
                         clef={transpositionLowerClef}
                       />
                     )}
@@ -10604,7 +10674,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                     <Note note={hoverNote} x={positions[hoverNote.noteIndex]} top={top} colour="#444" faint={!draggingNote} scale={draggingNote ? 1.6 : 1} clef={question.clef} />
                   </>
                 )}
-                {(isIntervalInsertTarget ? intervalInsertFeedback : missingFeedback) && isMissingTarget && <CorrectionLayer bar={bar} userNotes={userNotes} positions={positions} top={top} timeSignature={question.timeSignature} clef={question.clef} noteIndices={isIntervalInsertTarget ? [question.intervalInsertTarget.answerIndex] : null} />}
+                {(isIntervalInsertTarget ? intervalInsertFeedback : missingFeedback) && isMissingTarget && <CorrectionLayer bar={bar} userNotes={userNotes} positions={positions} top={top} timeSignature={barTimeSignature} clef={question.clef} noteIndices={isIntervalInsertTarget ? [question.intervalInsertTarget.answerIndex] : null} />}
                 {!hideBarline && !hasEndRepeatOnBar && (bar.barIndex === question.bars.length - 1 ? (
                   <g>
                     <line x1={end - 5} x2={end - 5} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="1.4" pointerEvents="none" />
@@ -12652,9 +12722,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
           }
         : TEMPOS.find((item) => item.id === (activeLevel === "AH" ? "slow" : tempo)) ?? TEMPOS[0];
       const beatSeconds = 60 / selectedTempo.bpm;
-      const barSeconds = beatSeconds * question.timeSignature.beats;
       const playbackBars = repeatPlaybackBars(question);
-      const totalDuration = playbackBars.length * barSeconds;
+      const playbackTimeline = playbackBars.reduce((items, bar) => {
+        const start = items.at(-1)?.end ?? 0;
+        const duration = beatSeconds * timeSignatureForBar(question, bar).beats;
+        return [...items, { start, end: start + duration, duration }];
+      }, []);
+      const totalDuration = playbackTimeline.at(-1)?.end ?? 0;
       const practiceReviewMode = question.questionType === "practicePaper" && Boolean(feedback);
       useEffect(() => {
         setSecondsRemaining(PRACTICE_TIMER_SECONDS);
@@ -13297,7 +13371,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         if (question.dynamicHairpin?.barIndex !== barIndex) return dynamicGainForBar(question, barIndex);
         const startGain = DYNAMIC_AUDIO_GAIN[question.startingDynamic.id] ?? 1;
         const endGain = DYNAMIC_AUDIO_GAIN[question.dynamic.id] ?? 1;
-        const progress = clamp(beat / Math.max(1, question.timeSignature.beats), 0, 1);
+        const progress = clamp(beat / Math.max(1, timeSignatureForBar(question, barIndex).beats), 0, 1);
         return startGain + (endGain - startGain) * progress;
       }
 
@@ -13337,7 +13411,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         const chordMidi = accompanimentChordMidisForBar(question, bar);
         if (!chordMidi.length) return;
 
-        const meterInfo = classifyMeter(question.timeSignature);
+        const meterInfo = classifyMeter(timeSignatureForBar(question, bar));
         const pattern = getPatternVariant(question.accompanimentPattern, meterInfo);
         const safePattern = validateAccompanimentPattern(pattern, meterInfo)
           ? pattern
@@ -13389,7 +13463,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
 
       function playAccompaniment(ctx, gainNode, question, bar, barStart, offset, startTime, dynamicGain = 1, dynamicVelocity = 96, finalPlaybackBar = false) {
-        if (barStart + barSeconds <= offset) return;
+        const barTimeSignature = timeSignatureForBar(question, bar);
+        const currentBarSeconds = beatSeconds * barTimeSignature.beats;
+        if (barStart + currentBarSeconds <= offset) return;
         const chordMidi = accompanimentChordMidisForBar(question, bar);
         if (!chordMidi.length) return;
         if (bar.barIndex !== question.bars.length - 1 && question.questionType === "practicePaper" && question.accompanimentPattern) {
@@ -13418,7 +13494,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
         if (bar.barIndex === question.bars.length - 1) {
           const chordStart = Math.max(barStart, offset);
-          const chordDuration = Math.max(0.04, barStart + barSeconds * 0.96 - chordStart);
+          const chordDuration = Math.max(0.04, barStart + currentBarSeconds * 0.96 - chordStart);
           const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, 0) * accompanimentGainScale;
           chordMidi.forEach((midi, index) => {
             playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
@@ -13458,7 +13534,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         const bassDuration = Math.max(0.04, barStart + beatSeconds * 0.88 - bassStart);
         playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(bassMidi), startTime + bassStart, bassDuration, accompanimentVelocity, accompanimentVolume(0.024), dynamicGainForPoint(question, bar.barIndex, 0) * accompanimentGainScale, "sine", 0.06);
 
-        if (question.timeSignature.id === "4/4") {
+        if (barTimeSignature.id === "4/4") {
           const events = [
             { beat: 1, type: "chord" },
             { beat: 2, type: "bass5" },
@@ -13483,12 +13559,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
           return;
         }
 
-        const pulseBeats = question.timeSignature.id === "6/8"
+        const pulseBeats = barTimeSignature.id === "6/8"
           ? [1.5]
-          : Array.from({ length: Math.max(0, question.timeSignature.beats - 1) }, (_, beat) => beat + 1);
+          : Array.from({ length: Math.max(0, barTimeSignature.beats - 1) }, (_, beat) => beat + 1);
         pulseBeats.forEach((beat) => {
           const pulseStart = barStart + beat * beatSeconds;
-          const pulseDuration = beatSeconds * (question.timeSignature.id === "6/8" ? 0.72 : 0.42);
+          const pulseDuration = beatSeconds * (barTimeSignature.id === "6/8" ? 0.72 : 0.42);
           if (pulseStart + pulseDuration <= offset) return;
           const audibleStart = Math.max(pulseStart, offset);
           const audibleDuration = Math.max(0.04, pulseStart + pulseDuration - audibleStart);
@@ -13551,7 +13627,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
               (slot.trebleNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidi(effectiveMidiForNote(question, bar, tone)), accompanimentVelocity));
               (slot.bassNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidi(effectiveMidiForNote(question, bar, tone)), accompanimentVelocity));
             });
-            const meterInfo = classifyMeter(question.timeSignature);
+            const meterInfo = classifyMeter(timeSignatureForBar(question, bar));
             const pattern = getPatternVariant(question.accompanimentPattern, meterInfo);
             const safePattern = validateAccompanimentPattern(pattern, meterInfo)
               ? pattern
@@ -13612,11 +13688,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
         const startTime = ctx.currentTime + 0.12 - offset;
 
         playbackBars.forEach((bar, playbackIndex) => {
-          const barStart = playbackIndex * barSeconds;
+          const barStart = playbackTimeline[playbackIndex]?.start ?? 0;
+          const barTimeSignature = timeSignatureForBar(question, bar);
           const dynamicGain = dynamicGainForBar(question, bar.barIndex);
           const dynamicVelocity = dynamicVelocityForBar(question, bar.barIndex);
           if (metronomeOn) {
-            for (let beat = 0; beat < question.timeSignature.beats; beat += 1) {
+            for (let beat = 0; beat < barTimeSignature.beats; beat += 1) {
               const beatStart = barStart + beat * beatSeconds;
               if (beatStart >= offset) playMetronome(ctx, master, startTime + beatStart, beat === 0);
             }
