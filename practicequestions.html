@@ -4267,33 +4267,32 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return tones.every(Boolean) ? { root: tones[0][0], type: "dim7", tones, chordSymbol: "VII" } : null;
       }
       if (chordTypeId === "aug") {
-        return advancedHigherAugmentedTriadSpelling(question, "I");
+        return advancedHigherAugmentedTriadSpelling(question);
       }
       return null;
     }
 
-    function advancedHigherAugmentedTriadSpelling(question, chordSymbol) {
-      if (isMinorKey(question.key) || !["I", "IV", "V"].includes(chordSymbol)) return null;
-      const chordLetters = question.key.chords?.[chordSymbol] ?? [];
+    function advancedHigherAugmentedTriadSpelling(question) {
+      if (isMinorKey(question.key)) return null;
+      const chordLetters = question.key.chords?.I ?? [];
       if (chordLetters.length < 3) return null;
       let previousIndex = null;
       const tones = chordLetters.slice(0, 3).map((letter, index) => {
         let octave = 4;
         while (previousIndex !== null && noteAbsoluteIndex(letter, octave) <= previousIndex) octave += 1;
         previousIndex = noteAbsoluteIndex(letter, octave);
-        const chordAccidental = chordAccidentalForLetter(question.key, chordSymbol, letter);
+        const chordAccidental = chordAccidentalForLetter(question.key, "I", letter);
         const accidental = (chordAccidental ?? keyAccidentalForLetter(question.key, letter)) + (index === 2 ? 1 : 0);
         return Number.isFinite(accidental) && accidental >= -1 && accidental <= 1
           ? [letter, octave, accidental]
           : null;
       });
-      return tones.every(Boolean) ? { root: chordLetters[0], type: "aug", tones, chordSymbol } : null;
+      return tones.every(Boolean) ? { root: chordLetters[0], type: "aug", tones, chordSymbol: "I" } : null;
     }
 
     function advancedHigherAugmentedTriadSpellings(question) {
-      return ["I", "IV", "V"]
-        .map((chordSymbol) => advancedHigherAugmentedTriadSpelling(question, chordSymbol))
-        .filter(Boolean);
+      const spelling = advancedHigherAugmentedTriadSpelling(question);
+      return spelling ? [spelling] : [];
     }
 
     function absoluteAccidentalForChordTone(key, chordSymbol, letter) {
@@ -4303,7 +4302,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
     function augmentedTriadSpellingForBar(question, barIndex, spelling = null) {
       if (!question.bars?.[barIndex - 1] || !question.bars?.[barIndex + 1]) return null;
-      return spelling ?? randomItem(advancedHigherAugmentedTriadSpellings(question));
+      return spelling ?? advancedHigherAugmentedTriadSpelling(question);
     }
 
     function advancedHigherChordTypeFixedBar(question, chordTypeId) {
@@ -4419,12 +4418,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
       if (chordType.id === "aug") {
         const resolutionOptions = ["IV", "VI"].filter((symbol) => question.key.chords?.[symbol]?.length);
-        const chordSymbol = spelling?.chordSymbol ?? "I";
-        question.bars[barIndex - 1] = { ...question.bars[barIndex - 1], chordSymbol };
-        question.bars[barIndex] = { ...question.bars[barIndex], chordSymbol };
-        question.bars[barIndex + 1] = { ...question.bars[barIndex + 1], chordSymbol: randomItem(resolutionOptions.length ? resolutionOptions : ["IV"]) };
+        const resolutionChordSymbol = randomItem(resolutionOptions.length ? resolutionOptions : ["IV"]);
+        question.bars[barIndex - 1] = { ...question.bars[barIndex - 1], chordSymbol: "I" };
+        question.bars[barIndex] = { ...question.bars[barIndex], chordSymbol: "I" };
+        question.bars[barIndex + 1] = { ...question.bars[barIndex + 1], chordSymbol: resolutionChordSymbol };
         setFirstSoundingNoteToScaleDegree(question, barIndex - 1, 5);
-        setBarToChordTypeStack(question, barIndex, spelling, chordType, chordSymbol);
+        setBarToChordTypeStack(question, barIndex, spelling, chordType, "I");
         setFirstSoundingNoteToScaleDegree(question, barIndex + 1, 6);
         return [barIndex - 1, barIndex, barIndex + 1].filter((index) => question.bars?.[index]);
       }
