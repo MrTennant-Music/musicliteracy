@@ -35,6 +35,7 @@ const BRAVURA_SYMBOLS = {
 
   // Full note symbols
   noteheadBlack: "\uE0A4",
+  noteheadHalf: "\uE0A3",
   wholeNote: "\uE1D2",
   halfNoteStemUp: "\uE1D3",
   halfNoteStemDown: "\uE1D4",

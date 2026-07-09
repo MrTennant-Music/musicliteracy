@@ -674,10 +674,25 @@
     const NATIONAL3_DYNAMIC_OPTIONS = DYNAMIC_OPTIONS.filter((dynamic) => ["p", "f"].includes(dynamic.id));
     const NATIONAL4_DYNAMIC_OPTIONS = DYNAMIC_OPTIONS.filter((dynamic) => ["p", "mp", "mf", "f"].includes(dynamic.id));
     const NATIONAL5_DYNAMIC_MEANING_OPTIONS = DYNAMIC_OPTIONS.filter((dynamic) => ["pp", "ff", "sfz"].includes(dynamic.id));
+    const TRANSPOSITION_QUESTION_TYPE_IDS = [
+      "transpositionOctaveDown",
+      "transpositionOctaveUp",
+      "transpositionSamePitch",
+      "transpositionOctaveSigns",
+    ];
+    const TRANSPOSITION_VARIANT_IDS_BY_QUESTION_TYPE = {
+      transpositionOctaveDown: ["trebleOctaveDown"],
+      transpositionOctaveUp: ["bassOctaveUp"],
+      transpositionSamePitch: ["trebleSamePitch", "bassSamePitch"],
+      transpositionOctaveSigns: ["meaning"],
+    };
     const PRACTICE_QUESTION_TYPES = [
       { id: "barlines", label: "Barlines", icon: "barlines" },
       { id: "cadence", label: "Cadences", icon: "cadences", audio: true },
       { id: "chord", label: "Chords", icon: "chords", audio: true },
+      { id: "ahChord", label: "Chords", subtitle: "Identify Chord and Position", icon: "chords", audio: true },
+      { id: "ahBassLine", label: "Chords", subtitle: "Create a Bass Line", icon: "chords", audio: true },
+      { id: "ahChordTypes", label: "Chords", subtitle: "Dominant 7th, Diminished 7th, Added 6th, Augmented triad", icon: "chords", audio: true },
       { id: "dynamic", label: "Dynamics", icon: "dynamics", audio: true },
       { id: "interval", label: "Intervals", icon: "intervals" },
       { id: "key", label: "Key Signatures", icon: "keySignatures" },
@@ -692,7 +707,10 @@
       { id: "enharmonics", label: "Enharmonic Equivalents", icon: "enharmonics" },
       { id: "triplets", label: "Triplets", icon: "triplets" },
       { id: "articulation", label: "Articulation Markings", icon: "articulation", audio: true },
-      { id: "transposition", label: "Transposing", icon: "transposition" },
+      { id: "transpositionOctaveDown", label: "Transposing", subtitle: "One octave lower from treble clef to bass clef", icon: "transposition" },
+      { id: "transpositionOctaveUp", label: "Transposing", subtitle: "One octave higher from bass clef to treble clef", icon: "transposition" },
+      { id: "transpositionSamePitch", label: "Transposing", subtitle: "At the same pitch", icon: "transposition" },
+      { id: "transpositionOctaveSigns", label: "Transposing", subtitle: "8va and 8vb", icon: "transposition" },
       { id: "tempoQuestion", label: "Tempo", icon: "tempoIcon", audio: true },
       { id: "time", label: "Time Signatures", icon: "timeSignatures" },
     ];
@@ -710,7 +728,7 @@
       ["key", "scaleDegrees"],
       ["key", "time"],
     ];
-    const HIGHER_STANDARD_FIXED_QUESTION_TYPES = ["interval", "transposition"];
+    const HIGHER_STANDARD_FIXED_QUESTION_TYPES = ["interval"];
     const HIGHER_STANDARD_HARMONY_ALTERNATES = [
       { id: "chord", weight: 8 },
       { id: "key", weight: 2 },
@@ -746,10 +764,16 @@
     ];
     const DEFAULT_ENABLED_PRACTICE_QUESTION_TYPE_IDS = new Set([
       "chord",
+      "ahChord",
+      "ahBassLine",
+      "ahChordTypes",
       "enharmonics",
       "interval",
       "rhythmIdentification",
-      "transposition",
+      "transpositionOctaveDown",
+      "transpositionOctaveUp",
+      "transpositionSamePitch",
+      "transpositionOctaveSigns",
     ]);
     const DEFAULT_PRACTICE_QUESTION_TYPES = Object.fromEntries(PRACTICE_QUESTION_TYPES.map((type) => [
       type.id,
@@ -773,6 +797,9 @@
       "barlines",
       "cadence",
       "chord",
+      "ahChord",
+      "ahBassLine",
+      "ahChordTypes",
       "interval",
       "key",
       "missing",
@@ -785,7 +812,10 @@
       "enharmonics",
       "triplets",
       "articulation",
-      "transposition",
+      "transpositionOctaveDown",
+      "transpositionOctaveUp",
+      "transpositionSamePitch",
+      "transpositionOctaveSigns",
       "time",
     ]);
     const DEFAULT_HIGHER_PRACTICE_QUESTION_TYPE_IDS = new Set([
@@ -802,8 +832,14 @@
       "accidentals",
       "enharmonics",
       "triplets",
+      "ahChord",
+      "ahBassLine",
+      "ahChordTypes",
       "articulation",
-      "transposition",
+      "transpositionOctaveDown",
+      "transpositionOctaveUp",
+      "transpositionSamePitch",
+      "transpositionOctaveSigns",
     ]);
     const PRACTICE_QUESTION_COUNT = 6;
     let lastPracticeCadenceId = null;
@@ -838,6 +874,45 @@
       { source: { letter: "F", accidental: -1 }, target: { letter: "E", accidental: 0 } },
       { source: { letter: "B", accidental: 1 }, target: { letter: "C", accidental: 0 }, targetOctaveOffset: 1 },
       { source: { letter: "C", accidental: -1 }, target: { letter: "B", accidental: 0 }, targetOctaveOffset: -1 },
+    ];
+    const RARE_ENHARMONIC_SOURCE_SPELLINGS = new Set(["F:-1", "B:1", "C:-1", "E:1"]);
+    const RARE_INTERVAL_SPELLINGS = new Set(["E:1", "F:-1", "C:-1", "B:1"]);
+    const RARE_INTERVAL_CHANCE = 0.2;
+    const ADVANCED_HIGHER_CHORD_TYPES = [
+      { id: "dim7", label: "Diminished 7th", aliases: ["diminished 7th", "diminished seventh", "dim 7", "dim 7th", "dim seventh"] },
+      { id: "dom7", label: "Dominant 7th", aliases: ["dominant 7th", "dominant seventh", "dom 7", "dom 7th", "dom seventh"] },
+      { id: "add6", label: "Added 6th", aliases: ["added 6th", "added sixth", "add 6", "add 6th", "added 6"] },
+      { id: "aug", label: "Augmented triad", aliases: ["augmented triad", "augmented", "aug triad", "aug"] },
+    ];
+    const ADVANCED_HIGHER_CHORD_TYPE_SPELLINGS = [
+      { root: "C", type: "dom7", tones: [["C", 4, 0], ["E", 4, 0], ["G", 4, 0], ["B", 4, -1]] },
+      { root: "C", type: "dim7", tones: [["C", 4, 0], ["E", 4, -1], ["G", 4, -1], ["A", 4, 0]] },
+      { root: "C", type: "aug", tones: [["C", 4, 0], ["E", 4, 0], ["G", 4, 1]] },
+      { root: "C", type: "add6", tones: [["C", 4, 0], ["E", 4, 0], ["G", 4, 0], ["A", 4, 0]] },
+      { root: "D", type: "dom7", tones: [["D", 4, 0], ["F", 4, 1], ["A", 4, 0], ["C", 5, 0]] },
+      { root: "D", type: "dim7", tones: [["D", 4, 0], ["F", 4, 0], ["A", 4, -1], ["C", 5, -1]] },
+      { root: "D", type: "aug", tones: [["D", 4, 0], ["F", 4, 1], ["A", 4, 1]] },
+      { root: "D", type: "add6", tones: [["D", 4, 0], ["F", 4, 1], ["A", 4, 0], ["B", 4, 0]] },
+      { root: "E", type: "dom7", tones: [["E", 4, 0], ["G", 4, 1], ["B", 4, 0], ["D", 5, 0]] },
+      { root: "E", type: "dim7", tones: [["E", 4, 0], ["G", 4, 0], ["B", 4, -1], ["D", 5, -1]] },
+      { root: "E", type: "aug", tones: [["E", 4, 0], ["G", 4, 1], ["C", 5, 0]] },
+      { root: "E", type: "add6", tones: [["E", 4, 0], ["G", 4, 1], ["B", 4, 0], ["C", 5, 1]] },
+      { root: "F", type: "dom7", tones: [["F", 4, 0], ["A", 4, 0], ["C", 5, 0], ["E", 5, -1]] },
+      { root: "F", type: "dim7", tones: [["F", 4, 0], ["A", 4, -1], ["B", 4, 0], ["D", 5, 0]] },
+      { root: "F", type: "aug", tones: [["F", 4, 0], ["A", 4, 0], ["C", 5, 1]] },
+      { root: "F", type: "add6", tones: [["F", 4, 0], ["A", 4, 0], ["C", 5, 0], ["D", 5, 0]] },
+      { root: "G", type: "dom7", tones: [["G", 4, 0], ["B", 4, 0], ["D", 5, 0], ["F", 5, 0]] },
+      { root: "G", type: "dim7", tones: [["G", 4, 0], ["B", 4, -1], ["D", 5, -1], ["F", 5, -1]] },
+      { root: "G", type: "aug", tones: [["G", 4, 0], ["B", 4, 0], ["D", 5, 1]] },
+      { root: "G", type: "add6", tones: [["G", 4, 0], ["B", 4, 0], ["D", 5, 0], ["E", 5, 0]] },
+      { root: "A", type: "dom7", tones: [["A", 4, 0], ["C", 5, 1], ["E", 5, 0], ["G", 5, 0]] },
+      { root: "A", type: "dim7", tones: [["A", 4, 0], ["C", 5, 0], ["E", 5, -1], ["G", 5, -1]] },
+      { root: "A", type: "aug", tones: [["A", 4, 0], ["C", 5, 1], ["F", 5, 0]] },
+      { root: "A", type: "add6", tones: [["A", 4, 0], ["C", 5, 1], ["E", 5, 0], ["F", 5, 1]] },
+      { root: "B", type: "dom7", tones: [["B", 4, 0], ["D", 5, 1], ["F", 5, 1], ["A", 5, 0]] },
+      { root: "B", type: "dim7", tones: [["B", 4, 0], ["D", 5, 0], ["F", 5, 0], ["A", 5, -1]] },
+      { root: "B", type: "aug", tones: [["B", 4, 0], ["D", 5, 1], ["G", 5, 0]] },
+      { root: "B", type: "add6", tones: [["B", 4, 0], ["D", 5, 1], ["F", 5, 1], ["G", 5, 1]] },
     ];
 
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -913,10 +988,22 @@
       if (level === "AH") return PRACTICE_QUESTION_TYPES.filter((type) => (
         HIGHER_PRACTICE_QUESTION_TYPE_IDS.has(type.id)
         && type.id !== "triplets"
+        && type.id !== "chord"
       ));
-      if (level === "H") return PRACTICE_QUESTION_TYPES.filter((type) => HIGHER_PRACTICE_QUESTION_TYPE_IDS.has(type.id));
+      if (level === "H") return PRACTICE_QUESTION_TYPES.filter((type) => (
+        HIGHER_PRACTICE_QUESTION_TYPE_IDS.has(type.id)
+        && !type.id.startsWith("ah")
+        && (!TRANSPOSITION_QUESTION_TYPE_IDS.includes(type.id) || type.id === "transpositionOctaveDown")
+      ));
       return PRACTICE_QUESTION_TYPES;
     };
+    const enabledTranspositionQuestionTypeIds = (enabledQuestionTypes, level = "H") => {
+      const availableIds = new Set(practiceQuestionTypesForLevel(level).map((type) => type.id));
+      return TRANSPOSITION_QUESTION_TYPE_IDS.filter((id) => availableIds.has(id) && enabledQuestionTypes[id] !== false);
+    };
+    const selectedTranspositionQuestionTypeId = (enabledQuestionTypes, level = "H") => (
+      randomItem(enabledTranspositionQuestionTypeIds(enabledQuestionTypes, level))
+    );
     const defaultPracticeQuestionTypesForLevel = (level) => Object.fromEntries(PRACTICE_QUESTION_TYPES.map((type) => [
       type.id,
       DEFAULT_ENABLED_PRACTICE_QUESTION_TYPE_IDS.has(type.id)
@@ -1034,6 +1121,10 @@
         .sort((a, b) => a.score - b.score)
         .map((item) => item.candidate);
     }
+    function isRareEnharmonicSourceSpelling(candidate) {
+      const source = candidate?.source;
+      return RARE_ENHARMONIC_SOURCE_SPELLINGS.has(`${source?.letter}:${source?.accidental}`);
+    }
     const HIGHER_TRANSPOSITION_BASS_MIN = noteBaseForStep(-14); // E2
     const ADVANCED_HIGHER_TRANSPOSITION_BASS_MIN = noteBaseForStep(-16); // C2
     const HIGHER_TRANSPOSITION_BASS_MAX = noteBaseForStep(-2); // C4
@@ -1085,7 +1176,16 @@
       if (!majorKeys.length) return randomItem(minorKeys);
       return Math.random() < 0.72 ? randomItem(majorKeys) : randomItem(minorKeys);
     };
-    const effectiveMidiForNote = (question, bar, note) => note.midi + keyAccidentalForLetter(question.key, note.letter) + (note.writtenAccidental ?? 0);
+    const effectiveMidiForNote = (question, bar, note) => (
+      Object.prototype.hasOwnProperty.call(note, "absoluteAccidental")
+        ? noteBaseForLetterOctave(note.letter, note.octave).midi + note.absoluteAccidental
+        : note.midi + keyAccidentalForLetter(question.key, note.letter) + (note.writtenAccidental ?? 0)
+    );
+    const effectiveMidiForStackTone = (question, bar, tone) => (
+      Object.prototype.hasOwnProperty.call(tone, "absoluteAccidental")
+        ? noteBaseForLetterOctave(tone.letter, tone.octave).midi + tone.absoluteAccidental
+        : effectiveMidiForNote(question, bar, tone)
+    );
     const effectivePlaybackMidiForNote = (question, bar, note, noteIndex) => {
       const accidentalTarget = question.accidentalTarget;
       if (accidentalTarget
@@ -1167,6 +1267,16 @@
         barIndex,
         noteIndex,
         writtenAccidental: melodicAccidental ?? chordAccidental,
+      };
+    }
+
+    function tiedContinuationPitch(note) {
+      return {
+        letter: note.letter,
+        octave: note.octave,
+        step: note.step,
+        midi: note.midi,
+        writtenAccidental: null,
       };
     }
 
@@ -2067,7 +2177,7 @@
         const repeatedPitch = repeatedPitchByIndex.get(index);
         return {
           ...note,
-          ...(repeatedPitch ? { letter: repeatedPitch.letter, octave: repeatedPitch.octave, step: repeatedPitch.step, midi: repeatedPitch.midi, writtenAccidental: repeatedPitch.writtenAccidental } : {}),
+          ...(repeatedPitch ? tiedContinuationPitch(repeatedPitch) : {}),
           id: `${targetBarIndex}-${index}`,
           noteIndex: index,
           audioTieToNext: index === answerIndex,
@@ -2245,7 +2355,7 @@
       secondBar.notes[template.secondIndex] = {
         ...second,
         ...NOTE_POOL[noteBaseIndex(first)],
-        writtenAccidental: first.writtenAccidental,
+        ...tiedContinuationPitch(first),
         tiedFromPrevious: true,
       };
 
@@ -2407,7 +2517,7 @@
         notes[noteIndex + 1] = {
           ...second,
           ...NOTE_POOL[noteBaseIndex(first)],
-          writtenAccidental: first.writtenAccidental,
+          ...tiedContinuationPitch(first),
           tiedFromPrevious: true,
         };
       });
@@ -3227,10 +3337,21 @@
       }) ?? null;
     }
 
-    function strongBeatsUseChordTones(question) {
+    function chordLettersForStrongBeatCheck(question, bar, note, advancedHigherChordTarget = null) {
+      const ahSlot = advancedHigherChordSlotsForBar(question, bar.barIndex, advancedHigherChordTarget)
+        .find((slot) => Math.abs((note.beat ?? 0) - slot.beat) < 0.001);
+      if (ahSlot) return question.key?.chords?.[ahSlot.chordSymbol] ?? [];
+      const chordTypeNote = bar.notes?.find((item) => item?.chordTypeId && item.stack?.length);
+      if (chordTypeNote) return chordTypeNote.stack.map((tone) => tone.letter);
+      return question.key?.chords?.[bar.chordSymbol] ?? [];
+    }
+
+    function strongBeatsUseChordTones(question, advancedHigherChordTarget = null) {
       return question.bars.every((bar) => {
-        const chordLetters = question.key?.chords?.[bar.chordSymbol] ?? [];
-        return (bar.notes ?? []).every((note) => !noteIsOnStrongBeat(note, question.timeSignature) || chordLetters.includes(note.letter));
+        return (bar.notes ?? []).every((note) => {
+          if (!noteIsOnStrongBeat(note, question.timeSignature)) return true;
+          return chordLettersForStrongBeatCheck(question, bar, note, advancedHigherChordTarget).includes(note.letter);
+        });
       });
     }
 
@@ -3865,7 +3986,7 @@
       bar.notes[noteIndex + 1] = {
         ...second,
         ...NOTE_POOL[noteBaseIndex(first)],
-        writtenAccidental: melodicAccidentalForLetter(key, first.letter),
+        ...tiedContinuationPitch(first),
         tiedFromPrevious: true,
       };
       return bars;
@@ -3993,7 +4114,8 @@
           if (lower === "m") return `${out}m`;
           if (char === "7") return `${out}7`;
           if (char === "#" || char === "♯") return `${out}#`;
-          if (lower === "b" || char === "♭") return out.endsWith("B") ? `${out}♭` : `${out}B`;
+          if (char === "♭") return out ? `${out}♭` : "B";
+          if (lower === "b") return /[A-G]$/.test(out) ? `${out}♭` : `${out}B`;
           return `${out}${char.toUpperCase()}`;
         }, "")
         .slice(0, 3);
@@ -4006,12 +4128,12 @@
       return "";
     }
 
-    function advancedHigherGuideInversionLabel(inversion) {
-      if (inversion === 0) return "root";
-      if (inversion === 1) return "1st inv.";
-      if (inversion === 2) return "2nd inv.";
-      return "";
-    }
+function advancedHigherGuideInversionLabel(inversion) {
+    if (inversion === 0) return "Root";
+    if (inversion === 1) return "1st inv.";
+    if (inversion === 2) return "2nd inv.";
+    return "";
+}
 
     function advancedHigherRomanWithInversionLabel(symbol, inversion) {
       if (inversion === 1) return `${symbol}b`;
@@ -4019,22 +4141,30 @@
       return symbol;
     }
 
-    function advancedHigherInversionAnswerLabel(inversion) {
-      if (inversion === 0) return "root";
-      if (inversion === 1) return "1st inversion";
-      if (inversion === 2) return "2nd inversion";
-      return "";
-    }
+function advancedHigherInversionAnswerLabel(inversion) {
+    if (inversion === 0) return "Root";
+    if (inversion === 1) return "1st inversion";
+    if (inversion === 2) return "2nd inversion";
+    return "";
+}
 
     function normaliseAdvancedHigherInversionAnswer(value) {
       return String(value ?? "")
         .trim()
         .toLowerCase()
+        .replace(/\./g, "")
         .replace(/first/g, "1st")
         .replace(/second/g, "2nd")
         .replace(/\s+/g, "")
         .replace(/inversion/g, "")
         .replace(/position/g, "");
+    }
+
+    function advancedHigherAcceptedInversionAnswers(inversion) {
+      if (inversion === 0) return ["", "root", "a"];
+      if (inversion === 1) return ["1st", "1stinv", "b"];
+      if (inversion === 2) return ["2nd", "2ndinv", "c"];
+      return [""];
     }
 
     function advancedHigherChordAnswerValue(value) {
@@ -4059,6 +4189,246 @@
         chordName.replace(" major", ""),
         chordName.replace(" minor", "m"),
       ].some((accepted) => normaliseHigherChordAnswer(accepted) === answer);
+    }
+
+    function advancedHigherChordTypeAnswerAccepts(chordType) {
+      return acceptedAnswers(chordType.label, ...(chordType.aliases ?? []));
+    }
+
+    function advancedHigherChordTypeTone(question, [letter, octave, accidental = 0]) {
+      const base = noteBaseForLetterOctave(letter, octave);
+      const keyAccidental = keyAccidentalForLetter(question.key, letter);
+      return {
+        ...base,
+        writtenAccidental: accidental === keyAccidental ? null : accidental,
+        absoluteAccidental: accidental,
+      };
+    }
+
+    function makeAdvancedHigherChordTypeStack(question, spelling) {
+      return spelling.tones.map((tone) => advancedHigherChordTypeTone(question, tone));
+    }
+
+    function scaleDegreeToneSpelling(question, degree, { octave = 4, alteration = 0, leadingTone = false } = {}) {
+      const normalisedDegree = ((degree - 1) % 7) + 1;
+      const octaveOffset = Math.floor((degree - 1) / 7);
+      const majorIntervals = [0, 2, 4, 5, 7, 9, 11];
+      const minorIntervals = [0, 2, 3, 5, 7, 8, 10];
+      const scaleIntervals = isMinorKey(question.key) ? minorIntervals : majorIntervals;
+      const tonicIndex = noteAbsoluteIndex(question.key.tonic, octave);
+      const absoluteIndex = tonicIndex + degree - 1;
+      const letter = NOTE_LETTERS[((absoluteIndex % 7) + 7) % 7];
+      const toneOctave = Math.floor(absoluteIndex / 7);
+      const tonicBase = noteBaseForLetterOctave(question.key.tonic, octave);
+      const tonicAccidental = keyAccidentalForLetter(question.key, question.key.tonic);
+      const interval = (leadingTone && normalisedDegree === 7 ? 11 : scaleIntervals[normalisedDegree - 1])
+        + alteration
+        + octaveOffset * 12;
+      const targetMidi = tonicBase.midi + tonicAccidental + interval;
+      const base = noteBaseForLetterOctave(letter, toneOctave);
+      const accidental = targetMidi - base.midi;
+      return Number.isFinite(accidental) && accidental >= -1 && accidental <= 1
+        ? [letter, toneOctave, accidental]
+        : null;
+    }
+
+    function advancedHigherScaleDegreeSpelling(question, chordTypeId) {
+      if (chordTypeId === "add6") {
+        const tones = [1, 3, 5, 6].map((degree) => scaleDegreeToneSpelling(question, degree));
+        return tones.every(Boolean) ? { root: question.key.tonic, type: "add6", tones, chordSymbol: "I" } : null;
+      }
+      if (chordTypeId === "dom7") {
+        const tones = [
+          scaleDegreeToneSpelling(question, 2),
+          scaleDegreeToneSpelling(question, 4),
+          scaleDegreeToneSpelling(question, 5),
+          scaleDegreeToneSpelling(question, 7, { leadingTone: true }),
+        ];
+        return tones.every(Boolean) ? { root: question.key.chords?.V?.[0] ?? dominantLetterForKey(question.key), type: "dom7", tones, chordSymbol: "V7" } : null;
+      }
+      if (chordTypeId === "dim7") {
+        const flatSixAlteration = isMinorKey(question.key) ? 0 : -1;
+        const tones = [
+          scaleDegreeToneSpelling(question, 2),
+          scaleDegreeToneSpelling(question, 4),
+          scaleDegreeToneSpelling(question, 6, { alteration: flatSixAlteration }),
+          scaleDegreeToneSpelling(question, 7, { leadingTone: true }),
+        ];
+        return tones.every(Boolean) ? { root: tones[0][0], type: "dim7", tones, chordSymbol: "VII" } : null;
+      }
+      if (chordTypeId === "aug") {
+        const tones = [
+          scaleDegreeToneSpelling(question, 1),
+          scaleDegreeToneSpelling(question, 3),
+          scaleDegreeToneSpelling(question, 5, { alteration: 1 }),
+        ];
+        return tones.every(Boolean) ? { root: question.key.tonic, type: "aug", tones, chordSymbol: "I" } : null;
+      }
+      return null;
+    }
+
+    function absoluteAccidentalForChordTone(key, chordSymbol, letter) {
+      const chordAccidental = chordAccidentalForLetter(key, chordSymbol, letter);
+      return chordAccidental ?? keyAccidentalForLetter(key, letter);
+    }
+
+    function augmentedTriadSpellingForBar(question, barIndex) {
+      if (!question.bars?.[barIndex - 1] || !question.bars?.[barIndex + 1]) return null;
+      return advancedHigherScaleDegreeSpelling(question, "aug");
+    }
+
+    function advancedHigherChordTypeFixedBar(question, chordTypeId) {
+      if (chordTypeId === "add6") return question.bars.length - 1;
+      if (chordTypeId === "dom7" || chordTypeId === "dim7") return 14;
+      return null;
+    }
+
+    function advancedHigherChordTypeCandidateBars(question, chordTypeId, protectedBars) {
+      const fixedBar = advancedHigherChordTypeFixedBar(question, chordTypeId);
+      if (Number.isInteger(fixedBar)) {
+        if (!question.bars?.[fixedBar] || protectedBars.has(fixedBar)) return [];
+        if ((chordTypeId === "dom7" || chordTypeId === "dim7") && (!question.bars?.[fixedBar + 1] || protectedBars.has(fixedBar + 1))) return [];
+        return [fixedBar];
+      }
+      return question.bars
+        .map((bar) => bar.barIndex)
+        .filter((barIndex) => (
+          barIndex >= 4
+          && barIndex < question.bars.length - 1
+          && !protectedBars.has(barIndex)
+          && (chordTypeId !== "aug" || (
+            !protectedBars.has(barIndex - 1)
+            && !protectedBars.has(barIndex + 1)
+            && Boolean(augmentedTriadSpellingForBar(question, barIndex))
+          ))
+        ));
+    }
+
+    function advancedHigherChordTypeSpellingsForQuestion(question, chordTypeId) {
+      const spelling = advancedHigherScaleDegreeSpelling(question, chordTypeId);
+      return spelling ? [spelling] : [];
+    }
+
+    function makeAdvancedHigherChordTypeNote(question, barIndex, spelling, chordType, rhythm = finalRhythmForSignature(question.timeSignature)) {
+      const stack = makeAdvancedHigherChordTypeStack(question, spelling);
+      const root = stack[0];
+      return {
+        ...root,
+        id: `ah-chord-type-${barIndex}`,
+        barIndex,
+        noteIndex: 0,
+        rhythm,
+        displayRhythm: "minim",
+        beats: rhythmInfo(rhythm).beats,
+        beat: 0,
+        beatPosition: 0,
+        stack,
+        chordTypeId: chordType.id,
+      };
+    }
+
+    function setBarToChordTypeStack(question, barIndex, spelling, chordType, chordSymbol = spelling?.chordSymbol ?? "I") {
+      if (!question.bars?.[barIndex] || !spelling) return;
+      const rhythm = finalRhythmForSignature(question.timeSignature);
+      const chordNote = makeAdvancedHigherChordTypeNote(question, barIndex, spelling, chordType, rhythm);
+      question.bars[barIndex] = {
+        ...question.bars[barIndex],
+        chordSymbol,
+        notes: [chordNote],
+        pattern: [rhythm],
+      };
+    }
+
+    function setFirstSoundingNoteToScaleDegree(question, barIndex, degree, options = {}) {
+      const bar = question.bars?.[barIndex];
+      if (!bar) return;
+      const noteIndex = bar.notes.findIndex((note) => !note.rest);
+      if (noteIndex < 0) return;
+      const spelling = scaleDegreeToneSpelling(question, degree, options);
+      if (!spelling) return;
+      const [letter, octave, accidental] = spelling;
+      const base = noteBaseForLetterOctave(letter, octave);
+      bar.notes[noteIndex] = {
+        ...bar.notes[noteIndex],
+        ...base,
+        writtenAccidental: accidental === keyAccidentalForLetter(question.key, letter) ? null : accidental,
+        absoluteAccidental: accidental,
+      };
+    }
+
+    function applyAdvancedHigherChordTypeContext(question, barIndex, chordType, spelling) {
+      if (chordType.id === "add6") {
+        setBarToChordTypeStack(question, barIndex, spelling, chordType, "I");
+        return [barIndex];
+      }
+      if (chordType.id === "dom7") {
+        setBarToChordTypeStack(question, barIndex, spelling, chordType, "V7");
+        const resolution = {
+          root: question.key.tonic,
+          type: "dom7Resolution",
+          tones: [3, 5, 8].map((degree) => scaleDegreeToneSpelling(question, degree)),
+          chordSymbol: "I",
+        };
+        if (resolution.tones.every(Boolean)) {
+          setBarToChordTypeStack(question, barIndex + 1, resolution, { ...chordType, id: "dom7-resolution" }, "I");
+        }
+        return [barIndex, barIndex + 1].filter((index) => question.bars?.[index]);
+      }
+      if (chordType.id === "dim7") {
+        setBarToChordTypeStack(question, barIndex, spelling, chordType, "VII");
+        const resolution = {
+          root: question.key.tonic,
+          type: "tonicResolution",
+          tones: [3, 5, 8].map((degree) => scaleDegreeToneSpelling(question, degree)),
+          chordSymbol: "I",
+        };
+        if (resolution.tones.every(Boolean)) {
+          setBarToChordTypeStack(question, barIndex + 1, resolution, { ...chordType, id: "dim7-resolution" }, "I");
+        }
+        return [barIndex, barIndex + 1].filter((index) => question.bars?.[index]);
+      }
+      if (chordType.id === "aug") {
+        const resolutionOptions = ["IV", "VI"].filter((symbol) => question.key.chords?.[symbol]?.length);
+        question.bars[barIndex - 1] = { ...question.bars[barIndex - 1], chordSymbol: "I" };
+        question.bars[barIndex] = { ...question.bars[barIndex], chordSymbol: "I" };
+        question.bars[barIndex + 1] = { ...question.bars[barIndex + 1], chordSymbol: randomItem(resolutionOptions.length ? resolutionOptions : ["IV"]) };
+        setFirstSoundingNoteToScaleDegree(question, barIndex - 1, 5);
+        setBarToChordTypeStack(question, barIndex, spelling, chordType, "I");
+        setFirstSoundingNoteToScaleDegree(question, barIndex + 1, 6);
+        return [barIndex - 1, barIndex, barIndex + 1].filter((index) => question.bars?.[index]);
+      }
+      setBarToChordTypeStack(question, barIndex, spelling, chordType, spelling?.chordSymbol);
+      return [barIndex];
+    }
+
+    function makeAdvancedHigherChordTypeTarget(question, usedQuestionBars = new Set()) {
+      const protectedBars = new Set(usedQuestionBars);
+      [question.targetBar, question.missingSourceBar].forEach((barIndex) => {
+        if (Number.isInteger(barIndex)) protectedBars.add(barIndex);
+      });
+      const placeableSpellings = ADVANCED_HIGHER_CHORD_TYPES
+        .flatMap((chordType) => advancedHigherChordTypeSpellingsForQuestion(question, chordType.id).map((spelling) => ({
+          spelling,
+          chordType,
+        })))
+        .map((item) => {
+          return {
+            ...item,
+            candidateBars: advancedHigherChordTypeCandidateBars(question, item.chordType.id, protectedBars),
+          };
+        })
+        .filter((item) => item.candidateBars.length);
+      const selected = randomItem(placeableSpellings);
+      if (!selected) return null;
+      const { chordType } = selected;
+      const barIndex = randomItem(selected.candidateBars);
+      if (!Number.isInteger(barIndex)) return null;
+      const spelling = chordType.id === "aug"
+        ? augmentedTriadSpellingForBar(question, barIndex) ?? selected.spelling
+        : selected.spelling;
+      const noteIndex = 0;
+      const reservedBars = applyAdvancedHigherChordTypeContext(question, barIndex, chordType, spelling);
+      return { barIndex, noteIndex, chordType, reservedBars };
     }
 
     const ADVANCED_HIGHER_CHORD_IDENTIFY_BAR = 12;
@@ -4110,13 +4480,24 @@
     }
 
     function advancedHigherChordInversionOptions(chordSymbol) {
-      if (chordSymbol === "II") return [0, 1];
-      return chordSymbol === "V7" ? [0, 1, 2] : [1, 2];
+      return [0, 1, 2];
     }
 
-    function advancedHigherChordCandidateWeight(candidate) {
-      if (candidate.symbol === "V7") return 0.25;
-      return 1;
+    const ADVANCED_HIGHER_CHORD_INVERSION_WEIGHTS = {
+      0: 50,
+      1: 30,
+      2: 20,
+    };
+
+    function advancedHigherChordPositionKey(chordSymbol, inversion) {
+      return `${chordSymbol}:${inversion}`;
+    }
+
+    function weightedAdvancedHigherChordCandidate(candidates) {
+      return weightedRandomItem(candidates.map((candidate) => ({
+        ...candidate,
+        weight: ADVANCED_HIGHER_CHORD_INVERSION_WEIGHTS[candidate.inversion] ?? 1,
+      })));
     }
 
     function makeAdvancedHigherChordVoicing(question, chordSymbol, inversion, idPrefix, timing = null) {
@@ -4161,18 +4542,22 @@
       return { bassNote, trebleNote };
     }
 
-    function makeAdvancedHigherChordSlot(question, barIndex, slotIndex, previousSymbol = null) {
+    function makeAdvancedHigherChordSlot(question, barIndex, slotIndex, usedChordPositions = new Set()) {
       const timing = advancedHigherChordSlotTimings(question.timeSignature)[slotIndex] ?? advancedHigherChordSlotTimings(question.timeSignature)[0];
       const symbols = advancedHigherChordSymbolsForKey(question.key);
-      const candidates = symbols.flatMap((symbol) => advancedHigherChordInversionOptions(symbol).map((inversion) => ({ symbol, inversion })));
-      const available = candidates.filter((candidate) => candidate.symbol !== previousSymbol);
-      const pool = available.length ? available : candidates;
-      const picked = weightedRandomItem(pool.map((candidate) => ({
-        ...candidate,
-        weight: advancedHigherChordCandidateWeight(candidate),
+      const candidates = symbols.flatMap((symbol) => advancedHigherChordInversionOptions(symbol).map((inversion) => ({
+        symbol,
+        inversion,
       })));
-      const chordSymbol = picked?.symbol ?? "V";
-      const inversion = picked?.inversion ?? 1;
+      const availableCandidates = candidates.filter((candidate) => !usedChordPositions.has(advancedHigherChordPositionKey(candidate.symbol, candidate.inversion)));
+      const candidatePool = availableCandidates.length ? availableCandidates : candidates;
+      const v7Candidates = candidatePool.filter((candidate) => candidate.symbol === "V7");
+      const commonCandidates = candidatePool.filter((candidate) => candidate.symbol !== "V7");
+      const selectedCandidate = v7Candidates.length && commonCandidates.length
+        ? Math.random() < 0.1 ? weightedAdvancedHigherChordCandidate(v7Candidates) : weightedAdvancedHigherChordCandidate(commonCandidates)
+        : weightedAdvancedHigherChordCandidate(candidatePool);
+      const chordSymbol = selectedCandidate?.symbol ?? "V";
+      const inversion = selectedCandidate?.inversion ?? 0;
       const voicing = makeAdvancedHigherChordVoicing(question, chordSymbol, inversion, `ah-chord-${barIndex}-${slotIndex}`, timing);
       return {
         id: `${barIndex}-${slotIndex}`,
@@ -4191,15 +4576,15 @@
 
     function makeAdvancedHigherChordTarget(question) {
       if (!question?.bars?.[ADVANCED_HIGHER_CHORD_IDENTIFY_BAR] || !question?.bars?.[ADVANCED_HIGHER_CHORD_BASS_BAR]) return null;
-      let previousSymbol = null;
+      const usedChordPositions = new Set();
       const identifySlots = [0, 1].map((slotIndex) => {
-        const slot = makeAdvancedHigherChordSlot(question, ADVANCED_HIGHER_CHORD_IDENTIFY_BAR, slotIndex, previousSymbol);
-        previousSymbol = slot.chordSymbol;
+        const slot = makeAdvancedHigherChordSlot(question, ADVANCED_HIGHER_CHORD_IDENTIFY_BAR, slotIndex, usedChordPositions);
+        usedChordPositions.add(advancedHigherChordPositionKey(slot.chordSymbol, slot.inversion));
         return slot;
       });
       const bassLineSlots = [0, 1].map((slotIndex) => {
-        const slot = makeAdvancedHigherChordSlot(question, ADVANCED_HIGHER_CHORD_BASS_BAR, slotIndex, previousSymbol);
-        previousSymbol = slot.chordSymbol;
+        const slot = makeAdvancedHigherChordSlot(question, ADVANCED_HIGHER_CHORD_BASS_BAR, slotIndex, usedChordPositions);
+        usedChordPositions.add(advancedHigherChordPositionKey(slot.chordSymbol, slot.inversion));
         return slot;
       });
       return {
@@ -4208,6 +4593,48 @@
         identifySlots,
         bassLineSlots,
       };
+    }
+
+    function advancedHigherChordSlotsForBar(question, barIndex, target = question?.advancedHigherChordTarget) {
+      if (!target) return [];
+      if (target.identifyBar === barIndex) return target.identifySlots ?? [];
+      if (target.bassLineBar === barIndex) return target.bassLineSlots ?? [];
+      return [];
+    }
+
+    function melodyChordToneForSlot(question, bar, note, slot) {
+      const chordLetters = question.key.chords?.[slot.chordSymbol] ?? [];
+      if (!chordLetters.length || note.rest || note.tiedFromPrevious) return note;
+      const sourceIndex = noteBaseIndex(note);
+      const candidates = NOTE_POOL
+        .filter((candidate) => chordLetters.includes(candidate.letter))
+        .filter((candidate) => noteAllowedForLevel("AH", candidate))
+        .filter((candidate) => noteInClefRange(candidate, question.clef ?? "treble"))
+        .sort((a, b) => Math.abs(noteBaseIndex(a) - sourceIndex) - Math.abs(noteBaseIndex(b) - sourceIndex));
+      const fitted = candidates[0];
+      if (!fitted) return note;
+      return {
+        ...note,
+        ...fitted,
+        writtenAccidental: chordAccidentalForLetter(question.key, slot.chordSymbol, fitted.letter)
+          ?? melodicAccidentalForLetter(question.key, fitted.letter),
+      };
+    }
+
+    function alignAdvancedHigherChordMelodyToSlots(question, target, includeBassLineBar = false) {
+      if (!question?.bars || !target) return question;
+      [
+        { barIndex: target.identifyBar, slots: target.identifySlots ?? [] },
+        ...(includeBassLineBar ? [{ barIndex: target.bassLineBar, slots: target.bassLineSlots ?? [] }] : []),
+      ].forEach(({ barIndex, slots }) => {
+        const bar = question.bars[barIndex];
+        if (!bar || !slots.length) return;
+        bar.notes = bar.notes.map((note) => {
+          const slot = slots.find((item) => Math.abs((note.beat ?? 0) - item.beat) < 0.001);
+          return slot ? melodyChordToneForSlot(question, bar, note, slot) : note;
+        });
+      });
+      return question;
     }
 
     function advancedHigherChordAnswerCorrect(value, slot) {
@@ -4222,8 +4649,22 @@
         slot.answer?.replace(" diminished", " dim."),
       ].some((accepted) => normaliseHigherChordAnswer(accepted) === answer);
       const positionAnswer = normaliseAdvancedHigherInversionAnswer(advancedHigherInversionAnswerValue(value));
-      const expectedPosition = normaliseAdvancedHigherInversionAnswer(advancedHigherInversionAnswerLabel(slot.inversion));
-      return chordCorrect && positionAnswer === expectedPosition;
+      const positionCorrect = advancedHigherAcceptedInversionAnswers(slot.inversion)
+        .map(normaliseAdvancedHigherInversionAnswer)
+        .includes(positionAnswer);
+      return chordCorrect && positionCorrect;
+    }
+
+    function transpositionNoteAnswerCorrect(actual, expected, answerClef) {
+      if (!actual || !expected) return false;
+      const pitchCorrect = answerClef === "bass"
+        ? actual.letter === expected.letter
+        : actual.step === expected.step;
+      return Boolean(
+        pitchCorrect
+        && actual.rhythm === expected.rhythm
+        && (actual.writtenAccidental ?? null) === (expected.writtenAccidental ?? null)
+      );
     }
 
     function outlineChordInBar(question, barIndex) {
@@ -4610,6 +5051,17 @@
       });
     }
 
+    function hasRareIntervalSpelling(pair) {
+      return pair.some((pitch) => RARE_INTERVAL_SPELLINGS.has(`${pitch.letter}:${pitch.displayAccidental}`));
+    }
+
+    function chooseAdvancedHigherIntervalPairPool(pitchPairs) {
+      const rarePairs = pitchPairs.filter((item) => hasRareIntervalSpelling(item.pair));
+      const regularPairs = pitchPairs.filter((item) => !hasRareIntervalSpelling(item.pair));
+      if (!rarePairs.length || !regularPairs.length) return pitchPairs;
+      return Math.random() < RARE_INTERVAL_CHANCE ? rarePairs : regularPairs;
+    }
+
     const HIGHER_INTERVAL_TYPE_WEIGHTS = [
       { type: "third", number: 3, weight: 1 },
       { type: "fourth", number: 4, weight: 3 },
@@ -4654,7 +5106,7 @@
       const tryPlantAdvancedHigherChromaticInterval = (preferDiatonicTritone = false) => {
         const diatonicTritonePairs = preferDiatonicTritone ? advancedHigherDiatonicTritonePitchPairs(question) : [];
         const chromaticPairs = advancedHigherChromaticIntervalPitchPairs(question);
-        const pitchPairs = diatonicTritonePairs.length ? diatonicTritonePairs : chromaticPairs;
+        const pitchPairs = chooseAdvancedHigherIntervalPairPool(diatonicTritonePairs.length ? diatonicTritonePairs : chromaticPairs);
         if (!pitchPairs.length) return null;
         const target = randomItem(targets);
         if (!target) return null;
@@ -5232,7 +5684,7 @@
       const pattern = transpositionFallbackPatternForSignature(question.timeSignature);
       let beat = 0;
       const safeSteps = variant.sourceClef === "bass"
-        ? [-2, -1, 0, 1, 0, -1]
+        ? [-9, -8, -7, -6, -7, -8]
         : variant.answerClef === "bass" && variant.answerOctavesFromMain === 0
           ? [-4, -3, -2, -3, -4, -2]
           : [0, 1, 2, 3, 2, 1];
@@ -5252,8 +5704,11 @@
       return question.bars[bar.barIndex];
     }
 
-    function makeTranspositionTarget(question, excludedBars = []) {
-      if (question.practiceLevel === "AH" && Math.random() < 0.2) {
+    function makeTranspositionTarget(question, excludedBars = [], transpositionQuestionTypeId = null) {
+      const allowedVariantIds = TRANSPOSITION_VARIANT_IDS_BY_QUESTION_TYPE[transpositionQuestionTypeId] ?? null;
+      const meaningOnly = allowedVariantIds?.length === 1 && allowedVariantIds[0] === "meaning";
+      const canUseMeaning = question.practiceLevel === "AH" && (!allowedVariantIds || allowedVariantIds.includes("meaning"));
+      if (canUseMeaning && (meaningOnly || Math.random() < 0.2)) {
         const excluded = new Set(excludedBars);
         const availableBars = question.bars
           .filter((bar) => bar.barIndex < 8 && !excluded.has(bar.barIndex))
@@ -5271,7 +5726,11 @@
         };
       }
       const excluded = new Set([...excludedBars]);
-      const variants = question.practiceLevel === "AH" ? ADVANCED_HIGHER_TRANSPOSITION_VARIANTS : HIGHER_TRANSPOSITION_VARIANTS;
+      const availableVariants = question.practiceLevel === "AH" ? ADVANCED_HIGHER_TRANSPOSITION_VARIANTS : HIGHER_TRANSPOSITION_VARIANTS;
+      const variants = allowedVariantIds
+        ? availableVariants.filter((variant) => allowedVariantIds.includes(variant.id))
+        : availableVariants;
+      if (!variants.length) return null;
       const variant = randomItem(variants);
       const eligibleBars = question.bars
         .filter((bar) => bar.barIndex < 8)
@@ -5287,6 +5746,9 @@
       const bar = randomItem(candidates) ?? plantTranspositionFallbackBar(question, excluded, variant);
       if (!bar) return null;
       const { answerNotes, sourceNotes } = transpositionVariantNotesForBar(bar, variant);
+      const notesFitSelectedClefs = answerNotes.every((note) => transpositionNoteFitsClefForQuestion(note, variant.answerClef, question))
+        && sourceNotes.every((note) => transpositionNoteFitsClefForQuestion(note, variant.sourceClef, question));
+      if (!notesFitSelectedClefs) return null;
       return {
         type: "notes",
         variantId: variant.id,
@@ -5304,10 +5766,16 @@
     function makeEnharmonicTarget(question, excludedBars = []) {
       const clef = question.clef ?? "treble";
       const excluded = new Set(excludedBars);
+      const previousBarOnSameSystemIsExcluded = (barIndex) => (
+        barIndex % BARS_PER_SYSTEM !== 0
+        && excluded.has(barIndex - 1)
+      );
       const candidates = question.bars.flatMap((bar) =>
         (bar.notes ?? []).flatMap((note, noteIndex) => {
           if (
             excluded.has(bar.barIndex)
+            || previousBarOnSameSystemIsExcluded(bar.barIndex)
+            || noteIndex !== 0
             || !note
             || note.rest
             || note.tieToNext
@@ -5340,7 +5808,12 @@
           + Math.abs(candidate.targetStep - displayStep(note, clef));
         return score <= bestScore + 4;
       });
-      const chosen = randomItem(bestCandidates);
+      const rareBestCandidates = bestCandidates.filter(({ candidate }) => isRareEnharmonicSourceSpelling(candidate));
+      const commonBestCandidates = bestCandidates.filter(({ candidate }) => !isRareEnharmonicSourceSpelling(candidate));
+      const preferredCandidates = rareBestCandidates.length && commonBestCandidates.length
+        ? Math.random() < 0.3 ? rareBestCandidates : commonBestCandidates
+        : rareBestCandidates.length ? rareBestCandidates : commonBestCandidates;
+      const chosen = randomItem(preferredCandidates);
       const candidate = chosen.candidate;
       const sourceNote = {
         ...makeEnharmonicNote(candidate.source, candidate.source.octave, clef, chosen.note),
@@ -5514,6 +5987,8 @@
 
     function selectedHigherPracticeQuestionTypeIds(enabledQuestionTypes, level = "H") {
       const selected = [...HIGHER_STANDARD_FIXED_QUESTION_TYPES];
+      const transpositionTypeId = selectedTranspositionQuestionTypeId(enabledQuestionTypes, level);
+      if (transpositionTypeId) selected.push(transpositionTypeId);
       const standardHarmony = higherWeightedQuestionCandidate(HIGHER_STANDARD_HARMONY_ALTERNATES, selected, enabledQuestionTypes, true, level);
       if (standardHarmony) selected.push(standardHarmony);
 
@@ -5636,11 +6111,16 @@
       const retryPracticeQuestion = () => makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes, timeSignatureLevel);
       const questionSelectionLevel = timeSignatureLevel === "AH" ? "AH" : level;
       const selectedSourceIds = new Set(selectedPracticeQuestionTypeIds(enabledQuestionTypes, questionSelectionLevel));
-      const needsAdvancedHigherChordTask = questionSelectionLevel === "AH" && enabledQuestionTypes.chord !== false;
-      if (needsAdvancedHigherChordTask) {
-        selectedSourceIds.add("ahChord");
-        selectedSourceIds.add("ahBassLine");
-      }
+      const selectedTranspositionTypeIds = TRANSPOSITION_QUESTION_TYPE_IDS.filter((id) => selectedSourceIds.has(id));
+      TRANSPOSITION_QUESTION_TYPE_IDS.forEach((id) => selectedSourceIds.delete(id));
+      if (selectedTranspositionTypeIds.length || selectedSourceIds.has("transposition")) selectedSourceIds.add("transposition");
+      const selectedTranspositionTypeId = selectedTranspositionTypeIds[0] ?? (selectedSourceIds.has("transposition") ? "transpositionOctaveDown" : null);
+      const selectedAdvancedHigherChordIds = questionSelectionLevel === "AH"
+        ? ["ahChord", "ahBassLine", "ahChordTypes"].filter((id) => enabledQuestionTypes[id] !== false)
+        : [];
+      selectedAdvancedHigherChordIds.forEach((id) => selectedSourceIds.add(id));
+      const needsAdvancedHigherChordTask = selectedSourceIds.has("ahChord") || selectedSourceIds.has("ahBassLine");
+      const needsAdvancedHigherChordTypes = selectedSourceIds.has("ahChordTypes");
       if (hasQuestionTypeConflict([...selectedSourceIds], questionSelectionLevel) && hasConflictFreePracticeQuestionSelection(enabledQuestionTypes, questionSelectionLevel) && canRetryPracticeQuestion) {
         return retryPracticeQuestion();
       }
@@ -5691,9 +6171,13 @@
       const advancedHigherChordTarget = needsAdvancedHigherChordTask ? makeAdvancedHigherChordTarget(question) : null;
       if (needsAdvancedHigherChordTask && !advancedHigherChordTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (advancedHigherChordTarget) {
+        alignAdvancedHigherChordMelodyToSlots(question, advancedHigherChordTarget, selectedSourceIds.has("ahBassLine"));
         reserveQuestionBar(advancedHigherChordTarget.identifyBar);
         if (selectedSourceIds.has("ahBassLine")) reserveQuestionBar(advancedHigherChordTarget.bassLineBar);
       }
+      const advancedHigherChordTypeTarget = needsAdvancedHigherChordTypes ? makeAdvancedHigherChordTypeTarget(question, usedQuestionBars) : null;
+      if (needsAdvancedHigherChordTypes && !advancedHigherChordTypeTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
+      if (advancedHigherChordTypeTarget) (advancedHigherChordTypeTarget.reservedBars ?? [advancedHigherChordTypeTarget.barIndex]).forEach(reserveQuestionBar);
       const unusedQuestionBars = (barIndexes) => barIndexes.filter((barIndex) => !usedQuestionBars.has(barIndex));
       const advancedHigherRhythmDictationTarget = needsRhythmicDictation && questionSelectionLevel === "AH"
         ? (() => {
@@ -5831,17 +6315,26 @@
       excludedBars.push(...usedQuestionBars);
       ensureRequiredMelodicAccidental(question, excludedBars);
       forceFirstNoteToTonic(question.bars, level, question.key);
-      const transpositionTarget = needsTransposition ? makeTranspositionTarget(question, [...usedQuestionBars]) : null;
+      const transpositionTarget = needsTransposition ? makeTranspositionTarget(question, [...usedQuestionBars], selectedTranspositionTypeId) : null;
       if (needsTransposition && !transpositionTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsTransposition && Number.isInteger(transpositionTarget?.barIndex)) {
         reserveQuestionBar(transpositionTarget.barIndex);
         excludedBars.push(transpositionTarget.barIndex);
       }
-      const enharmonicTarget = needsEnharmonics ? makeEnharmonicTarget(question, [...usedQuestionBars]) : null;
+      const transpositionSystemBars = Number.isInteger(transpositionTarget?.barIndex)
+        ? question.bars
+          .filter((bar) => Math.floor(bar.barIndex / BARS_PER_SYSTEM) === Math.floor(transpositionTarget.barIndex / BARS_PER_SYSTEM))
+          .map((bar) => bar.barIndex)
+        : [];
+      const enharmonicTarget = needsEnharmonics ? makeEnharmonicTarget(question, [...usedQuestionBars, ...transpositionSystemBars]) : null;
       if (needsEnharmonics && !enharmonicTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsEnharmonics && enharmonicTarget) {
         reserveQuestionBar(enharmonicTarget.barIndex);
         excludedBars.push(enharmonicTarget.barIndex);
+        if (enharmonicTarget.barIndex % BARS_PER_SYSTEM !== 0) {
+          reserveQuestionBar(enharmonicTarget.barIndex - 1);
+          excludedBars.push(enharmonicTarget.barIndex - 1);
+        }
       }
       const higherIntervalBars = level === "H" ? HIGHER_PRACTICE_LINE_BARS.interval : null;
       const higherRestBars = level === "H" ? HIGHER_PRACTICE_LINE_BARS.rests : null;
@@ -5937,6 +6430,7 @@
           advancedHigherChordTarget.identifyBar,
           ...(selectedSourceIds.has("ahBassLine") ? [advancedHigherChordTarget.bassLineBar] : []),
         ] : []),
+        ...(advancedHigherChordTypeTarget ? (advancedHigherChordTypeTarget.reservedBars ?? [advancedHigherChordTypeTarget.barIndex]) : []),
         ...(Number.isInteger(rhythmTargetBar) ? [rhythmTargetBar] : []),
       ].filter((barIndex) => Number.isInteger(barIndex));
       if (new Set(barQuestionTargets).size !== barQuestionTargets.length && canRetryQualityPracticeQuestion) {
@@ -5963,6 +6457,7 @@
           advancedHigherChordTarget.identifyBar,
           ...(selectedSourceIds.has("ahBassLine") ? [advancedHigherChordTarget.bassLineBar] : []),
         ] : []),
+        ...(advancedHigherChordTypeTarget ? (advancedHigherChordTypeTarget.reservedBars ?? [advancedHigherChordTypeTarget.barIndex]) : []),
         ...(needsCadence ? cadenceBarIndexes : []),
         ...(needsInterval && level !== "N3" && level !== "N4" && Number.isInteger(intervalQuestionBar) ? [intervalQuestionBar] : []),
         ...(needsRests && restTarget ? [restTarget.barIndex] : []),
@@ -5977,7 +6472,7 @@
       if (needsMissing && level === "N4" && !targetIsOneStepSequenceFromPrevious(question) && canRetryQualityPracticeQuestion) {
         return retryPracticeQuestion();
       }
-      if (!strongBeatsUseChordTones(question) && canRetryQualityPracticeQuestion) {
+      if (!strongBeatsUseChordTones(question, advancedHigherChordTarget) && canRetryQualityPracticeQuestion) {
         return retryPracticeQuestion();
       }
       if ((level === "N5" || isHigherLevel(level)) && !melodyPassesQualityRules(question) && canRetryQualityPracticeQuestion) {
@@ -5992,6 +6487,7 @@
           advancedHigherChordTarget.identifyBar,
           ...(selectedSourceIds.has("ahBassLine") ? [advancedHigherChordTarget.bassLineBar] : []),
         ] : []),
+        ...(advancedHigherChordTypeTarget ? (advancedHigherChordTypeTarget.reservedBars ?? [advancedHigherChordTypeTarget.barIndex]) : []),
         ...(needsCadence ? cadenceBarIndexes : []),
         ...(needsInterval && Number.isInteger(intervalQuestionBar) ? [intervalQuestionBar] : []),
         ...(needsNoteIdentification && Number.isInteger(noteIdentificationQuestionBar) ? [noteIdentificationQuestionBar] : []),
@@ -6058,13 +6554,13 @@
           type: "text",
         }] : []),
         ...(advancedHigherChordTarget ? [
-          {
+          ...(selectedSourceIds.has("ahChord") ? [{
             id: "ahChord",
             sourceId: "ahChord",
             prompt: `Identify the boxed chords used in bar ${advancedHigherChordTarget.identifyBar + 1}. You should indicate the chord name or number and, where appropriate, 1st or 2nd inversion.`,
             answer: "Advanced Higher chords identified correctly",
             type: "ahChord",
-          },
+          }] : []),
           ...(selectedSourceIds.has("ahBassLine") ? [{
             id: "ahBassLine",
             sourceId: "ahBassLine",
@@ -6073,6 +6569,14 @@
             type: "ahBassLine",
           }] : []),
         ] : []),
+        ...(advancedHigherChordTypeTarget ? [{
+          id: "ahChordTypes",
+          sourceId: "ahChordTypes",
+          prompt: `Identify the type of chord shown in bar ${advancedHigherChordTypeTarget.barIndex + 1}.`,
+          answer: advancedHigherChordTypeTarget.chordType.label,
+          accepts: advancedHigherChordTypeAnswerAccepts(advancedHigherChordTypeTarget.chordType),
+          type: "text",
+        }] : []),
         {
           id: "cadence",
           sourceId: "cadence",
@@ -6308,12 +6812,13 @@
       }
       const fillSubquestions = baseSubquestions.filter((part) => {
         if (selectedSourceIds.has(part.sourceId)) return false;
+        if (enabledQuestionTypes[part.sourceId] === false) return false;
         if (hasQuestionTypeConflict([...selectedSourceIds, part.sourceId], questionSelectionLevel)) return false;
         return true;
       });
       const fallbackFillSubquestions = fillSubquestions.length
         ? fillSubquestions
-        : baseSubquestions.filter((part) => !selectedSourceIds.has(part.sourceId));
+        : baseSubquestions.filter((part) => !selectedSourceIds.has(part.sourceId) && enabledQuestionTypes[part.sourceId] !== false);
       let fillIndex = 0;
       while (selectedSubquestions.length < 6 && fallbackFillSubquestions.length) {
         selectedSubquestions.push({ ...fallbackFillSubquestions[fillIndex % fallbackFillSubquestions.length] });
@@ -6360,6 +6865,7 @@
         if (sourceId === "enharmonics") return (enharmonicTarget?.barIndex ?? 99) + 0.5;
         if (sourceId === "ahChord") return ADVANCED_HIGHER_CHORD_IDENTIFY_BAR + 0.5;
         if (sourceId === "ahBassLine") return ADVANCED_HIGHER_CHORD_BASS_BAR + 0.5;
+        if (sourceId === "ahChordTypes") return (advancedHigherChordTypeTarget?.barIndex ?? 99) + 0.5;
         return 99 + fallbackIndex / 100;
       };
       const orderedCandidates = selectedSubquestions
@@ -6369,8 +6875,8 @@
           return orderDifference || first.index - second.index;
         })
         .map(({ part }) => part);
-      const protectedAhSourceIds = needsAdvancedHigherChordTask
-        ? new Set(["ahChord", ...(selectedSourceIds.has("ahBassLine") ? ["ahBassLine"] : [])])
+      const protectedAhSourceIds = selectedAdvancedHigherChordIds.length
+        ? new Set(selectedAdvancedHigherChordIds)
         : new Set();
       const orderedSubquestions = orderedCandidates.length <= 6
         ? orderedCandidates
@@ -6433,6 +6939,7 @@
         articulationTarget,
         transpositionTarget,
         enharmonicTarget,
+        advancedHigherChordTypeTarget,
         answerTargets: {
           key: "a",
           time: "b",
@@ -6789,13 +7296,15 @@
       if (!note?.stack?.length) return null;
       const tones = [...note.stack].sort((a, b) => displayStep(a, clef) - displayStep(b, clef));
       const stemDownValue = forceStemUp ? false : !tones.some((tone) => displayStep(tone, clef) < 4);
-      const isOpenChordRhythm = ["minim", "dottedMinim"].includes(note.rhythm);
+      const visualRhythm = note.displayRhythm ?? note.rhythm;
+      const isOpenChordRhythm = ["semibreve", "minim", "dottedMinim"].includes(visualRhythm);
+      const adjacentNoteOffset = stemDownValue ? -10 : 12;
       const adjacentOffsets = (() => {
         const offsets = new Map();
         let cluster = [];
         const flush = () => {
           if (!cluster.length) return;
-          cluster.forEach((item, index) => offsets.set(item.index, cluster.length > 1 && index % 2 === 1 ? 12 : 0));
+          cluster.forEach((item, index) => offsets.set(item.index, cluster.length > 1 && index % 2 === 1 ? adjacentNoteOffset : 0));
           cluster = [];
         };
         tones.forEach((tone, index) => {
@@ -6805,15 +7314,24 @@
         flush();
         return offsets;
       })();
-      const accidentalOffset = (index) => {
-        const accidentalEntries = tones.map((tone, toneIndex) => ({ tone, toneIndex })).filter((item) => item.tone.writtenAccidental);
-        if (accidentalEntries.length <= 1) return 0;
-        const accidentalIndex = accidentalEntries.findIndex((item) => item.toneIndex === index);
-        if (accidentalIndex === -1) return 0;
-        if (accidentalEntries.length === 2) return accidentalIndex === 0 ? 10 : 0;
-        if (accidentalEntries.length === 3) return accidentalIndex === 1 ? 12 : 0;
-        return accidentalIndex % 2 === 1 ? 12 : 0;
-      };
+      const accidentalOffsets = (() => {
+        const offsets = new Map();
+        let closeGroup = [];
+        const flush = () => {
+          closeGroup.forEach((item, groupIndex) => offsets.set(item.toneIndex, groupIndex * 12));
+          closeGroup = [];
+        };
+        tones
+          .map((tone, toneIndex) => ({ tone, toneIndex, step: displayStep(tone, clef) }))
+          .filter((item) => item.tone.writtenAccidental)
+          .forEach((item) => {
+            if (closeGroup.length && item.step - closeGroup.at(-1).step >= 4) flush();
+            closeGroup.push(item);
+          });
+        flush();
+        return offsets;
+      })();
+      const accidentalOffset = (index) => accidentalOffsets.get(index) ?? 0;
       return (
         <g pointerEvents="none" opacity="0.98">
           {tones.map((tone, index) => {
@@ -6823,14 +7341,18 @@
             const dotY = step % 2 === 0 ? toneY - STAFF.gap * 0.25 : toneY;
             const sideOffset = adjacentOffsets.get(index) || 0;
             const noteHeadX = x + sideOffset;
-            const symbolKey = sideOffset && !isOpenChordRhythm ? "noteheadBlack" : noteSymbolKey(note.rhythm, stemDownValue);
+            const symbolKey = sideOffset
+              ? ["minim", "dottedMinim"].includes(visualRhythm)
+                ? "noteheadHalf"
+                : isOpenChordRhythm ? "wholeNote" : "noteheadBlack"
+              : noteSymbolKey(visualRhythm, stemDownValue);
             return (
               <g key={`${note.id}-tone-${index}`}>
                 <LedgerLines x={x} step={step} top={top} colour={colour} />
                 <Accidental value={tone.writtenAccidental} x={x - STAFF.gap * 2.1 - accidentalOffset(index)} y={toneY} colour={colour} letter={tone.letter} flatOffsetX={-2} />
                 <CalibratedSymbol symbolKey={symbolKey} x={noteHeadX} y={toneY} colour={colour} />
                 {step % 2 === 0 && <line x1={noteHeadX - 8} x2={noteHeadX + 12} y1={toneY} y2={toneY} stroke={colour} strokeWidth="1.2" />}
-                {["dottedMinim", "dottedCrotchet"].includes(note.rhythm) && <CalibratedSymbol symbolKey={dotKey} x={noteHeadX + STAFF.gap * 1.3} y={dotY} colour={colour} />}
+                {["dottedMinim", "dottedCrotchet"].includes(visualRhythm) && <CalibratedSymbol symbolKey={dotKey} x={noteHeadX + STAFF.gap * 1.3} y={dotY} colour={colour} />}
               </g>
             );
           })}
@@ -6892,6 +7414,9 @@
             const forcedEndY = beam && stem ? beamYAtX(stem.stemX, beam) : null;
             const expected = bar.notes[index];
             const resultColour = note.colour ?? (feedback && hidden ? (note.step === expected?.step ? COLOUR.green : COLOUR.red) : colour);
+            if (displayNote.stack?.length) {
+              return <ChordStack key={note.id ?? `${bar.barIndex}-${index}`} note={displayNote} x={positions[index]} top={top} colour={resultColour} clef={clef} forceStemUp={forceStemUp} />;
+            }
             return <Note key={note.id ?? `${bar.barIndex}-${index}`} note={displayNote} x={positions[index]} top={top} colour={resultColour} active={activeNoteId === note.id} showFlag={!beam} forcedDown={noteStemDown} forcedEndY={forcedEndY} opacity={feedback && hidden && note.step !== expected?.step ? 0.58 : 1} clef={clef} visualScale={visualScale} />;
           })}
           {groups.map((group, index) => {
@@ -7097,7 +7622,7 @@
         if (systemIndex < 0 || systemIndex >= systemCount) return;
         extraSpacingAfterSystem[systemIndex] = Math.max(extraSpacingAfterSystem[systemIndex], spacing);
       };
-      reserveExtraSpacingAfterSystem(transpositionSystemIndex, question.transpositionTarget?.type === "meaning" ? 0 : 50);
+      reserveExtraSpacingAfterSystem(transpositionSystemIndex, question.transpositionTarget?.type === "meaning" ? 0 : 65);
       reserveExtraSpacingAfterSystem(enharmonicSystemIndex, 90);
       reserveExtraSpacingAfterSystem(ahChordSystemIndex, 65);
       const cumulativeSpacingBeforeSystem = extraSpacingAfterSystem.map((_, index) => (
@@ -7658,14 +8183,29 @@
         const part = activeTranspositionPart();
         if (!part || feedback || !note) return;
         const current = placementValue(part, { selectedRhythm: null, notes: {}, ties: {} });
-        if (!current.selectedRhythm) return;
-        setPracticeAnswers((answers) => ({
-          ...answers,
-          [part.id]: {
-            ...current,
-            notes: { ...(current.notes ?? {}), [note.noteIndex]: { ...note, rhythm: current.selectedRhythm, beats: rhythmInfo(current.selectedRhythm).beats } },
-          },
-        }));
+        const automaticRhythm = question.practiceLevel === "AH";
+        if (!automaticRhythm && !current.selectedRhythm) return;
+        setPracticeAnswers((answers) => {
+          const nextNotes = {
+            ...(current.notes ?? {}),
+            [note.noteIndex]: automaticRhythm
+              ? note
+              : { ...note, rhythm: current.selectedRhythm, beats: rhythmInfo(current.selectedRhythm).beats },
+          };
+          const nextTies = automaticRhythm
+            ? Object.fromEntries((question.bars?.[note.barIndex]?.notes ?? [])
+              .map((barNote, index) => [index, Boolean(barNote.tieToNext && nextNotes[index] && nextNotes[index + 1])])
+              .filter(([, active]) => active))
+            : current.ties;
+          return {
+            ...answers,
+            [part.id]: {
+              ...current,
+              notes: nextNotes,
+              ties: nextTies,
+            },
+          };
+        });
       }
 
       function activeEnharmonicPart() {
@@ -7993,6 +8533,7 @@
         const answerBoxHeight = chordRowHeight + inversionRowHeight;
         const chordValue = advancedHigherChordAnswerValue(value);
         const inversionValue = advancedHigherInversionAnswerValue(value);
+        const inversionInputFontSize = `${clamp(14 - Math.max(0, inversionValue.length - 9) * 0.9, 10, 14)}px`;
         const selectChordQuestion = () => selectQuestionBox(part.sourceId ?? part.id);
         const updateAhChordAnswer = (field, nextValue) => {
           setPracticeAnswers((current) => {
@@ -8074,6 +8615,7 @@
               value={inversionValue}
               disabled={disabled}
               autoComplete="off"
+              maxLength={13}
               onFocus={selectChordQuestion}
               onPointerDown={(event) => {
                 event.stopPropagation();
@@ -8090,23 +8632,46 @@
                 ...inputBaseStyle,
                 height: `${inversionRowHeight}px`,
                 borderTop: "none",
-                fontSize: "14px",
+                fontSize: inversionInputFontSize,
               }}
             />
             {feedbackResult && correct === false && (
-              <span
-                style={{
-                  marginLeft: "8px",
-                  color: COLOUR.green,
-                  fontSize: "16px",
-                  fontWeight: 600,
-                  lineHeight: "42px",
-                  whiteSpace: "nowrap",
-                  verticalAlign: "top",
-                }}
-              >
-                {`${higherChordShortName(question, slot.chordSymbol)} or ${slot.chordSymbol}; ${advancedHigherInversionAnswerLabel(slot.inversion)}`}
-              </span>
+              <>
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    bottom: `${answerBoxHeight - 1}px`,
+                    width: `${inputWidth}px`,
+                    color: COLOUR.green,
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    lineHeight: "12px",
+                    textAlign: "center",
+                    whiteSpace: "nowrap",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {`${higherChordShortName(question, slot.chordSymbol)} or ${slot.chordSymbol}`}
+                </span>
+                <span
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: `${answerBoxHeight + 2}px`,
+                    width: `${inputWidth}px`,
+                    color: COLOUR.green,
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    lineHeight: "12px",
+                    textAlign: "center",
+                    whiteSpace: "nowrap",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {advancedHigherInversionAnswerLabel(slot.inversion)}
+                </span>
+              </>
             )}
           </div>
         );
@@ -8531,20 +9096,24 @@
             const transpositionFeedback = sourceIsRevealed("transposition");
             const transpositionAnswer = placementValue(transpositionPart, { selectedRhythm: null, notes: {}, ties: {} });
             const transpositionCanInteract = Boolean(transpositionPart && !feedback);
+            const transpositionUsesAutomaticRhythm = question.practiceLevel === "AH";
             const transpositionAnswerOnMain = Boolean(transpositionTarget?.answerOnMain);
             const transpositionAnswerClef = transpositionTarget?.answerClef ?? "bass";
             const transpositionLowerClef = transpositionAnswerOnMain ? transpositionTarget?.sourceClef ?? "bass" : transpositionAnswerClef;
-            const transpositionAnswerTop = transpositionAnswerOnMain ? top : top + 82;
-            const transpositionLowerTop = top + 82;
+            const transpositionLowerTop = top + 97;
+            const transpositionAnswerTop = transpositionAnswerOnMain ? top : transpositionLowerTop;
             const transpositionBoxY = top - 49 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
             const transpositionBoxHeight = transpositionLowerTop + STAFF.gap * 8 - transpositionBoxY - 5;
             const transpositionStartsSystem = bar.barIndex % BARS_PER_SYSTEM === 0;
             const transpositionClefX = transpositionStartsSystem ? STAFF.left + 37 : start - 19;
+            const transpositionClefY = transpositionLowerClef === "bass"
+              ? yForStep(6, transpositionLowerTop)
+              : yForStep(2, transpositionLowerTop);
             const transpositionStaffStart = transpositionStartsSystem ? STAFF.left : start - 48;
             const transpositionSignBoxX = start + 4;
             const transpositionSignBoxY = sharedBoxY;
             const transpositionSignBoxWidth = Math.max(58, end - start - 8);
-            const transpositionSignBoxHeight = MARKING_BOX_HEIGHT;
+            const transpositionSignBoxHeight = MARKING_BOX_HEIGHT + 10;
             const transpositionPositions = transpositionTarget ? positions : [];
             const transpositionUserNotes = transpositionTarget
               ? bar.notes.map((note, noteIndex) => transpositionAnswer.notes?.[noteIndex] ?? null)
@@ -8554,7 +9123,7 @@
               ? transpositionUserNotes.map((note, index) => {
                 if (!note) return null;
                 const expected = transpositionExpectedNotes[index];
-                const correct = Boolean(expected && note.step === expected.step && note.rhythm === expected.rhythm && (note.writtenAccidental ?? null) === (expected.writtenAccidental ?? null));
+                const correct = transpositionNoteAnswerCorrect(note, expected, transpositionAnswerClef);
                 return { ...note, colour: correct ? COLOUR.green : COLOUR.red };
               })
               : transpositionUserNotes;
@@ -8562,12 +9131,12 @@
               ? transpositionExpectedNotes.map((expected, index) => {
                 if (!expected) return null;
                 const actual = transpositionUserNotes[index];
-                const correct = Boolean(actual && actual.step === expected.step && actual.rhythm === expected.rhythm && (actual.writtenAccidental ?? null) === (expected.writtenAccidental ?? null));
+                const correct = transpositionNoteAnswerCorrect(actual, expected, transpositionAnswerClef);
                 return correct ? null : { ...expected, id: `transposition-correct-${bar.barIndex}-${index}`, colour: COLOUR.green };
               })
               : [];
             const transpositionHasCorrections = transpositionCorrectionNotes.some(Boolean);
-            const transpositionCorrectionPositions = transpositionPositions;
+            const transpositionCorrectionPositions = transpositionPositions.map((position) => position + 5);
             const transpositionLowerNotes = transpositionAnswerOnMain ? transpositionTarget?.sourceNotes ?? [] : transpositionUserFeedbackNotes;
             const transpositionLowerCorrections = transpositionAnswerOnMain ? [] : transpositionCorrectionNotes;
             const transpositionLowerHasCorrections = !transpositionAnswerOnMain && transpositionHasCorrections;
@@ -8583,11 +9152,36 @@
             const enharmonicAnswerX = enharmonicTarget ? positions[enharmonicTarget.noteIndex] : null;
             const enharmonicSourceX = enharmonicTarget ? Math.max(start + 4, positions[enharmonicTarget.noteIndex] - 22) : null;
             const enharmonicSourceBoxWidth = 44;
-            const enharmonicAnswerStaveStart = enharmonicSourceX === null ? start : enharmonicSourceX - 46;
-            const enharmonicAnswerStaveSolidEnd = enharmonicSourceX === null ? end : Math.min(end, enharmonicSourceX + enharmonicSourceBoxWidth + 10);
-            const enharmonicAnswerStaveFadeEnd = Math.min(end, enharmonicAnswerStaveSolidEnd + 84);
+            const enharmonicBarOneBoxExtension = enharmonicTarget?.barIndex === 0 ? 3 : 0;
+            const enharmonicSourceBoxX = enharmonicSourceX === null ? null : enharmonicSourceX - enharmonicBarOneBoxExtension;
+            const enharmonicVisibleSourceBoxWidth = enharmonicSourceBoxWidth + enharmonicBarOneBoxExtension;
+            const enharmonicAnswerStaveWidth = 113;
+            const enharmonicClefOffsetFromBox = 17;
+            const enharmonicAnswerStaveXOffset = 10;
+            const enharmonicAnswerStaveEnd = enharmonicSourceX === null
+              ? end
+              : enharmonicSourceX + enharmonicSourceBoxWidth + 14 + enharmonicAnswerStaveXOffset;
+            const enharmonicAnswerStaveStart = enharmonicSourceX === null
+              ? start
+              : enharmonicAnswerStaveEnd - enharmonicAnswerStaveWidth;
+            const enharmonicAnswerStaveSolidEnd = enharmonicSourceX === null ? end : enharmonicSourceX + enharmonicSourceBoxWidth + 6;
+            const nextTranspositionTargetOnSystem = question.transpositionTarget
+              && question.transpositionTarget.barIndex > bar.barIndex
+              && Math.floor(question.transpositionTarget.barIndex / BARS_PER_SYSTEM) === Math.floor(bar.barIndex / BARS_PER_SYSTEM)
+              ? question.transpositionTarget
+              : null;
+            const nextTranspositionAnswerStart = nextTranspositionTargetOnSystem
+              ? barStart(nextTranspositionTargetOnSystem.barIndex) - 48
+              : null;
+            const enharmonicAnswerStaveFadeEnd = Math.min(
+              end,
+              enharmonicAnswerStaveEnd,
+              nextTranspositionAnswerStart === null ? end : nextTranspositionAnswerStart - 12,
+            );
             const enharmonicStaffFadeId = `enharmonic-answer-staff-fade-${question.id}-${bar.barIndex}`;
-            const enharmonicClefX = enharmonicSourceX === null ? enharmonicAnswerStaveStart + 28 : enharmonicSourceX - 28;
+            const enharmonicClefX = enharmonicSourceX === null
+              ? enharmonicAnswerStaveStart + 28
+              : enharmonicSourceX - enharmonicClefOffsetFromBox;
             const placedEnharmonicNote = enharmonicTarget ? enharmonicAnswer.note ?? null : null;
             const enharmonicPlacedCorrect = Boolean(
               placedEnharmonicNote
@@ -8906,6 +9500,14 @@
             const chordQuestionBoxHeight = question.level === "H" ? 156 : MARKING_BOX_HEIGHT;
             const ahChordPart = findPartBySource("ahChord");
             const ahBassLinePart = findPartBySource("ahBassLine");
+            const ahChordTypesPart = findPartBySource("ahChordTypes");
+            const ahChordTypeTarget = ahChordTypesPart && question.advancedHigherChordTypeTarget?.barIndex === bar.barIndex ? question.advancedHigherChordTypeTarget : null;
+            const ahChordTypeX = ahChordTypeTarget ? positions[ahChordTypeTarget.noteIndex] ?? start + 30 : 0;
+            const ahChordTypeBoxX = ahChordTypeTarget ? Math.max(start + 4, ahChordTypeX - 25) : 0;
+            const ahChordTypeBoxRight = ahChordTypeTarget ? Math.min(end - 4, ahChordTypeX + 34) : 0;
+            const ahChordTypeBoxWidth = Math.max(58, ahChordTypeBoxRight - ahChordTypeBoxX);
+            const ahChordTypeBoxY = sharedBoxY - 8;
+            const ahChordTypeBoxHeight = MARKING_BOX_HEIGHT + 16;
             const ahBassLinePartIndex = ahBassLinePart ? question.subquestions?.findIndex((part) => part.id === ahBassLinePart.id) ?? -1 : -1;
             const ahChordFeedback = sourceIsRevealed("ahChord");
             const ahBassLineFeedback = sourceIsRevealed("ahBassLine");
@@ -8916,13 +9518,32 @@
             const ahChordTrebleTop = top + 110;
             const ahChordBassTop = top + 220;
             const ahChordGuideBoxTop = ahChordBassTop + STAFF.gap * 8;
-            const ahChordBoxY = top - 49 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
+            const ahChordBoxY = ahChordTrebleTop - 32 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
             const ahChordBoxHeight = ahChordBassTop + STAFF.gap * 16 - ahChordBoxY;
             const ahChordStartsSystem = bar.barIndex % BARS_PER_SYSTEM === 0;
             const ahChordClefX = STAFF.left + 32;
             const ahChordStaffStart = ahChordStartsSystem ? STAFF.left : start;
-            const ahChordIdentifyBoxX = ahChordStartsSystem ? ahChordStaffStart - 20 : start + 4;
-            const ahChordIdentifyBoxWidth = Math.max(58, end - ahChordIdentifyBoxX - 4);
+            const ahChordAnswerBoxGroupX = start + 4;
+            const ahChordAnswerBoxGroupWidth = Math.max(58, end - ahChordAnswerBoxGroupX - 4);
+            const ahChordAnswerBoxWidth = Math.min(74, ahChordAnswerBoxGroupWidth / 2);
+            const sortedAhChordIdentifySlots = [...ahChordIdentifySlots].sort((first, second) => (first.slotIndex ?? 0) - (second.slotIndex ?? 0));
+            const ahChordAnswerBoxGap = Math.min(12, Math.max(0, ahChordAnswerBoxGroupWidth - ahChordAnswerBoxWidth * sortedAhChordIdentifySlots.length));
+            const ahChordAnswerTotalBoxWidth = ahChordAnswerBoxWidth * sortedAhChordIdentifySlots.length + ahChordAnswerBoxGap * Math.max(0, sortedAhChordIdentifySlots.length - 1);
+            const ahChordAnswerGroupLeft = ahChordAnswerBoxGroupX + Math.max(0, ahChordAnswerBoxGroupWidth - ahChordAnswerTotalBoxWidth) * 0.68 - 10;
+            const ahChordFirstAnswerBoxX = sortedAhChordIdentifySlots.length === 2
+              ? ahChordAnswerGroupLeft
+              : ahChordAnswerBoxGroupX + (ahChordAnswerBoxGroupWidth - ahChordAnswerBoxWidth) / 2;
+            const ahChordLastAnswerBoxRight = sortedAhChordIdentifySlots.length === 2
+              ? ahChordAnswerGroupLeft + ahChordAnswerBoxWidth * 2 + ahChordAnswerBoxGap
+              : ahChordFirstAnswerBoxX + ahChordAnswerBoxWidth;
+            const ahChordAnswerBoxSurroundPadding = ahChordAnswerBoxGap;
+            const ahChordIdentifyBoxX = ahChordIdentifySlots.length
+              ? ahChordFirstAnswerBoxX - ahChordAnswerBoxSurroundPadding
+              : start + 4;
+            const ahChordIdentifyBoxRight = ahChordIdentifySlots.length
+              ? Math.min(end - 4, ahChordLastAnswerBoxRight + ahChordAnswerBoxSurroundPadding)
+              : end - 4;
+            const ahChordIdentifyBoxWidth = Math.max(58, ahChordIdentifyBoxRight - ahChordIdentifyBoxX);
             const ahChordConnectorTop = top;
             const ahChordSystemBottomY = ahChordBassTop + STAFF.gap * 4;
             const ahChordBraceConfig = sharedSymbolConfig("brace");
@@ -8952,9 +9573,9 @@
             const intervalSecondX = intervalTarget ? positions[intervalTarget.secondIndex] : 0;
             const intervalLeftNote = intervalFirstX <= intervalSecondX ? intervalFirstNote : intervalSecondNote;
             const intervalRightNote = intervalFirstX <= intervalSecondX ? intervalSecondNote : intervalFirstNote;
-            const intervalLeftPaddingX = intervalLeftNote?.writtenAccidental ? 26 : 14;
+            const intervalLeftPaddingX = intervalLeftNote?.writtenAccidental ? 23 : 14;
             const intervalRightHasDot = intervalRightNote && ["dottedCrotchet", "dottedMinim"].includes(intervalRightNote.rhythm);
-            const intervalRightPaddingX = intervalRightNote?.rhythm === "quaver" ? 20 : intervalRightHasDot ? 24 : 14;
+            const intervalRightPaddingX = (intervalRightNote?.rhythm === "quaver" ? 14 : intervalRightHasDot ? 16 : 9) + 5;
             const intervalBoxTop = sharedBoxY;
             const intervalBoxX = Math.min(intervalFirstX, intervalSecondX) - intervalLeftPaddingX;
             const intervalBoxWidth = Math.abs(intervalSecondX - intervalFirstX) + intervalLeftPaddingX + intervalRightPaddingX;
@@ -9017,6 +9638,7 @@
               intervalTarget ? { x: intervalBoxX, y: intervalBoxTop, width: intervalBoxWidth, height: MARKING_BOX_HEIGHT } : null,
               cadenceBoxSpansBar ? { x: cadenceBoxX, y: cadenceBoxY, width: cadenceBoxRight - cadenceBoxX, height: MARKING_BOX_HEIGHT } : null,
               chordQuestionBoxTarget ? { x: chordQuestionBoxX, y: chordQuestionBoxY, width: chordQuestionBoxWidth, height: chordQuestionBoxHeight } : null,
+              ahChordTypeTarget ? { x: ahChordTypeBoxX, y: ahChordTypeBoxY, width: ahChordTypeBoxWidth, height: ahChordTypeBoxHeight } : null,
               isArticulationTarget ? { x: articulationBoxX, y: articulationBoxY, width: articulationBoxWidth, height: MARKING_BOX_HEIGHT } : null,
               tripletTargetForBar ? { x: tripletBoxX, y: tripletBoxY, width: tripletBoxWidth, height: MARKING_BOX_HEIGHT } : null,
               valueTargetNote ? { x: valueBoxX, y: valueBoxY, width: valueBoxWidth, height: valueBoxHeight } : null,
@@ -9076,6 +9698,7 @@
                     layer="box"
                   />
                 )}
+                {ahChordTypeTarget && <MarkingBox x={ahChordTypeBoxX} y={ahChordTypeBoxY} width={ahChordTypeBoxWidth} height={ahChordTypeBoxHeight} labelSourceId="ahChordTypes" label="Chord" layer="box" />}
                 {valueTargetNote && <MarkingBox x={valueBoxX} y={valueBoxY} width={valueBoxWidth} height={valueBoxHeight} labelSourceId="rhythmIdentification" label={valueBoxLabel} layer="box" />}
                 {transpositionMeaningTarget && <MarkingBox x={transpositionSignBoxX} y={transpositionSignBoxY} width={transpositionSignBoxWidth} height={transpositionSignBoxHeight} labelSourceId="transposition" label="Sign" layer="box" />}
                 {isMissingTarget && <RhythmGuide bar={bar} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} clef={question.clef} guideNoteIndices={isIntervalInsertTarget ? [question.intervalInsertTarget.answerIndex] : missingNoteIndices} />}
@@ -9097,7 +9720,7 @@
                 ) : isMissingTarget
                   ? <BarNotes bar={bar} notes={targetUserNotes} positions={positions} top={top} hidden feedback={isIntervalInsertTarget ? intervalInsertFeedback : missingFeedback} timeSignature={question.timeSignature} clef={question.clef} />
                   : <BarNotes bar={bar} notes={visibleDisplayNotes} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={question.timeSignature} clef={question.clef} />}
-                {valueTargetCrossBarTie && <TieShape firstNote={valueTargetNote} secondNote={valueTargetEndNote} firstX={valueLeftX} secondX={valueRightX} top={top} clef={question.clef} colour="currentColor" widthScale={1.2} />}
+                {valueTargetCrossBarTie && <TieShape firstNote={valueTargetNote} secondNote={valueTargetEndNote} firstX={valueLeftX} secondX={valueRightX} top={top} clef={question.clef} colour="currentColor" widthScale={1} />}
                 {rhythmTiePlacements.map((noteIndex) => {
                   const first = bar.notes[noteIndex];
                   const second = bar.notes[noteIndex + 1];
@@ -9177,7 +9800,7 @@
                 {transpositionTarget && transpositionTarget.type !== "meaning" && (
                   <g>
                     {[0, 1, 2, 3, 4].map((line) => <line key={`transposition-lower-line-${line}`} x1={transpositionStaffStart} x2={end} y1={transpositionLowerTop + line * STAFF.gap} y2={transpositionLowerTop + line * STAFF.gap} stroke="currentColor" strokeWidth="1.25" />)}
-                    <CalibratedSymbol symbolKey={transpositionLowerClef === "bass" ? "fClef" : "gClef"} x={transpositionClefX} y={transpositionLowerClef === "bass" ? yForStep(6, transpositionLowerTop) : yForStep(2, transpositionLowerTop)} />
+                    <CalibratedSymbol symbolKey={transpositionLowerClef === "bass" ? "fClef" : "gClef"} x={transpositionClefX} y={transpositionClefY} />
                     {transpositionStartsSystem && <KeySignature keySignature={question.key} top={transpositionLowerTop} clef={transpositionLowerClef} />}
                     {bar.barIndex === 0 && <TimeSignature signature={question.timeSignature} top={transpositionLowerTop} />}
                     {!transpositionAnswerOnMain && <MarkingBox x={start + 4} y={transpositionBoxY} width={Math.max(58, end - start - 8)} height={transpositionBoxHeight} labelSourceId="transposition" label="Transpose" layer="full" />}
@@ -9242,7 +9865,7 @@
                       return <line key={`enharmonic-line-${line}`} x1={enharmonicAnswerStaveStart} x2={enharmonicAnswerStaveFadeEnd} y1={y} y2={y} stroke={`url(#${enharmonicStaffFadeId})`} strokeWidth="1.25" />;
                     })}
                     <CalibratedSymbol symbolKey={enharmonicTarget.clef === "bass" ? "fClef" : "gClef"} x={enharmonicClefX} y={enharmonicTarget.clef === "bass" ? yForStep(6, enharmonicAnswerTop) : yForStep(2, enharmonicAnswerTop)} />
-                    <MarkingBox x={enharmonicSourceX} y={enharmonicBoxY} width={enharmonicSourceBoxWidth} height={enharmonicBoxHeight} labelSourceId="enharmonics" label="Enharmonic" layer="full" />
+                    <MarkingBox x={enharmonicSourceBoxX} y={enharmonicBoxY} width={enharmonicVisibleSourceBoxWidth} height={enharmonicBoxHeight} labelSourceId="enharmonics" label="Enharmonic" layer="full" />
                     {placedEnharmonicNote && (
                       <Note
                         note={placedEnharmonicNote}
@@ -9255,7 +9878,7 @@
                     {enharmonicFeedback && !enharmonicPlacedCorrect && (
                       <Note
                         note={question.enharmonicTarget.answerNote}
-                        x={Math.min(end - 22, enharmonicAnswerX + 54)}
+                        x={Math.min(end - 22, enharmonicAnswerX + 39)}
                         top={enharmonicAnswerTop}
                         colour={COLOUR.green}
                         clef={enharmonicTarget.clef}
@@ -9336,10 +9959,12 @@
                       const guideBottomLabel = guideInversion;
                       const guideBoxGroupWidth = Math.max(58, end - start - 8);
                       const guideBoxWidth = Math.min(74, guideBoxGroupWidth / 2);
+                      const guideBoxRowHeight = 32.5;
+                      const guideBoxHeight = guideBoxRowHeight * 2;
                       const sortedGuideSlots = [...ahChordBassLineSlots].sort((first, second) => (first.slotIndex ?? 0) - (second.slotIndex ?? 0));
                       const guideBoxGroupCenterX = start + 4 + guideBoxGroupWidth / 2;
                       const guideBoxCenterX = sortedGuideSlots.length === 2
-                        ? guideBoxGroupCenterX + (slot.slotIndex === sortedGuideSlots[0].slotIndex ? -guideBoxWidth / 2 : guideBoxWidth / 2)
+                        ? guideBoxGroupCenterX + (slot.slotIndex === sortedGuideSlots[0].slotIndex ? -guideBoxWidth / 2 - 2 : guideBoxWidth / 2 + 2)
                         : ahChordJoinedBoxCenterX(bar, ahChordBassLineSlots, slot, start, end, guideBoxWidth);
                       const guideRhythmNote = {
                         ...noteBaseForDisplayStep(9, "bass"),
@@ -9375,12 +10000,12 @@
                             <Note note={hoverNote} x={x} top={ahChordBassTop} clef="bass" colour="#444" faint />
                           )}
                           <g pointerEvents="none">
-                            <rect x={guideBoxCenterX - guideBoxWidth / 2} y={ahChordGuideBoxTop} width={guideBoxWidth} height="60" fill="white" stroke="#444" strokeWidth="1.3" />
-                            <line x1={guideBoxCenterX - guideBoxWidth / 2} x2={guideBoxCenterX + guideBoxWidth / 2} y1={ahChordGuideBoxTop + 30} y2={ahChordGuideBoxTop + 30} stroke="#444" strokeWidth="1.3" />
+                            <rect x={guideBoxCenterX - guideBoxWidth / 2} y={ahChordGuideBoxTop} width={guideBoxWidth} height={guideBoxHeight} fill="white" stroke="#444" strokeWidth="1.3" />
+                            <line x1={guideBoxCenterX - guideBoxWidth / 2} x2={guideBoxCenterX + guideBoxWidth / 2} y1={ahChordGuideBoxTop + guideBoxRowHeight} y2={ahChordGuideBoxTop + guideBoxRowHeight} stroke="#444" strokeWidth="1.3" />
                             <text x={guideBoxCenterX} y={ahChordGuideBoxTop + 20} textAnchor="middle" fontSize="14" fontWeight="600" fill="#111">
                               {guideTopLabel}
                             </text>
-                            <text x={guideBoxCenterX} y={ahChordGuideBoxTop + 50} textAnchor="middle" fontSize="14" fontWeight="600" fill="#111">
+                            <text x={guideBoxCenterX} y={ahChordGuideBoxTop + 52.5} textAnchor="middle" fontSize="14" fontWeight="600" fill="#111">
                               {guideBottomLabel}
                             </text>
                           </g>
@@ -9444,6 +10069,7 @@
                     layer="label"
                   />
                 )}
+                {ahChordTypeTarget && <MarkingBox x={ahChordTypeBoxX} y={ahChordTypeBoxY} width={ahChordTypeBoxWidth} height={ahChordTypeBoxHeight} labelSourceId="ahChordTypes" label="Chord" layer="label" />}
                 {valueTargetNote && <MarkingBox x={valueBoxX} y={valueBoxY} width={valueBoxWidth} height={valueBoxHeight} labelSourceId="rhythmIdentification" label={valueBoxLabel} layer="label" />}
                 {transpositionMeaningTarget && <MarkingBox x={transpositionSignBoxX} y={transpositionSignBoxY} width={transpositionSignBoxWidth} height={transpositionSignBoxHeight} labelSourceId="transposition" label="Sign" layer="label" />}
                 {!hideBarNumber && <ScoreBarNumber label={bar.barIndex + 1} x={barNumberX} y={barNumberY} backdrop={barNumberNeedsBackdrop} />}
@@ -9786,7 +10412,7 @@
                       pointerEvents={transpositionCanInteract ? "all" : "none"}
                       className={transpositionCanInteract ? "cursor-pointer" : ""}
                       onPointerMove={(event) => {
-                        if (!transpositionCanInteract || !transpositionAnswer.selectedRhythm || transpositionAnswer.selectedRhythm === "tie") return;
+                        if (!transpositionCanInteract || (!transpositionUsesAutomaticRhythm && (!transpositionAnswer.selectedRhythm || transpositionAnswer.selectedRhythm === "tie"))) return;
                         if (draggingTranspositionNote) {
                           event.preventDefault();
                           const nextNote = transpositionNoteFromPointer(event, bar, positions, transpositionAnswerTop, transpositionTarget);
@@ -9803,12 +10429,12 @@
                       }}
                       onPointerDown={(event) => {
                         if (!transpositionCanInteract) return;
-                        if (!transpositionAnswer.selectedRhythm) {
+                        if (!transpositionUsesAutomaticRhythm && !transpositionAnswer.selectedRhythm) {
                           if (transpositionPartIndex >= 0) setActiveIndex(transpositionPartIndex);
                           return;
                         }
                         event.preventDefault();
-                        if (transpositionAnswer.selectedRhythm === "tie") {
+                        if (!transpositionUsesAutomaticRhythm && transpositionAnswer.selectedRhythm === "tie") {
                           toggleTranspositionTie(index);
                           return;
                         }
@@ -9933,16 +10559,48 @@
               : chordBoxGroupX + (chordBoxGroupWidth - chordBoxWidth) / 2;
             const y = top + 220 + STAFF.gap * 8;
             const value = makePlacementAnswer(practiceAnswers[part.id], { chordAnswers: {}, bassNotes: {} }).chordAnswers?.[slot.slotIndex] ?? "";
-            return renderAhChordAnswerInput({
-              part,
-              slot,
-              x,
-              y,
-              width: chordBoxWidth,
-              value,
-              disabled: Boolean(feedback),
-              feedbackResult: feedback?.results?.[part.id],
-            });
+            const rowLabelWidth = 48;
+            const rowLabelGap = 22;
+            const rowLabelX = sortedSlots.length === 2
+              ? lockedGroupLeft - rowLabelWidth - rowLabelGap
+              : x - rowLabelWidth - rowLabelGap;
+            return (
+              <React.Fragment key={`ah-chord-answer-fragment-${slot.slotIndex}`}>
+                {slotPosition === 0 && (
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      left: `${((rowLabelX - SVG.x) / SVG.width) * 100}%`,
+                      top: `${((y + scoreOffsetY) / scoreHeight) * 100}%`,
+                      width: `${(rowLabelWidth / SVG.width) * 100}%`,
+                      height: `${(60 / scoreHeight) * 100}%`,
+                      color: "#111",
+                      opacity: 0.18,
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      lineHeight: "30px",
+                      textAlign: "right",
+                      pointerEvents: "none",
+                      zIndex: 19,
+                    }}
+                  >
+                    <div>Chord</div>
+                    <div>Position</div>
+                  </div>
+                )}
+                {renderAhChordAnswerInput({
+                  part,
+                  slot,
+                  x,
+                  y,
+                  width: chordBoxWidth,
+                  value,
+                  disabled: Boolean(feedback),
+                  feedbackResult: feedback?.results?.[part.id],
+                })}
+              </React.Fragment>
+            );
           })}
         </div>
       );
@@ -10093,6 +10751,20 @@
     }
 
     function AudioQuestionTypeLabel({ type }) {
+      if (type.subtitle) {
+        const subtitleClassName = `mt-0.5 text-[12px] font-semibold leading-tight text-slate-500/70 ${type.id === "transpositionOctaveSigns" ? "-ml-1" : ""}`.trim();
+        return (
+          <span className="flex min-w-0 flex-col leading-tight">
+            <span className="inline-flex items-center leading-none">
+              <span>{type.label}</span>
+              {type.audio && <AudioQuestionGlyph />}
+            </span>
+            <span className={subtitleClassName}>
+              {type.subtitle}
+            </span>
+          </span>
+        );
+      }
       return (
         <span className="inline-flex items-center leading-none">
           <span>{type.label}</span>
@@ -10718,7 +11390,7 @@
         return (
           <svg viewBox="0 0 110 70" className="h-14 w-20 overflow-visible" aria-hidden="true">
             <Accidental value={option?.value ?? 1} x={38} y={y} visualScale={1.6} />
-            <CalibratedSymbol symbolKey="noteheadBlack" x={72} y={36} colour="#9ca3af" opacity={0.55} settingOverrides={{ fontSize: 38 }} />
+            <CalibratedSymbol symbolKey="noteheadBlack" x={72} y={36} colour="#9ca3af" opacity={0.55} lineGap={15} settingOverrides={{ fontSizeScale: 4.4 }} />
           </svg>
         );
       }
@@ -11086,6 +11758,9 @@
         }
         if (part.type === "transposition") {
           const value = makePlacementAnswer(practiceAnswers[part.id], { selectedRhythm: null, notes: {}, ties: {} });
+          if (question.practiceLevel === "AH") {
+            return <ScoreApplyHint>Use the score above to enter your answer.</ScoreApplyHint>;
+          }
           const options = TRANSPOSITION_RHYTHM_OPTIONS;
           return (
             <div className="flex flex-wrap items-center gap-3">
@@ -11197,6 +11872,9 @@
           const keyName = KEY_ANSWERS[question.key.id]?.label ?? question.key.id;
           const hasKeySignatureQuestion = question.subquestions?.some((item) => (item.sourceId ?? item.id) === "key");
           return <>Using the rhythm provided and the chord information below the stave, insert the bass notes in <strong>bar {question.advancedHigherChordTarget?.bassLineBar + 1}</strong>.{!hasKeySignatureQuestion && <> The key is <strong>{keyName}</strong>.</>}</>;
+        }
+        if (sourceId === "ahChordTypes") {
+          return <>Identify the type of chord shown in <strong>bar {question.advancedHigherChordTypeTarget?.barIndex + 1}</strong>.</>;
         }
         if (sourceId === "dynamic") {
           if (question.dynamicQuestionType === "hairpinName") {
@@ -11512,6 +12190,7 @@
       const menuRef = useRef(null);
       const mainContainerRef = useRef(null);
       const scoreScrollRef = useRef(null);
+      const previousScoreFocusRef = useRef(null);
       const [mainMinHeight, setMainMinHeight] = useState(null);
       const [scoreScrollFade, setScoreScrollFade] = useState({ top: false, bottom: false });
 
@@ -11931,10 +12610,11 @@
           }
           if (part.type === "transposition") {
             const answer = makePlacementAnswer(practiceAnswers[part.id], { notes: {}, ties: {} });
+            const answerClef = question.transpositionTarget?.answerClef ?? "bass";
             const correctNotes = (question.transpositionTarget?.answerNotes ?? []).every((expected, index) => {
               if (!expected) return true;
               const actual = answer.notes?.[index];
-              return Boolean(actual && actual.step === expected.step && actual.rhythm === expected.rhythm && (actual.writtenAccidental ?? null) === (expected.writtenAccidental ?? null));
+              return transpositionNoteAnswerCorrect(actual, expected, answerClef);
             });
             const expectedTies = Object.fromEntries((question.bars[question.transpositionTarget?.barIndex]?.notes ?? []).map((note, index) => [index, Boolean(note.tieToNext)]));
             const correctTies = Object.entries(expectedTies).every(([index, expected]) => Boolean(answer.ties?.[index]) === expected);
@@ -12210,9 +12890,18 @@
           .map(lowerAccompanimentMidi);
       }
 
-      function playTempoAccompanimentPattern(ctx, gainNode, question, bar, barStart, offset, startTime, dynamicGain = 1, dynamicVelocity = 96) {
+      function accompanimentChordMidisForBar(question, bar) {
+        const chordTypeNote = bar.notes?.find((note) => note?.chordTypeId && note.stack?.length);
+        if (chordTypeNote) {
+          return chordTypeNote.stack.map((tone) => effectiveMidiForStackTone(question, bar, tone));
+        }
         const chordLetters = question.key.chords[bar.chordSymbol] ?? [];
-        if (!chordLetters.length) return;
+        return chordLetters.map((letter, index) => pitchForChordLetter(question, bar, letter, 3 + index));
+      }
+
+      function playTempoAccompanimentPattern(ctx, gainNode, question, bar, barStart, offset, startTime, dynamicGain = 1, dynamicVelocity = 96) {
+        const chordMidi = accompanimentChordMidisForBar(question, bar);
+        if (!chordMidi.length) return;
 
         const meterInfo = classifyMeter(question.timeSignature);
         const pattern = getPatternVariant(question.accompanimentPattern, meterInfo);
@@ -12223,11 +12912,10 @@
         const accompanimentVelocity = dynamicVelocity + (accompanimentIsAccent ? 12 : 0);
         const accompanimentGainScale = accompanimentIsAccent ? 1.6 : 1;
         const accompanimentDurationScale = isStaccatoArticulationBar(question, bar) ? 0.3 : 1;
-        const chordMidi = chordLetters.map((letter, index) => pitchForChordLetter(question, bar, letter, 3 + index));
-        const rootMidi = pitchForChordLetter(question, bar, chordLetters[0], 3);
-        const thirdMidi = pitchForChordLetter(question, bar, chordLetters[1] ?? chordLetters[0], 3);
-        const fifthMidi = pitchForChordLetter(question, bar, chordLetters[2] ?? chordLetters[0], 3);
-        const seventhMidi = chordLetters[3] ? pitchForChordLetter(question, bar, chordLetters[3], 3) : null;
+        const rootMidi = chordMidi[0];
+        const thirdMidi = chordMidi[1] ?? rootMidi;
+        const fifthMidi = chordMidi[2] ?? rootMidi;
+        const seventhMidi = chordMidi[3] ?? null;
         const tokenMidi = (token) => {
           const map = {
             lowRoot: rootMidi - 12,
@@ -12269,8 +12957,8 @@
 
       function playAccompaniment(ctx, gainNode, question, bar, barStart, offset, startTime, dynamicGain = 1, dynamicVelocity = 96, finalPlaybackBar = false) {
         if (barStart + barSeconds <= offset) return;
-        const chordLetters = question.key.chords[bar.chordSymbol] ?? [];
-        if (!chordLetters.length) return;
+        const chordMidi = accompanimentChordMidisForBar(question, bar);
+        if (!chordMidi.length) return;
         const accompanimentIsAccent = isAccentArticulationBar(question, bar);
         const accompanimentVelocity = dynamicVelocity + (accompanimentIsAccent ? 12 : 0);
         const accompanimentGainScale = accompanimentIsAccent ? 1.6 : 1;
@@ -12285,10 +12973,9 @@
           const audibleStart = Math.max(chordStart, offset);
           const audibleDuration = Math.max(0.04, chordStart + chordDuration - audibleStart);
           const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, finalNote.beat) * accompanimentGainScale;
-          chordLetters.forEach((letter, index) => {
-            const chordMidi = pitchForChordLetter(question, bar, letter, 3 + index);
-            playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(chordMidi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
-            if (index === 0) playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(chordMidi - 12), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.02), eventDynamicGain, "sine", finalPlaybackBar ? 0.38 : 0.08);
+          chordMidi.forEach((midi, index) => {
+            playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
+            if (index === 0) playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi - 12), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.02), eventDynamicGain, "sine", finalPlaybackBar ? 0.38 : 0.08);
           });
           return;
         }
@@ -12297,10 +12984,9 @@
           const chordStart = Math.max(barStart, offset);
           const chordDuration = Math.max(0.04, (barStart + barSeconds * 0.96 - chordStart) * accompanimentDurationScale);
           const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, 0) * accompanimentGainScale;
-          chordLetters.forEach((letter, index) => {
-            const chordMidi = pitchForChordLetter(question, bar, letter, 3 + index);
-            playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(chordMidi), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
-            if (index === 0) playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(chordMidi - 12), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.02), eventDynamicGain, "sine", finalPlaybackBar ? 0.38 : 0.08);
+          chordMidi.forEach((midi, index) => {
+            playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
+            if (index === 0) playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi - 12), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.02), eventDynamicGain, "sine", finalPlaybackBar ? 0.38 : 0.08);
           });
           return;
         }
@@ -12336,7 +13022,7 @@
           return;
         }
 
-        const bassMidi = pitchForChordLetter(question, bar, chordLetters[0], 2) - 12;
+        const bassMidi = chordMidi[0] - 12;
         const bassStart = Math.max(barStart, offset);
         const bassDuration = Math.max(0.04, (barStart + beatSeconds * 0.88 - bassStart) * accompanimentDurationScale);
         playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(bassMidi), startTime + bassStart, bassDuration, accompanimentVelocity, accompanimentVolume(0.024), dynamicGainForPoint(question, bar.barIndex, 0) * accompanimentGainScale, "sine", 0.06);
@@ -12355,13 +13041,12 @@
             const audibleDuration = Math.max(0.04, pulseStart + pulseDuration - audibleStart);
             const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, event.beat) * accompanimentGainScale;
             if (event.type === "bass5") {
-              const fifthMidi = pitchForChordLetter(question, bar, chordLetters[1] ?? chordLetters[0], 2) - 12;
+              const fifthMidi = (chordMidi[1] ?? chordMidi[0]) - 12;
               playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(fifthMidi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.024), eventDynamicGain, "sine", 0.06);
               return;
             }
-            chordLetters.forEach((letter, index) => {
-              const chordMidi = pitchForChordLetter(question, bar, letter, 3 + index);
-              playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(chordMidi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
+            chordMidi.forEach((midi) => {
+              playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
             });
           });
           return;
@@ -12377,15 +13062,25 @@
           const audibleStart = Math.max(pulseStart, offset);
           const audibleDuration = Math.max(0.04, pulseStart + pulseDuration - audibleStart);
           const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, beat) * accompanimentGainScale;
-          chordLetters.forEach((letter, index) => {
-            const chordMidi = pitchForChordLetter(question, bar, letter, 3 + index);
-            playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(chordMidi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
+          chordMidi.forEach((midi) => {
+            playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
           });
         });
       }
 
       function playMelodyNote(ctx, gainNode, midi, start, duration, dynamicGain = 1, dynamicVelocity = 96, release = 0.1) {
         playPianoMidi(ctx, gainNode, midi, start, duration, dynamicVelocity, 0.078, dynamicGain, "triangle", release);
+      }
+
+      function shouldSkipMelodyPlaybackNote(bar, note, noteIndex) {
+        const previousNote = bar.notes?.[noteIndex - 1];
+        return Boolean(
+          note.rest
+          || note.tiedFromPrevious
+          || note.silentAudio
+          || previousNote?.tieToNext
+          || previousNote?.audioTieToNext
+        );
       }
 
       function pianoLayersForPlayback(question, playbackBars) {
@@ -12399,14 +13094,19 @@
           bar.notes.forEach((note, noteIndex) => {
             const articulationTargetMarking = articulationMarkingForPlayback(question, bar, noteIndex);
             const playbackVelocity = articulationTargetMarking === "accent" ? MELODY_SAMPLE_VELOCITY_V12 : MELODY_SAMPLE_VELOCITY_V8;
-            if (!note.rest && !note.tiedFromPrevious && !note.silentAudio) addMidi(effectivePlaybackMidiForNote(question, bar, note, noteIndex), playbackVelocity);
+            if (!shouldSkipMelodyPlaybackNote(bar, note, noteIndex)) {
+              const playbackMidis = note.stack?.length
+                ? note.stack.map((tone) => effectiveMidiForStackTone(question, bar, tone))
+                : [effectivePlaybackMidiForNote(question, bar, note, noteIndex)];
+              playbackMidis.forEach((midi) => addMidi(midi, playbackVelocity));
+            }
           });
-          const chordLetters = question.key.chords[bar.chordSymbol] ?? [];
-          if (!chordLetters.length) return;
-          addMidi(lowerAccompanimentMidi(pitchForChordLetter(question, bar, chordLetters[0], 2) - 12), accompanimentVelocity);
-          addMidi(lowerAccompanimentMidi(pitchForChordLetter(question, bar, chordLetters[1] ?? chordLetters[0], 2) - 12), accompanimentVelocity);
-          chordLetters.forEach((letter, index) => {
-            addMidi(lowerAccompanimentMidi(pitchForChordLetter(question, bar, letter, 3 + index)), accompanimentVelocity);
+          const chordMidi = accompanimentChordMidisForBar(question, bar);
+          if (!chordMidi.length) return;
+          addMidi(lowerAccompanimentMidi(chordMidi[0] - 12), accompanimentVelocity);
+          addMidi(lowerAccompanimentMidi((chordMidi[1] ?? chordMidi[0]) - 12), accompanimentVelocity);
+          chordMidi.forEach((midi) => {
+            addMidi(lowerAccompanimentMidi(midi), accompanimentVelocity);
           });
           if (question.questionType === "practicePaper" && question.accompanimentPattern) {
             const advancedHigherChordSlots = question.advancedHigherChordTarget
@@ -12425,11 +13125,10 @@
             const safePattern = validateAccompanimentPattern(pattern, meterInfo)
               ? pattern
               : getPatternVariant("bassChord", meterInfo);
-            const chordMidi = chordLetters.map((letter, index) => pitchForChordLetter(question, bar, letter, 3 + index));
-            const rootMidi = pitchForChordLetter(question, bar, chordLetters[0], 3);
-            const thirdMidi = pitchForChordLetter(question, bar, chordLetters[1] ?? chordLetters[0], 3);
-            const fifthMidi = pitchForChordLetter(question, bar, chordLetters[2] ?? chordLetters[0], 3);
-            const seventhMidi = chordLetters[3] ? pitchForChordLetter(question, bar, chordLetters[3], 3) : null;
+            const rootMidi = chordMidi[0];
+            const thirdMidi = chordMidi[1] ?? rootMidi;
+            const fifthMidi = chordMidi[2] ?? rootMidi;
+            const seventhMidi = chordMidi[3] ?? null;
             const tokenMidi = (token) => {
               const map = {
                 lowRoot: rootMidi - 12,
@@ -12495,7 +13194,7 @@
           const finalSoundingNoteIndex = finalPlaybackBar ? bar.notes.map((note, index) => ({ note, index })).reverse().find(({ note }) => note && !note.rest)?.index : null;
           playAccompaniment(ctx, master, question, bar, barStart, offset, startTime, dynamicGain, dynamicVelocity, finalPlaybackBar);
           bar.notes.forEach((note, noteIndex) => {
-            if (note.rest || note.tiedFromPrevious || note.silentAudio) return;
+            if (shouldSkipMelodyPlaybackNote(bar, note, noteIndex)) return;
             const noteStart = barStart + note.beat * beatSeconds;
             const nextTiedNote = (note.tieToNext || note.audioTieToNext) && !bar.notes[noteIndex + 1]?.rest ? bar.notes[noteIndex + 1] : null;
             const articulationTargetMarking = articulationMarkingForPlayback(question, bar, noteIndex);
@@ -12506,7 +13205,12 @@
             const audibleDuration = Math.max(0.04, noteStart + duration - audibleStart);
             const noteDynamicGain = dynamicGainForPoint(question, bar.barIndex, note.beat);
             const playbackVelocity = articulationTargetMarking === "accent" ? MELODY_SAMPLE_VELOCITY_V12 : MELODY_SAMPLE_VELOCITY_V8;
-            playMelodyNote(ctx, master, effectivePlaybackMidiForNote(question, bar, note, noteIndex), startTime + audibleStart, audibleDuration, articulationTargetMarking === "accent" ? noteDynamicGain * 1.6 : noteDynamicGain, playbackVelocity, noteIndex === finalSoundingNoteIndex ? 0.42 : 0.1);
+            const playbackMidis = note.stack?.length
+              ? note.stack.map((tone) => effectiveMidiForStackTone(question, bar, tone))
+              : [effectivePlaybackMidiForNote(question, bar, note, noteIndex)];
+            playbackMidis.forEach((midi) => {
+              playMelodyNote(ctx, master, midi, startTime + audibleStart, audibleDuration, articulationTargetMarking === "accent" ? noteDynamicGain * 1.6 : noteDynamicGain, playbackVelocity, noteIndex === finalSoundingNoteIndex ? 0.42 : 0.1);
+            });
             if (followPlayback) {
               const highlightTimer = window.setTimeout(() => {
                 setActiveNoteId(note.id);
@@ -12601,6 +13305,15 @@
 
       useEffect(() => {
         if (!hasScrollablePracticeScore || !visible || question.questionType !== "practicePaper") return undefined;
+        const previousFocus = previousScoreFocusRef.current;
+        previousScoreFocusRef.current = { questionId: question.id, activePracticePart };
+        if (!previousFocus || previousFocus.questionId !== question.id) {
+          const animationFrame = window.requestAnimationFrame(() => {
+            scrollPracticeScore("top", "auto");
+          });
+          return () => window.cancelAnimationFrame(animationFrame);
+        }
+        if (previousFocus.activePracticePart === activePracticePart) return undefined;
         const activePart = question.subquestions?.[activePracticePart];
         const sourceId = activePart?.sourceId ?? activePart?.id;
         if (!sourceId) return undefined;

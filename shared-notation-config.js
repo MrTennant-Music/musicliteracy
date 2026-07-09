@@ -193,6 +193,15 @@ const SHARED_NOTATION_CONFIG = {
       "opticalXOffset": 0,
       "opticalYOffset": 0
     },
+    "noteheadHalf": {
+      "fontSizeScale": 3.75,
+      "xOffsetScale": 0,
+      "yOffsetScale": 0,
+      "widthScale": 1,
+      "heightScale": 1,
+      "opticalXOffset": 0,
+      "opticalYOffset": 0
+    },
     "wholeNote": {
       "fontSizeScale": 3.4,
       "xOffsetScale": 0,
