@@ -875,7 +875,7 @@
       { source: { letter: "B", accidental: 1 }, target: { letter: "C", accidental: 0 }, targetOctaveOffset: 1 },
       { source: { letter: "C", accidental: -1 }, target: { letter: "B", accidental: 0 }, targetOctaveOffset: -1 },
     ];
-    const RARE_ENHARMONIC_SOURCE_SPELLINGS = new Set(["F:-1", "B:1", "C:-1", "E:1"]);
+    const AH_CHORD_STAFF_OFFSET_Y = 15;
     const RARE_INTERVAL_SPELLINGS = new Set(["E:1", "F:-1", "C:-1", "B:1"]);
     const RARE_INTERVAL_CHANCE = 0.1;
     const ADVANCED_HIGHER_CHORD_TYPES = [
@@ -1087,43 +1087,52 @@
       }
       return result;
     }
-    function randomEnharmonicCandidate(clef = "treble") {
-      const candidates = enharmonicCandidatesForClef(clef);
-      const fallback = enharmonicCandidatesForClef("treble");
-      return randomItem(candidates.length ? candidates : fallback);
+    const ENHARMONIC_KEY_PAIR_OPTIONS = {
+      C: [
+        [{ letter: "G", accidental: 1 }, { letter: "A", accidental: -1 }],
+      ],
+      Am: [
+        [{ letter: "G", accidental: 1 }, { letter: "A", accidental: -1 }],
+      ],
+      G: [
+        [{ letter: "F", accidental: 1 }, { letter: "G", accidental: -1 }],
+        [{ letter: "D", accidental: 1 }, { letter: "E", accidental: -1 }],
+      ],
+      Em: [
+        [{ letter: "F", accidental: 1 }, { letter: "G", accidental: -1 }],
+        [{ letter: "D", accidental: 1 }, { letter: "E", accidental: -1 }],
+      ],
+      F: [
+        [{ letter: "B", accidental: -1 }, { letter: "A", accidental: 1 }],
+        [{ letter: "C", accidental: 1 }, { letter: "D", accidental: -1 }],
+      ],
+      Dm: [
+        [{ letter: "B", accidental: -1 }, { letter: "A", accidental: 1 }],
+        [{ letter: "C", accidental: 1 }, { letter: "D", accidental: -1 }],
+      ],
+      Bb: [
+        [{ letter: "B", accidental: -1 }, { letter: "A", accidental: 1 }],
+        [{ letter: "E", accidental: -1 }, { letter: "D", accidental: 1 }],
+      ],
+      D: [
+        [{ letter: "F", accidental: 1 }, { letter: "G", accidental: -1 }],
+        [{ letter: "C", accidental: 1 }, { letter: "D", accidental: -1 }],
+      ],
+    };
+    const enharmonicSpellingKey = (spelling) => `${spelling?.letter}:${spelling?.accidental}`;
+    function enharmonicPairOptionsForKey(key) {
+      return ENHARMONIC_KEY_PAIR_OPTIONS[key?.id] ?? [];
     }
-    function notePitchInQuestionKey(question, note) {
-      if (!note) return null;
-      const keyAccidental = keyAccidentalForLetter(question.key, note.letter);
-      return pitchOfSpelledNote({
-        ...note,
-        accidental: note.writtenAccidental ?? keyAccidental,
-      });
-    }
-    function closeEnharmonicCandidatesForNote(question, note, clef = "treble") {
-      const notePitch = notePitchInQuestionKey(question, note);
-      if (!Number.isFinite(notePitch)) return [];
-      const noteStep = displayStep(note, clef);
-      return enharmonicCandidatesForClef(clef)
-        .map((candidate) => {
-          const sourcePitch = pitchOfSpelledNote(candidate.source);
-          const pitchDistance = Math.abs(sourcePitch - notePitch);
-          const sourceStepDistance = Math.abs(candidate.sourceStep - noteStep);
-          const targetStepDistance = Math.abs(candidate.targetStep - noteStep);
-          return {
-            candidate,
-            score: pitchDistance * 10 + sourceStepDistance * 4 + targetStepDistance,
-            pitchDistance,
-            sourceStepDistance,
-          };
-        })
-        .filter((item) => item.pitchDistance <= 2 && item.sourceStepDistance <= 2)
-        .sort((a, b) => a.score - b.score)
-        .map((item) => item.candidate);
-    }
-    function isRareEnharmonicSourceSpelling(candidate) {
-      const source = candidate?.source;
-      return RARE_ENHARMONIC_SOURCE_SPELLINGS.has(`${source?.letter}:${source?.accidental}`);
+    function keyMappedEnharmonicCandidatesForClef(key, clef = "treble") {
+      const allowedPairKeys = new Set(enharmonicPairOptionsForKey(key).map(([first, second]) => [
+        enharmonicSpellingKey(first),
+        enharmonicSpellingKey(second),
+      ].sort().join("|")));
+      if (!allowedPairKeys.size) return [];
+      return enharmonicCandidatesForClef(clef).filter((candidate) => allowedPairKeys.has([
+        enharmonicSpellingKey(candidate.source),
+        enharmonicSpellingKey(candidate.target),
+      ].sort().join("|")));
     }
     const HIGHER_TRANSPOSITION_BASS_MIN = noteBaseForStep(-14); // E2
     const ADVANCED_HIGHER_TRANSPOSITION_BASS_MIN = noteBaseForStep(-16); // C2
@@ -4234,6 +4243,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
     function advancedHigherScaleDegreeSpelling(question, chordTypeId) {
       if (chordTypeId === "add6") {
+        if (isMinorKey(question.key)) return null;
         const tones = [1, 3, 5, 6].map((degree) => scaleDegreeToneSpelling(question, degree));
         return tones.every(Boolean) ? { root: question.key.tonic, type: "add6", tones, chordSymbol: "I" } : null;
       }
@@ -5635,7 +5645,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         answerClef: "bass",
         answerOctavesFromMain: -1,
         sourceOctavesFromMain: 0,
-        prompt: (barNumber) => `Transpose the notes in bar ${barNumber} one octave lower into the bass clef. Use the stave given.`,
+        prompt: (barNumber) => `Transpose the notes in bar ${barNumber} one octave lower into the bass clef.`,
       },
     ];
 
@@ -5669,7 +5679,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
     function transpositionQuestionPrompt(target) {
       if (target?.type === "meaning") return target.prompt;
-      return target?.prompt ?? `Transpose the notes in bar ${target?.barIndex + 1} one octave lower into the bass clef. Use the stave given.`;
+      return target?.prompt ?? `Transpose the notes in bar ${target?.barIndex + 1} one octave lower into the bass clef.`;
     }
 
     function transpositionNoteFitsClefForQuestion(note, clef, question) {
@@ -5791,6 +5801,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         barIndex % BARS_PER_SYSTEM !== 0
         && excluded.has(barIndex - 1)
       );
+      const keyMappedCandidates = keyMappedEnharmonicCandidatesForClef(question.key, clef);
+      if (!keyMappedCandidates.length) return null;
       const candidates = question.bars.flatMap((bar) =>
         (bar.notes ?? []).flatMap((note, noteIndex) => {
           if (
@@ -5806,7 +5818,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           ) {
             return [];
           }
-          return closeEnharmonicCandidatesForNote(question, note, clef).map((candidate, candidateIndex) => ({
+          return keyMappedCandidates.map((candidate, candidateIndex) => ({
             bar,
             note,
             noteIndex,
@@ -5816,25 +5828,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         })
       );
       if (!candidates.length) return null;
-      const bestScore = Math.min(...candidates.map(({ note, candidate }) => {
-        const notePitch = notePitchInQuestionKey(question, note);
-        return Math.abs(pitchOfSpelledNote(candidate.source) - notePitch) * 10
-          + Math.abs(candidate.sourceStep - displayStep(note, clef)) * 4
-          + Math.abs(candidate.targetStep - displayStep(note, clef));
-      }));
-      const bestCandidates = candidates.filter(({ note, candidate }) => {
-        const notePitch = notePitchInQuestionKey(question, note);
-        const score = Math.abs(pitchOfSpelledNote(candidate.source) - notePitch) * 10
-          + Math.abs(candidate.sourceStep - displayStep(note, clef)) * 4
-          + Math.abs(candidate.targetStep - displayStep(note, clef));
-        return score <= bestScore + 4;
-      });
-      const rareBestCandidates = bestCandidates.filter(({ candidate }) => isRareEnharmonicSourceSpelling(candidate));
-      const commonBestCandidates = bestCandidates.filter(({ candidate }) => !isRareEnharmonicSourceSpelling(candidate));
-      const preferredCandidates = rareBestCandidates.length && commonBestCandidates.length
-        ? Math.random() < 0.1 ? rareBestCandidates : commonBestCandidates
-        : rareBestCandidates.length ? rareBestCandidates : commonBestCandidates;
-      const chosen = randomItem(preferredCandidates);
+      const chosen = randomItem(candidates);
       const candidate = chosen.candidate;
       const sourceNote = {
         ...makeEnharmonicNote(candidate.source, candidate.source.octave, clef, chosen.note),
@@ -6585,7 +6579,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           ...(selectedSourceIds.has("ahBassLine") ? [{
             id: "ahBassLine",
             sourceId: "ahBassLine",
-            prompt: `Using the rhythm provided and the chord information below the stave, insert the bass notes in bar ${advancedHigherChordTarget.bassLineBar + 1}. The key is ${KEY_ANSWERS[question.key.id]?.label ?? question.key.id}.`,
+            prompt: `Using the rhythm provided and the chord information below the stave, insert the bass notes in bar ${advancedHigherChordTarget.bassLineBar + 1}.`,
             answer: "Advanced Higher bass notes completed correctly",
             type: "ahBassLine",
           }] : []),
@@ -6710,7 +6704,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           id: "rhythmIdentification",
           sourceId: "rhythmIdentification",
           prompt: rhythmIdentificationTarget.tied
-            ? `Give the total value of the tied notes in bars ${rhythmIdentificationTarget.barIndex + 1} and ${rhythmIdentificationTarget.endBarIndex + 1}. Write your answer in the box provided.`
+            ? `Give the total value of the tied notes in bars ${rhythmIdentificationTarget.barIndex + 1} and ${rhythmIdentificationTarget.endBarIndex + 1}.`
             : `What is the total value of the two notes in the box in bar ${rhythmIdentificationTarget.barIndex + 1}?`,
           answer: rhythmIdentificationTotalAnswer.answer,
           accepts: rhythmIdentificationTotalAnswer.accepts,
@@ -7645,7 +7639,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       };
       reserveExtraSpacingAfterSystem(transpositionSystemIndex, question.transpositionTarget?.type === "meaning" ? 0 : 65);
       reserveExtraSpacingAfterSystem(enharmonicSystemIndex, 90);
-      reserveExtraSpacingAfterSystem(ahChordSystemIndex, 65);
+      reserveExtraSpacingAfterSystem(ahChordSystemIndex, 80);
       const cumulativeSpacingBeforeSystem = extraSpacingAfterSystem.map((_, index) => (
         extraSpacingAfterSystem.slice(0, index).reduce((sum, spacing) => sum + spacing, 0)
       ));
@@ -7655,7 +7649,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const standardBottomPadding = STAFF.topA + STAFF.gap * 4 - 20;
       const lastSystemNeedsExtraSpacing = extraSpacingAfterSystem[lastSystemIndex] > 0;
       const bottomPadding = ahChordSystemIndex === lastSystemIndex ? 400 : lastSystemNeedsExtraSpacing ? 160 : standardBottomPadding;
-      const scoreHeight = isOneSystem ? 154 : systems.at(-1) + bottomPadding;
+      const scrollBottomPadding = ahChordSystemIndex === lastSystemIndex ? 15 : 0;
+      const scoreHeight = isOneSystem ? 154 : systems.at(-1) + bottomPadding + scrollBottomPadding;
       const scoreOffsetY = isOneSystem ? -30 : 0;
       useEffect(() => {
         setHoverBarlineSlot(null);
@@ -9210,6 +9205,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
               && placedEnharmonicNote.step === question.enharmonicTarget.answerNote.step
               && placedEnharmonicNote.writtenAccidental === question.enharmonicTarget.answerNote.writtenAccidental
             );
+            const enharmonicFeedbackAnswerX = placedEnharmonicNote
+              ? Math.min(end - 22, enharmonicAnswerX + 39)
+              : enharmonicAnswerX;
             const rhythmicDictationPart = findPartBySource("rhythmicDictation");
             const restsPart = findPartBySource("rests");
             const restTargetForBar = question.rhythmFixTarget?.variant === "rests" && question.rhythmFixTarget?.barIndex === bar.barIndex;
@@ -9536,8 +9534,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const ahBassLineAnswer = placementValue(ahBassLinePart, { bassNotes: {} });
             const ahChordIdentifySlots = question.advancedHigherChordTarget?.identifyBar === bar.barIndex ? question.advancedHigherChordTarget.identifySlots ?? [] : [];
             const ahChordBassLineSlots = question.advancedHigherChordTarget?.bassLineBar === bar.barIndex ? question.advancedHigherChordTarget.bassLineSlots ?? [] : [];
-            const ahChordTrebleTop = top + 110;
-            const ahChordBassTop = top + 220;
+            const ahChordTrebleTop = top + 110 + AH_CHORD_STAFF_OFFSET_Y;
+            const ahChordBassTop = top + 220 + AH_CHORD_STAFF_OFFSET_Y;
             const ahChordGuideBoxTop = ahChordBassTop + STAFF.gap * 8;
             const ahChordBoxY = ahChordTrebleTop - 32 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
             const ahChordBoxHeight = ahChordBassTop + STAFF.gap * 16 - ahChordBoxY;
@@ -9899,7 +9897,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                     {enharmonicFeedback && !enharmonicPlacedCorrect && (
                       <Note
                         note={question.enharmonicTarget.answerNote}
-                        x={Math.min(end - 22, enharmonicAnswerX + 39)}
+                        x={enharmonicFeedbackAnswerX}
                         top={enharmonicAnswerTop}
                         colour={COLOUR.green}
                         clef={enharmonicTarget.clef}
@@ -10578,7 +10576,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const x = sortedSlots.length === 2
               ? lockedGroupLeft + slotPosition * (chordBoxWidth + chordBoxGap)
               : chordBoxGroupX + (chordBoxGroupWidth - chordBoxWidth) / 2;
-            const y = top + 220 + STAFF.gap * 8;
+            const y = top + 220 + AH_CHORD_STAFF_OFFSET_Y + STAFF.gap * 8;
             const value = makePlacementAnswer(practiceAnswers[part.id], { chordAnswers: {}, bassNotes: {} }).chordAnswers?.[slot.slotIndex] ?? "";
             const rowLabelWidth = 48;
             const rowLabelGap = 22;
@@ -11892,7 +11890,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         if (sourceId === "ahBassLine") {
           const keyName = KEY_ANSWERS[question.key.id]?.label ?? question.key.id;
           const hasKeySignatureQuestion = question.subquestions?.some((item) => (item.sourceId ?? item.id) === "key");
-          return <>Using the rhythm provided and the chord information below the stave, insert the bass notes in <strong>bar {question.advancedHigherChordTarget?.bassLineBar + 1}</strong>.{!hasKeySignatureQuestion && <> The key is <strong>{keyName}</strong>.</>}</>;
+          return <>Using the rhythm provided and the chord information below the stave, insert the bass notes in <strong>bar {question.advancedHigherChordTarget?.bassLineBar + 1}</strong>.</>;
         }
         if (sourceId === "ahChordTypes") {
           return <>Identify the type of chord shown in <strong>bar {question.advancedHigherChordTypeTarget?.barIndex + 1}</strong>.</>;
@@ -11968,7 +11966,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           if (target?.variantId === "bassOctaveUp") {
             return <>Transpose the notes in <strong>bar {barNumber}</strong> one octave higher into the treble clef. Use the stave given.</>;
           }
-          return <>Transpose the notes in <strong>bar {barNumber}</strong> one octave lower into the bass clef. Use the stave given.</>;
+          return <>Transpose the notes in <strong>bar {barNumber}</strong> one octave lower into the bass clef.</>;
         }
         if (sourceId === "enharmonics" && question.enharmonicTarget) {
           return <>Identify the enharmonic equivalent of the boxed note in <strong>bar {question.enharmonicTarget.barIndex + 1}</strong> using the stave provided.</>;
@@ -11976,7 +11974,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         if (sourceId === "rhythmIdentification" && part.type === "text") {
           if (question.rhythmIdentificationTarget?.variant === "noteValueTotal") {
             if (question.rhythmIdentificationTarget.tied) {
-              return <>Give the total value of the tied notes in <strong>bars {question.rhythmIdentificationTarget.barIndex + 1} and {question.rhythmIdentificationTarget.endBarIndex + 1}</strong>. Write your answer in the box provided.</>;
+              return <>Give the total value of the tied notes in <strong>bars {question.rhythmIdentificationTarget.barIndex + 1} and {question.rhythmIdentificationTarget.endBarIndex + 1}</strong>.</>;
             }
             return <>What is the total value of the two notes in the box in <strong>bar {question.rhythmIdentificationTarget.barIndex + 1}</strong>?</>;
           }
