@@ -9670,23 +9670,46 @@ function advancedHigherInversionAnswerLabel(inversion) {
               transpositionMeaningTarget ? { x: transpositionSignBoxX, y: transpositionSignBoxY, width: transpositionSignBoxWidth, height: transpositionSignBoxHeight } : null,
               ahChordIdentifySlots.length || ahChordBassLineSlots.length ? { x: start + 4, y: ahChordBoxY, width: Math.max(58, end - start - 8), height: ahChordBoxHeight } : null,
             ].filter(Boolean);
-            const barNumberNeedsBackdrop = markingBoxes.some((box) => {
-              const labelLength = String(bar.barIndex + 1).length;
-              const numberHalfWidth = labelLength > 1 ? 8.8 : 5.8;
-              const lineTolerance = labelLength > 1 ? 9 : 6;
+            const barNumberLabelLength = String(bar.barIndex + 1).length;
+            const barNumberHalfWidth = barNumberLabelLength > 1 ? 8.8 : 5.8;
+            const barNumberLineTolerance = barNumberLabelLength > 1 ? 9 : 6;
+            const barNumberTop = barNumberY - 10;
+            const barNumberBottom = barNumberY + 1;
+            const barNumberLeft = barNumberX - barNumberHalfWidth;
+            const barNumberRight = barNumberX + barNumberHalfWidth;
+            const tieOverlapsBarNumber = (firstNote, secondNote, firstX, secondX, widthScale = 1) => {
+              if (!firstNote || !secondNote) return false;
+              const firstStep = displayStep(firstNote, question.clef);
+              const secondStep = displayStep(secondNote, question.clef);
+              const firstY = yForStep(firstStep, top);
+              const secondY = yForStep(secondStep, top);
+              const stemsUp = !stemDown(firstStep) && !stemDown(secondStep);
+              const tieY = stemsUp ? Math.max(firstY, secondY) + STAFF.gap * 0.28 : Math.min(firstY, secondY) - STAFF.gap * 0.28;
+              const tiePadX = STAFF.gap * 1.4 * widthScale;
+              const tieLeft = Math.min(firstX, secondX) - tiePadX;
+              const tieRight = Math.max(firstX, secondX) + tiePadX;
+              const tiePadY = 8;
+              return tieLeft <= barNumberRight
+                && tieRight >= barNumberLeft
+                && tieY - tiePadY <= barNumberBottom
+                && tieY + tiePadY >= barNumberTop;
+            };
+            const noteTieHitsBarNumber = bar.notes.some((note, noteIndex) => (
+              note?.tieToNext
+              && tieOverlapsBarNumber(note, bar.notes[noteIndex + 1], positions[noteIndex], positions[noteIndex + 1])
+            ));
+            const valueTieHitsBarNumber = valueTargetCrossBarTie
+              && tieOverlapsBarNumber(valueTargetNote, valueTargetEndNote, valueLeftX, valueRightX);
+            const barNumberNeedsBackdrop = noteTieHitsBarNumber || valueTieHitsBarNumber || markingBoxes.some((box) => {
               const boxTop = box.y + BOX_LABEL_BAND_HEIGHT;
               const boxBottom = box.y + box.height;
               const boxRight = box.x + box.width;
-              const numberTop = barNumberY - 10;
-              const numberBottom = barNumberY + 1;
-              const numberLeft = barNumberX - numberHalfWidth;
-              const numberRight = barNumberX + numberHalfWidth;
-              const verticalLineHits = (Math.abs(box.x - barNumberX) <= numberHalfWidth + lineTolerance || Math.abs(boxRight - barNumberX) <= numberHalfWidth + lineTolerance)
-                && boxTop <= numberBottom
-                && boxBottom >= numberTop;
-              const horizontalLineHits = (Math.abs(boxTop - (barNumberY - 4)) <= lineTolerance || Math.abs(boxBottom - (barNumberY - 4)) <= lineTolerance)
-                && box.x <= numberRight
-                && boxRight >= numberLeft;
+              const verticalLineHits = (Math.abs(box.x - barNumberX) <= barNumberHalfWidth + barNumberLineTolerance || Math.abs(boxRight - barNumberX) <= barNumberHalfWidth + barNumberLineTolerance)
+                && boxTop <= barNumberBottom
+                && boxBottom >= barNumberTop;
+              const horizontalLineHits = (Math.abs(boxTop - (barNumberY - 4)) <= barNumberLineTolerance || Math.abs(boxBottom - (barNumberY - 4)) <= barNumberLineTolerance)
+                && box.x <= barNumberRight
+                && boxRight >= barNumberLeft;
               return verticalLineHits || horizontalLineHits;
             });
             return (
