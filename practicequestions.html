@@ -5524,26 +5524,110 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return placements;
     }
 
+    const LETTER_SEQUENCE = ["C", "D", "E", "F", "G", "A", "B"];
+    const letterAtDiatonicOffset = (letter, offset) => {
+      const index = LETTER_SEQUENCE.indexOf(letter);
+      if (index < 0) return letter;
+      return LETTER_SEQUENCE[(index + offset + LETTER_SEQUENCE.length * 4) % LETTER_SEQUENCE.length];
+    };
+
+    function accidentalPracticeHarmony(key) {
+      if (!key || isMinorKey(key)) return null;
+      const ivRoot = key.chords?.IV?.[0] ?? letterAtDiatonicOffset(key.tonic, 3);
+      const viRoot = key.chords?.VI?.[0] ?? letterAtDiatonicOffset(key.tonic, 5);
+      const secondaryRoot = key.chords?.VI?.[2] ?? letterAtDiatonicOffset(viRoot, 4);
+      const minorIvThird = letterAtDiatonicOffset(ivRoot, 2);
+      const secondaryThird = letterAtDiatonicOffset(secondaryRoot, 2);
+      return {
+        chords: {
+          IVm: [ivRoot, minorIvThird, letterAtDiatonicOffset(ivRoot, 4)],
+          III: [secondaryRoot, secondaryThird, letterAtDiatonicOffset(secondaryRoot, 4)],
+        },
+        raised: {
+          IVm: { [minorIvThird]: -1 },
+          III: { [secondaryThird]: 1 },
+        },
+        minorIvThird,
+        secondaryThird,
+      };
+    }
+
+    function prepareAccidentalPracticeHarmony(question) {
+      const harmony = accidentalPracticeHarmony(question.key);
+      if (!harmony) return null;
+      question.key = {
+        ...question.key,
+        chords: {
+          ...question.key.chords,
+          ...harmony.chords,
+        },
+        raised: {
+          ...(question.key.raised ?? {}),
+          ...harmony.raised,
+        },
+      };
+      return harmony;
+    }
+
+    function setBarHarmony(question, barIndex, chordSymbol) {
+      const bar = question.bars?.[barIndex];
+      if (!bar) return null;
+      const updated = {
+        ...bar,
+        chordSymbol,
+        notes: (bar.notes ?? []).map((note, noteIndex) => (
+          note.rest
+            ? note
+            : makeNote(note, note.rhythm, bar.barIndex, noteIndex, note.beat, question.key, chordSymbol)
+        )),
+      };
+      question.bars[barIndex] = updated;
+      return updated;
+    }
+
     function makeAccidentalQuestionTarget(question, excludedBars = []) {
       const awkwardAccidentalSpellings = new Set(["C:flat", "B:sharp", "E:sharp", "F:flat"]);
       const excluded = new Set([...excludedBars, question.targetBar, question.bars.length - 1]);
-      const candidates = question.bars
+      const harmony = prepareAccidentalPracticeHarmony(question);
+      if (!harmony) return null;
+      const flatCandidates = question.bars
         .flatMap((bar) => (bar.notes ?? []).flatMap((note, noteIndex) => {
-          if (excluded.has(bar.barIndex) || note.rest) return [];
-          return ["sharp", "flat"]
-            .map((direction) => ({ bar, note, noteIndex, direction, value: direction === "sharp" ? 1 : -1 }))
-            .filter((target) => target.note.writtenAccidental === null || target.note.writtenAccidental === undefined)
-            .filter((target) => keyAccidentalForLetter(question.key, note.letter) !== target.value)
-            .filter((target) => Math.abs(
-              effectiveMidiForNote(question, target.bar, { ...target.note, writtenAccidental: target.value })
-              - effectiveMidiForNote(question, target.bar, { ...target.note, writtenAccidental: null })
-            ) === 1)
-            .filter((target) => !awkwardAccidentalSpellings.has(`${note.letter}:${target.direction}`));
+          const barContainsMinorIvThird = (bar.notes ?? []).some((barNote) => !barNote.rest && barNote.letter === harmony.minorIvThird);
+          if (excluded.has(bar.barIndex) || barContainsMinorIvThird || note.rest || note.letter === harmony.minorIvThird) return [];
+          const target = { bar, note, noteIndex, direction: "flat", value: -1, chordSymbol: "IVm" };
+          if (target.note.writtenAccidental !== null && target.note.writtenAccidental !== undefined) return [];
+          if (keyAccidentalForLetter(question.key, note.letter) === target.value) return [];
+          if (awkwardAccidentalSpellings.has(`${note.letter}:${target.direction}`)) return [];
+          if (Math.abs(
+            effectiveMidiForNote(question, target.bar, { ...target.note, writtenAccidental: target.value })
+            - effectiveMidiForNote(question, target.bar, { ...target.note, writtenAccidental: null })
+          ) !== 1) return [];
+          return [target];
         }));
-      const target = randomItem(candidates);
+      const sharpCandidates = question.bars
+        .flatMap((bar) => (bar.notes ?? []).flatMap((note, noteIndex) => {
+          if (excluded.has(bar.barIndex) || excluded.has(bar.barIndex + 1) || bar.barIndex + 1 >= question.bars.length - 1 || note.rest) return [];
+          if (note.letter !== harmony.secondaryThird) return [];
+          const target = { bar, note, noteIndex, direction: "sharp", value: 1, chordSymbol: "III", resolutionChordSymbol: "VI" };
+          if (target.note.writtenAccidental !== null && target.note.writtenAccidental !== undefined) return [];
+          if (keyAccidentalForLetter(question.key, note.letter) === target.value) return [];
+          if (awkwardAccidentalSpellings.has(`${note.letter}:${target.direction}`)) return [];
+          if (Math.abs(
+            effectiveMidiForNote(question, target.bar, { ...target.note, writtenAccidental: target.value })
+            - effectiveMidiForNote(question, target.bar, { ...target.note, writtenAccidental: null })
+          ) !== 1) return [];
+          return [target];
+        }));
+      const candidates = [
+        ...flatCandidates.map((target) => ({ ...target, weight: 1 })),
+        ...sharpCandidates.map((target) => ({ ...target, weight: 1 })),
+      ];
+      const target = weightedRandomItem(candidates);
       if (!target) return null;
-      target.bar.notes[target.noteIndex] = {
-        ...target.note,
+      const targetBar = setBarHarmony(question, target.bar.barIndex, target.chordSymbol);
+      if (target.resolutionChordSymbol) setBarHarmony(question, target.bar.barIndex + 1, target.resolutionChordSymbol);
+      targetBar.notes[target.noteIndex] = {
+        ...targetBar.notes[target.noteIndex],
         writtenAccidental: target.value,
       };
       return {
