@@ -1264,6 +1264,8 @@
     const MELODY_SAMPLE_VELOCITY_V12 = 96;
     const ARTICULATION_ACCENT_VELOCITY_BOOST = 20;
     const ARTICULATION_ACCENT_GAIN_SCALE = 2;
+    const STACCATO_SOUND_SECONDS = 0.2;
+    const STACCATO_RELEASE_SECONDS = 0.004;
     const pitchForChordLetter = (question, bar, letter, preferredIndex = 4) => {
       const base = noteByLetter(letter, preferredIndex);
       const raised = chordAccidentalForLetter(question.key, bar.chordSymbol, letter);
@@ -13709,14 +13711,16 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const noteStart = barStart + note.beat * beatSeconds;
             const nextTiedNote = (note.tieToNext || note.audioTieToNext) && !bar.notes[noteIndex + 1]?.rest ? bar.notes[noteIndex + 1] : null;
             const articulationTargetMarking = articulationMarkingForPlayback(question, bar, noteIndex);
-            const durationScale = articulationTargetMarking === "staccato" ? 0.3 : 0.96;
-            const duration = (note.beats + (nextTiedNote?.beats ?? 0)) * beatSeconds * durationScale;
+            const writtenDuration = (note.beats + (nextTiedNote?.beats ?? 0)) * beatSeconds;
+            const duration = articulationTargetMarking === "staccato"
+              ? Math.min(STACCATO_SOUND_SECONDS, writtenDuration * 0.5)
+              : writtenDuration * 0.96;
             if (noteStart + duration <= offset) return;
             const audibleStart = Math.max(noteStart, offset);
             const audibleDuration = Math.max(0.04, noteStart + duration - audibleStart);
             const noteDynamicGain = dynamicGainForPoint(question, bar.barIndex, note.beat);
             const playbackVelocity = articulationTargetMarking === "accent" ? MELODY_SAMPLE_VELOCITY_V12 : MELODY_SAMPLE_VELOCITY_V8;
-            const playbackRelease = articulationTargetMarking === "staccato" ? 0.015 : noteIndex === finalSoundingNoteIndex ? 0.42 : 0.1;
+            const playbackRelease = articulationTargetMarking === "staccato" ? STACCATO_RELEASE_SECONDS : noteIndex === finalSoundingNoteIndex ? 0.42 : 0.1;
             const playbackMidis = note.stack?.length
               ? note.stack.map((tone) => effectivePlaybackMidiForStackTone(question, bar, tone))
               : [effectivePlaybackMidiForNote(question, bar, note, noteIndex)];
