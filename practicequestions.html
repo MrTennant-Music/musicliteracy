@@ -6313,19 +6313,26 @@ function advancedHigherInversionAnswerLabel(inversion) {
         { symbolId: "first-time", barIndex: randomItem([5, 6]), anchor: "above" },
       ];
       const dcLineEndBarIndexes = [7, 15].filter((barIndex) => barIndex < question.bars.length);
-      const makeDsFineTarget = (dsFineOption) => ({
-        symbolId: "ds-fine",
-        barIndex: 7,
-        anchor: "above",
-        performedBars: dsFineOption === "start-to-four"
-          ? [0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3]
-          : [0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6],
-        placements: [
-          { symbolId: "segno", barIndex: dsFineOption === "start-to-four" ? 0 : 4, anchor: "above" },
-          { symbolId: "fine", barIndex: dsFineOption === "start-to-four" ? 3 : 6, anchor: "above" },
-          { symbolId: "ds", barIndex: 7, anchor: "above" },
-        ],
-      });
+      const makeDsFineTarget = (dsFineOption) => {
+        const segnoBarIndex = dsFineOption === "start-to-four" ? 0 : 4;
+        const fineBarIndex = dsFineOption === "start-to-four" ? 3 : 6;
+        return {
+          symbolId: "ds-fine",
+          barIndex: finalBarIndex,
+          anchor: "above",
+          performedBars: [
+            ...Array.from({ length: finalBarIndex + 1 }, (_, index) => index),
+            ...Array.from({ length: fineBarIndex - segnoBarIndex + 1 }, (_, index) => segnoBarIndex + index),
+          ],
+          placements: [
+            { symbolId: "segno", barIndex: segnoBarIndex, anchor: "above" },
+            { symbolId: "fine", barIndex: fineBarIndex, anchor: "above" },
+          ],
+          givenPlacements: [
+            { symbolId: "ds", barIndex: finalBarIndex, anchor: "above" },
+          ],
+        };
+      };
       const higherRepeatTargetOptions = level === "H"
         ? timeSignatureLevel === "AH"
           ? [
@@ -6352,7 +6359,10 @@ function advancedHigherInversionAnswerLabel(inversion) {
           { symbolId: "end-repeat", barIndex: endBarIndex, anchor: "end" },
         ],
       }));
-      const repeatTargetFitsUsedBars = (target) => (target.placements ?? [target]).every((placement) => !usedQuestionBars.has(placement.barIndex));
+      const repeatTargetFitsUsedBars = (target) => [
+        ...(target.placements ?? [target]),
+        ...(target.givenPlacements ?? []),
+      ].every((placement) => !usedQuestionBars.has(placement.barIndex));
       const unusedNational4RepeatTargets = national4RepeatTargets.filter(repeatTargetFitsUsedBars);
       const unusedRepeatTargetOptions = higherRepeatTargetOptions.filter(repeatTargetFitsUsedBars);
       const repeatTarget = needsRepeatSigns
@@ -6367,9 +6377,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
           : repeatTarget.symbolId === "start-repeat" ? [
             { symbolId: "end-repeat", barIndex: 7, anchor: "end" },
           ]
+          : repeatTarget.symbolId === "ds-fine" ? repeatTarget.givenPlacements ?? []
             : []
         : [];
-      if (needsRepeatSigns) (repeatTarget.placements ?? [repeatTarget]).forEach((placement) => reserveQuestionBar(placement.barIndex));
+      if (needsRepeatSigns) [
+        ...(repeatTarget.placements ?? [repeatTarget]),
+        ...(givenRepeatPlacements ?? []),
+      ].forEach((placement) => reserveQuestionBar(placement.barIndex));
       const excludedBars = [0, finalBarIndex];
       if (needsMissing) excludedBars.push(question.targetBar, question.missingSourceBar);
       if (needsChord) excludedBars.push(chordBar);
@@ -6841,7 +6855,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           prompt: repeatTarget.symbolId === "dc"
             ? "There is a da capo in this excerpt. Apply D.C. at the appropriate place in the music."
             : repeatTarget.symbolId === "ds-fine"
-              ? "Apply the Segno, Fine and D.S. al Fine markings in the appropriate places."
+              ? "Apply the Segno and Fine markings in the appropriate places."
             : repeatTarget.symbolId === "repeat-pair"
               ? "Insert the start and end repeat signs at the correct places in the music."
               : "Insert a repeat sign at the correct place in the music.",
@@ -6852,14 +6866,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
             : repeatTarget.symbolId === "dc"
               ? "D.C. placed correctly"
             : repeatTarget.symbolId === "ds-fine"
-              ? "D.S. al Fine markings placed correctly"
+              ? "Segno and Fine placed correctly"
             : repeatTarget.symbolId === "start-repeat"
               ? "Start repeat placed correctly"
               : "End repeat placed correctly",
           options: repeatTarget.symbolId === "repeat-pair"
             ? PRACTICE_REPEAT_SYMBOLS.filter((symbol) => ["start-repeat", "end-repeat"].includes(symbol.id))
             : repeatTarget.symbolId === "ds-fine"
-              ? PRACTICE_REPEAT_SYMBOLS.filter((symbol) => ["segno", "fine", "ds"].includes(symbol.id))
+              ? PRACTICE_REPEAT_SYMBOLS.filter((symbol) => ["segno", "fine"].includes(symbol.id))
             : PRACTICE_REPEAT_SYMBOLS.filter((symbol) => symbol.id === repeatTarget.symbolId),
           type: "repeat",
         }] : []),
