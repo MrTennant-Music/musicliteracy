@@ -5528,13 +5528,26 @@ function advancedHigherInversionAnswerLabel(inversion) {
     };
 
     function accidentalPracticeHarmony(key) {
-      if (!key || isMinorKey(key)) return null;
+      if (!key) return null;
+      if (isMinorKey(key)) {
+        const minorSixth = letterAtDiatonicOffset(key.tonic, 5);
+        if (keyAccidentalForLetter(key, minorSixth) !== 0) return null;
+        return {
+          mode: "minor",
+          chords: {},
+          raised: {
+            IV: { [minorSixth]: 1 },
+          },
+          minorSixth,
+        };
+      }
       const ivRoot = key.chords?.IV?.[0] ?? letterAtDiatonicOffset(key.tonic, 3);
       const viRoot = key.chords?.VI?.[0] ?? letterAtDiatonicOffset(key.tonic, 5);
       const secondaryRoot = key.chords?.VI?.[2] ?? letterAtDiatonicOffset(viRoot, 4);
       const minorIvThird = letterAtDiatonicOffset(ivRoot, 2);
       const secondaryThird = letterAtDiatonicOffset(secondaryRoot, 2);
       return {
+        mode: "major",
         chords: {
           IVm: [ivRoot, minorIvThird, letterAtDiatonicOffset(ivRoot, 4)],
           III: [secondaryRoot, secondaryThird, letterAtDiatonicOffset(secondaryRoot, 4)],
@@ -5545,6 +5558,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         },
         minorIvThird,
         secondaryThird,
+        relativeMinorTonic: viRoot,
       };
     }
 
@@ -5581,13 +5595,44 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return updated;
     }
 
+    function soundingRhythmForRest(rhythm) {
+      return {
+        semibreveRest: "semibreve",
+        minimRest: "minim",
+        dottedCrotchetRest: "dottedCrotchet",
+        crotchetRest: "crotchet",
+        dottedQuaverRest: "dottedQuaver",
+        quaverRest: "quaver",
+      }[rhythm] ?? rhythm;
+    }
+
+    function setFirstNoteOfBarToLetter(question, barIndex, letter, chordSymbol) {
+      const bar = question.bars?.[barIndex];
+      const first = bar?.notes?.[0];
+      if (!bar || !first) return null;
+      const existingIndex = noteBaseIndex(first);
+      const preferredIndex = existingIndex >= 0 ? existingIndex - LEGACY_NOTE_INDEX_OFFSET : 6;
+      const rhythm = isRestRhythm(first.rhythm) ? soundingRhythmForRest(first.rhythm) : first.rhythm;
+      const replacement = makeNote(noteByLetter(letter, preferredIndex), rhythm, bar.barIndex, 0, first.beat ?? 0, question.key, chordSymbol);
+      question.bars[barIndex] = {
+        ...bar,
+        notes: [replacement, ...(bar.notes ?? []).slice(1)],
+      };
+      return question.bars[barIndex];
+    }
+
+    function barHasSingleLetterTarget(bar, letter) {
+      return (bar.notes ?? []).filter((note) => !note.rest && note.letter === letter).length === 1;
+    }
+
     function makeAccidentalQuestionTarget(question, excludedBars = []) {
       const awkwardAccidentalSpellings = new Set(["C:flat", "B:sharp", "E:sharp", "F:flat"]);
       const excluded = new Set([...excludedBars, question.targetBar, question.bars.length - 1]);
       const harmony = prepareAccidentalPracticeHarmony(question);
       if (!harmony) return null;
-      const flatCandidates = question.bars
+      const flatCandidates = harmony.mode === "major" ? question.bars
         .flatMap((bar) => (bar.notes ?? []).flatMap((note, noteIndex) => {
+          if (!barHasSingleLetterTarget(bar, harmony.minorIvThird)) return [];
           if (excluded.has(bar.barIndex) || note.rest || note.letter !== harmony.minorIvThird) return [];
           const target = { bar, note, noteIndex, direction: "flat", value: -1, chordSymbol: "IVm" };
           if (target.note.writtenAccidental !== null && target.note.writtenAccidental !== undefined) return [];
@@ -5598,12 +5643,17 @@ function advancedHigherInversionAnswerLabel(inversion) {
             - effectiveMidiForNote(question, target.bar, { ...target.note, writtenAccidental: null })
           ) !== 1) return [];
           return [target];
-        }));
+        })) : [];
       const sharpCandidates = question.bars
         .flatMap((bar) => (bar.notes ?? []).flatMap((note, noteIndex) => {
-          if (excluded.has(bar.barIndex) || excluded.has(bar.barIndex + 1) || bar.barIndex + 1 >= question.bars.length - 1 || note.rest) return [];
-          if (note.letter !== harmony.secondaryThird) return [];
-          const target = { bar, note, noteIndex, direction: "sharp", value: 1, chordSymbol: "III", resolutionChordSymbol: "VI" };
+          if (excluded.has(bar.barIndex) || note.rest) return [];
+          if (harmony.mode === "major" && (excluded.has(bar.barIndex + 1) || bar.barIndex + 1 >= question.bars.length - 1)) return [];
+          const expectedLetter = harmony.mode === "minor" ? harmony.minorSixth : harmony.secondaryThird;
+          if (!barHasSingleLetterTarget(bar, expectedLetter)) return [];
+          if (note.letter !== expectedLetter) return [];
+          const target = harmony.mode === "minor"
+            ? { bar, note, noteIndex, direction: "sharp", value: 1, chordSymbol: "IV" }
+            : { bar, note, noteIndex, direction: "sharp", value: 1, chordSymbol: "III", resolutionChordSymbol: "VI", resolutionLetter: harmony.relativeMinorTonic };
           if (target.note.writtenAccidental !== null && target.note.writtenAccidental !== undefined) return [];
           if (keyAccidentalForLetter(question.key, note.letter) === target.value) return [];
           if (awkwardAccidentalSpellings.has(`${note.letter}:${target.direction}`)) return [];
@@ -5620,7 +5670,10 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const target = weightedRandomItem(candidates);
       if (!target) return null;
       const targetBar = setBarHarmony(question, target.bar.barIndex, target.chordSymbol);
-      if (target.resolutionChordSymbol) setBarHarmony(question, target.bar.barIndex + 1, target.resolutionChordSymbol);
+      if (target.resolutionChordSymbol) {
+        setBarHarmony(question, target.bar.barIndex + 1, target.resolutionChordSymbol);
+        setFirstNoteOfBarToLetter(question, target.bar.barIndex + 1, target.resolutionLetter, target.resolutionChordSymbol);
+      }
       targetBar.notes[target.noteIndex] = {
         ...targetBar.notes[target.noteIndex],
         writtenAccidental: target.value,
