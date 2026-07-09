@@ -11243,6 +11243,60 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return { correct: Boolean(partResult.correct) };
       }
 
+      function textAnswerWithMusicAccidentals(value) {
+        const text = String(value ?? "");
+        if (!/[A-Ga-g]b/.test(text)) return null;
+        const flatGlyph = SHARED_SYMBOLS.flat ?? "♭";
+        const parts = [];
+        let lastIndex = 0;
+        text.replace(/([A-Ga-g])b/g, (match, letter, offset) => {
+          if (offset > lastIndex) parts.push(text.slice(lastIndex, offset));
+          parts.push(letter.toUpperCase());
+          parts.push(
+            <span key={`flat-${offset}`} className="music-symbol inline-block align-baseline leading-none" style={{ transform: "translateY(-0.16em)" }} aria-hidden="true">
+              {flatGlyph}
+            </span>
+          );
+          lastIndex = offset + match.length;
+          return match;
+        });
+        if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+        return parts;
+      }
+
+      function textAnswerOverlayColour(id) {
+        const state = inputState(id);
+        if (!state) return "#1c1917";
+        return state.correct ? COLOUR.green : COLOUR.red;
+      }
+
+      function renderTextAnswerInput(part, partIndex) {
+        const value = practiceAnswers[part.id] ?? "";
+        const formattedValue = textAnswerWithMusicAccidentals(value);
+        return (
+          <span className={`relative inline-block max-w-full ${ANSWER_TEXTBOX_SIZE_CLASS}`}>
+            <input
+              value={value}
+              disabled={Boolean(feedback)}
+              onFocus={() => setActiveIndex(partIndex)}
+              onChange={(event) => setPracticeAnswers((current) => ({ ...current, [part.id]: formatTextAnswer(event.target.value) }))}
+              placeholder="Type your answer"
+              className={window.MLH.typedAnswerClass(inputState(part.id), ANSWER_TEXTBOX_SIZE_CLASS)}
+              style={formattedValue ? { color: "transparent", caretColor: "#1c1917" } : null}
+            />
+            {formattedValue && (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-base font-semibold leading-none"
+                style={{ color: textAnswerOverlayColour(part.id), whiteSpace: "pre" }}
+              >
+                {formattedValue}
+              </span>
+            )}
+          </span>
+        );
+      }
+
       function finalFeedbackNextQuestionButton(part, index) {
         return null;
       }
@@ -11990,16 +12044,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         if (part.type === "ahBassLine") {
           return null;
         }
-        return (
-          <input
-            value={practiceAnswers[part.id] ?? ""}
-            disabled={Boolean(feedback)}
-            onFocus={() => setActiveIndex(partIndex)}
-            onChange={(event) => setPracticeAnswers((current) => ({ ...current, [part.id]: formatTextAnswer(event.target.value) }))}
-            placeholder="Type your answer"
-            className={window.MLH.typedAnswerClass(inputState(part.id), ANSWER_TEXTBOX_SIZE_CLASS)}
-          />
-        );
+        return renderTextAnswerInput(part, partIndex);
       }
 
       function ChevronIcon({ expanded }) {
