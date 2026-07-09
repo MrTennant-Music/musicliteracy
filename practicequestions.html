@@ -1123,6 +1123,13 @@
       ],
     };
     const enharmonicSpellingKey = (spelling) => `${spelling?.letter}:${spelling?.accidental}`;
+    function closestEnharmonicTargetOctave(source, target, clef = "treble") {
+      const sourcePitch = pitchOfSpelledNote(source);
+      const sourceStep = noteStepForClef(source, clef);
+      return Array.from({ length: 7 }, (_, index) => index + 1)
+        .map((octave) => ({ octave, pitchDistance: Math.abs(pitchOfSpelledNote({ ...target, octave }) - sourcePitch), stepDistance: Math.abs(noteStepForClef({ ...target, octave }, clef) - sourceStep) }))
+        .sort((first, second) => first.pitchDistance - second.pitchDistance || first.stepDistance - second.stepDistance)[0]?.octave ?? target.octave;
+    }
     function enharmonicPairOptionsForKey(key) {
       return ENHARMONIC_KEY_PAIR_OPTIONS[key?.id] ?? [];
     }
@@ -5865,8 +5872,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
         writtenAccidental: candidate.source.accidental - keyAccidentalForLetter(question.key, candidate.source.letter),
         displayAccidental: candidate.source.accidental,
       };
+      const targetOctave = closestEnharmonicTargetOctave(sourceNote, candidate.target, clef);
       const answerNote = {
-        ...makeEnharmonicNote(candidate.target, candidate.target.octave, clef, chosen.note),
+        ...makeEnharmonicNote(candidate.target, targetOctave, clef, chosen.note),
         id: `enharmonic-answer-${chosen.bar.barIndex}-${chosen.noteIndex}`,
         barIndex: chosen.bar.barIndex,
         noteIndex: chosen.noteIndex,
