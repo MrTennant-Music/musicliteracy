@@ -877,7 +877,7 @@
     ];
     const RARE_ENHARMONIC_SOURCE_SPELLINGS = new Set(["F:-1", "B:1", "C:-1", "E:1"]);
     const RARE_INTERVAL_SPELLINGS = new Set(["E:1", "F:-1", "C:-1", "B:1"]);
-    const RARE_INTERVAL_CHANCE = 0.2;
+    const RARE_INTERVAL_CHANCE = 0.1;
     const ADVANCED_HIGHER_CHORD_TYPES = [
       { id: "dim7", label: "Diminished 7th", aliases: ["diminished 7th", "diminished seventh", "dim 7", "dim 7th", "dim seventh"] },
       { id: "dom7", label: "Dominant 7th", aliases: ["dominant 7th", "dominant seventh", "dom 7", "dom 7th", "dom seventh"] },
@@ -4257,14 +4257,33 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return tones.every(Boolean) ? { root: tones[0][0], type: "dim7", tones, chordSymbol: "VII" } : null;
       }
       if (chordTypeId === "aug") {
-        const tones = [
-          scaleDegreeToneSpelling(question, 1),
-          scaleDegreeToneSpelling(question, 3),
-          scaleDegreeToneSpelling(question, 5, { alteration: 1 }),
-        ];
-        return tones.every(Boolean) ? { root: question.key.tonic, type: "aug", tones, chordSymbol: "I" } : null;
+        return advancedHigherAugmentedTriadSpelling(question, "I");
       }
       return null;
+    }
+
+    function advancedHigherAugmentedTriadSpelling(question, chordSymbol) {
+      if (isMinorKey(question.key) || !["I", "IV", "V"].includes(chordSymbol)) return null;
+      const chordLetters = question.key.chords?.[chordSymbol] ?? [];
+      if (chordLetters.length < 3) return null;
+      let previousIndex = null;
+      const tones = chordLetters.slice(0, 3).map((letter, index) => {
+        let octave = 4;
+        while (previousIndex !== null && noteAbsoluteIndex(letter, octave) <= previousIndex) octave += 1;
+        previousIndex = noteAbsoluteIndex(letter, octave);
+        const chordAccidental = chordAccidentalForLetter(question.key, chordSymbol, letter);
+        const accidental = (chordAccidental ?? keyAccidentalForLetter(question.key, letter)) + (index === 2 ? 1 : 0);
+        return Number.isFinite(accidental) && accidental >= -1 && accidental <= 1
+          ? [letter, octave, accidental]
+          : null;
+      });
+      return tones.every(Boolean) ? { root: chordLetters[0], type: "aug", tones, chordSymbol } : null;
+    }
+
+    function advancedHigherAugmentedTriadSpellings(question) {
+      return ["I", "IV", "V"]
+        .map((chordSymbol) => advancedHigherAugmentedTriadSpelling(question, chordSymbol))
+        .filter(Boolean);
     }
 
     function absoluteAccidentalForChordTone(key, chordSymbol, letter) {
@@ -4272,9 +4291,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return chordAccidental ?? keyAccidentalForLetter(key, letter);
     }
 
-    function augmentedTriadSpellingForBar(question, barIndex) {
+    function augmentedTriadSpellingForBar(question, barIndex, spelling = null) {
       if (!question.bars?.[barIndex - 1] || !question.bars?.[barIndex + 1]) return null;
-      return advancedHigherScaleDegreeSpelling(question, "aug");
+      return spelling ?? randomItem(advancedHigherAugmentedTriadSpellings(question));
     }
 
     function advancedHigherChordTypeFixedBar(question, chordTypeId) {
@@ -4305,6 +4324,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     function advancedHigherChordTypeSpellingsForQuestion(question, chordTypeId) {
+      if (chordTypeId === "aug") return advancedHigherAugmentedTriadSpellings(question);
       const spelling = advancedHigherScaleDegreeSpelling(question, chordTypeId);
       return spelling ? [spelling] : [];
     }
@@ -4389,11 +4409,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
       if (chordType.id === "aug") {
         const resolutionOptions = ["IV", "VI"].filter((symbol) => question.key.chords?.[symbol]?.length);
-        question.bars[barIndex - 1] = { ...question.bars[barIndex - 1], chordSymbol: "I" };
-        question.bars[barIndex] = { ...question.bars[barIndex], chordSymbol: "I" };
+        const chordSymbol = spelling?.chordSymbol ?? "I";
+        question.bars[barIndex - 1] = { ...question.bars[barIndex - 1], chordSymbol };
+        question.bars[barIndex] = { ...question.bars[barIndex], chordSymbol };
         question.bars[barIndex + 1] = { ...question.bars[barIndex + 1], chordSymbol: randomItem(resolutionOptions.length ? resolutionOptions : ["IV"]) };
         setFirstSoundingNoteToScaleDegree(question, barIndex - 1, 5);
-        setBarToChordTypeStack(question, barIndex, spelling, chordType, "I");
+        setBarToChordTypeStack(question, barIndex, spelling, chordType, chordSymbol);
         setFirstSoundingNoteToScaleDegree(question, barIndex + 1, 6);
         return [barIndex - 1, barIndex, barIndex + 1].filter((index) => question.bars?.[index]);
       }
@@ -4424,7 +4445,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const barIndex = randomItem(selected.candidateBars);
       if (!Number.isInteger(barIndex)) return null;
       const spelling = chordType.id === "aug"
-        ? augmentedTriadSpellingForBar(question, barIndex) ?? selected.spelling
+        ? augmentedTriadSpellingForBar(question, barIndex, selected.spelling) ?? selected.spelling
         : selected.spelling;
       const noteIndex = 0;
       const reservedBars = applyAdvancedHigherChordTypeContext(question, barIndex, chordType, spelling);
@@ -5811,7 +5832,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const rareBestCandidates = bestCandidates.filter(({ candidate }) => isRareEnharmonicSourceSpelling(candidate));
       const commonBestCandidates = bestCandidates.filter(({ candidate }) => !isRareEnharmonicSourceSpelling(candidate));
       const preferredCandidates = rareBestCandidates.length && commonBestCandidates.length
-        ? Math.random() < 0.3 ? rareBestCandidates : commonBestCandidates
+        ? Math.random() < 0.1 ? rareBestCandidates : commonBestCandidates
         : rareBestCandidates.length ? rareBestCandidates : commonBestCandidates;
       const chosen = randomItem(preferredCandidates);
       const candidate = chosen.candidate;
@@ -6753,7 +6774,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ...(needsEnharmonics && enharmonicTarget ? [{
           id: "enharmonics",
           sourceId: "enharmonics",
-          prompt: `Apply the enharmonic equivalent of the boxed note in bar ${enharmonicTarget.barIndex + 1} using the stave provided.`,
+          prompt: `Identify the enharmonic equivalent of the boxed note in bar ${enharmonicTarget.barIndex + 1} using the stave provided.`,
           answer: "Enharmonic equivalent written correctly",
           type: "enharmonic",
         }] : []),
@@ -11950,7 +11971,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           return <>Transpose the notes in <strong>bar {barNumber}</strong> one octave lower into the bass clef. Use the stave given.</>;
         }
         if (sourceId === "enharmonics" && question.enharmonicTarget) {
-          return <>Apply the enharmonic equivalent of the boxed note in <strong>bar {question.enharmonicTarget.barIndex + 1}</strong> using the stave provided.</>;
+          return <>Identify the enharmonic equivalent of the boxed note in <strong>bar {question.enharmonicTarget.barIndex + 1}</strong> using the stave provided.</>;
         }
         if (sourceId === "rhythmIdentification" && part.type === "text") {
           if (question.rhythmIdentificationTarget?.variant === "noteValueTotal") {
