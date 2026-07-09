@@ -5592,8 +5592,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       if (!harmony) return null;
       const flatCandidates = question.bars
         .flatMap((bar) => (bar.notes ?? []).flatMap((note, noteIndex) => {
-          const barContainsMinorIvThird = (bar.notes ?? []).some((barNote) => !barNote.rest && barNote.letter === harmony.minorIvThird);
-          if (excluded.has(bar.barIndex) || barContainsMinorIvThird || note.rest || note.letter === harmony.minorIvThird) return [];
+          if (excluded.has(bar.barIndex) || note.rest || note.letter !== harmony.minorIvThird) return [];
           const target = { bar, note, noteIndex, direction: "flat", value: -1, chordSymbol: "IVm" };
           if (target.note.writtenAccidental !== null && target.note.writtenAccidental !== undefined) return [];
           if (keyAccidentalForLetter(question.key, note.letter) === target.value) return [];
@@ -5632,6 +5631,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       };
       return {
         barIndex: target.bar.barIndex,
+        resolutionBarIndex: target.resolutionChordSymbol ? target.bar.barIndex + 1 : null,
         noteIndex: target.noteIndex,
         symbolId: target.direction,
         value: target.value,
@@ -6568,6 +6568,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const accidentalTarget = needsAccidentals ? makeAccidentalQuestionTarget(question, [...usedQuestionBars]) : null;
       if (needsAccidentals && !accidentalTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsAccidentals && accidentalTarget) reserveQuestionBar(accidentalTarget.barIndex);
+      if (needsAccidentals && Number.isInteger(accidentalTarget?.resolutionBarIndex)) reserveQuestionBar(accidentalTarget.resolutionBarIndex);
       const articulationTarget = needsArticulation ? makeArticulationTarget(question, [...usedQuestionBars]) : null;
       if (needsArticulation && !articulationTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsArticulation && articulationTarget) reserveQuestionBar(articulationTarget.barIndex);
@@ -6604,6 +6605,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ...(needsTriplets ? tripletAnswerBars : []),
         ...(needsTriplets ? givenTriplets.map((placement) => placement.barIndex) : []),
         ...(needsAccidentals && accidentalTarget ? [accidentalTarget.barIndex] : []),
+        ...(needsAccidentals && Number.isInteger(accidentalTarget?.resolutionBarIndex) ? [accidentalTarget.resolutionBarIndex] : []),
         ...(needsEnharmonics && enharmonicTarget ? [enharmonicTarget.barIndex] : []),
         ...(needsArticulation && articulationTarget ? [articulationTarget.barIndex] : []),
         ...(needsTransposition && Number.isInteger(transpositionTarget?.barIndex) ? [transpositionTarget.barIndex] : []),
@@ -6644,6 +6646,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ...(needsCadence ? cadenceBarIndexes : []),
         ...(needsInterval && level !== "N3" && level !== "N4" && Number.isInteger(intervalQuestionBar) ? [intervalQuestionBar] : []),
         ...(needsRests && restTarget ? [restTarget.barIndex] : []),
+        ...(needsAccidentals && accidentalTarget ? [accidentalTarget.barIndex] : []),
+        ...(needsAccidentals && Number.isInteger(accidentalTarget?.resolutionBarIndex) ? [accidentalTarget.resolutionBarIndex] : []),
       ];
       if (level !== "N3" && level !== "N4") refitQuestionChordsToMelody(question, chordRefitProtectedBars);
       if (needsMissing && level === "H" && timeSignatureLevel !== "AH" && !targetIsPreviousBarWithOneStepChange(question) && canRetryQualityPracticeQuestion) {
