@@ -9,6 +9,10 @@ function includes(text, message) {
   assert.equal(source.includes(text), true, message);
 }
 
+function excludes(text, message) {
+  assert.equal(source.includes(text), false, message);
+}
+
 includes("./practice-melody-generator.js?v=20260710-ah-rules", "The AH generator must load before the page app");
 includes("const ADVANCED_HIGHER_DEVELOPMENT_BARS = [8, 9, 10, 11];", "Development questions must use bars 9-12");
 includes("const ADVANCED_HIGHER_VARIATION_BARS = [4, 5, 6, 7];", "Variation questions must use bars 5-8");
@@ -43,5 +47,7 @@ includes("function advancedHigherPlaybackSlotsForBar(question, bar)", "AH playba
 includes("advancedHigherChordPlaybackMidiMap(question, bar, advancedHigherPlaybackSlotForBeat(advancedHigherChordSlots, event.time))", "AH accompaniment patterns must follow generated chord inversions at each pulse");
 includes("function melodyCeilingMidiForBeat(question, bar, beat = 0)", "Playback must calculate a melody-aware ceiling for accompaniment notes");
 includes("lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, beatOffset))", "Accompaniment playback must be lowered below the melody at each pulse");
+excludes("{ rests: [\"quaverRest\"], before: [\"quaver\", \"quaver\", \"quaver\"], after: [\"crotchet\"], ties: [1] }", "Rest questions must not use the awkward tied-quaver 3/4 template");
+includes("{ rests: [\"quaverRest\"], before: [\"crotchet\", \"quaver\"], after: [\"crotchet\"] }", "3/4 rest questions must include a clean untied quaver-rest template");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 34 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 36 }, null, 2));
