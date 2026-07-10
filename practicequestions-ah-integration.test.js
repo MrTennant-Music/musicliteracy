@@ -39,5 +39,7 @@ includes("higherIntervalTypeOrder().filter((type) => type !== \"second\")", "AH 
 includes("return selected.has(\"ahChord\") && selected.has(\"rhythmicDictation\");", "Chord identify and rhythmic dictation must not both occupy bar 9");
 includes("questionSelectionLevel === \"AH\" && needsKey && needsTime && !timeChangeTarget", "Key and starting time-signature questions must not both occupy bar 1");
 includes(".filter((signature) => signature.id !== \"5/4\")", "5/4 must not be selected as the starting AH time signature");
+includes("function advancedHigherPlaybackSlotsForBar(question, bar)", "AH playback must read the generated chord slots for bars 9 and 10");
+includes("advancedHigherChordPlaybackMidiMap(question, bar, advancedHigherPlaybackSlotForBeat(advancedHigherChordSlots, event.time))", "AH accompaniment patterns must follow generated chord inversions at each pulse");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 30 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 32 }, null, 2));

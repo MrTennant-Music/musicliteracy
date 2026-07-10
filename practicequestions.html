@@ -13937,6 +13937,58 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return chordLetters.map((letter, index) => pitchForChordLetter(question, bar, letter, 3 + index));
       }
 
+      function advancedHigherPlaybackSlotsForBar(question, bar) {
+        if (question.questionType !== "practicePaper" || !question.advancedHigherChordTarget) return [];
+        if (bar.barIndex === question.advancedHigherChordTarget.identifyBar) {
+          return question.advancedHigherChordTarget.identifySlots ?? [];
+        }
+        if (bar.barIndex === question.advancedHigherChordTarget.bassLineBar) {
+          return question.advancedHigherChordTarget.bassLineSlots ?? [];
+        }
+        return [];
+      }
+
+      function advancedHigherPlaybackSlotForBeat(slots, beat) {
+        if (!slots.length) return null;
+        return [...slots]
+          .sort((first, second) => (first.beat ?? 0) - (second.beat ?? 0))
+          .find((slot, index, sortedSlots) => {
+            const start = slot.beat ?? 0;
+            const end = sortedSlots[index + 1]?.beat ?? (start + (slot.beats ?? 1));
+            return beat >= start - 0.001 && beat < end - 0.001;
+          }) ?? slots.at(-1);
+      }
+
+      function advancedHigherChordPlaybackMidiMap(question, bar, slot) {
+        if (!slot) return null;
+        const trebleMidis = (slot.trebleNote?.stack ?? []).map((tone) => effectiveMidiForNote(question, bar, tone));
+        const bassMidis = (slot.bassNote?.stack ?? []).map((tone) => effectiveMidiForNote(question, bar, tone));
+        const bassMidi = bassMidis[0] ?? trebleMidis[0];
+        if (!Number.isFinite(bassMidi)) return null;
+        const upperMidis = trebleMidis.length ? trebleMidis : bassMidis;
+        const chordMidis = [...upperMidis, ...bassMidis].filter(Number.isFinite);
+        const upperTone = (index) => upperMidis[index] ?? upperMidis.at(-1) ?? bassMidi;
+        return {
+          lowRoot: bassMidi - 12,
+          lowThird: upperTone(0) - 12,
+          lowFifth: upperTone(1) - 12,
+          root: bassMidi,
+          third: upperTone(0),
+          fifth: upperTone(1),
+          seventh: upperTone(2),
+          octaveRoot: bassMidi + 12,
+          chord: chordMidis,
+          shell: [bassMidi, upperTone(0), upperTone(2) ?? upperTone(1)],
+          power: [bassMidi, upperTone(1)],
+        };
+      }
+
+      function accompanimentTokenMidi(token, midiMap) {
+        if (!midiMap) return [];
+        if (Array.isArray(token)) return token.flatMap((item) => accompanimentTokenMidi(item, midiMap));
+        return midiMap[token] ?? midiMap.root ?? [];
+      }
+
       function playTempoAccompanimentPattern(ctx, gainNode, question, bar, barStart, offset, startTime, dynamicGain = 1, dynamicVelocity = 96) {
         const chordMidi = accompanimentChordMidisForBar(question, bar);
         if (!chordMidi.length) return;
@@ -13953,22 +14005,24 @@ function advancedHigherInversionAnswerLabel(inversion) {
         const thirdMidi = chordMidi[1] ?? rootMidi;
         const fifthMidi = chordMidi[2] ?? rootMidi;
         const seventhMidi = chordMidi[3] ?? null;
-        const tokenMidi = (token) => {
-          const map = {
-            lowRoot: rootMidi - 12,
-            lowThird: thirdMidi - 12,
-            lowFifth: fifthMidi - 12,
-            root: rootMidi,
-            third: thirdMidi,
-            fifth: fifthMidi,
-            seventh: seventhMidi ?? fifthMidi,
-            octaveRoot: rootMidi + 12,
-          };
-          if (token === "chord") return chordMidi;
-          if (token === "shell") return [rootMidi, thirdMidi, seventhMidi ?? fifthMidi];
-          if (token === "power") return [rootMidi, fifthMidi];
-          return map[token] ?? rootMidi;
+        const defaultMidiMap = {
+          lowRoot: rootMidi - 12,
+          lowThird: thirdMidi - 12,
+          lowFifth: fifthMidi - 12,
+          root: rootMidi,
+          third: thirdMidi,
+          fifth: fifthMidi,
+          seventh: seventhMidi ?? fifthMidi,
+          octaveRoot: rootMidi + 12,
+          chord: chordMidi,
+          shell: [rootMidi, thirdMidi, seventhMidi ?? fifthMidi],
+          power: [rootMidi, fifthMidi],
         };
+        const advancedHigherChordSlots = advancedHigherPlaybackSlotsForBar(question, bar);
+        const midiMapForBeat = (beat) => (
+          advancedHigherChordPlaybackMidiMap(question, bar, advancedHigherPlaybackSlotForBeat(advancedHigherChordSlots, beat))
+          ?? defaultMidiMap
+        );
         const scheduleTone = (midi, beatOffset, beatDuration, volume, hand, velocity = accompanimentVelocity) => {
           if (beatOffset >= meterInfo.beatsPerBar) return;
           const durationBeats = Math.min(beatDuration, meterInfo.beatsPerBar - beatOffset);
@@ -13988,7 +14042,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         safePattern.forEach((event) => {
           const duration = accompanimentDurationBeats(event.duration, meterInfo);
           const eventVelocity = Math.round(((event.velocity ?? dynamicVelocity) + (accompanimentIsAccent ? ARTICULATION_ACCENT_VELOCITY_BOOST : 0)) * (meterInfo.groupStartBeats.some((beat) => Math.abs(event.time - beat) < 0.001) ? 1.04 : 1));
-          lowerAccompanimentMidiValues(event.notes.flatMap(tokenMidi)).forEach((midi) => scheduleTone(midi, event.time, duration, event.volume ?? 0.016, event.hand, eventVelocity));
+          lowerAccompanimentMidiValues(event.notes.flatMap((token) => accompanimentTokenMidi(token, midiMapForBeat(event.time)))).forEach((midi) => scheduleTone(midi, event.time, duration, event.volume ?? 0.016, event.hand, eventVelocity));
         });
       }
 
@@ -14033,13 +14087,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           return;
         }
 
-        const advancedHigherChordSlots = question.questionType === "practicePaper" && question.advancedHigherChordTarget
-          ? bar.barIndex === question.advancedHigherChordTarget.identifyBar
-            ? question.advancedHigherChordTarget.identifySlots ?? []
-            : bar.barIndex === question.advancedHigherChordTarget.bassLineBar
-              ? question.advancedHigherChordTarget.bassLineSlots ?? []
-              : []
-          : [];
+        const advancedHigherChordSlots = advancedHigherPlaybackSlotsForBar(question, bar);
         if (advancedHigherChordSlots.length) {
           advancedHigherChordSlots.forEach((slot) => {
             const slotStart = barStart + (slot.beat ?? 0) * beatSeconds;
@@ -14170,13 +14218,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             addMidi(lowerAccompanimentMidi(midi), accompanimentVelocity);
           });
           if (question.questionType === "practicePaper" && question.accompanimentPattern) {
-            const advancedHigherChordSlots = question.advancedHigherChordTarget
-              ? bar.barIndex === question.advancedHigherChordTarget.identifyBar
-                ? question.advancedHigherChordTarget.identifySlots ?? []
-                : bar.barIndex === question.advancedHigherChordTarget.bassLineBar
-                  ? question.advancedHigherChordTarget.bassLineSlots ?? []
-                  : []
-              : [];
+            const advancedHigherChordSlots = advancedHigherPlaybackSlotsForBar(question, bar);
             advancedHigherChordSlots.forEach((slot) => {
               (slot.trebleNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidi(effectiveMidiForNote(question, bar, tone)), accompanimentVelocity));
               (slot.bassNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidi(effectiveMidiForNote(question, bar, tone)), accompanimentVelocity));
@@ -14190,25 +14232,23 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const thirdMidi = chordMidi[1] ?? rootMidi;
             const fifthMidi = chordMidi[2] ?? rootMidi;
             const seventhMidi = chordMidi[3] ?? null;
-            const tokenMidi = (token) => {
-              const map = {
-                lowRoot: rootMidi - 12,
-                lowThird: thirdMidi - 12,
-                lowFifth: fifthMidi - 12,
-                root: rootMidi,
-                third: thirdMidi,
-                fifth: fifthMidi,
-                seventh: seventhMidi ?? fifthMidi,
-                octaveRoot: rootMidi + 12,
-              };
-              if (token === "chord") return chordMidi;
-              if (token === "shell") return [rootMidi, thirdMidi, seventhMidi ?? fifthMidi];
-              if (token === "power") return [rootMidi, fifthMidi];
-              return map[token] ?? rootMidi;
+            const defaultMidiMap = {
+              lowRoot: rootMidi - 12,
+              lowThird: thirdMidi - 12,
+              lowFifth: fifthMidi - 12,
+              root: rootMidi,
+              third: thirdMidi,
+              fifth: fifthMidi,
+              seventh: seventhMidi ?? fifthMidi,
+              octaveRoot: rootMidi + 12,
+              chord: chordMidi,
+              shell: [rootMidi, thirdMidi, seventhMidi ?? fifthMidi],
+              power: [rootMidi, fifthMidi],
             };
             safePattern.forEach((event) => {
               const eventVelocity = Math.round((event.velocity ?? accompanimentVelocityForBar(question, bar.barIndex)) + (isAccentArticulationBar(question, bar) ? ARTICULATION_ACCENT_VELOCITY_BOOST : 0));
-              lowerAccompanimentMidiValues(event.notes.flatMap(tokenMidi)).forEach((midi) => addMidi(midi, eventVelocity));
+              const midiMap = advancedHigherChordPlaybackMidiMap(question, bar, advancedHigherPlaybackSlotForBeat(advancedHigherChordSlots, event.time)) ?? defaultMidiMap;
+              lowerAccompanimentMidiValues(event.notes.flatMap((token) => accompanimentTokenMidi(token, midiMap))).forEach((midi) => addMidi(midi, eventVelocity));
             });
           }
         });
