@@ -27,8 +27,9 @@ includes("barlineQuestionPromptText(barlineTargets[0], question.bars.length)", "
 includes("question.transpositionTarget?.type === \"meaning\" ? 0 : 80", "A written transposition stave must add 80 pixels below its system");
 includes("const scaleDegreeBoxHeight = MARKING_BOX_HEIGHT + 10;", "Scale-degree boxes must extend 10 pixels farther downward");
 includes("reserveExtraSpacingAfterSystem(ahChordSystemIndex, 300);", "Chord and bass-line boxes must push line 4 down by 300 pixels");
+includes("sharedBoxY - 10", "Total-value boxes must extend 10 pixels upward from the top");
 includes("return selected.has(\"ahChord\") && selected.has(\"rhythmicDictation\");", "Chord identify and rhythmic dictation must not both occupy bar 9");
 includes("questionSelectionLevel === \"AH\" && needsKey && needsTime && !timeChangeTarget", "Key and starting time-signature questions must not both occupy bar 1");
 includes(".filter((signature) => signature.id !== \"5/4\")", "5/4 must not be selected as the starting AH time signature");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 21 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 22 }, null, 2));
