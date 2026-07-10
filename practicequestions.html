@@ -861,6 +861,8 @@
       "transposition",
     ]);
     const PRACTICE_QUESTION_COUNT = 6;
+    const AH_PRACTICE_QUESTION_COUNT = 8;
+    const practiceQuestionCountForLevel = (level) => level === "AH" ? AH_PRACTICE_QUESTION_COUNT : PRACTICE_QUESTION_COUNT;
     let lastPracticeCadenceId = null;
     let practiceCadenceRepeatCount = 0;
     const DYNAMIC_AUDIO_GAIN = { pp: 0.58, p: 0.62, mp: 0.72, mf: 1.05, f: 1.45, ff: 1.7 };
@@ -6342,10 +6344,87 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return candidates.length ? weightedRandomItem(candidates).id : null;
     }
 
+    function selectedAdvancedHigherPracticeQuestionTypeIds(enabledQuestionTypes) {
+      const selected = [];
+      const sourceTypeEnabled = (id) => id === "ahChordTypes" ? enabledQuestionTypes.ahChord !== false : enabledQuestionTypes[id] !== false;
+      const addIfEnabled = (id) => {
+        if (!sourceTypeEnabled(id) || selected.includes(id)) return false;
+        selected.push(id);
+        return true;
+      };
+      const addWeighted = (options) => {
+        const candidates = options.filter((option) => sourceTypeEnabled(option.id) && !selected.includes(option.id));
+        if (!candidates.length) return null;
+        const id = weightedRandomItem(candidates).id;
+        selected.push(id);
+        return id;
+      };
+
+      if (enabledQuestionTypes.ahChord !== false) {
+        selected.push(weightedRandomItem([
+          { id: "ahChord", weight: 8 },
+          { id: "ahChordTypes", weight: 2 },
+        ]).id);
+      }
+      addWeighted([
+        { id: "ahBassLine", weight: 75 },
+        { id: "key", weight: 25 },
+      ]);
+      addIfEnabled("enharmonics");
+      addIfEnabled("transposition");
+      addWeighted([
+        { id: "time", weight: 1 },
+        { id: "barlines", weight: 1 },
+        { id: "rhythmIdentification", weight: 1 },
+        { id: "rests", weight: 1 },
+      ]);
+      addWeighted([
+        { id: "interval", weight: 70 },
+        { id: "scaleDegrees", weight: 30 },
+      ]);
+
+      const audioGroups = [
+        {
+          key: "dictation",
+          weight: 4,
+          choose: () => weightedRandomItem([
+            { id: "missing", weight: 80 },
+            { id: "rhythmicDictation", weight: 20 },
+          ]).id,
+        },
+        { key: "repeatSigns", weight: 2, choose: () => "repeatSigns" },
+        { key: "cadence", weight: 2, choose: () => "cadence" },
+        { key: "accidentals", weight: 2, choose: () => "accidentals" },
+        { key: "articulation", weight: 0.05, choose: () => "articulation" },
+      ];
+      const usedAudioGroups = new Set();
+      while (selected.length < AH_PRACTICE_QUESTION_COUNT) {
+        const candidates = audioGroups.filter((group) => !usedAudioGroups.has(group.key));
+        if (!candidates.length) break;
+        const group = weightedRandomItem(candidates);
+        usedAudioGroups.add(group.key);
+        const id = group.choose();
+        if (sourceTypeEnabled(id) && !selected.includes(id)) selected.push(id);
+      }
+
+      const fallbackOptions = [
+        "ahChord", "ahChordTypes", "ahBassLine", "key", "enharmonics", "transposition",
+        "time", "barlines", "rhythmIdentification", "rests", "interval", "scaleDegrees",
+        "missing", "rhythmicDictation", "repeatSigns", "cadence", "accidentals", "articulation",
+      ].map((id) => ({ id, weight: id === "articulation" ? 0.05 : 1 }));
+      while (selected.length < AH_PRACTICE_QUESTION_COUNT) {
+        const next = addWeighted(fallbackOptions);
+        if (!next) break;
+      }
+      return selected.slice(0, AH_PRACTICE_QUESTION_COUNT);
+    }
+
     function selectedHigherPracticeQuestionTypeIds(enabledQuestionTypes, level = "H") {
+      if (level === "AH") return selectedAdvancedHigherPracticeQuestionTypeIds(enabledQuestionTypes);
+      const questionCount = practiceQuestionCountForLevel(level);
       const exactCustomOptions = customPracticeQuestionSelectionOptions(enabledQuestionTypes, level);
       const enabledIds = practiceQuestionTypesForLevel(level).filter((type) => enabledQuestionTypes[type.id]).map((type) => type.id);
-      if (enabledIds.length === PRACTICE_QUESTION_COUNT && exactCustomOptions.length) return randomItem(exactCustomOptions);
+      if (enabledIds.length === questionCount && exactCustomOptions.length) return randomItem(exactCustomOptions);
       const selected = [...HIGHER_STANDARD_FIXED_QUESTION_TYPES];
       const transpositionTypeId = selectedTranspositionQuestionTypeId(enabledQuestionTypes, level);
       if (transpositionTypeId) selected.push(transpositionTypeId);
@@ -6361,12 +6440,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const nonAudio = higherWeightedQuestionCandidate(HIGHER_RANDOM_NON_AUDIO_QUESTION_OPTIONS, selected, enabledQuestionTypes, true, level);
       if (nonAudio) selected.push(nonAudio);
 
-      if (selected.length >= PRACTICE_QUESTION_COUNT) return selected.slice(0, PRACTICE_QUESTION_COUNT);
+      if (selected.length >= questionCount) return selected.slice(0, questionCount);
 
       const fallbackOptions = practiceQuestionTypesForLevel(level)
         .map((type) => ({ id: type.id, weight: 1 }))
         .filter((option) => enabledQuestionTypes[option.id] !== false || HIGHER_STANDARD_FIXED_QUESTION_TYPES.includes(option.id));
-      while (selected.length < PRACTICE_QUESTION_COUNT) {
+      while (selected.length < questionCount) {
         const next = higherWeightedQuestionCandidate(fallbackOptions, selected, enabledQuestionTypes, true, level);
         if (!next) break;
         selected.push(next);
@@ -6375,16 +6454,17 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     function practiceQuestionSelectionOptions(enabledQuestionTypes, level = "N5") {
+      const questionCount = practiceQuestionCountForLevel(level);
       const enabledIds = practiceQuestionTypesForLevel(level)
         .filter((type) => enabledQuestionTypes[type.id])
         .map((type) => type.id);
       const audioIds = enabledIds.filter((id) => AUDIO_PRACTICE_QUESTION_TYPE_IDS.has(id));
       const nonAudioIds = enabledIds.filter((id) => !AUDIO_PRACTICE_QUESTION_TYPE_IDS.has(id));
       const minimumAudioQuestions = level === "N3" ? 2 : 3;
-      const minimumNonAudioQuestions = PRACTICE_QUESTION_COUNT - minimumAudioQuestions;
+      const minimumNonAudioQuestions = questionCount - minimumAudioQuestions;
       if (audioIds.length < minimumAudioQuestions || nonAudioIds.length < minimumNonAudioQuestions) return [];
       if (level === "N3") {
-        return combinations(enabledIds, PRACTICE_QUESTION_COUNT)
+        return combinations(enabledIds, questionCount)
           .filter((selection) => selection.filter((id) => AUDIO_PRACTICE_QUESTION_TYPE_IDS.has(id)).length >= minimumAudioQuestions)
           .filter((selection) => !hasQuestionTypeConflict(selection, level));
       }
@@ -6396,21 +6476,23 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     function customPracticeQuestionSelectionOptions(enabledQuestionTypes, level = "N5") {
+      const questionCount = practiceQuestionCountForLevel(level);
       const enabledIds = practiceQuestionTypesForLevel(level)
         .filter((type) => enabledQuestionTypes[type.id])
         .map((type) => type.id);
-      if (enabledIds.length < PRACTICE_QUESTION_COUNT) return [];
-      const options = combinations(enabledIds, PRACTICE_QUESTION_COUNT);
+      if (enabledIds.length < questionCount) return [];
+      const options = combinations(enabledIds, questionCount);
       const conflictFreeOptions = options.filter((selection) => !hasQuestionTypeConflict(selection, level));
       return conflictFreeOptions.length ? conflictFreeOptions : options;
     }
 
     function hasConflictFreePracticeQuestionSelection(enabledQuestionTypes, level = "N5") {
+      const questionCount = practiceQuestionCountForLevel(level);
       const enabledIds = practiceQuestionTypesForLevel(level)
         .filter((type) => enabledQuestionTypes[type.id])
         .map((type) => type.id);
-      if (enabledIds.length < PRACTICE_QUESTION_COUNT) return false;
-      return combinations(enabledIds, PRACTICE_QUESTION_COUNT).some((selection) => !hasQuestionTypeConflict(selection, level));
+      if (enabledIds.length < questionCount) return false;
+      return combinations(enabledIds, questionCount).some((selection) => !hasQuestionTypeConflict(selection, level));
     }
 
     function canBuildPracticeQuestionSelection(enabledQuestionTypes, level = "N5") {
@@ -6424,7 +6506,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const options = customPracticeQuestionSelectionOptions(enabledQuestionTypes, level);
       if (options.length) return randomItem(options);
       return practiceQuestionSelectionOptions(defaultPracticeQuestionTypesForLevel(level), level)[0]
-        ?? practiceQuestionTypesForLevel(level).slice(0, PRACTICE_QUESTION_COUNT).map((type) => type.id);
+        ?? practiceQuestionTypesForLevel(level).slice(0, practiceQuestionCountForLevel(level)).map((type) => type.id);
     }
 
     function rebuildPracticeBarsAfterTimeChange(question, barIndex, signature) {
@@ -6513,18 +6595,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const canRetryQualityPracticeQuestion = canRetryQualityRules(level, attempt, timeSignatureLevel);
       const retryPracticeQuestion = () => makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes, timeSignatureLevel);
       const questionSelectionLevel = timeSignatureLevel === "AH" ? "AH" : level;
+      const targetPracticeQuestionCount = practiceQuestionCountForLevel(questionSelectionLevel);
       const selectedSourceIds = new Set(selectedPracticeQuestionTypeIds(enabledQuestionTypes, questionSelectionLevel));
       const selectedTranspositionTypeIds = TRANSPOSITION_QUESTION_TYPE_IDS.filter((id) => selectedSourceIds.has(id));
       TRANSPOSITION_QUESTION_TYPE_IDS.forEach((id) => selectedSourceIds.delete(id));
       if (selectedTranspositionTypeIds.length || selectedSourceIds.has("transposition")) selectedSourceIds.add("transposition");
-      selectedSourceIds.delete("ahChordTypes");
-      const selectedAdvancedHigherChordIds = [];
-      if (questionSelectionLevel === "AH") {
-        selectedSourceIds.delete("ahChord");
-        if (enabledQuestionTypes.ahChord !== false) selectedAdvancedHigherChordIds.push(randomItem(["ahChord", "ahChordTypes"]));
-        if (enabledQuestionTypes.ahBassLine !== false) selectedAdvancedHigherChordIds.push("ahBassLine");
-      }
-      selectedAdvancedHigherChordIds.forEach((id) => selectedSourceIds.add(id));
+      const selectedAdvancedHigherChordIds = questionSelectionLevel === "AH"
+        ? ["ahChord", "ahChordTypes", "ahBassLine"].filter((id) => selectedSourceIds.has(id))
+        : [];
       const needsAdvancedHigherChordTask = selectedSourceIds.has("ahChord") || selectedSourceIds.has("ahBassLine");
       const needsAdvancedHigherChordTypes = selectedSourceIds.has("ahChordTypes");
       if (hasQuestionTypeConflict([...selectedSourceIds], questionSelectionLevel) && hasConflictFreePracticeQuestionSelection(enabledQuestionTypes, questionSelectionLevel) && canRetryPracticeQuestion) {
@@ -6688,10 +6766,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       ].map(([segnoBarIndex, fineBarIndex]) => makeDsFineTarget(segnoBarIndex, fineBarIndex));
       const higherRepeatTargetOptions = level === "H"
         ? timeSignatureLevel === "AH"
-          ? [
-            { symbolId: "dc", barIndex: randomItem(dcLineEndBarIndexes), anchor: "above" },
-            ...dsFineTargetOptions,
-          ]
+          ? dsFineTargetOptions
           : [{ symbolId: "dc", barIndex: randomItem(dcLineEndBarIndexes), anchor: "above" }]
         : repeatTargetOptions;
       const national4RepeatTargets = [
@@ -7253,7 +7328,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ? fillSubquestions
         : baseSubquestions.filter((part) => !selectedSourceIds.has(part.sourceId) && enabledQuestionTypes[part.sourceId] !== false);
       let fillIndex = 0;
-      while (selectedSubquestions.length < 6 && fallbackFillSubquestions.length) {
+      while (selectedSubquestions.length < targetPracticeQuestionCount && fallbackFillSubquestions.length) {
         selectedSubquestions.push({ ...fallbackFillSubquestions[fillIndex % fallbackFillSubquestions.length] });
         fillIndex += 1;
       }
@@ -7311,12 +7386,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const protectedAhSourceIds = selectedAdvancedHigherChordIds.length
         ? new Set(selectedAdvancedHigherChordIds)
         : new Set();
-      const orderedSubquestions = orderedCandidates.length <= 6
+      const orderedSubquestions = orderedCandidates.length <= targetPracticeQuestionCount
         ? orderedCandidates
         : [
           ...orderedCandidates.filter((part) => protectedAhSourceIds.has(part.sourceId)),
           ...orderedCandidates.filter((part) => !protectedAhSourceIds.has(part.sourceId)),
-        ].slice(0, 6).sort((first, second) => subquestionMusicOrder(first, 0) - subquestionMusicOrder(second, 0));
+        ].slice(0, targetPracticeQuestionCount).sort((first, second) => subquestionMusicOrder(first, 0) - subquestionMusicOrder(second, 0));
       const finalSubquestionOrder = [...orderedSubquestions];
       const subquestions = finalSubquestionOrder.map((part, index) => ({
         ...part,
@@ -11313,7 +11388,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
     function CustomiseMenu({ activeLevel, limitPlays, setLimitPlays, timerEnabled, setTimerEnabled, followPlayback, setFollowPlayback, showAudioQuestionGlyphs, setShowAudioQuestionGlyphs, enabledQuestionTypes, onToggleQuestionType }) {
       const visibleQuestionTypes = [...practiceQuestionTypesForLevel(activeLevel)].sort((first, second) => first.label.localeCompare(second.label));
       const enabledQuestionTypeCount = visibleQuestionTypes.filter((type) => enabledQuestionTypes[type.id]).length;
-      const questionTypeCountLabel = enabledQuestionTypeCount === 6 ? "6 minimum" : `${enabledQuestionTypeCount}`;
+      const minimumQuestionTypeCount = practiceQuestionCountForLevel(activeLevel);
+      const questionTypeCountLabel = enabledQuestionTypeCount === minimumQuestionTypeCount ? `${minimumQuestionTypeCount} minimum` : `${enabledQuestionTypeCount}`;
       return (
         <div className="flex w-full min-w-0 flex-col sm:inline-flex sm:w-max sm:min-w-[310px]">
           <window.MLH.MenuSubheading>Exam Conditions</window.MLH.MenuSubheading>
@@ -11345,6 +11421,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     const PRACTICE_TIMER_SECONDS = 5 * 60;
+    const AH_PRACTICE_TIMER_SECONDS = 6 * 60;
+    const practiceTimerSecondsForLevel = (level) => level === "AH" ? AH_PRACTICE_TIMER_SECONDS : PRACTICE_TIMER_SECONDS;
     const PRACTICE_PLAYS_PER_QUESTION = 4;
     const PRACTICE_TIMER_WARNING_SECONDS = 30;
 
@@ -11355,13 +11433,16 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
     }
 
-    function PracticeScoreTimerPanel({ correct, attempted, secondsRemaining, timerEnabled, timerPaused, timerLocked, onPauseTimer, confettiKey = 0 }) {
+    function PracticeScoreTimerPanel({ correct, attempted, totalQuestions = PRACTICE_QUESTION_COUNT, secondsRemaining, timerEnabled, timerPaused, timerLocked, onPauseTimer, confettiKey = 0 }) {
       const [timerPopoverOpen, setTimerPopoverOpen] = useState(false);
       const timerRef = useRef(null);
       const hasMarks = attempted > 0;
-      const zeroFinalScore = attempted >= PRACTICE_QUESTION_COUNT && correct === 0;
-      const markFill = Math.max(0, Math.min(100, (correct / 6) * 100));
-      const markColour = correct >= 4 ? "rgba(22,163,74,.38)" : markFill < 50 ? "rgba(220,38,38,.38)" : "rgba(255,120,0,.42)";
+      const safeTotalQuestions = Math.max(1, Number(totalQuestions) || PRACTICE_QUESTION_COUNT);
+      const zeroFinalScore = attempted >= safeTotalQuestions && correct === 0;
+      const markFill = Math.max(0, Math.min(100, (correct / safeTotalQuestions) * 100));
+      const markColour = safeTotalQuestions >= AH_PRACTICE_QUESTION_COUNT
+        ? correct >= 6 ? "rgba(22,163,74,.38)" : correct >= 4 ? "rgba(255,120,0,.42)" : "rgba(220,38,38,.38)"
+        : correct >= 4 ? "rgba(22,163,74,.38)" : markFill < 50 ? "rgba(220,38,38,.38)" : "rgba(255,120,0,.42)";
       const timerUrgent = timerEnabled && secondsRemaining <= PRACTICE_TIMER_WARNING_SECONDS;
       const tile = window.MLH.shell.scoreTileClass;
       const active = window.MLH.shell.scoreTileActiveClass;
@@ -11426,7 +11507,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             </div>
             <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
               <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Marks</div>
-              <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{hasMarks ? `${correct}/6` : "6"}</div>
+              <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{hasMarks ? `${correct}/${safeTotalQuestions}` : safeTotalQuestions}</div>
             </div>
           </section>
         </div>
@@ -12776,7 +12857,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const [score, setScore] = useState({ correct: 0, attempted: 0 });
       const [confettiKey, setConfettiKey] = useState(0);
       const [timerResetKey, setTimerResetKey] = useState(0);
-      const [secondsRemaining, setSecondsRemaining] = useState(PRACTICE_TIMER_SECONDS);
+      const [secondsRemaining, setSecondsRemaining] = useState(() => practiceTimerSecondsForLevel(initialLevel));
       const [playsRemaining, setPlaysRemaining] = useState(PRACTICE_PLAYS_PER_QUESTION);
       const [limitPlays, setLimitPlays] = useState(true);
       const [timerEnabled, setTimerEnabled] = useState(true);
@@ -12834,9 +12915,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const totalDuration = playbackTimeline.at(-1)?.end ?? 0;
       const practiceReviewMode = question.questionType === "practicePaper" && Boolean(feedback);
       useEffect(() => {
-        setSecondsRemaining(PRACTICE_TIMER_SECONDS);
+        setSecondsRemaining(practiceTimerSecondsForLevel(activeLevel));
         setTimerPaused(false);
-      }, [timerResetKey]);
+      }, [timerResetKey, activeLevel]);
 
       useEffect(() => {
         if (!timerEnabled || timerPaused || practiceReviewMode) return undefined;
@@ -12958,7 +13039,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       function toggleQuestionType(typeId) {
         setEnabledQuestionTypes((current) => {
           const enabledCount = Object.values(current).filter(Boolean).length;
-          if (current[typeId] && enabledCount <= 6) return current;
+          if (current[typeId] && enabledCount <= practiceQuestionCountForLevel(activeLevel)) return current;
           const next = { ...current, [typeId]: !current[typeId] };
           if (!canBuildPracticeQuestionSelection(next, activeLevel)) return current;
           stopAudio();
@@ -13967,6 +14048,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             <PracticeScoreTimerPanel
               correct={score.correct}
               attempted={score.attempted}
+              totalQuestions={question.questionType === "practicePaper" ? question.subquestions?.length : practiceQuestionCountForLevel(activeLevel)}
               secondsRemaining={secondsRemaining}
               timerEnabled={timerEnabled}
               timerPaused={timerPaused}
