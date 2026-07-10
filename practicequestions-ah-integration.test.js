@@ -29,8 +29,12 @@ includes("const scaleDegreeBoxHeight = MARKING_BOX_HEIGHT + 10;", "Scale-degree 
 includes("reserveExtraSpacingAfterSystem(ahChordSystemIndex, 300);", "Chord and bass-line boxes must push line 4 down by 300 pixels");
 includes("sharedBoxY - 10", "Total-value boxes must extend 10 pixels upward from the top");
 includes("const lineStart = start + 39;", "8va and 8vb dashed lines must be shortened 35 pixels from the left");
+includes("const ENHARMONIC_KEY_SOURCE_OPTIONS = {", "Enharmonic questions must use key-specific boxed source spellings");
+includes("{ letter: \"E\", accidental: 1 }", "C major enharmonic sources must include E sharp");
+includes("{ letter: \"F\", accidental: -1 }", "C major enharmonic sources must include F flat");
+includes("Dm: [\n        { letter: \"C\", accidental: 1 },\n        { letter: \"D\", accidental: -1 },\n        { letter: \"B\", accidental: -1 },\n        { letter: \"A\", accidental: 1 },", "D minor must include its own and relative-major enharmonic sources");
 includes("return selected.has(\"ahChord\") && selected.has(\"rhythmicDictation\");", "Chord identify and rhythmic dictation must not both occupy bar 9");
 includes("questionSelectionLevel === \"AH\" && needsKey && needsTime && !timeChangeTarget", "Key and starting time-signature questions must not both occupy bar 1");
 includes(".filter((signature) => signature.id !== \"5/4\")", "5/4 must not be selected as the starting AH time signature");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 23 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 27 }, null, 2));
