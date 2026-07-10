@@ -116,12 +116,13 @@
       { id: "2/4", top: 2, bottom: 4, beats: 2 },
       { id: "3/4", top: 3, bottom: 4, beats: 3 },
       { id: "4/4", top: 4, bottom: 4, beats: 4 },
+      { id: "5/4", top: 5, bottom: 4, beats: 5, weight: 0.5 },
       { id: "6/8", top: 6, bottom: 8, beats: 3 },
       { id: "9/8", top: 9, bottom: 8, beats: 4.5, rare: true },
       { id: "12/8", top: 12, bottom: 8, beats: 6, rare: true },
     ];
     const FIVE_FOUR_GROUPINGS = [
-      { id: "2+3", label: "2 + 3", beatGroups: [2, 3], secondaryAccentBeat: 2, feel: "ONE two THREE four five" },
+      { id: "3+2", label: "3 + 2", beatGroups: [3, 2], secondaryAccentBeat: 3, feel: "ONE two three FOUR five" },
     ];
     function fiveFourGroupingById(id) {
       return FIVE_FOUR_GROUPINGS.find((grouping) => grouping.id === id) ?? null;
@@ -152,7 +153,7 @@
     }
     function groupStartBeatsForTimeSignature(timeSignature) {
       if (timeSignature?.id === "5/4") {
-        const beatGroups = timeSignature.beatGroups?.length ? timeSignature.beatGroups : [5];
+        const beatGroups = timeSignature.beatGroups?.length ? timeSignature.beatGroups : [3, 2];
         return beatGroups.reduce((starts, beats) => [...starts, starts.at(-1) + beats], [0]).slice(0, -1);
       }
       if (timeSignature?.bottom === 8) {
@@ -177,8 +178,8 @@
           groupStartBeats: groupStartBeatsForTimeSignature(timeSignature),
         };
       }
-      const simpleGroups = timeSignature?.id === "5/4" && timeSignature?.beatGroups?.length
-        ? timeSignature.beatGroups
+      const simpleGroups = timeSignature?.id === "5/4"
+        ? (timeSignature.beatGroups?.length ? timeSignature.beatGroups : [3, 2])
         : numerator === 4 ? [2, 2] : [numerator];
       return {
         numerator,
@@ -411,6 +412,21 @@
     function getPatternVariant(styleId, meterInfo) {
       const resolvedStyleId = ACCOMPANIMENT_PATTERN_ALIASES[styleId] ?? styleId;
       const stylePattern = FULL_ACCOMPANIMENT_PATTERN_LIBRARY[resolvedStyleId] ?? FULL_ACCOMPANIMENT_PATTERN_LIBRARY.block_chords;
+      if (meterInfo.meterFamily === "simple_5" && meterInfo.beatGroups?.join("+") === "3+2") {
+        let groupOffset = 0;
+        return meterInfo.beatGroups.flatMap((groupBeats) => {
+          const groupPattern = stylePattern.variants?.[`simple_${groupBeats}`]
+            ?? FULL_ACCOMPANIMENT_PATTERN_LIBRARY.block_chords.variants[`simple_${groupBeats}`]
+            ?? [];
+          const events = groupPattern.map((event) => ({
+            ...event,
+            time: event.time + groupOffset,
+            duration: event.duration === "bar" ? groupBeats : event.duration,
+          }));
+          groupOffset += groupBeats;
+          return events;
+        });
+      }
       return stylePattern.variants?.[meterInfo.meterFamily]
         ?? adaptPatternToMeter(stylePattern, meterInfo)
         ?? FULL_ACCOMPANIMENT_PATTERN_LIBRARY.block_chords.variants[meterInfo.meterFamily]
@@ -502,12 +518,11 @@
         ["minim", "minim"],
       ],
       "5/4": [
-        ["semibreve", "crotchet"],
-        ["crotchet", "semibreve"],
-        ["minim", "minim", "crotchet"],
+        ["dottedMinim", "minim"],
+        ["minim", "crotchet", "minim"],
         ["crotchet", "minim", "minim"],
         ["crotchet", "crotchet", "crotchet", "crotchet", "crotchet"],
-        ["dottedCrotchet", "quaver", "minim", "crotchet"],
+        ["dottedCrotchet", "quaver", "crotchet", "minim"],
         ["crotchet", "dottedCrotchet", "quaver", "minim"],
         ["quaver", "quaver", "crotchet", "crotchet", "minim"],
       ],
@@ -606,7 +621,7 @@
         ["dottedCrotchet", "quaver", "crotchet", "minim"],
         ["minim", "quaver", "quaver", "crotchet", "crotchet"],
         ["crotchet", "quaver", "quaver", "crotchetRest", "minim"],
-        ["quaverRest", "quaver", "crotchet", "minim", "crotchet"],
+        ["quaverRest", "quaver", "crotchet", "crotchet", "minim"],
         ["crotchet", "crotchet", "crotchet", "crotchet", "crotchet"],
       ],
       "6/8": [
@@ -950,7 +965,7 @@
     const simpleTimeSignaturesForLevel = (level) => timeSignaturesForLevel(level)
       .filter((signature) => classifyMeter(signature).meterFamily.startsWith("simple_"));
     const timeSignatureAnswerOptionsForLevel = (level) => {
-      if (level === "AH") return ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8"];
+      if (level === "AH") return ["2/4", "3/4", "4/4", "5/4", "6/8", "9/8", "12/8"];
       if (level === "H") return ["2/4", "3/4", "4/4", "6/8", "9/8", "12/8"];
       return ["2/4", "3/4", "4/4"];
     };
@@ -1287,11 +1302,28 @@
       "2/4": "minim",
       "3/4": "dottedMinim",
       "4/4": "semibreve",
-      "5/4": "semibreve",
+      "5/4": "dottedMinim",
       "6/8": "dottedMinim",
       "9/8": "dottedMinim",
       "12/8": "dottedMinim",
     }[signature.id] ?? "semibreve");
+    const finalPatternForSignature = (signature) => (
+      signature?.id === "5/4" ? ["dottedMinim", "minim"] : [finalRhythmForSignature(signature)]
+    );
+
+    function makeFinalBarNotes(base, barIndex, key, chordSymbol, timeSignature) {
+      let beat = 0;
+      const notes = finalPatternForSignature(timeSignature).map((rhythm, noteIndex) => {
+        const note = makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol);
+        beat += rhythmInfo(rhythm).beats;
+        return note;
+      });
+      if (timeSignature?.id === "5/4" && notes.length === 2) {
+        notes[0] = { ...notes[0], tieToNext: true };
+        notes[1] = { ...notes[1], ...tiedContinuationPitch(notes[0]), tiedFromPrevious: true };
+      }
+      return notes;
+    }
 
     function makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol) {
       if (isRestRhythm(rhythm)) {
@@ -1789,7 +1821,6 @@
     }
 
     function buildFinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars, level }) {
-      const rhythm = finalRhythmForSignature(timeSignature);
       const previous = NOTE_POOL[previousIndex] ?? noteByLetter(key.tonic, 6);
       const tonicOptions = level === "N3" || level === "N4"
         ? NOTE_POOL.filter((note) => note.letter === "C" && (level === "N3" ? note.octave === 5 : note.octave === 4 || note.octave === 5))
@@ -1798,27 +1829,26 @@
       return {
         barIndex,
         chordSymbol,
-        notes: [makeNote(base, rhythm, barIndex, 0, 0, key, chordSymbol)],
+        notes: makeFinalBarNotes(base, barIndex, key, chordSymbol, timeSignature),
         totalBars,
-        pattern: [rhythm],
+        pattern: finalPatternForSignature(timeSignature),
       };
     }
 
     function buildNational3FinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars }) {
       const tonic = NOTE_POOL.find((note) => note.letter === "C" && note.octave === 5) ?? noteByLetter("C", 5);
-      const rhythm = finalRhythmForSignature(timeSignature);
       return {
         barIndex,
         chordSymbol,
-        notes: [makeNote(tonic, rhythm, barIndex, 0, 0, key, chordSymbol)],
+        notes: makeFinalBarNotes(tonic, barIndex, key, chordSymbol, timeSignature),
         totalBars,
-        pattern: [rhythm],
+        pattern: finalPatternForSignature(timeSignature),
       };
     }
 
     function nonFinalCadencePatternForSignature(timeSignature) {
       return {
-        "5/4": ["semibreve", "crotchet"],
+        "5/4": ["dottedMinim", "minim"],
         "9/8": ["dottedMinim", "dottedCrotchet"],
         "12/8": ["dottedMinim", "dottedMinim"],
       }[timeSignature.id] ?? [finalRhythmForSignature(timeSignature)];
@@ -1848,7 +1878,7 @@
 
     function buildCadenceBar({ key, chordSymbol, targetLetter, barIndex, timeSignature, previousIndex, totalBars, level }) {
       const pattern = barIndex === totalBars - 1
-        ? [finalRhythmForSignature(timeSignature)]
+        ? finalPatternForSignature(timeSignature)
         : nonFinalCadencePatternForSignature(timeSignature);
       const previous = NOTE_POOL[previousIndex] ?? noteByLetter(key.tonic, 6);
       const options = NOTE_POOL
@@ -1872,13 +1902,13 @@
     function enforceFinalBarLongestRhythm(question) {
       const finalBar = question.bars?.at(-1);
       if (!finalBar?.notes?.length) return question;
-      const rhythm = finalRhythmForSignature(timeSignatureForBar(question, finalBar));
+      const timeSignature = timeSignatureForBar(question, finalBar);
       const finalNote = finalSoundingNote(finalBar) ?? finalBar.notes[0];
       if (!finalNote || finalNote.rest) return question;
       question.bars[question.bars.length - 1] = {
         ...finalBar,
-        notes: [makeNote(finalNote, rhythm, finalBar.barIndex, 0, 0, question.key, finalBar.chordSymbol)],
-        pattern: [rhythm],
+        notes: makeFinalBarNotes(finalNote, finalBar.barIndex, question.key, finalBar.chordSymbol, timeSignature),
+        pattern: finalPatternForSignature(timeSignature),
       };
       return question;
     }
@@ -2040,7 +2070,7 @@
         ["crotchet", "crotchet", "crotchet", "quaver", "quaver", "crotchet"],
       ],
     };
-    const ADVANCED_HIGHER_RHYTHM_DICTATION_TIME_SIGNATURE_IDS = ["2/4", "3/4", "4/4"];
+    const ADVANCED_HIGHER_RHYTHM_DICTATION_TIME_SIGNATURE_IDS = ["2/4", "3/4", "4/4", "5/4"];
     const ADVANCED_HIGHER_RHYTHM_DICTATION_OPTIONS = ["dottedCrotchet", "crotchet", "quaver"];
     const ADVANCED_HIGHER_RHYTHM_TIE_OPTIONS = ["tie"];
     const ADVANCED_HIGHER_RHYTHM_TRIPLET_OPTIONS = ["crotchet", "quaver", "tripletQuavers", "tripletCrotchets"];
@@ -2048,6 +2078,7 @@
       "2/4": [["tripletQuavers", "crotchet"], ["crotchet", "tripletQuavers"], ["tripletCrotchets"]],
       "3/4": [["tripletQuavers", "crotchet", "crotchet"], ["crotchet", "tripletQuavers", "crotchet"], ["crotchet", "crotchet", "tripletQuavers"], ["tripletCrotchets", "crotchet"], ["crotchet", "tripletCrotchets"]],
       "4/4": [["tripletQuavers", "crotchet", "crotchet", "crotchet"], ["crotchet", "tripletQuavers", "crotchet", "crotchet"], ["crotchet", "crotchet", "tripletQuavers", "crotchet"], ["tripletCrotchets", "minim"], ["minim", "tripletCrotchets"], ["tripletCrotchets", "crotchet", "crotchet"]],
+      "5/4": [["tripletQuavers", "crotchet", "crotchet", "crotchet", "crotchet"], ["crotchet", "tripletQuavers", "crotchet", "crotchet", "crotchet"], ["crotchet", "crotchet", "tripletQuavers", "crotchet", "crotchet"], ["tripletCrotchets", "crotchet", "crotchet", "crotchet"], ["crotchet", "tripletCrotchets", "crotchet", "crotchet"]],
     };
     const ADVANCED_HIGHER_RHYTHM_DICTATION_PATTERNS = {
       "2/4": [
@@ -2071,6 +2102,13 @@
         ["quaver", "quaver", "crotchet", "crotchet", "crotchet"],
         ["crotchet", "quaver", "quaver", "crotchet", "crotchet"],
       ],
+      "5/4": [
+        ["crotchet", "crotchet", "crotchet", "crotchet", "crotchet"],
+        ["dottedCrotchet", "quaver", "crotchet", "crotchet", "crotchet"],
+        ["crotchet", "dottedCrotchet", "quaver", "crotchet", "crotchet"],
+        ["quaver", "quaver", "crotchet", "crotchet", "crotchet", "crotchet"],
+        ["crotchet", "quaver", "quaver", "crotchet", "crotchet", "crotchet"],
+      ],
     };
 
     const RHYTHM_IDENTIFICATION_PATTERNS = {
@@ -2093,7 +2131,6 @@
         "5/4": [
           { display: ["crotchet", "crotchet", "crotchet", "crotchet", "crotchet"], answer: ["dottedCrotchet", "quaver", "crotchet", "crotchet", "crotchet"], startIndex: 0 },
           { display: ["crotchet", "crotchet", "crotchet", "crotchet", "crotchet"], answer: ["crotchet", "dottedCrotchet", "quaver", "crotchet", "crotchet"], startIndex: 1 },
-          { display: ["crotchet", "crotchet", "crotchet", "crotchet", "crotchet"], answer: ["crotchet", "crotchet", "dottedCrotchet", "quaver", "crotchet"], startIndex: 2 },
         ],
       },
       scotchSnap: {
@@ -2189,9 +2226,13 @@
     }
 
     function plantAdvancedHigherRhythmDictationTarget(question) {
-      const timeSignature = randomItem(TIME_SIGNATURES.filter((signature) => ADVANCED_HIGHER_RHYTHM_DICTATION_TIME_SIGNATURE_IDS.includes(signature.id)));
+      const signatureOptions = TIME_SIGNATURES
+        .filter((signature) => ADVANCED_HIGHER_RHYTHM_DICTATION_TIME_SIGNATURE_IDS.includes(signature.id))
+        .filter((signature) => signature.id !== question.timeChangeTarget?.signature?.id);
+      const timeSignature = withFiveFourGrouping(weightedRandomItem(signatureOptions));
       const patterns = ADVANCED_HIGHER_RHYTHM_DICTATION_PATTERNS[timeSignature.id] ?? ADVANCED_HIGHER_RHYTHM_DICTATION_PATTERNS["4/4"];
-      const barPatterns = Array.from({ length: question.bars.length }, () => [...randomItem(patterns)]);
+      const barsBeforeTimeChange = question.timeChangeTarget?.barIndex ?? question.bars.length;
+      const barPatterns = Array.from({ length: barsBeforeTimeChange }, () => [...randomItem(patterns)]);
       const phraseStarts = [0, 1, 2, 3, 4, 5];
       const hiddenPhraseStart = randomItem(phraseStarts);
       const visiblePhraseStart = randomItem(phraseStarts.filter((start) => Math.abs(start - hiddenPhraseStart) >= 2));
@@ -2218,7 +2259,7 @@
     }
 
     function plantAdvancedHigherRhythmTieTarget(question) {
-      const timeSignature = ["3/4", "4/4"].includes(question.timeSignature?.id) ? question.timeSignature : null;
+      const timeSignature = ["3/4", "4/4", "5/4"].includes(question.timeSignature?.id) ? question.timeSignature : null;
       if (!timeSignature) return null;
       const targetBarIndex = randomItem([0, 1, 2]);
       const useQuaverToCrotchetTie = timeSignature.id === "4/4" && Math.random() < 0.5;
@@ -2227,7 +2268,7 @@
         ? ["quaver", "quaver", "crotchet", "quaver", "quaver", "crotchet"]
         : Array.from({ length: quaverCount }, () => "quaver");
       const offBeatCandidateStarts = Array.from({ length: Math.max(0, quaverCount - 2) }, (_, index) => index + 1).filter((index) => index % 2 === 1);
-      // Tie candidates cross the beat: quavers 2-3, 4-5, 6-7 in 4/4.
+      // Tie candidates cross crotchet beats while preserving the larger 3+2 grouping in 5/4.
       const candidateStarts = useQuaverToCrotchetTie
         ? [1, 4]
         : offBeatCandidateStarts;
@@ -2273,7 +2314,7 @@
     }
 
     function plantAdvancedHigherRhythmTripletTarget(question) {
-      const timeSignature = ["2/4", "3/4", "4/4"].includes(question.timeSignature?.id) ? question.timeSignature : null;
+      const timeSignature = ["2/4", "3/4", "4/4", "5/4"].includes(question.timeSignature?.id) ? question.timeSignature : null;
       if (!timeSignature) return null;
       const patternPool = ADVANCED_HIGHER_RHYTHM_TRIPLET_PATTERNS[timeSignature.id] ?? ADVANCED_HIGHER_RHYTHM_TRIPLET_PATTERNS["4/4"];
       const pattern = [...randomItem(patternPool)];
@@ -2398,7 +2439,7 @@
         "2/4": { first: ["minim"], second: ["crotchet", "crotchet"], firstIndex: 0, secondIndex: 0 },
         "3/4": { first: ["dottedMinim"], second: ["crotchet", "minim"], firstIndex: 0, secondIndex: 0 },
         "4/4": { first: ["semibreve"], second: ["crotchet", "dottedMinim"], firstIndex: 0, secondIndex: 0 },
-        "5/4": { first: ["dottedMinim", "minim"], second: ["crotchet", "semibreve"], firstIndex: 1, secondIndex: 0 },
+        "5/4": { first: ["dottedMinim", "minim"], second: ["crotchet", "minim", "minim"], firstIndex: 1, secondIndex: 0 },
         "6/8": { first: ["dottedMinim"], second: ["dottedCrotchet", "dottedCrotchet"], firstIndex: 0, secondIndex: 0 },
         "9/8": { first: ["dottedMinim", "dottedCrotchet"], second: ["dottedCrotchet", "dottedMinim"], firstIndex: 1, secondIndex: 0 },
         "12/8": { first: ["dottedMinim", "dottedMinim"], second: ["dottedCrotchet", "dottedMinim", "dottedCrotchet"], firstIndex: 1, secondIndex: 0 },
@@ -2540,7 +2581,7 @@
         ],
         "5/4": [
           { rests: ["crotchetRest"], before: ["minim"], after: ["minim"] },
-          { rests: ["quaverRest"], before: ["quaver", "crotchet"], after: ["minim", "crotchet"] },
+          { rests: ["quaverRest"], before: ["minim"], after: ["quaver", "minim"] },
           { rests: ["crotchetRest", "quaverRest"], before: ["minim"], after: ["quaver", "crotchet"] },
         ],
       };
@@ -3021,7 +3062,7 @@
     }
 
     function higherFinalPatternForSignature(timeSignature) {
-      return [finalRhythmForSignature(timeSignature)];
+      return finalPatternForSignature(timeSignature);
     }
 
     let higherPhraseGenerationLevel = "H";
@@ -3203,11 +3244,14 @@
     function validateRhythmBars(question) {
       return question.bars.every((bar) => {
         const timeSignature = timeSignatureForBar(question, bar);
-        const finalRhythmBeats = rhythmInfo(finalRhythmForSignature(timeSignature)).beats;
+        const finalPatternBeats = finalPatternForSignature(timeSignature)
+          .reduce((total, rhythm) => total + rhythmInfo(rhythm).beats, 0);
         const expectedBeats = bar.barIndex === question.bars.length - 1
-          ? Math.min(timeSignature.beats, finalRhythmBeats)
+          ? Math.min(timeSignature.beats, finalPatternBeats)
           : timeSignature.beats;
-        return Math.abs(barRhythmTotalBeats(bar) - expectedBeats) < 0.001;
+        if (Math.abs(barRhythmTotalBeats(bar) - expectedBeats) >= 0.001) return false;
+        return timeSignature.id !== "5/4"
+          || !(bar.notes ?? []).some((note) => noteCrossesInternalBoundary(note, timeSignature));
       });
     }
 
@@ -6385,7 +6429,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         .filter((signature) => timeSignatureAnswerOptionsForLevel(timeSignatureLevel).includes(signature.id))
         .filter((signature) => signature.id !== question.timeSignature.id);
       if (!options.length) return null;
-      const signature = withFiveFourGrouping(randomItem(options));
+      const signature = withFiveFourGrouping(weightedRandomItem(options));
       if (!signature) return null;
       const barIndex = 8;
       if (!rebuildPracticeBarsAfterTimeChange(question, barIndex, signature)) return null;
@@ -6462,9 +6506,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const needsArticulation = selectedSourceIds.has("articulation");
       const needsTransposition = selectedSourceIds.has("transposition");
       const allowedTimeSignatureIds = needsBarlines
-        ? timeSignaturesForLevel(timeSignatureLevel)
-          .filter((signature) => signature.id !== "5/4")
-          .map((signature) => signature.id)
+        ? timeSignaturesForLevel(timeSignatureLevel).map((signature) => signature.id)
         : null;
       let cadenceId = choosePracticeCadenceId(level);
       const needsSimpleTime = needsTriplets || (level === "H" && needsRhythmicDictation);
@@ -13537,6 +13579,30 @@ function advancedHigherInversionAnswerLabel(inversion) {
         const bassStart = Math.max(barStart, offset);
         const bassDuration = Math.max(0.04, barStart + beatSeconds * 0.88 - bassStart);
         playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(bassMidi), startTime + bassStart, bassDuration, accompanimentVelocity, accompanimentVolume(0.024), dynamicGainForPoint(question, bar.barIndex, 0) * accompanimentGainScale, "sine", 0.06);
+
+        if (barTimeSignature.id === "5/4") {
+          [
+            { beat: 1, type: "chord" },
+            { beat: 2, type: "chord" },
+            { beat: 3, type: "bass" },
+            { beat: 4, type: "chord" },
+          ].forEach((event) => {
+            const pulseStart = barStart + event.beat * beatSeconds;
+            const pulseDuration = beatSeconds * (event.type === "bass" ? 0.88 : 0.42);
+            if (pulseStart + pulseDuration <= offset) return;
+            const audibleStart = Math.max(pulseStart, offset);
+            const audibleDuration = Math.max(0.04, pulseStart + pulseDuration - audibleStart);
+            const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, event.beat) * accompanimentGainScale;
+            if (event.type === "bass") {
+              playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(bassMidi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.024), eventDynamicGain, "sine", 0.06);
+              return;
+            }
+            chordMidi.forEach((midi) => {
+              playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
+            });
+          });
+          return;
+        }
 
         if (barTimeSignature.id === "4/4") {
           const events = [
