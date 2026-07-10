@@ -34,8 +34,10 @@ includes("{ letter: \"E\", accidental: 1 }", "C major enharmonic sources must in
 includes("{ letter: \"F\", accidental: -1 }", "C major enharmonic sources must include F flat");
 includes("Dm: [\n        { letter: \"C\", accidental: 1 },\n        { letter: \"D\", accidental: -1 },\n        { letter: \"B\", accidental: -1 },\n        { letter: \"A\", accidental: 1 },", "D minor must include its own and relative-major enharmonic sources");
 includes("const blend = 0;", "Barline question note spacing must preserve rhythmic grammar");
+includes("if (question.practiceLevel === \"AH\" && intervalNumber === 2) return false;", "AH interval questions must not target existing 2nds");
+includes("higherIntervalTypeOrder().filter((type) => type !== \"second\")", "AH planted interval questions must not choose 2nds");
 includes("return selected.has(\"ahChord\") && selected.has(\"rhythmicDictation\");", "Chord identify and rhythmic dictation must not both occupy bar 9");
 includes("questionSelectionLevel === \"AH\" && needsKey && needsTime && !timeChangeTarget", "Key and starting time-signature questions must not both occupy bar 1");
 includes(".filter((signature) => signature.id !== \"5/4\")", "5/4 must not be selected as the starting AH time signature");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 28 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 30 }, null, 2));
