@@ -5756,6 +5756,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         .filter(({ note }) => note && !note.rest);
       if (!soundingNotes.length) return [];
       if (!soundingNotes.some(({ noteIndex }) => noteIndex === firstNoteIndex)) return [];
+      if (soundingNotes.some(({ note, noteIndex }) => noteIndex < firstNoteIndex && note.letter === letter)) return [];
       const requiredCount = Math.ceil(soundingNotes.length * 0.6);
       const availableFromTarget = soundingNotes.filter(({ noteIndex }) => noteIndex >= firstNoteIndex);
       if (availableFromTarget.length < requiredCount) return [];
@@ -5849,6 +5850,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         resolutionBarIndex: target.resolutionChordSymbol ? target.bar.barIndex + 1 : null,
         noteIndex: target.noteIndex,
         noteIndices: target.noteIndices,
+        targetLetter,
         symbolId: target.direction,
         value: target.value,
         answer: target.direction === "sharp" ? "Sharp" : "Flat",
@@ -9876,7 +9878,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
               : null;
             const hiddenAccidentalNoteIndices = new Set(accidentalTarget?.noteIndices ?? (Number.isInteger(accidentalTarget?.noteIndex) ? [accidentalTarget.noteIndex] : []));
             const visibleDisplayNotes = accidentalTarget
-              ? rhythmDisplayNotes.map((note, index) => hiddenAccidentalNoteIndices.has(index) ? { ...note, writtenAccidental: null } : note)
+              ? rhythmDisplayNotes.map((note, index) => (
+                hiddenAccidentalNoteIndices.has(index)
+                || (note?.letter === accidentalTarget.targetLetter && note?.writtenAccidental === accidentalTarget.value)
+                  ? { ...note, writtenAccidental: null }
+                  : note
+              ))
               : rhythmDisplayNotes;
             const hideBarNumber = question.hiddenBarNumbers?.includes(bar.barIndex);
             const hideBarline = barlinePart && question.barlineTargets?.some((target) => target.barIndex === bar.barIndex && (target.slot ?? "end") === "end");
