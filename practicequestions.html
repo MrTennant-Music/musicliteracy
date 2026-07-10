@@ -1256,6 +1256,7 @@
       const ids = KEY_IDS_BY_LEVEL[level] ?? KEY_IDS_BY_LEVEL.H;
       return KEYS.filter((key) => ids.has(key.id));
     };
+    const AH_KEY_SUCCESS_COUNTS = Object.fromEntries(KEYS.map((key) => [key.id, 0]));
     const randomPracticeKey = (level = "H") => {
       const availableKeys = keysForLevel(level);
       const majorKeys = availableKeys.filter((key) => !isMinorKey(key));
@@ -3385,11 +3386,25 @@
 
     function randomPracticeKeyWith(random, level = "AH") {
       const availableKeys = keysForLevel(level);
+      if (level === "AH") {
+        const weightedKeys = availableKeys.map((key) => ({
+          ...key,
+          weight: 1 / Math.max(1, (AH_KEY_SUCCESS_COUNTS[key.id] ?? 0) + 1) ** 2,
+        }));
+        return weightedItemWith(random, weightedKeys);
+      }
       const majorKeys = availableKeys.filter((key) => !isMinorKey(key));
       const minorKeys = availableKeys.filter(isMinorKey);
       if (!minorKeys.length) return randomItemWith(random, majorKeys.length ? majorKeys : availableKeys);
       if (!majorKeys.length) return randomItemWith(random, minorKeys);
       return random() < 0.72 ? randomItemWith(random, majorKeys) : randomItemWith(random, minorKeys);
+    }
+
+    function recordAdvancedHigherKeySuccess(question) {
+      const keyId = question?.key?.id;
+      if (keyId && Object.prototype.hasOwnProperty.call(AH_KEY_SUCCESS_COUNTS, keyId)) {
+        AH_KEY_SUCCESS_COUNTS[keyId] += 1;
+      }
     }
 
     function advancedHigherBarFromPlan(planBar, key, timeSignature, totalBars) {
@@ -4590,7 +4605,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     function augmentedTriadSpellingForBar(question, barIndex, spelling = null) {
-      if (!question.bars?.[barIndex - 1] || !question.bars?.[barIndex + 1]) return null;
+      if (!question.bars?.[barIndex] || !question.bars?.[barIndex + 1]) return null;
       return spelling ?? advancedHigherAugmentedTriadSpelling(question);
     }
 
@@ -4617,9 +4632,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           return barIndex < 11 && Boolean(question.bars?.[barIndex + 1]) && !protectedBars.has(barIndex + 1);
         }
         if (chordTypeId === "aug") {
-          return barIndex > 8
-            && barIndex < 11
-            && !protectedBars.has(barIndex - 1)
+          return barIndex < 11
             && !protectedBars.has(barIndex + 1)
             && Boolean(augmentedTriadSpellingForBar(question, barIndex));
         }
@@ -4634,9 +4647,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     const ADVANCED_HIGHER_CHORD_TYPE_SELECTION_WEIGHTS = {
-      dom7: 0.2,
+      dom7: 0.1,
       dim7: 2,
-      aug: 4,
+      aug: 10,
       add6: 2,
     };
 
@@ -4702,6 +4715,24 @@ function advancedHigherInversionAnswerLabel(inversion) {
       setSoundingNoteToScaleDegree(question, barIndex, degree, { ...options, target: "last" })
     );
 
+    function setFirstSoundingNoteAboveSpelledTone(question, barIndex, [letter, octave, accidental = 0]) {
+      const bar = question.bars?.[barIndex];
+      if (!bar) return false;
+      const noteIndex = bar.notes.findIndex((note) => !note.rest);
+      if (noteIndex < 0) return false;
+      const targetMidi = noteBaseForLetterOctave(letter, octave).midi + accidental + 1;
+      const candidate = NOTE_POOL
+        .filter((note) => note.midi === targetMidi)
+        .sort((first, second) => Math.abs(noteBaseIndex(bar.notes[noteIndex]) - noteBaseIndex(first)) - Math.abs(noteBaseIndex(bar.notes[noteIndex]) - noteBaseIndex(second)))[0];
+      if (!candidate) return false;
+      bar.notes[noteIndex] = {
+        ...bar.notes[noteIndex],
+        ...candidate,
+        writtenAccidental: melodicAccidentalForLetter(question.key, candidate.letter),
+      };
+      return true;
+    }
+
     function applyAdvancedHigherChordTypeContext(question, barIndex, chordType, spelling) {
       if (chordType.id === "add6") {
         setBarToChordTypeStack(question, barIndex, spelling, chordType, "I");
@@ -4746,15 +4777,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return [barIndex, resolutionBarIndex].filter((index) => question.bars?.[index]);
       }
       if (chordType.id === "aug") {
-        const resolutionOptions = ["IV", "VI"].filter((symbol) => question.key.chords?.[symbol]?.length);
-        const resolutionChordSymbol = randomItem(resolutionOptions.length ? resolutionOptions : ["IV"]);
-        question.bars[barIndex - 1] = { ...question.bars[barIndex - 1], chordSymbol: "I" };
+        const resolutionChordSymbol = question.key.chords?.VI?.length ? "VI" : "IV";
         question.bars[barIndex] = { ...question.bars[barIndex], chordSymbol: "I" };
         question.bars[barIndex + 1] = { ...question.bars[barIndex + 1], chordSymbol: resolutionChordSymbol };
-        setLastSoundingNoteToScaleDegree(question, barIndex - 1, 5);
         setBarToChordTypeStack(question, barIndex, spelling, chordType, "I");
-        setFirstSoundingNoteToScaleDegree(question, barIndex + 1, 6);
-        return [barIndex - 1, barIndex, barIndex + 1].filter((index) => question.bars?.[index]);
+        const augmentedTone = spelling?.tones?.[2];
+        if (augmentedTone) setFirstSoundingNoteAboveSpelledTone(question, barIndex + 1, augmentedTone);
+        return [barIndex, barIndex + 1].filter((index) => question.bars?.[index]);
       }
       setBarToChordTypeStack(question, barIndex, spelling, chordType, spelling?.chordSymbol);
       return [barIndex];
@@ -7322,7 +7351,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return retryPracticeQuestion();
       }
       const rhythmTargetPattern = Number.isInteger(rhythmTargetBar) ? applyRhythmDictationPattern(question, rhythmTargetBar) : null;
-      if (needsRhythmIdentification && level !== "N3" && level !== "N4") {
+      if (needsRhythmIdentification && rhythmIdentificationTarget && level !== "N3" && level !== "N4") {
         const dottedDistractorTypes = rhythmIdentificationTarget.variant === "scotchSnap" ? ["dottedCrotchet"] : [];
         if (dottedDistractorTypes.length) {
           plantDottedRhythmDistractors(
@@ -7400,16 +7429,16 @@ function advancedHigherInversionAnswerLabel(inversion) {
         barIndex,
         answer: chordAnswerForQuestion(question, question.bars[barIndex].chordSymbol),
       })) : [];
-      const rhythmIdentificationValueAnswer = needsRhythmIdentification && rhythmIdentificationTarget.variant === "dottedCrotchet"
+      const rhythmIdentificationValueAnswer = needsRhythmIdentification && rhythmIdentificationTarget?.variant === "dottedCrotchet"
         ? rhythmValueAcceptedAnswers(rhythmIdentificationTarget.targetRhythm ?? "dottedCrotchet")
         : null;
-      const rhythmIdentificationNameAnswer = needsRhythmIdentification && rhythmIdentificationTarget.variant === "noteValue"
+      const rhythmIdentificationNameAnswer = needsRhythmIdentification && rhythmIdentificationTarget?.variant === "noteValue"
         ? rhythmNameAcceptedAnswers(rhythmIdentificationTarget.targetRhythm)
         : null;
-      const rhythmIdentificationBeatAnswer = needsRhythmIdentification && rhythmIdentificationTarget.variant === "noteValue"
+      const rhythmIdentificationBeatAnswer = needsRhythmIdentification && rhythmIdentificationTarget?.variant === "noteValue"
         ? rhythmBeatAcceptedAnswers(rhythmIdentificationTarget.targetRhythm)
         : null;
-      const rhythmIdentificationTotalAnswer = needsRhythmIdentification && rhythmIdentificationTarget.variant === "noteValueTotal"
+      const rhythmIdentificationTotalAnswer = needsRhythmIdentification && rhythmIdentificationTarget?.variant === "noteValueTotal"
         ? rhythmTotalAcceptedAnswers(rhythmIdentificationTarget.totalBeats)
         : null;
       const baseSubquestions = [
@@ -7560,7 +7589,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           answer: "Rhythm completed correctly",
           type: "rhythm",
         }] : []),
-        ...(needsRhythmIdentification && rhythmIdentificationTarget.variant === "dottedCrotchet" ? [{
+        ...(needsRhythmIdentification && rhythmIdentificationTarget?.variant === "dottedCrotchet" ? [{
           id: "rhythmIdentification",
           sourceId: "rhythmIdentification",
           prompt: `Identify the number of beats for the note marked in bar ${rhythmIdentificationTarget.barIndex + 1}.`,
@@ -7568,7 +7597,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           accepts: rhythmIdentificationValueAnswer.accepts,
           type: "text",
         }] : []),
-        ...(needsRhythmIdentification && rhythmIdentificationTarget.variant === "noteValue" ? [{
+        ...(needsRhythmIdentification && rhythmIdentificationTarget?.variant === "noteValue" ? [{
           id: "rhythmIdentification",
           sourceId: "rhythmIdentification",
           prompt: rhythmIdentificationTarget.questionStyle === "beats"
@@ -7582,7 +7611,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             : rhythmIdentificationNameAnswer.accepts,
           type: "text",
         }] : []),
-        ...(needsRhythmIdentification && rhythmIdentificationTarget.variant === "noteValueTotal" ? [{
+        ...(needsRhythmIdentification && rhythmIdentificationTarget?.variant === "noteValueTotal" ? [{
           id: "rhythmIdentification",
           sourceId: "rhythmIdentification",
           prompt: rhythmIdentificationTarget.tied
@@ -7592,14 +7621,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
           accepts: rhythmIdentificationTotalAnswer.accepts,
           type: "text",
         }] : []),
-        ...(needsRhythmIdentification && rhythmIdentificationTarget.variant === "scotchSnap" ? [{
+        ...(needsRhythmIdentification && rhythmIdentificationTarget?.variant === "scotchSnap" ? [{
           id: "rhythmIdentification",
           sourceId: "rhythmIdentification",
           prompt: "Place a circle around an example of a Scotch snap.",
           answer: "Scotch snap circled correctly",
           type: "scotchSnap",
         }] : []),
-        ...(needsScaleDegrees ? [{
+        ...(needsScaleDegrees && scaleDegreeTarget ? [{
           id: "scaleDegrees",
           sourceId: "scaleDegrees",
           prompt: `Apply a circle around the ${SCALE_DEGREE_DETAILS[scaleDegreeTarget.degree].label} note of the key in bar ${scaleDegreeTarget.barIndex + 1}.`,
@@ -7791,6 +7820,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
       if (!validateRhythmBars(question) && canRetryQualityPracticeQuestion) {
         return retryPracticeQuestion();
       }
+
+      if (questionSelectionLevel === "AH") recordAdvancedHigherKeySuccess(question);
 
       return {
         ...question,

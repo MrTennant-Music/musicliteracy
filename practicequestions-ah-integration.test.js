@@ -47,6 +47,11 @@ includes(".filter((signature) => signature.id !== \"5/4\")", "5/4 must not be se
 includes("type.id !== \"articulation\"", "Articulation questions must be removed from AH");
 excludes("{ key: \"articulation\", weight: 0.05, choose: () => \"articulation\" }", "Articulation must not remain in the AH audio-question pool");
 includes("const variant = question.practiceLevel === \"AH\" ? weightedRandomItem(variants) : randomItem(variants);", "AH transposition variants must use weighted selection");
+includes("const AH_KEY_SUCCESS_COUNTS = Object.fromEntries(KEYS.map((key) => [key.id, 0]));", "AH key selection must track successful generated papers");
+includes("recordAdvancedHigherKeySuccess(question);", "AH key balancing must record successful keys");
+includes("return [barIndex, barIndex + 1].filter((index) => question.bars?.[index]);", "Augmented triads must use a two-bar context");
+includes("setFirstSoundingNoteAboveSpelledTone(question, barIndex + 1, augmentedTone);", "Augmented triads must resolve the raised tone upward in the next bar");
+includes("rhythmIdentificationTarget?.variant", "Rhythm-identification generation must guard against a missing target");
 includes("function advancedHigherPlaybackSlotsForBar(question, bar)", "AH playback must read the generated chord slots for bars 9 and 10");
 includes("advancedHigherChordPlaybackMidiMap(question, bar, advancedHigherPlaybackSlotForBeat(advancedHigherChordSlots, event.time))", "AH accompaniment patterns must follow generated chord inversions at each pulse");
 includes("function melodyCeilingMidiForBeat(question, bar, beat = 0)", "Playback must calculate a melody-aware ceiling for accompaniment notes");
@@ -58,4 +63,4 @@ includes("return chordPitchClasses.has(pitchClass(pitchOfSpelledNote(candidate.s
 includes("function closestEnharmonicSourceOctave(question, bar, note, source, clef = \"treble\")", "Enharmonic source spellings must be fitted to the original melody register");
 includes("fitEnharmonicCandidateToMelodyNote(question, bar, note, candidate, clef)", "Enharmonic candidates must be refitted before selection");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 44 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 49 }, null, 2));
