@@ -5754,6 +5754,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return (bar.notes ?? []).filter((note) => !note.rest && note.letter === letter).length === 1;
     }
 
+    function noteIsProminentAccidentalTarget(bar, note) {
+      if (!bar || !note || note.rest) return false;
+      const soundingNotes = (bar.notes ?? []).filter((item) => item && !item.rest);
+      const longestBeats = Math.max(...soundingNotes.map((item) => item.beats ?? rhythmInfo(item.rhythm).beats));
+      const noteBeats = note.beats ?? rhythmInfo(note.rhythm).beats;
+      return noteBeats >= 1 && noteBeats >= longestBeats - 0.001;
+    }
+
     function makeAccidentalQuestionTarget(question, excludedBars = []) {
       const awkwardAccidentalSpellings = new Set(["C:flat", "B:sharp", "E:sharp", "F:flat"]);
       const excluded = new Set([...excludedBars, question.targetBar, question.bars.length - 1]);
@@ -5763,6 +5771,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         .flatMap((bar) => (bar.notes ?? []).flatMap((note, noteIndex) => {
           if (!barHasSingleLetterTarget(bar, harmony.minorIvThird)) return [];
           if (excluded.has(bar.barIndex) || note.rest || note.letter !== harmony.minorIvThird) return [];
+          if (!noteIsProminentAccidentalTarget(bar, note)) return [];
           const target = { bar, note, noteIndex, direction: "flat", value: -1, chordSymbol: "IVm" };
           if (target.note.writtenAccidental !== null && target.note.writtenAccidental !== undefined) return [];
           if (keyAccidentalForLetter(question.key, note.letter) === target.value) return [];
@@ -5780,6 +5789,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           const expectedLetter = harmony.mode === "minor" ? harmony.minorSixth : harmony.secondaryThird;
           if (!barHasSingleLetterTarget(bar, expectedLetter)) return [];
           if (note.letter !== expectedLetter) return [];
+          if (!noteIsProminentAccidentalTarget(bar, note)) return [];
           const target = harmony.mode === "minor"
             ? { bar, note, noteIndex, direction: "sharp", value: 1, chordSymbol: "IV" }
             : { bar, note, noteIndex, direction: "sharp", value: 1, chordSymbol: "III", resolutionChordSymbol: "VI", resolutionLetter: harmony.relativeMinorTonic };
