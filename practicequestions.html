@@ -7807,15 +7807,29 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return pairsWithDottedQuaver ? rhythmInfo("quaver").spacing : rhythmInfo(rhythm).spacing;
     }
 
+    function accidentalPreSpacingForNote(notes, index, shownAccidentals) {
+      const note = notes[index];
+      if (!note || note.rest) return 0;
+      const accidentalValue = Object.prototype.hasOwnProperty.call(note, "displayAccidental") ? note.displayAccidental : note.writtenAccidental;
+      if (accidentalValue === null || accidentalValue === undefined || accidentalValue === false) return 0;
+      const accidentalKey = `${note.letter}:${accidentalValue}`;
+      if (shownAccidentals.has(accidentalKey)) return 0;
+      shownAccidentals.add(accidentalKey);
+      return accidentalValue === 1 ? 0.72 : 0.58;
+    }
+
     function barPositions(bar, displayBarCount = BARS_PER_SYSTEM) {
       const start = barStart(bar.barIndex, displayBarCount);
       const end = start + barWidth(bar.barIndex, displayBarCount);
       const scoreStart = start + (bar.barIndex === 0 ? 4 : bar.timeChangeQuestion ? 58 : 15);
       const scoreEnd = bar.barIndex === (bar.totalBars ?? BAR_COUNT) - 1 ? end - 24 : end - 4;
-      const units = bar.notes.reduce((sum, _, index) => sum + positionSpacingForNote(bar.notes, index), 0);
+      const shownAccidentalsForUnits = new Set();
+      const accidentalPreSpacing = bar.notes.map((_, index) => accidentalPreSpacingForNote(bar.notes, index, shownAccidentalsForUnits));
+      const units = bar.notes.reduce((sum, _, index) => sum + positionSpacingForNote(bar.notes, index) + accidentalPreSpacing[index], 0);
       const unit = Math.max(1, scoreEnd - scoreStart) / Math.max(1, units);
       let cursor = scoreStart + unit * 0.38;
       return bar.notes.map((_, index) => {
+        cursor += accidentalPreSpacing[index] * unit;
         const x = cursor;
         cursor += positionSpacingForNote(bar.notes, index) * unit;
         return x;
