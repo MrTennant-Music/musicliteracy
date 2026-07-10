@@ -117,7 +117,7 @@
       { id: "2/4", top: 2, bottom: 4, beats: 2 },
       { id: "3/4", top: 3, bottom: 4, beats: 3 },
       { id: "4/4", top: 4, bottom: 4, beats: 4 },
-      { id: "5/4", top: 5, bottom: 4, beats: 5, weight: 0.5 },
+      { id: "5/4", top: 5, bottom: 4, beats: 5 },
       { id: "6/8", top: 6, bottom: 8, beats: 3 },
       { id: "9/8", top: 9, bottom: 8, beats: 4.5, rare: true },
       { id: "12/8", top: 12, bottom: 8, beats: 6, rare: true },
@@ -836,7 +836,6 @@
       "accidentals",
       "ahBassLine",
       "ahChord",
-      "articulation",
       "barlines",
       "cadence",
       "enharmonics",
@@ -1012,6 +1011,7 @@
         HIGHER_PRACTICE_QUESTION_TYPE_IDS.has(type.id)
         && type.id !== "triplets"
         && type.id !== "chord"
+        && type.id !== "articulation"
       ));
       if (level === "H") return PRACTICE_QUESTION_TYPES.filter((type) => (
         HIGHER_PRACTICE_QUESTION_TYPE_IDS.has(type.id)
@@ -2269,8 +2269,7 @@
       return candidates.sort((a, b) => Math.abs(a.start + 1 - target.noteIndex) - Math.abs(b.start + 1 - target.noteIndex))[0]?.indices ?? null;
     }
 
-    function plantAdvancedHigherRhythmDictationTarget(question) {
-      const targetBarIndex = 8;
+    function plantAdvancedHigherRhythmDictationTarget(question, targetBarIndex = 8) {
       const timeSignature = timeSignatureForBar(question, targetBarIndex);
       if (!ADVANCED_HIGHER_RHYTHM_DICTATION_TIME_SIGNATURE_IDS.includes(timeSignature?.id)) return null;
       const patterns = ADVANCED_HIGHER_RHYTHM_DICTATION_PATTERNS[timeSignature.id] ?? ADVANCED_HIGHER_RHYTHM_DICTATION_PATTERNS["4/4"];
@@ -2295,8 +2294,7 @@
       };
     }
 
-    function plantAdvancedHigherRhythmTieTarget(question) {
-      const targetBarIndex = 8;
+    function plantAdvancedHigherRhythmTieTarget(question, targetBarIndex = 8) {
       const activeSignature = timeSignatureForBar(question, targetBarIndex);
       const timeSignature = ["3/4", "4/4", "5/4"].includes(activeSignature?.id) ? activeSignature : null;
       if (!timeSignature) return null;
@@ -2351,8 +2349,7 @@
       };
     }
 
-    function plantAdvancedHigherRhythmTripletTarget(question) {
-      const targetBarIndex = 8;
+    function plantAdvancedHigherRhythmTripletTarget(question, targetBarIndex = 8) {
       const activeSignature = timeSignatureForBar(question, targetBarIndex);
       const timeSignature = ["2/4", "3/4", "4/4", "5/4"].includes(activeSignature?.id) ? activeSignature : null;
       if (!timeSignature) return null;
@@ -4636,6 +4633,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return spelling ? [spelling] : [];
     }
 
+    const ADVANCED_HIGHER_CHORD_TYPE_SELECTION_WEIGHTS = {
+      dom7: 0.2,
+      dim7: 2,
+      aug: 4,
+      add6: 2,
+    };
+
     function makeAdvancedHigherChordTypeNote(question, barIndex, spelling, chordType, rhythm = finalRhythmForSignature(question.timeSignature)) {
       const stack = makeAdvancedHigherChordTypeStack(question, spelling);
       const root = stack[0];
@@ -4768,6 +4772,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         .flatMap((chordType) => advancedHigherChordTypeSpellingsForQuestion(question, chordType.id).map((spelling) => ({
           spelling,
           chordType,
+          weight: ADVANCED_HIGHER_CHORD_TYPE_SELECTION_WEIGHTS[chordType.id] ?? 1,
         })))
         .map((item) => {
           return {
@@ -4776,7 +4781,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           };
         })
         .filter((item) => item.candidateBars.length);
-      const selected = randomItem(placeableSpellings);
+      const selected = weightedRandomItem(placeableSpellings);
       if (!selected) return null;
       const { chordType } = selected;
       const barIndex = randomItem(selected.candidateBars);
@@ -5437,10 +5442,18 @@ function advancedHigherInversionAnswerLabel(inversion) {
       { type: "seventh", number: 7, weight: 2 },
       { type: "octave", number: 8, weight: 0.7 },
     ];
+    const ADVANCED_HIGHER_INTERVAL_TYPE_WEIGHTS = [
+      { type: "third", number: 3, weight: 1 },
+      { type: "fourth", number: 4, weight: 5 },
+      { type: "fifth", number: 5, weight: 5 },
+      { type: "sixth", number: 6, weight: 6 },
+      { type: "seventh", number: 7, weight: 4 },
+      { type: "octave", number: 8, weight: 2 },
+    ];
 
-    function higherIntervalTypeOrder() {
-      const intervalTypes = HIGHER_INTERVAL_TYPE_WEIGHTS.map((item) => item.type);
-      const preferredType = weightedRandomItem(HIGHER_INTERVAL_TYPE_WEIGHTS).type;
+    function higherIntervalTypeOrder(weights = HIGHER_INTERVAL_TYPE_WEIGHTS) {
+      const intervalTypes = weights.map((item) => item.type);
+      const preferredType = weightedRandomItem(weights).type;
       return [
         preferredType,
         ...intervalTypes.filter((type) => type !== preferredType),
@@ -5528,14 +5541,20 @@ function advancedHigherInversionAnswerLabel(inversion) {
           const chromaticTarget = tryPlantAdvancedHigherChromaticInterval(true, developmentTargets);
           if (chromaticTarget) return { ...chromaticTarget, advancedHigherIntervalLabel: "Tritone" };
         } else {
-          const existingTarget = randomItem(targets.filter((target) => isSupportedExistingInterval(target) && !isTritoneTarget(target)));
+          const existingTargets = targets
+            .filter((target) => isSupportedExistingInterval(target) && !isTritoneTarget(target))
+            .map((target) => {
+              const intervalNumber = Math.abs(target.bar.notes[target.secondIndex].step - target.bar.notes[target.firstIndex].step) + 1;
+              return { ...target, weight: intervalNumber === 3 ? 1 : 4 };
+            });
+          const existingTarget = weightedRandomItem(existingTargets);
           if (existingTarget) return targetWithNotes(existingTarget);
         }
       }
 
       const levelIntervalTypes = question.level === "H"
         ? question.practiceLevel === "AH"
-          ? higherIntervalTypeOrder().filter((type) => type !== "second")
+          ? higherIntervalTypeOrder(ADVANCED_HIGHER_INTERVAL_TYPE_WEIGHTS)
           : higherIntervalTypeOrder()
         : ["second", "octave"];
       const preferredType = question.level === "H" ? null : randomItem(levelIntervalTypes);
@@ -6248,6 +6267,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         answerClef: "bass",
         answerOctavesFromMain: -1,
         sourceOctavesFromMain: 0,
+        weight: 0.05,
         prompt: (barNumber) => `Transpose the notes in bar ${barNumber} one octave lower into the bass clef.`,
       },
     ];
@@ -6260,6 +6280,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         answerClef: "bass",
         answerOctavesFromMain: 0,
         sourceOctavesFromMain: 0,
+        weight: 2,
         prompt: (barNumber) => `Transpose the notes in bar ${barNumber} at the same pitch into the bass clef.`,
       },
       {
@@ -6268,6 +6289,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         answerClef: "treble",
         answerOctavesFromMain: 0,
         sourceOctavesFromMain: 0,
+        weight: 2,
         prompt: (barNumber) => `Transpose the notes in bar ${barNumber} at the same pitch into the treble clef.`,
       },
       {
@@ -6276,6 +6298,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         answerClef: "treble",
         answerOctavesFromMain: 0,
         sourceOctavesFromMain: -1,
+        weight: 0.05,
         prompt: (barNumber) => `Transpose the notes in bar ${barNumber} one octave higher into the treble clef.`,
       },
     ];
@@ -6340,7 +6363,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
     function makeTranspositionTarget(question, excludedBars = []) {
       const canUseMeaning = question.practiceLevel === "AH";
-      if (canUseMeaning && Math.random() < 0.2) {
+      if (canUseMeaning && Math.random() < 0.01) {
         const excluded = new Set(excludedBars);
         const availableBars = question.bars
           .filter((bar) => bar.barIndex >= 1 && bar.barIndex < 8 && !excluded.has(bar.barIndex))
@@ -6360,7 +6383,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const excluded = new Set([...excludedBars]);
       const variants = question.practiceLevel === "AH" ? ADVANCED_HIGHER_TRANSPOSITION_VARIANTS : HIGHER_TRANSPOSITION_VARIANTS;
       if (!variants.length) return null;
-      const variant = randomItem(variants);
+      const variant = question.practiceLevel === "AH" ? weightedRandomItem(variants) : randomItem(variants);
       const eligibleBars = question.bars
         .filter((bar) => bar.barIndex >= 1 && bar.barIndex < 8)
         .filter((bar) => (bar.notes ?? []).length >= 3 && (bar.notes ?? []).every((note) => !note.rest))
@@ -6626,8 +6649,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     function hasAdvancedHigherFixedBarSelectionConflict(ids) {
-      const selected = new Set(ids);
-      return selected.has("ahChord") && selected.has("rhythmicDictation");
+      return false;
     }
 
     function selectedAdvancedHigherPracticeQuestionTypeIds(enabledQuestionTypes, selectionAttempt = 0) {
@@ -6685,7 +6707,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
         { key: "repeatSigns", weight: 2, choose: () => "repeatSigns" },
         { key: "cadence", weight: 2, choose: () => "cadence" },
         { key: "accidentals", weight: 2, choose: () => "accidentals" },
-        { key: "articulation", weight: 0.05, choose: () => "articulation" },
       ];
       const usedAudioGroups = new Set();
       while (selected.length < AH_PRACTICE_QUESTION_COUNT) {
@@ -6700,8 +6721,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const fallbackOptions = [
         "ahChord", "ahChordTypes", "ahBassLine", "key", "enharmonics", "transposition",
         "time", "barlines", "rhythmIdentification", "rests", "interval", "scaleDegrees",
-        "missing", "rhythmicDictation", "repeatSigns", "cadence", "accidentals", "articulation",
-      ].map((id) => ({ id, weight: id === "articulation" ? 0.05 : 1 }));
+        "missing", "rhythmicDictation", "repeatSigns", "cadence", "accidentals",
+      ].map((id) => ({ id, weight: 1 }));
       while (selected.length < AH_PRACTICE_QUESTION_COUNT) {
         const next = addWeighted(fallbackOptions);
         if (!next) break;
@@ -6864,7 +6885,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return true;
     }
 
-    function makePracticeTimeChangeTarget(question, timeSignatureLevel) {
+    function makePracticeTimeChangeTarget(question, timeSignatureLevel, preferredBarIndexes = [8]) {
       if (timeSignatureLevel !== "AH" || question.bars.length <= 8) return null;
       const options = TIME_SIGNATURES
         .filter((signature) => timeSignatureAnswerOptionsForLevel(timeSignatureLevel).includes(signature.id))
@@ -6873,7 +6894,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
       if (!options.length) return null;
       const signature = withFiveFourGrouping(weightedRandomItem(options));
       if (!signature) return null;
-      const barIndex = 8;
+      const possibleBarIndexes = preferredBarIndexes.filter((barIndex) => (
+        Number.isInteger(barIndex)
+        && barIndex >= 8
+        && barIndex <= 11
+        && question.bars[barIndex]
+      ));
+      const barIndex = randomItem(possibleBarIndexes.length ? possibleBarIndexes : [8]);
       if (!rebuildPracticeBarsAfterTimeChange(question, barIndex, signature)) return null;
       return { barIndex, endBarIndex: 11, restoreBarIndex: 12, signature };
     }
@@ -6960,7 +6987,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         : null;
       const forceAdvancedHigherDominantCadence = questionSelectionLevel === "AH"
         && selectedSourceIds.has("ahChordTypes")
-        && selectedSourceIds.has("cadence");
+        && selectedSourceIds.has("cadence")
+        && Math.random() < 0.1;
       let cadenceId = forceAdvancedHigherDominantCadence ? "perfect" : choosePracticeCadenceId(level);
       const needsSimpleTime = needsTriplets || (level === "H" && needsRhythmicDictation);
       const generationOptions = { questionTypes: [...selectedSourceIds] };
@@ -6973,10 +7001,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
       const timeChangeTarget = needsTime
         && questionSelectionLevel === "AH"
-        && !needsRhythmicDictation
-        && advancedHigherDevelopmentBarCost([...selectedSourceIds]) < ADVANCED_HIGHER_DEVELOPMENT_BARS.length
-        && Math.random() < 0.5
-        ? makePracticeTimeChangeTarget(question, timeSignatureLevel)
+        && Math.random() < 0.9
+        ? makePracticeTimeChangeTarget(question, timeSignatureLevel, needsAdvancedHigherChordTask ? [10, 11] : [8, 10, 11])
         : null;
       if (questionSelectionLevel === "AH" && needsKey && needsTime && !timeChangeTarget && canRetryPracticeQuestion) {
         return retryPracticeQuestion();
@@ -6991,7 +7017,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
       };
       if (needsKey || needsTime) reserveQuestionBar(0);
       if (questionSelectionLevel === "AH" && timeChangeTarget) reserveQuestionBar(timeChangeTarget.barIndex);
-      if (questionSelectionLevel === "AH" && needsRhythmicDictation) reserveQuestionBar(8);
       const advancedHigherChordTarget = needsAdvancedHigherChordTask ? makeAdvancedHigherChordTarget(question) : null;
       if (needsAdvancedHigherChordTask && !advancedHigherChordTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (advancedHigherChordTarget) {
@@ -7010,10 +7035,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const unusedQuestionBars = (barIndexes) => barIndexes.filter((barIndex) => !usedQuestionBars.has(barIndex));
       const advancedHigherRhythmDictationTarget = needsRhythmicDictation && questionSelectionLevel === "AH"
         ? (() => {
+          const targetBarIndex = randomItem(unusedQuestionBars([10, 11]));
+          if (!Number.isInteger(targetBarIndex)) return null;
           const variantRoll = Math.random();
-          if (variantRoll < 0.34) return plantAdvancedHigherRhythmTripletTarget(question);
-          if (variantRoll < 0.67) return plantAdvancedHigherRhythmTieTarget(question);
-          return plantAdvancedHigherRhythmDictationTarget(question);
+          if (variantRoll < 0.34) return plantAdvancedHigherRhythmTripletTarget(question, targetBarIndex);
+          if (variantRoll < 0.67) return plantAdvancedHigherRhythmTieTarget(question, targetBarIndex);
+          return plantAdvancedHigherRhythmDictationTarget(question, targetBarIndex);
         })()
         : null;
       if (advancedHigherRhythmDictationTarget) rhythmFixTargetBars(advancedHigherRhythmDictationTarget).forEach(reserveQuestionBar);
@@ -7245,7 +7272,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const articulationTarget = needsArticulation ? makeArticulationTarget(question, [...usedQuestionBars]) : null;
       if (needsArticulation && !articulationTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsArticulation && articulationTarget) reserveQuestionBar(articulationTarget.barIndex);
-      const preferRhythmFix = needsRhythmicDictation && !advancedHigherRhythmDictationTarget && (level === "H" || Math.random() < 0.5);
+      const preferRhythmFix = needsRhythmicDictation && !advancedHigherRhythmDictationTarget && questionSelectionLevel !== "AH" && (level === "H" || Math.random() < 0.5);
       const rhythmFixTarget = advancedHigherRhythmDictationTarget ?? (preferRhythmFix ? plantRhythmFixTarget(question, [...usedQuestionBars]) : null);
       if (rhythmFixTarget) rhythmFixTargetBars(rhythmFixTarget).forEach(reserveQuestionBar);
       if (needsRhythmicDictation && (level === "H" || questionSelectionLevel === "AH") && !rhythmFixTarget && canRetryPracticeQuestion) {

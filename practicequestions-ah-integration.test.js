@@ -22,9 +22,10 @@ includes("return { barIndex, endBarIndex: 11, restoreBarIndex: 12, signature };"
 includes("question.practiceLevel === \"AH\" ? null : plantTranspositionFallbackBar", "AH transposition must not rewrite the generated melody");
 includes(".filter((bar) => bar.barIndex >= 1 && bar.barIndex < 8)", "AH transposition must select bars 2-8");
 includes("questionSelectionLevel === \"AH\" ? ADVANCED_HIGHER_DEVELOPMENT_BARS : null", "AH editable questions must be directed to the development line");
-includes("const targetBarIndex = 8;", "AH rhythmic dictation must target bar 9");
+includes("const targetBarIndex = randomItem(unusedQuestionBars([10, 11]));", "AH rhythmic dictation must target bars 11-12");
 includes("forceFinalDominantCadence: forceAdvancedHigherDominantCadence", "A cadence with a chord-type question must use the dominant-seventh exception");
 includes("!forceAdvancedHigherDominantCadence ? cadenceBarIndexes : []", "The dominant-seventh cadence exception must be allowed to share bars 15-16");
+includes("&& Math.random() < 0.1;", "The dominant-seventh cadence exception must be rare enough for other chord types to appear");
 includes("const activeTimeSignature = timeSignatureForBar(question, barIndex);", "Chord slots must follow a line-3 time change");
 includes("{ beat: 3, beats: 2, rhythm: \"minim\" }", "AH chord slots in 5/4 must preserve the 3+2 grouping");
 includes("barlineQuestionPromptText(barlineTargets[0], question.bars.length)", "AH barline prompts must retain two-digit bar numbers");
@@ -39,10 +40,13 @@ includes("{ letter: \"F\", accidental: -1 }", "C major enharmonic sources must i
 includes("Dm: [\n        { letter: \"C\", accidental: 1 },\n        { letter: \"D\", accidental: -1 },\n        { letter: \"B\", accidental: -1 },\n        { letter: \"A\", accidental: 1 },", "D minor must include its own and relative-major enharmonic sources");
 includes("const blend = 0;", "Barline question note spacing must preserve rhythmic grammar");
 includes("if (question.practiceLevel === \"AH\" && intervalNumber === 2) return false;", "AH interval questions must not target existing 2nds");
-includes("higherIntervalTypeOrder().filter((type) => type !== \"second\")", "AH planted interval questions must not choose 2nds");
-includes("return selected.has(\"ahChord\") && selected.has(\"rhythmicDictation\");", "Chord identify and rhythmic dictation must not both occupy bar 9");
+includes("higherIntervalTypeOrder(ADVANCED_HIGHER_INTERVAL_TYPE_WEIGHTS)", "AH planted interval questions must use AH-specific interval weighting");
+includes("return { ...target, weight: intervalNumber === 3 ? 1 : 4 };", "AH existing interval targets must favour intervals other than 3rds");
 includes("questionSelectionLevel === \"AH\" && needsKey && needsTime && !timeChangeTarget", "Key and starting time-signature questions must not both occupy bar 1");
 includes(".filter((signature) => signature.id !== \"5/4\")", "5/4 must not be selected as the starting AH time signature");
+includes("type.id !== \"articulation\"", "Articulation questions must be removed from AH");
+excludes("{ key: \"articulation\", weight: 0.05, choose: () => \"articulation\" }", "Articulation must not remain in the AH audio-question pool");
+includes("const variant = question.practiceLevel === \"AH\" ? weightedRandomItem(variants) : randomItem(variants);", "AH transposition variants must use weighted selection");
 includes("function advancedHigherPlaybackSlotsForBar(question, bar)", "AH playback must read the generated chord slots for bars 9 and 10");
 includes("advancedHigherChordPlaybackMidiMap(question, bar, advancedHigherPlaybackSlotForBeat(advancedHigherChordSlots, event.time))", "AH accompaniment patterns must follow generated chord inversions at each pulse");
 includes("function melodyCeilingMidiForBeat(question, bar, beat = 0)", "Playback must calculate a melody-aware ceiling for accompaniment notes");
@@ -54,4 +58,4 @@ includes("return chordPitchClasses.has(pitchClass(pitchOfSpelledNote(candidate.s
 includes("function closestEnharmonicSourceOctave(question, bar, note, source, clef = \"treble\")", "Enharmonic source spellings must be fitted to the original melody register");
 includes("fitEnharmonicCandidateToMelodyNote(question, bar, note, candidate, clef)", "Enharmonic candidates must be refitted before selection");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 40 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 44 }, null, 2));
