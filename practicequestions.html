@@ -702,18 +702,7 @@
     const NATIONAL3_DYNAMIC_OPTIONS = DYNAMIC_OPTIONS.filter((dynamic) => ["p", "f"].includes(dynamic.id));
     const NATIONAL4_DYNAMIC_OPTIONS = DYNAMIC_OPTIONS.filter((dynamic) => ["p", "mp", "mf", "f"].includes(dynamic.id));
     const NATIONAL5_DYNAMIC_MEANING_OPTIONS = DYNAMIC_OPTIONS.filter((dynamic) => ["pp", "ff", "sfz"].includes(dynamic.id));
-    const TRANSPOSITION_QUESTION_TYPE_IDS = [
-      "transpositionOctaveDown",
-      "transpositionOctaveUp",
-      "transpositionSamePitch",
-      "transpositionOctaveSigns",
-    ];
-    const TRANSPOSITION_VARIANT_IDS_BY_QUESTION_TYPE = {
-      transpositionOctaveDown: ["trebleOctaveDown"],
-      transpositionOctaveUp: ["bassOctaveUp"],
-      transpositionSamePitch: ["trebleSamePitch", "bassSamePitch"],
-      transpositionOctaveSigns: ["meaning"],
-    };
+    const TRANSPOSITION_QUESTION_TYPE_IDS = ["transposition"];
     const PRACTICE_QUESTION_TYPES = [
       { id: "barlines", label: "Barlines", icon: "barlines" },
       { id: "cadence", label: "Cadences", icon: "cadences", audio: true },
@@ -735,10 +724,7 @@
       { id: "enharmonics", label: "Enharmonic Equivalents", icon: "enharmonics" },
       { id: "triplets", label: "Triplets", icon: "triplets" },
       { id: "articulation", label: "Articulation Markings", icon: "articulation", audio: true },
-      { id: "transpositionOctaveDown", label: "Transposing", subtitle: "One octave lower from treble clef to bass clef", icon: "transposition" },
-      { id: "transpositionOctaveUp", label: "Transposing", subtitle: "One octave higher from bass clef to treble clef", icon: "transposition" },
-      { id: "transpositionSamePitch", label: "Transposing", subtitle: "At the same pitch", icon: "transposition" },
-      { id: "transpositionOctaveSigns", label: "Transposing", subtitle: "8va and 8vb", icon: "transposition" },
+      { id: "transposition", label: "Transposing", icon: "transposition" },
       { id: "tempoQuestion", label: "Tempo", icon: "tempoIcon", audio: true },
       { id: "time", label: "Time Signatures", icon: "timeSignatures" },
     ];
@@ -835,10 +821,7 @@
       "enharmonics",
       "triplets",
       "articulation",
-      "transpositionOctaveDown",
-      "transpositionOctaveUp",
-      "transpositionSamePitch",
-      "transpositionOctaveSigns",
+      "transposition",
       "time",
     ]);
     const DEFAULT_HIGHER_PRACTICE_QUESTION_TYPE_IDS = new Set([
@@ -851,11 +834,23 @@
     ]);
     const DEFAULT_AH_PRACTICE_QUESTION_TYPE_IDS = new Set([
       "accidentals",
+      "ahBassLine",
+      "ahChord",
+      "ahChordTypes",
       "articulation",
+      "barlines",
       "cadence",
+      "enharmonics",
+      "interval",
+      "key",
       "missing",
+      "repeatSigns",
+      "rests",
+      "rhythmIdentification",
       "rhythmicDictation",
+      "scaleDegrees",
       "time",
+      "transposition",
     ]);
     const HIGHER_ONLY_PRACTICE_QUESTION_TYPE_IDS = new Set([
       "rests",
@@ -867,10 +862,7 @@
       "ahBassLine",
       "ahChordTypes",
       "articulation",
-      "transpositionOctaveDown",
-      "transpositionOctaveUp",
-      "transpositionSamePitch",
-      "transpositionOctaveSigns",
+      "transposition",
     ]);
     const PRACTICE_QUESTION_COUNT = 6;
     let lastPracticeCadenceId = null;
@@ -1024,7 +1016,7 @@
       if (level === "H") return PRACTICE_QUESTION_TYPES.filter((type) => (
         HIGHER_PRACTICE_QUESTION_TYPE_IDS.has(type.id)
         && !type.id.startsWith("ah")
-        && (!TRANSPOSITION_QUESTION_TYPE_IDS.includes(type.id) || type.id === "transpositionOctaveDown")
+        && (!TRANSPOSITION_QUESTION_TYPE_IDS.includes(type.id) || type.id === "transposition")
       ));
       return PRACTICE_QUESTION_TYPES;
     };
@@ -6092,11 +6084,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return question.bars[bar.barIndex];
     }
 
-    function makeTranspositionTarget(question, excludedBars = [], transpositionQuestionTypeId = null) {
-      const allowedVariantIds = TRANSPOSITION_VARIANT_IDS_BY_QUESTION_TYPE[transpositionQuestionTypeId] ?? null;
-      const meaningOnly = allowedVariantIds?.length === 1 && allowedVariantIds[0] === "meaning";
-      const canUseMeaning = question.practiceLevel === "AH" && (!allowedVariantIds || allowedVariantIds.includes("meaning"));
-      if (canUseMeaning && (meaningOnly || Math.random() < 0.2)) {
+    function makeTranspositionTarget(question, excludedBars = []) {
+      const canUseMeaning = question.practiceLevel === "AH";
+      if (canUseMeaning && Math.random() < 0.2) {
         const excluded = new Set(excludedBars);
         const availableBars = question.bars
           .filter((bar) => bar.barIndex < 8 && !excluded.has(bar.barIndex))
@@ -6114,10 +6104,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         };
       }
       const excluded = new Set([...excludedBars]);
-      const availableVariants = question.practiceLevel === "AH" ? ADVANCED_HIGHER_TRANSPOSITION_VARIANTS : HIGHER_TRANSPOSITION_VARIANTS;
-      const variants = allowedVariantIds
-        ? availableVariants.filter((variant) => allowedVariantIds.includes(variant.id))
-        : availableVariants;
+      const variants = question.practiceLevel === "AH" ? ADVANCED_HIGHER_TRANSPOSITION_VARIANTS : HIGHER_TRANSPOSITION_VARIANTS;
       if (!variants.length) return null;
       const variant = randomItem(variants);
       const eligibleBars = question.bars
@@ -6534,7 +6521,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const selectedTranspositionTypeIds = TRANSPOSITION_QUESTION_TYPE_IDS.filter((id) => selectedSourceIds.has(id));
       TRANSPOSITION_QUESTION_TYPE_IDS.forEach((id) => selectedSourceIds.delete(id));
       if (selectedTranspositionTypeIds.length || selectedSourceIds.has("transposition")) selectedSourceIds.add("transposition");
-      const selectedTranspositionTypeId = selectedTranspositionTypeIds[0] ?? (selectedSourceIds.has("transposition") ? "transpositionOctaveDown" : null);
       const selectedAdvancedHigherChordIds = questionSelectionLevel === "AH"
         ? ["ahChord", "ahBassLine", "ahChordTypes"].filter((id) => enabledQuestionTypes[id] !== false)
         : [];
@@ -6752,7 +6738,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       excludedBars.push(...usedQuestionBars);
       ensureRequiredMelodicAccidental(question, excludedBars);
       forceFirstNoteToTonic(question.bars, level, question.key);
-      const transpositionTarget = needsTransposition ? makeTranspositionTarget(question, [...usedQuestionBars], selectedTranspositionTypeId) : null;
+      const transpositionTarget = needsTransposition ? makeTranspositionTarget(question, [...usedQuestionBars]) : null;
       if (needsTransposition && !transpositionTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsTransposition && Number.isInteger(transpositionTarget?.barIndex)) {
         reserveQuestionBar(transpositionTarget.barIndex);
@@ -11295,7 +11281,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
     function AudioQuestionTypeLabel({ type }) {
       if (type.subtitle) {
-        const subtitleClassName = `mt-0.5 text-[12px] font-semibold leading-tight text-slate-500/70 ${type.id === "transpositionOctaveSigns" ? "-ml-1" : ""}`.trim();
+        const subtitleClassName = "mt-0.5 text-[12px] font-semibold leading-tight text-slate-500/70";
         return (
           <span className="flex min-w-0 flex-col leading-tight">
             <span className="inline-flex items-center leading-none">
