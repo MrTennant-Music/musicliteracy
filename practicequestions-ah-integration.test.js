@@ -12,8 +12,8 @@ function includes(text, message) {
 includes("./practice-melody-generator.js?v=20260710-ah-rules", "The AH generator must load before the page app");
 includes("const ADVANCED_HIGHER_DEVELOPMENT_BARS = [8, 9, 10, 11];", "Development questions must use bars 9-12");
 includes("const ADVANCED_HIGHER_VARIATION_BARS = [4, 5, 6, 7];", "Variation questions must use bars 5-8");
-includes("const ADVANCED_HIGHER_CHORD_IDENTIFY_BAR = 10;", "Chord identification must use bar 11");
-includes("const ADVANCED_HIGHER_CHORD_BASS_BAR = 11;", "Bass-line work must use bar 12");
+includes("const ADVANCED_HIGHER_CHORD_IDENTIFY_BAR = 8;", "Chord identification must use bar 9");
+includes("const ADVANCED_HIGHER_CHORD_BASS_BAR = 9;", "Bass-line work must use bar 10");
 includes("return { barIndex, endBarIndex: 11, restoreBarIndex: 12, signature };", "Time changes must end after bar 12");
 includes("question.practiceLevel === \"AH\" ? null : plantTranspositionFallbackBar", "AH transposition must not rewrite the generated melody");
 includes(".filter((bar) => bar.barIndex >= 1 && bar.barIndex < 8)", "AH transposition must select bars 2-8");
@@ -26,5 +26,8 @@ includes("{ beat: 3, beats: 2, rhythm: \"minim\" }", "AH chord slots in 5/4 must
 includes("barlineQuestionPromptText(barlineTargets[0], question.bars.length)", "AH barline prompts must retain two-digit bar numbers");
 includes("question.transpositionTarget?.type === \"meaning\" ? 0 : 80", "A written transposition stave must add 80 pixels below its system");
 includes("const scaleDegreeBoxHeight = MARKING_BOX_HEIGHT + 10;", "Scale-degree boxes must extend 10 pixels farther downward");
+includes("reserveExtraSpacingAfterSystem(ahChordSystemIndex, 100);", "Chord and bass-line boxes must push line 4 down by 100 pixels");
+includes("return selected.has(\"ahChord\") && selected.has(\"rhythmicDictation\");", "Chord identify and rhythmic dictation must not both occupy bar 9");
+includes("questionSelectionLevel === \"AH\" && needsKey && needsTime && !timeChangeTarget", "Key and starting time-signature questions must not both occupy bar 1");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 17 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 20 }, null, 2));

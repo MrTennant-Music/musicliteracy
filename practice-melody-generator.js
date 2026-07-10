@@ -111,8 +111,8 @@
     rests: { questionOverrides: { targetBars: [8, 9, 10, 11], mayReplaceRhythm: true } },
     rhythmIdentification: { questionOverrides: { targetBars: [8, 9, 10, 11], mayReplaceRhythm: true } },
     barlines: { rhythm: { allowRests: true }, questionOverrides: { targetBars: [8, 9, 10, 11] } },
-    ahChord: { questionOverrides: { targetBars: [10], mayReplaceHarmony: true } },
-    ahBassLine: { questionOverrides: { targetBars: [11], mayReplaceHarmony: true } },
+    ahChord: { questionOverrides: { targetBars: [8], mayReplaceHarmony: true } },
+    ahBassLine: { questionOverrides: { targetBars: [9], mayReplaceHarmony: true } },
   };
 
   function deepMerge(base, override) {

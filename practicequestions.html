@@ -4750,8 +4750,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return { barIndex, noteIndex, chordType, reservedBars };
     }
 
-    const ADVANCED_HIGHER_CHORD_IDENTIFY_BAR = 10;
-    const ADVANCED_HIGHER_CHORD_BASS_BAR = 11;
+    const ADVANCED_HIGHER_CHORD_IDENTIFY_BAR = 8;
+    const ADVANCED_HIGHER_CHORD_BASS_BAR = 9;
     function advancedHigherChordSlotTimings(timeSignature) {
       const id = timeSignature?.id;
       if (id === "2/4") return [
@@ -6571,16 +6571,25 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return cost;
     }
 
+    function hasAdvancedHigherFixedBarSelectionConflict(ids) {
+      const selected = new Set(ids);
+      return selected.has("ahChord") && selected.has("rhythmicDictation");
+    }
+
     function selectedAdvancedHigherPracticeQuestionTypeIds(enabledQuestionTypes, selectionAttempt = 0) {
       const selected = [];
       const sourceTypeEnabled = (id) => id === "ahChordTypes" ? enabledQuestionTypes.ahChord !== false : enabledQuestionTypes[id] !== false;
       const addIfEnabled = (id) => {
-        if (!sourceTypeEnabled(id) || selected.includes(id)) return false;
+        if (!sourceTypeEnabled(id) || selected.includes(id) || hasAdvancedHigherFixedBarSelectionConflict([...selected, id])) return false;
         selected.push(id);
         return true;
       };
       const addWeighted = (options) => {
-        const candidates = options.filter((option) => sourceTypeEnabled(option.id) && !selected.includes(option.id));
+        const candidates = options.filter((option) => (
+          sourceTypeEnabled(option.id)
+          && !selected.includes(option.id)
+          && !hasAdvancedHigherFixedBarSelectionConflict([...selected, option.id])
+        ));
         if (!candidates.length) return null;
         const id = weightedRandomItem(candidates).id;
         selected.push(id);
@@ -6631,7 +6640,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         const group = weightedRandomItem(candidates);
         usedAudioGroups.add(group.key);
         const id = group.choose();
-        if (sourceTypeEnabled(id) && !selected.includes(id)) selected.push(id);
+        if (sourceTypeEnabled(id) && !selected.includes(id) && !hasAdvancedHigherFixedBarSelectionConflict([...selected, id])) selected.push(id);
       }
 
       const fallbackOptions = [
@@ -6644,6 +6653,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
         if (!next) break;
       }
       const finalSelection = selected.slice(0, AH_PRACTICE_QUESTION_COUNT);
+      if (hasAdvancedHigherFixedBarSelectionConflict(finalSelection) && selectionAttempt < 40) {
+        return selectedAdvancedHigherPracticeQuestionTypeIds(enabledQuestionTypes, selectionAttempt + 1);
+      }
       if (advancedHigherDevelopmentBarCost(finalSelection) > ADVANCED_HIGHER_DEVELOPMENT_BARS.length && selectionAttempt < 40) {
         return selectedAdvancedHigherPracticeQuestionTypeIds(enabledQuestionTypes, selectionAttempt + 1);
       }
@@ -6912,6 +6924,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
         && Math.random() < 0.5
         ? makePracticeTimeChangeTarget(question, timeSignatureLevel)
         : null;
+      if (questionSelectionLevel === "AH" && needsKey && needsTime && !timeChangeTarget && canRetryPracticeQuestion) {
+        return retryPracticeQuestion();
+      }
       if (timeChangeTarget) question.timeChangeTarget = timeChangeTarget;
       if (needsTime && needsMissing && (question.targetBar === 0 || question.missingSourceBar === 0) && canRetryPracticeQuestion) {
         return retryPracticeQuestion();
@@ -8426,7 +8441,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       };
       reserveExtraSpacingAfterSystem(transpositionSystemIndex, question.transpositionTarget?.type === "meaning" ? 0 : 80);
       reserveExtraSpacingAfterSystem(enharmonicSystemIndex, 90);
-      reserveExtraSpacingAfterSystem(ahChordSystemIndex, 80);
+      reserveExtraSpacingAfterSystem(ahChordSystemIndex, 100);
       const cumulativeSpacingBeforeSystem = extraSpacingAfterSystem.map((_, index) => (
         extraSpacingAfterSystem.slice(0, index).reduce((sum, spacing) => sum + spacing, 0)
       ));
