@@ -26,7 +26,7 @@ includes("{ beat: 3, beats: 2, rhythm: \"minim\" }", "AH chord slots in 5/4 must
 includes("barlineQuestionPromptText(barlineTargets[0], question.bars.length)", "AH barline prompts must retain two-digit bar numbers");
 includes("question.transpositionTarget?.type === \"meaning\" ? 0 : 80", "A written transposition stave must add 80 pixels below its system");
 includes("const scaleDegreeBoxHeight = MARKING_BOX_HEIGHT + 10;", "Scale-degree boxes must extend 10 pixels farther downward");
-includes("reserveExtraSpacingAfterSystem(ahChordSystemIndex, 250);", "Chord and bass-line boxes must push line 4 down by 250 pixels");
+includes("reserveExtraSpacingAfterSystem(ahChordSystemIndex, 300);", "Chord and bass-line boxes must push line 4 down by 300 pixels");
 includes("return selected.has(\"ahChord\") && selected.has(\"rhythmicDictation\");", "Chord identify and rhythmic dictation must not both occupy bar 9");
 includes("questionSelectionLevel === \"AH\" && needsKey && needsTime && !timeChangeTarget", "Key and starting time-signature questions must not both occupy bar 1");
 includes(".filter((signature) => signature.id !== \"5/4\")", "5/4 must not be selected as the starting AH time signature");
