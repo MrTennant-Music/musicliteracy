@@ -49,5 +49,7 @@ includes("function melodyCeilingMidiForBeat(question, bar, beat = 0)", "Playback
 includes("lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, beatOffset))", "Accompaniment playback must be lowered below the melody at each pulse");
 excludes("{ rests: [\"quaverRest\"], before: [\"quaver\", \"quaver\", \"quaver\"], after: [\"crotchet\"], ties: [1] }", "Rest questions must not use the awkward tied-quaver 3/4 template");
 includes("{ rests: [\"quaverRest\"], before: [\"crotchet\", \"quaver\"], after: [\"crotchet\"] }", "3/4 rest questions must include a clean untied quaver-rest template");
+includes("const chordFittingCandidates = candidates.filter(({ bar, candidate }) => {", "Enharmonic source spellings must prefer chord tones on the primary beat");
+includes("return chordPitchClasses.has(pitchClass(pitchOfSpelledNote(candidate.source)));", "Enharmonic primary-beat spellings must be checked by sounding pitch against the bar harmony");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 36 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 38 }, null, 2));
