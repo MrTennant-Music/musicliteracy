@@ -29,5 +29,6 @@ includes("const scaleDegreeBoxHeight = MARKING_BOX_HEIGHT + 10;", "Scale-degree 
 includes("reserveExtraSpacingAfterSystem(ahChordSystemIndex, 100);", "Chord and bass-line boxes must push line 4 down by 100 pixels");
 includes("return selected.has(\"ahChord\") && selected.has(\"rhythmicDictation\");", "Chord identify and rhythmic dictation must not both occupy bar 9");
 includes("questionSelectionLevel === \"AH\" && needsKey && needsTime && !timeChangeTarget", "Key and starting time-signature questions must not both occupy bar 1");
+includes(".filter((signature) => signature.id !== \"5/4\")", "5/4 must not be selected as the starting AH time signature");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 20 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 21 }, null, 2));
