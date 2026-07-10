@@ -1078,6 +1078,13 @@
     const noteBaseForLetterOctave = (letter, octave) => noteBaseForStep(noteAbsoluteIndex(letter, octave) - 30);
     const writtenAccidentalOffset = (note) => note?.writtenAccidental ?? note?.accidental ?? 0;
     const pitchOfSpelledNote = (note) => 12 * (note.octave + 1) + NATURAL_MIDI_CLASSES[note.letter] + writtenAccidentalOffset(note);
+    const noteBaseAbovePitch = (letter, sourcePitch) => (
+      NOTE_POOL
+        .filter((note) => note.letter === letter && note.midi > sourcePitch)
+        .sort((first, second) => first.midi - second.midi)[0]
+      ?? NOTE_POOL.filter((note) => note.letter === letter).sort((first, second) => second.midi - first.midi)[0]
+      ?? noteByLetter(letter, 6)
+    );
     const enharmonicDisplayRangeForClef = (clef) => ({ min: MIN_DISPLAY_STEP, max: MAX_DISPLAY_STEP });
     function makeEnharmonicNote(spelling, octave, clef, sourceNote = null) {
       const base = noteBaseForLetterOctave(spelling.letter, octave);
@@ -5711,14 +5718,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }[rhythm] ?? rhythm;
     }
 
-    function setFirstNoteOfBarToLetter(question, barIndex, letter, chordSymbol) {
+    function setFirstNoteOfBarToLetter(question, barIndex, letter, chordSymbol, baseOverride = null) {
       const bar = question.bars?.[barIndex];
       const first = bar?.notes?.[0];
       if (!bar || !first) return null;
       const existingIndex = noteBaseIndex(first);
       const preferredIndex = existingIndex >= 0 ? existingIndex - LEGACY_NOTE_INDEX_OFFSET : 6;
       const rhythm = isRestRhythm(first.rhythm) ? soundingRhythmForRest(first.rhythm) : first.rhythm;
-      const replacement = makeNote(noteByLetter(letter, preferredIndex), rhythm, bar.barIndex, 0, first.beat ?? 0, question.key, chordSymbol);
+      const replacement = makeNote(baseOverride ?? noteByLetter(letter, preferredIndex), rhythm, bar.barIndex, 0, first.beat ?? 0, question.key, chordSymbol);
       question.bars[barIndex] = {
         ...bar,
         notes: [replacement, ...(bar.notes ?? []).slice(1)],
@@ -5794,7 +5801,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
       setBarHarmony(question, target.bar.barIndex, target.chordSymbol);
       if (target.resolutionChordSymbol) {
         setBarHarmony(question, target.bar.barIndex + 1, target.resolutionChordSymbol);
-        setFirstNoteOfBarToLetter(question, target.bar.barIndex + 1, target.resolutionLetter, target.resolutionChordSymbol);
+        const targetPitch = effectiveMidiForNote(question, target.bar, { ...target.note, writtenAccidental: target.value });
+        const resolutionBase = noteBaseAbovePitch(target.resolutionLetter, targetPitch);
+        setFirstNoteOfBarToLetter(question, target.bar.barIndex + 1, target.resolutionLetter, target.resolutionChordSymbol, resolutionBase);
       }
       const targetLetter = target.direction === "flat" ? harmony.minorIvThird : harmony.mode === "minor" ? harmony.minorSixth : harmony.secondaryThird;
       setMelodyNoteToLetter(question, target.bar.barIndex, target.noteIndex, targetLetter, target.chordSymbol, target.value);
