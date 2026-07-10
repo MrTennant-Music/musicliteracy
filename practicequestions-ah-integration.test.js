@@ -24,5 +24,6 @@ includes("!forceAdvancedHigherDominantCadence ? cadenceBarIndexes : []", "The do
 includes("const activeTimeSignature = timeSignatureForBar(question, barIndex);", "Chord slots must follow a line-3 time change");
 includes("{ beat: 3, beats: 2, rhythm: \"minim\" }", "AH chord slots in 5/4 must preserve the 3+2 grouping");
 includes("barlineQuestionPromptText(barlineTargets[0], question.bars.length)", "AH barline prompts must retain two-digit bar numbers");
+includes("question.transpositionTarget?.type === \"meaning\" ? 0 : 80", "A written transposition stave must add 80 pixels below its system");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 15 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 16 }, null, 2));
