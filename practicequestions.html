@@ -1175,6 +1175,36 @@
         .map((octave) => ({ octave, pitchDistance: Math.abs(pitchOfSpelledNote({ ...target, octave }) - sourcePitch), stepDistance: Math.abs(noteStepForClef({ ...target, octave }, clef) - sourceStep) }))
         .sort((first, second) => first.pitchDistance - second.pitchDistance || first.stepDistance - second.stepDistance)[0]?.octave ?? target.octave;
     }
+    function closestEnharmonicSourceOctave(question, bar, note, source, clef = "treble") {
+      const originalPitch = effectiveMidiForNote(question, bar, note);
+      const originalStep = displayStep(note, clef);
+      return Array.from({ length: 7 }, (_, index) => index + 1)
+        .map((octave) => ({
+          octave,
+          pitchDistance: Math.abs(pitchOfSpelledNote({ ...source, octave }) - originalPitch),
+          stepDistance: Math.abs(noteStepForClef({ ...source, octave }, clef) - originalStep),
+        }))
+        .sort((first, second) => first.pitchDistance - second.pitchDistance || first.stepDistance - second.stepDistance)[0]?.octave ?? note.octave;
+    }
+    function fitEnharmonicCandidateToMelodyNote(question, bar, note, candidate, clef = "treble") {
+      const sourceOctave = closestEnharmonicSourceOctave(question, bar, note, candidate.source, clef);
+      const source = { ...candidate.source, octave: sourceOctave };
+      const targetOctave = closestEnharmonicTargetOctave(source, candidate.target, clef);
+      const target = { ...candidate.target, octave: targetOctave };
+      const sourceStep = noteStepForClef(source, clef);
+      const targetStep = noteStepForClef(target, clef);
+      const range = enharmonicDisplayRangeForClef(clef);
+      if (
+        pitchOfSpelledNote(source) !== pitchOfSpelledNote(target)
+        || sourceStep < range.min
+        || sourceStep > range.max
+        || targetStep < range.min
+        || targetStep > range.max
+      ) {
+        return null;
+      }
+      return { ...candidate, source, target, sourceStep, targetStep };
+    }
     function enharmonicSourceOptionsForKey(key) {
       return ENHARMONIC_KEY_SOURCE_OPTIONS[key?.id] ?? [];
     }
@@ -6388,13 +6418,18 @@ function advancedHigherInversionAnswerLabel(inversion) {
           ) {
             return [];
           }
-          return keyMappedCandidates.map((candidate, candidateIndex) => ({
-            bar,
-            note,
-            noteIndex,
-            candidate,
-            candidateIndex,
-          }));
+          return keyMappedCandidates
+            .map((candidate, candidateIndex) => {
+              const fittedCandidate = fitEnharmonicCandidateToMelodyNote(question, bar, note, candidate, clef);
+              return fittedCandidate ? {
+                bar,
+                note,
+                noteIndex,
+                candidate: fittedCandidate,
+                candidateIndex,
+              } : null;
+            })
+            .filter(Boolean);
         })
       );
       if (!candidates.length) return null;
@@ -6411,9 +6446,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         writtenAccidental: candidate.source.accidental - keyAccidentalForLetter(question.key, candidate.source.letter),
         displayAccidental: candidate.source.accidental,
       };
-      const targetOctave = closestEnharmonicTargetOctave(sourceNote, candidate.target, clef);
       const answerNote = {
-        ...makeEnharmonicNote(candidate.target, targetOctave, clef, chosen.note),
+        ...makeEnharmonicNote(candidate.target, candidate.target.octave, clef, chosen.note),
         id: `enharmonic-answer-${chosen.bar.barIndex}-${chosen.noteIndex}`,
         barIndex: chosen.bar.barIndex,
         noteIndex: chosen.noteIndex,

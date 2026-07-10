@@ -51,5 +51,7 @@ excludes("{ rests: [\"quaverRest\"], before: [\"quaver\", \"quaver\", \"quaver\"
 includes("{ rests: [\"quaverRest\"], before: [\"crotchet\", \"quaver\"], after: [\"crotchet\"] }", "3/4 rest questions must include a clean untied quaver-rest template");
 includes("const chordFittingCandidates = candidates.filter(({ bar, candidate }) => {", "Enharmonic source spellings must prefer chord tones on the primary beat");
 includes("return chordPitchClasses.has(pitchClass(pitchOfSpelledNote(candidate.source)));", "Enharmonic primary-beat spellings must be checked by sounding pitch against the bar harmony");
+includes("function closestEnharmonicSourceOctave(question, bar, note, source, clef = \"treble\")", "Enharmonic source spellings must be fitted to the original melody register");
+includes("fitEnharmonicCandidateToMelodyNote(question, bar, note, candidate, clef)", "Enharmonic candidates must be refitted before selection");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 38 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 40 }, null, 2));
