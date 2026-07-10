@@ -41,5 +41,7 @@ includes("questionSelectionLevel === \"AH\" && needsKey && needsTime && !timeCha
 includes(".filter((signature) => signature.id !== \"5/4\")", "5/4 must not be selected as the starting AH time signature");
 includes("function advancedHigherPlaybackSlotsForBar(question, bar)", "AH playback must read the generated chord slots for bars 9 and 10");
 includes("advancedHigherChordPlaybackMidiMap(question, bar, advancedHigherPlaybackSlotForBeat(advancedHigherChordSlots, event.time))", "AH accompaniment patterns must follow generated chord inversions at each pulse");
+includes("function melodyCeilingMidiForBeat(question, bar, beat = 0)", "Playback must calculate a melody-aware ceiling for accompaniment notes");
+includes("lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, beatOffset))", "Accompaniment playback must be lowered below the melody at each pulse");
 
-console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 32 }, null, 2));
+console.log(JSON.stringify({ tests: "passed", integrationRulesChecked: 34 }, null, 2));

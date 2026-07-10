@@ -13923,9 +13923,39 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return adjusted;
       }
 
-      function lowerAccompanimentMidiValues(midiOrValues) {
+      function lowerAccompanimentMidiBelow(midi, ceiling = ACCOMPANIMENT_MAX_MIDI) {
+        const maxMidi = Math.min(ACCOMPANIMENT_MAX_MIDI, Number.isFinite(ceiling) ? ceiling : ACCOMPANIMENT_MAX_MIDI);
+        let adjusted = lowerAccompanimentMidi(midi);
+        while (adjusted >= maxMidi) adjusted -= 12;
+        return adjusted;
+      }
+
+      function lowerAccompanimentMidiValues(midiOrValues, ceiling = ACCOMPANIMENT_MAX_MIDI) {
         return (Array.isArray(midiOrValues) ? midiOrValues.flat(Infinity) : [midiOrValues])
-          .map(lowerAccompanimentMidi);
+          .map((midi) => lowerAccompanimentMidiBelow(midi, ceiling));
+      }
+
+      function melodyPlaybackMidisForNote(question, bar, note, noteIndex) {
+        if (!note || shouldSkipMelodyPlaybackNote(bar, note, noteIndex)) return [];
+        return note.stack?.length
+          ? note.stack.map((tone) => effectivePlaybackMidiForStackTone(question, bar, tone))
+          : [effectivePlaybackMidiForNote(question, bar, note, noteIndex)];
+      }
+
+      function melodyCeilingMidiForBeat(question, bar, beat = 0) {
+        const sounding = (bar.notes ?? []).flatMap((note, noteIndex) => {
+          const start = note.beat ?? 0;
+          const nextTiedNote = (note.tieToNext || note.audioTieToNext) && !bar.notes[noteIndex + 1]?.rest ? bar.notes[noteIndex + 1] : null;
+          const end = start + (note.beats ?? 0) + (nextTiedNote?.beats ?? 0);
+          return beat >= start - 0.001 && beat < end - 0.001
+            ? melodyPlaybackMidisForNote(question, bar, note, noteIndex)
+            : [];
+        });
+        const reference = sounding.length
+          ? sounding
+          : (bar.notes ?? []).flatMap((note, noteIndex) => melodyPlaybackMidisForNote(question, bar, note, noteIndex));
+        if (!reference.length) return ACCOMPANIMENT_MAX_MIDI;
+        return Math.min(...reference) - 1;
       }
 
       function accompanimentChordMidisForBar(question, bar) {
@@ -14036,13 +14066,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
             : dynamicGain) * accompanimentGainScale;
           const fallbackType = hand === "LH" ? "sine" : "triangle";
           const release = hand === "LH" ? 0.08 : 0.06;
-          playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, velocity, accompanimentVolume(volume), eventDynamicGain, fallbackType, release);
+          playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, beatOffset)), startTime + audibleStart, audibleDuration, velocity, accompanimentVolume(volume), eventDynamicGain, fallbackType, release);
         };
 
         safePattern.forEach((event) => {
           const duration = accompanimentDurationBeats(event.duration, meterInfo);
           const eventVelocity = Math.round(((event.velocity ?? dynamicVelocity) + (accompanimentIsAccent ? ARTICULATION_ACCENT_VELOCITY_BOOST : 0)) * (meterInfo.groupStartBeats.some((beat) => Math.abs(event.time - beat) < 0.001) ? 1.04 : 1));
-          lowerAccompanimentMidiValues(event.notes.flatMap((token) => accompanimentTokenMidi(token, midiMapForBeat(event.time)))).forEach((midi) => scheduleTone(midi, event.time, duration, event.volume ?? 0.016, event.hand, eventVelocity));
+          event.notes.flatMap((token) => accompanimentTokenMidi(token, midiMapForBeat(event.time))).forEach((midi) => scheduleTone(midi, event.time, duration, event.volume ?? 0.016, event.hand, eventVelocity));
         });
       }
 
@@ -14070,8 +14100,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
           const audibleDuration = Math.max(0.04, chordStart + chordDuration - audibleStart);
           const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, finalNote.beat) * accompanimentGainScale;
           chordMidi.forEach((midi, index) => {
-            playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
-            if (index === 0) playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi - 12), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.02), eventDynamicGain, "sine", finalPlaybackBar ? 0.38 : 0.08);
+            playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, finalNote.beat)), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
+            if (index === 0) playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi - 12, melodyCeilingMidiForBeat(question, bar, finalNote.beat)), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.02), eventDynamicGain, "sine", finalPlaybackBar ? 0.38 : 0.08);
           });
           return;
         }
@@ -14081,8 +14111,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
           const chordDuration = Math.max(0.04, barStart + currentBarSeconds * 0.96 - chordStart);
           const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, 0) * accompanimentGainScale;
           chordMidi.forEach((midi, index) => {
-            playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
-            if (index === 0) playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi - 12), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.02), eventDynamicGain, "sine", finalPlaybackBar ? 0.38 : 0.08);
+            playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, 0)), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
+            if (index === 0) playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi - 12, melodyCeilingMidiForBeat(question, bar, 0)), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.02), eventDynamicGain, "sine", finalPlaybackBar ? 0.38 : 0.08);
           });
           return;
         }
@@ -14101,7 +14131,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             [...trebleMidis, ...bassMidis].forEach((midi, index) => {
               const hand = index >= trebleMidis.length ? "sine" : "triangle";
               const volume = index >= trebleMidis.length ? 0.022 : 0.018;
-              playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(volume), eventDynamicGain, hand, 0.08);
+              playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, slot.beat ?? 0)), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(volume), eventDynamicGain, hand, 0.08);
             });
           });
           return;
@@ -14110,7 +14140,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         const bassMidi = chordMidi[0] - 12;
         const bassStart = Math.max(barStart, offset);
         const bassDuration = Math.max(0.04, barStart + beatSeconds * 0.88 - bassStart);
-        playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(bassMidi), startTime + bassStart, bassDuration, accompanimentVelocity, accompanimentVolume(0.024), dynamicGainForPoint(question, bar.barIndex, 0) * accompanimentGainScale, "sine", 0.06);
+        playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(bassMidi, melodyCeilingMidiForBeat(question, bar, 0)), startTime + bassStart, bassDuration, accompanimentVelocity, accompanimentVolume(0.024), dynamicGainForPoint(question, bar.barIndex, 0) * accompanimentGainScale, "sine", 0.06);
 
         if (barTimeSignature.id === "5/4") {
           [
@@ -14126,11 +14156,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const audibleDuration = Math.max(0.04, pulseStart + pulseDuration - audibleStart);
             const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, event.beat) * accompanimentGainScale;
             if (event.type === "bass") {
-              playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(bassMidi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.024), eventDynamicGain, "sine", 0.06);
+              playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(bassMidi, melodyCeilingMidiForBeat(question, bar, event.beat)), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.024), eventDynamicGain, "sine", 0.06);
               return;
             }
             chordMidi.forEach((midi) => {
-              playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
+              playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, event.beat)), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
             });
           });
           return;
@@ -14151,11 +14181,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, event.beat) * accompanimentGainScale;
             if (event.type === "bass5") {
               const fifthMidi = (chordMidi[1] ?? chordMidi[0]) - 12;
-              playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(fifthMidi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.024), eventDynamicGain, "sine", 0.06);
+              playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(fifthMidi, melodyCeilingMidiForBeat(question, bar, event.beat)), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.024), eventDynamicGain, "sine", 0.06);
               return;
             }
             chordMidi.forEach((midi) => {
-              playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
+              playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, event.beat)), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
             });
           });
           return;
@@ -14172,7 +14202,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           const audibleDuration = Math.max(0.04, pulseStart + pulseDuration - audibleStart);
           const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, beat) * accompanimentGainScale;
           chordMidi.forEach((midi) => {
-            playPianoMidi(ctx, gainNode, lowerAccompanimentMidi(midi), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
+            playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, beat)), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(0.018), eventDynamicGain, "triangle", 0.05);
           });
         });
       }
@@ -14212,16 +14242,16 @@ function advancedHigherInversionAnswerLabel(inversion) {
           });
           const chordMidi = accompanimentChordMidisForBar(question, bar);
           if (!chordMidi.length) return;
-          addMidi(lowerAccompanimentMidi(chordMidi[0] - 12), accompanimentVelocity);
-          addMidi(lowerAccompanimentMidi((chordMidi[1] ?? chordMidi[0]) - 12), accompanimentVelocity);
+          addMidi(lowerAccompanimentMidiBelow(chordMidi[0] - 12, melodyCeilingMidiForBeat(question, bar, 0)), accompanimentVelocity);
+          addMidi(lowerAccompanimentMidiBelow((chordMidi[1] ?? chordMidi[0]) - 12, melodyCeilingMidiForBeat(question, bar, 0)), accompanimentVelocity);
           chordMidi.forEach((midi) => {
-            addMidi(lowerAccompanimentMidi(midi), accompanimentVelocity);
+            addMidi(lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, 0)), accompanimentVelocity);
           });
           if (question.questionType === "practicePaper" && question.accompanimentPattern) {
             const advancedHigherChordSlots = advancedHigherPlaybackSlotsForBar(question, bar);
             advancedHigherChordSlots.forEach((slot) => {
-              (slot.trebleNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidi(effectiveMidiForNote(question, bar, tone)), accompanimentVelocity));
-              (slot.bassNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidi(effectiveMidiForNote(question, bar, tone)), accompanimentVelocity));
+              (slot.trebleNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidiBelow(effectiveMidiForNote(question, bar, tone), melodyCeilingMidiForBeat(question, bar, slot.beat ?? 0)), accompanimentVelocity));
+              (slot.bassNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidiBelow(effectiveMidiForNote(question, bar, tone), melodyCeilingMidiForBeat(question, bar, slot.beat ?? 0)), accompanimentVelocity));
             });
             const meterInfo = classifyMeter(timeSignatureForBar(question, bar));
             const pattern = getPatternVariant(question.accompanimentPattern, meterInfo);
@@ -14248,7 +14278,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             safePattern.forEach((event) => {
               const eventVelocity = Math.round((event.velocity ?? accompanimentVelocityForBar(question, bar.barIndex)) + (isAccentArticulationBar(question, bar) ? ARTICULATION_ACCENT_VELOCITY_BOOST : 0));
               const midiMap = advancedHigherChordPlaybackMidiMap(question, bar, advancedHigherPlaybackSlotForBeat(advancedHigherChordSlots, event.time)) ?? defaultMidiMap;
-              lowerAccompanimentMidiValues(event.notes.flatMap((token) => accompanimentTokenMidi(token, midiMap))).forEach((midi) => addMidi(midi, eventVelocity));
+              lowerAccompanimentMidiValues(event.notes.flatMap((token) => accompanimentTokenMidi(token, midiMap)), melodyCeilingMidiForBeat(question, bar, event.time)).forEach((midi) => addMidi(midi, eventVelocity));
             });
           }
         });
