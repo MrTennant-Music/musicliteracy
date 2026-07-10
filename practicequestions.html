@@ -1253,7 +1253,7 @@
         : 0;
       if (accidentalTarget
         && accidentalTarget.barIndex === bar.barIndex
-        && accidentalTarget.noteIndex === noteIndex
+        && (accidentalTarget.noteIndices ?? [accidentalTarget.noteIndex]).includes(noteIndex)
       ) {
         return effectiveMidiForNote(question, bar, { ...note, writtenAccidental: accidentalTarget.value }) + octaveShift;
       }
@@ -5750,8 +5750,27 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return question.bars[barIndex].notes[noteIndex];
     }
 
-    function barHasSingleLetterTarget(bar, letter) {
-      return (bar.notes ?? []).filter((note) => !note.rest && note.letter === letter).length === 1;
+    function prominentAccidentalTargetIndices(bar, letter, firstNoteIndex) {
+      const soundingNotes = (bar.notes ?? [])
+        .map((note, noteIndex) => ({ note, noteIndex }))
+        .filter(({ note }) => note && !note.rest);
+      if (!soundingNotes.length) return [];
+      if (!soundingNotes.some(({ noteIndex }) => noteIndex === firstNoteIndex)) return [];
+      const requiredCount = Math.ceil(soundingNotes.length * 0.6);
+      const availableFromTarget = soundingNotes.filter(({ noteIndex }) => noteIndex >= firstNoteIndex);
+      if (availableFromTarget.length < requiredCount) return [];
+      const chosen = new Set([firstNoteIndex, soundingNotes.at(-1).noteIndex]);
+      availableFromTarget
+        .filter(({ noteIndex }) => !chosen.has(noteIndex))
+        .sort((first, second) => {
+          const firstBeats = first.note.beats ?? rhythmInfo(first.note.rhythm).beats;
+          const secondBeats = second.note.beats ?? rhythmInfo(second.note.rhythm).beats;
+          return secondBeats - firstBeats || Math.abs(first.noteIndex - firstNoteIndex) - Math.abs(second.noteIndex - firstNoteIndex);
+        })
+        .forEach(({ noteIndex }) => {
+          if (chosen.size < requiredCount) chosen.add(noteIndex);
+        });
+      return [...chosen].sort((first, second) => first - second);
     }
 
     function noteIsProminentAccidentalTarget(bar, note) {
@@ -5762,6 +5781,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return noteBeats >= 1 && noteBeats >= longestBeats - 0.001;
     }
 
+    function setMelodyNotesToLetter(question, barIndex, noteIndices, letter, chordSymbol, writtenAccidental = null) {
+      noteIndices.forEach((noteIndex) => {
+        setMelodyNoteToLetter(question, barIndex, noteIndex, letter, chordSymbol, writtenAccidental);
+      });
+    }
+
     function makeAccidentalQuestionTarget(question, excludedBars = []) {
       const awkwardAccidentalSpellings = new Set(["C:flat", "B:sharp", "E:sharp", "F:flat"]);
       const excluded = new Set([...excludedBars, question.targetBar, question.bars.length - 1]);
@@ -5769,10 +5794,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
       if (!harmony) return null;
       const flatCandidates = harmony.mode === "major" ? question.bars
         .flatMap((bar) => (bar.notes ?? []).flatMap((note, noteIndex) => {
-          if (!barHasSingleLetterTarget(bar, harmony.minorIvThird)) return [];
           if (excluded.has(bar.barIndex) || note.rest || note.letter !== harmony.minorIvThird) return [];
           if (!noteIsProminentAccidentalTarget(bar, note)) return [];
-          const target = { bar, note, noteIndex, direction: "flat", value: -1, chordSymbol: "IVm" };
+          const targetNoteIndices = prominentAccidentalTargetIndices(bar, harmony.minorIvThird, noteIndex);
+          if (!targetNoteIndices.length) return [];
+          const target = { bar, note, noteIndex, noteIndices: targetNoteIndices, direction: "flat", value: -1, chordSymbol: "IVm" };
           if (target.note.writtenAccidental !== null && target.note.writtenAccidental !== undefined) return [];
           if (keyAccidentalForLetter(question.key, note.letter) === target.value) return [];
           if (awkwardAccidentalSpellings.has(`${note.letter}:${target.direction}`)) return [];
@@ -5787,12 +5813,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
           if (excluded.has(bar.barIndex) || note.rest) return [];
           if (harmony.mode === "major" && (excluded.has(bar.barIndex + 1) || bar.barIndex + 1 >= question.bars.length - 1)) return [];
           const expectedLetter = harmony.mode === "minor" ? harmony.minorSixth : harmony.secondaryThird;
-          if (!barHasSingleLetterTarget(bar, expectedLetter)) return [];
           if (note.letter !== expectedLetter) return [];
           if (!noteIsProminentAccidentalTarget(bar, note)) return [];
+          const targetNoteIndices = prominentAccidentalTargetIndices(bar, expectedLetter, noteIndex);
+          if (!targetNoteIndices.length) return [];
           const target = harmony.mode === "minor"
-            ? { bar, note, noteIndex, direction: "sharp", value: 1, chordSymbol: "IV" }
-            : { bar, note, noteIndex, direction: "sharp", value: 1, chordSymbol: "III", resolutionChordSymbol: "VI", resolutionLetter: harmony.relativeMinorTonic };
+            ? { bar, note, noteIndex, noteIndices: targetNoteIndices, direction: "sharp", value: 1, chordSymbol: "IV" }
+            : { bar, note, noteIndex, noteIndices: targetNoteIndices, direction: "sharp", value: 1, chordSymbol: "III", resolutionChordSymbol: "VI", resolutionLetter: harmony.relativeMinorTonic };
           if (target.note.writtenAccidental !== null && target.note.writtenAccidental !== undefined) return [];
           if (keyAccidentalForLetter(question.key, note.letter) === target.value) return [];
           if (awkwardAccidentalSpellings.has(`${note.letter}:${target.direction}`)) return [];
@@ -5816,11 +5843,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
         setFirstNoteOfBarToLetter(question, target.bar.barIndex + 1, target.resolutionLetter, target.resolutionChordSymbol, resolutionBase);
       }
       const targetLetter = target.direction === "flat" ? harmony.minorIvThird : harmony.mode === "minor" ? harmony.minorSixth : harmony.secondaryThird;
-      setMelodyNoteToLetter(question, target.bar.barIndex, target.noteIndex, targetLetter, target.chordSymbol, target.value);
+      setMelodyNotesToLetter(question, target.bar.barIndex, target.noteIndices, targetLetter, target.chordSymbol, target.value);
       return {
         barIndex: target.bar.barIndex,
         resolutionBarIndex: target.resolutionChordSymbol ? target.bar.barIndex + 1 : null,
         noteIndex: target.noteIndex,
+        noteIndices: target.noteIndices,
         symbolId: target.direction,
         value: target.value,
         answer: target.direction === "sharp" ? "Sharp" : "Flat",
@@ -9846,8 +9874,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
                 };
               })()
               : null;
+            const hiddenAccidentalNoteIndices = new Set(accidentalTarget?.noteIndices ?? (Number.isInteger(accidentalTarget?.noteIndex) ? [accidentalTarget.noteIndex] : []));
             const visibleDisplayNotes = accidentalTarget
-              ? rhythmDisplayNotes.map((note, index) => index === accidentalTarget.noteIndex ? { ...note, writtenAccidental: null } : note)
+              ? rhythmDisplayNotes.map((note, index) => hiddenAccidentalNoteIndices.has(index) ? { ...note, writtenAccidental: null } : note)
               : rhythmDisplayNotes;
             const hideBarNumber = question.hiddenBarNumbers?.includes(bar.barIndex);
             const hideBarline = barlinePart && question.barlineTargets?.some((target) => target.barIndex === bar.barIndex && (target.slot ?? "end") === "end");
