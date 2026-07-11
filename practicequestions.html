@@ -4578,20 +4578,20 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
     function advancedHigherAugmentedTriadSpelling(question) {
       if (isMinorKey(question.key)) return null;
-      const chordLetters = question.key.chords?.I ?? [];
+      const chordLetters = question.key.chords?.V ?? [];
       if (chordLetters.length < 3) return null;
       let previousIndex = null;
       const tones = chordLetters.slice(0, 3).map((letter, index) => {
         let octave = 4;
         while (previousIndex !== null && noteAbsoluteIndex(letter, octave) <= previousIndex) octave += 1;
         previousIndex = noteAbsoluteIndex(letter, octave);
-        const chordAccidental = chordAccidentalForLetter(question.key, "I", letter);
+        const chordAccidental = chordAccidentalForLetter(question.key, "V", letter);
         const accidental = (chordAccidental ?? keyAccidentalForLetter(question.key, letter)) + (index === 2 ? 1 : 0);
         return Number.isFinite(accidental) && accidental >= -1 && accidental <= 1
           ? [letter, octave, accidental]
           : null;
       });
-      return tones.every(Boolean) ? { root: chordLetters[0], type: "aug", tones, chordSymbol: "I" } : null;
+      return tones.every(Boolean) ? { root: chordLetters[0], type: "aug", tones, chordSymbol: "V" } : null;
     }
 
     function advancedHigherAugmentedTriadSpellings(question) {
@@ -4602,17 +4602,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
     function absoluteAccidentalForChordTone(key, chordSymbol, letter) {
       const chordAccidental = chordAccidentalForLetter(key, chordSymbol, letter);
       return chordAccidental ?? keyAccidentalForLetter(key, letter);
-    }
-
-    function augmentedTriadSpellingForBar(question, barIndex, spelling = null) {
-      if (!question.bars?.[barIndex] || !question.bars?.[barIndex + 1]) return null;
-      return spelling ?? advancedHigherAugmentedTriadSpelling(question);
-    }
-
-    function advancedHigherChordTypeFixedBar(question, chordTypeId) {
-      if (chordTypeId === "add6") return question.bars.length - 1;
-      if (chordTypeId === "dom7" || chordTypeId === "dim7") return 14;
-      return null;
     }
 
     function advancedHigherChordTypeCandidateBars(question, chordTypeId, protectedBars, options = {}) {
@@ -4626,15 +4615,20 @@ function advancedHigherInversionAnswerLabel(inversion) {
           ? [finalDominantBar]
           : [];
       }
-      return [8, 9, 10, 11].filter((barIndex) => {
+      if (chordTypeId === "aug") {
+        const finalDominantBar = question.bars.length - 2;
+        return question.bars?.[finalDominantBar]
+          && question.bars?.[finalDominantBar + 1]
+          && !protectedBars.has(finalDominantBar)
+          && !protectedBars.has(finalDominantBar + 1)
+          && Boolean(advancedHigherAugmentedTriadSpelling(question))
+          ? [finalDominantBar]
+          : [];
+      }
+      return [8, 9, 10].filter((barIndex) => {
         if (!question.bars?.[barIndex] || protectedBars.has(barIndex)) return false;
         if (chordTypeId === "dom7" || chordTypeId === "dim7") {
-          return barIndex < 11 && Boolean(question.bars?.[barIndex + 1]) && !protectedBars.has(barIndex + 1);
-        }
-        if (chordTypeId === "aug") {
-          return barIndex < 11
-            && !protectedBars.has(barIndex + 1)
-            && Boolean(augmentedTriadSpellingForBar(question, barIndex));
+          return barIndex < 10 && Boolean(question.bars?.[barIndex + 1]) && !protectedBars.has(barIndex + 1);
         }
         return true;
       });
@@ -4649,7 +4643,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
     const ADVANCED_HIGHER_CHORD_TYPE_SELECTION_WEIGHTS = {
       dom7: 0.1,
       dim7: 2,
-      aug: 10,
+      aug: 1,
       add6: 2,
     };
 
@@ -4777,16 +4771,32 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return [barIndex, resolutionBarIndex].filter((index) => question.bars?.[index]);
       }
       if (chordType.id === "aug") {
-        const resolutionChordSymbol = question.key.chords?.VI?.length ? "VI" : "IV";
-        question.bars[barIndex] = { ...question.bars[barIndex], chordSymbol: "I" };
-        question.bars[barIndex + 1] = { ...question.bars[barIndex + 1], chordSymbol: resolutionChordSymbol };
-        setBarToChordTypeStack(question, barIndex, spelling, chordType, "I");
-        const augmentedTone = spelling?.tones?.[2];
-        if (augmentedTone) setFirstSoundingNoteAboveSpelledTone(question, barIndex + 1, augmentedTone);
-        return [barIndex, barIndex + 1].filter((index) => question.bars?.[index]);
+        const resolutionBarIndex = barIndex + 1;
+        const tonicLetters = question.key.chords?.I ?? [];
+        const dominantLetter = question.key.chords?.V?.[0];
+        const resolutionTones = dominantLetter && tonicLetters.length >= 2
+          ? [
+              [dominantLetter, 4, absoluteAccidentalForChordTone(question.key, "V", dominantLetter)],
+              [tonicLetters[0], 5, absoluteAccidentalForChordTone(question.key, "I", tonicLetters[0])],
+              [tonicLetters[1], 5, absoluteAccidentalForChordTone(question.key, "I", tonicLetters[1])],
+            ]
+          : [];
+        const resolution = resolutionTones.every((tone) => Number.isFinite(tone[2]))
+          ? { root: tonicLetters[0], type: "aug-resolution", tones: resolutionTones, chordSymbol: "I" }
+          : null;
+        setBarToChordTypeStack(question, barIndex, spelling, chordType, "V");
+        if (resolution) setBarToChordTypeStack(question, resolutionBarIndex, resolution, { ...chordType, id: "aug-resolution" }, "I");
+        return [barIndex, resolutionBarIndex].filter((index) => question.bars?.[index]);
       }
       setBarToChordTypeStack(question, barIndex, spelling, chordType, spelling?.chordSymbol);
       return [barIndex];
+    }
+
+    function setAdvancedHigherBarTwelveDominant(question) {
+      const barIndex = 11;
+      if (!question.bars?.[barIndex]) return;
+      const chordSymbol = Math.random() < 0.5 ? "V" : "V7";
+      question.bars[barIndex] = { ...question.bars[barIndex], chordSymbol };
     }
 
     function makeAdvancedHigherChordTypeTarget(question, usedQuestionBars = new Set(), options = {}) {
@@ -4815,9 +4825,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const { chordType } = selected;
       const barIndex = randomItem(selected.candidateBars);
       if (!Number.isInteger(barIndex)) return null;
-      const spelling = chordType.id === "aug"
-        ? augmentedTriadSpellingForBar(question, barIndex, selected.spelling) ?? selected.spelling
-        : selected.spelling;
+      const spelling = selected.spelling;
       const noteIndex = 0;
       const reservedBars = applyAdvancedHigherChordTypeContext(question, barIndex, chordType, spelling);
       return { barIndex, noteIndex, chordType, reservedBars };
@@ -7061,6 +7069,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }) : null;
       if (needsAdvancedHigherChordTypes && !advancedHigherChordTypeTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (advancedHigherChordTypeTarget) (advancedHigherChordTypeTarget.reservedBars ?? [advancedHigherChordTypeTarget.barIndex]).forEach(reserveQuestionBar);
+      if (questionSelectionLevel === "AH") setAdvancedHigherBarTwelveDominant(question);
       const unusedQuestionBars = (barIndexes) => barIndexes.filter((barIndex) => !usedQuestionBars.has(barIndex));
       const advancedHigherRhythmDictationTarget = needsRhythmicDictation && questionSelectionLevel === "AH"
         ? (() => {
