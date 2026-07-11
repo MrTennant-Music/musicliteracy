@@ -5752,12 +5752,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return null;
     }
 
-    function plantLevelRhythmIdentificationTarget(question, level, excludedBars = []) {
+    function plantLevelRhythmIdentificationTarget(question, level, excludedBars = [], excludedRhythms = []) {
       const excluded = new Set([...excludedBars, question.bars.length - 1]);
+      const excludedRhythmSet = new Set(excludedRhythms);
       const allowedRhythms = allowedRhythmsForLevel(level);
       const candidates = question.bars
         .flatMap((bar) => (bar.notes ?? []).map((note, noteIndex) => ({ bar, note, noteIndex })))
-        .filter(({ bar, note }) => !excluded.has(bar.barIndex) && bar.barIndex !== question.targetBar && !note.rest && allowedRhythms.has(note.rhythm));
+        .filter(({ bar, note }) => !excluded.has(bar.barIndex) && bar.barIndex !== question.targetBar && !note.rest && allowedRhythms.has(note.rhythm) && !excludedRhythmSet.has(note.rhythm));
       const questionStyle = randomItem(["beats", "name"]);
       const rhythmTypes = [...new Set(candidates.map(({ note }) => note.rhythm))];
       const targetRhythm = randomItem(rhythmTypes);
@@ -7348,9 +7349,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
       if (needsNoteIdentification && !noteValueCircleTarget && !noteTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       const noteIdentificationQuestionBar = noteValueCircleTarget?.barIndex ?? noteTarget?.bar?.barIndex ?? null;
       if (needsNoteIdentification && Number.isInteger(noteIdentificationQuestionBar)) reserveQuestionBar(noteIdentificationQuestionBar);
+      const rhythmIdentificationExcludedRhythms = level === "N3" && noteValueCircleTarget
+        ? [noteValueCircleTarget.targetRhythm]
+        : [];
       const rhythmIdentificationTarget = needsRhythmIdentification
         ? level === "N3" || level === "N4"
-          ? plantLevelRhythmIdentificationTarget(question, level, [...usedQuestionBars])
+          ? plantLevelRhythmIdentificationTarget(question, level, [...usedQuestionBars], rhythmIdentificationExcludedRhythms)
           : plantRhythmIdentificationTarget(
             question,
             [...usedQuestionBars],
