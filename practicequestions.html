@@ -961,11 +961,28 @@
     };
     const REMOVED_GENERATED_RHYTHMS = new Set(["semiquaver", "dottedQuaver"]);
     const patternUsesRemovedGeneratedRhythm = (pattern) => pattern.some((rhythm) => REMOVED_GENERATED_RHYTHMS.has(rhythm));
+    const national4SemiquaverPatternIsAllowed = (pattern) => {
+      for (let index = 0; index < pattern.length; index += 1) {
+        if (pattern[index] !== "semiquaver") continue;
+        const groupStart = index;
+        while (pattern[index + 1] === "semiquaver") index += 1;
+        const groupLength = index - groupStart + 1;
+        const isGroupOfFour = groupLength === 4;
+        const isTwoThenQuaver = groupLength === 2 && pattern[index + 1] === "quaver";
+        const isQuaverThenTwo = groupLength === 2 && pattern[groupStart - 1] === "quaver";
+        if (!isGroupOfFour && !isTwoThenQuaver && !isQuaverThenTwo) return false;
+      }
+      return true;
+    };
     const barPatternsForSignature = (signature, level = null) => {
       const patterns = level === "N4"
         ? [...(BAR_PATTERNS[signature.id] ?? BAR_PATTERNS["4/4"]), ...(NATIONAL4_EXTRA_BAR_PATTERNS[signature.id] ?? [])]
         : BAR_PATTERNS[signature.id] ?? BAR_PATTERNS["4/4"];
-      const generatedPatterns = patterns.filter((pattern) => !patternUsesRemovedGeneratedRhythm(pattern));
+      const generatedPatterns = patterns.filter((pattern) => (
+        level === "N4"
+          ? national4SemiquaverPatternIsAllowed(pattern)
+          : !patternUsesRemovedGeneratedRhythm(pattern)
+      ));
       const safePatterns = generatedPatterns.length ? generatedPatterns : patterns;
       const allowedRhythms = allowedRhythmsForLevel(level);
       if (!allowedRhythms) return safePatterns;
