@@ -2890,6 +2890,21 @@
       return Boolean(first && second && first.barIndex === second.barIndex && first.startIndex === second.startIndex);
     }
 
+    function isScotchSnapSelection(question, selection) {
+      const notes = question.bars?.[selection?.barIndex]?.notes ?? [];
+      return notes[selection?.startIndex]?.rhythm === "semiquaver"
+        && notes[selection.startIndex + 1]?.rhythm === "dottedQuaver";
+    }
+
+    function circleSelectionCorrectForQuestion(question, part, selection, target) {
+      const sourceId = part?.sourceId ?? part?.id;
+      if (sourceId === "scaleDegrees") return scaleDegreeSelectionCorrect(question, selection);
+      if (sourceId === "rhythmIdentification" && target?.variant === "scotchSnap") {
+        return isScotchSnapSelection(question, selection);
+      }
+      return sameScotchSelection(selection, target);
+    }
+
     function circleQuestionRequiresTool(question, part) {
       const sourceId = part?.sourceId ?? part?.id;
       return sourceId === "noteIdentification"
@@ -9250,9 +9265,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
 
       function circleSelectionCorrect(part, selection, target) {
-        const sourceId = part?.sourceId ?? part?.id;
-        if (sourceId === "scaleDegrees") return scaleDegreeSelectionCorrect(question, selection);
-        return sameScotchSelection(selection, target);
+        return circleSelectionCorrectForQuestion(question, part, selection, target);
       }
 
       function selectScotchSnapCandidate(candidate) {
@@ -10489,7 +10502,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
               ? scaleDegreeAnswerBoxBars(question, circleTarget.barIndex).bars
               : null;
             const circleSelectionIndexes = circlePart?.type === "scotchSnap"
-              ? circleTarget?.variant === "scaleDegree"
+              ? circleTarget?.variant === "scotchSnap"
+                ? positions.slice(0, -1).map((_, index) => index)
+                : circleTarget?.variant === "scaleDegree"
                 ? scaleDegreeClickableBars.includes(bar.barIndex) ? positions.map((_, index) => index) : []
                 : circleTarget?.variant === "circleNoteValue"
                   ? positions.map((_, index) => index)
@@ -14065,9 +14080,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                   ? question.tripletTarget
                   : question.rhythmIdentificationTarget;
             results[part.id] = {
-              correct: sourceId === "scaleDegrees"
-                ? scaleDegreeSelectionCorrect(question, selected)
-                : sameScotchSelection(selected, circleTarget),
+              correct: circleSelectionCorrectForQuestion(question, part, selected, circleTarget),
             };
             return;
           }
