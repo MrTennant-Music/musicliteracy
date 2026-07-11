@@ -5032,9 +5032,15 @@ function advancedHigherInversionAnswerLabel(inversion) {
       ].forEach(({ barIndex, slots }) => {
         const bar = question.bars[barIndex];
         if (!bar || !slots.length) return;
+        const sortedSlots = [...slots].sort((first, second) => (first.beat ?? 0) - (second.beat ?? 0));
         bar.notes = bar.notes.map((note) => {
-          const slot = slots.find((item) => Math.abs((note.beat ?? 0) - item.beat) < 0.001);
-          return slot ? melodyChordToneForSlot(question, bar, note, slot) : note;
+          if (!noteIsOnStrongBeat(note, timeSignatureForBar(question, bar))) return note;
+          const slot = sortedSlots.find((item, index) => {
+            const start = item.beat ?? 0;
+            const end = sortedSlots[index + 1]?.beat ?? (start + (item.beats ?? 1));
+            return (note.beat ?? 0) >= start - 0.001 && (note.beat ?? 0) < end - 0.001;
+          }) ?? sortedSlots.at(-1);
+          return melodyChordToneForSlot(question, bar, note, slot);
         });
       });
       return question;
@@ -7054,8 +7060,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
       if (needsAdvancedHigherChordTask && !advancedHigherChordTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (advancedHigherChordTarget) {
         alignAdvancedHigherChordMelodyToSlots(question, advancedHigherChordTarget, {
-          includeIdentifyBar: selectedSourceIds.has("ahChord"),
-          includeBassLineBar: selectedSourceIds.has("ahBassLine"),
+          includeIdentifyBar: true,
+          includeBassLineBar: true,
         });
         if (selectedSourceIds.has("ahChord")) reserveQuestionBar(advancedHigherChordTarget.identifyBar);
         if (selectedSourceIds.has("ahBassLine")) reserveQuestionBar(advancedHigherChordTarget.bassLineBar);
@@ -14188,7 +14194,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
         if (barStart + currentBarSeconds <= offset) return;
         const chordMidi = accompanimentChordMidisForBar(question, bar);
         if (!chordMidi.length) return;
-        const advancedHigherChordSlots = advancedHigherPlaybackSlotsForBar(question, bar);
         if (bar.barIndex !== question.bars.length - 1 && question.questionType === "practicePaper" && question.accompanimentPattern) {
           playTempoAccompanimentPattern(ctx, gainNode, question, bar, barStart, offset, startTime, dynamicGain, dynamicVelocity);
           return;
@@ -14220,25 +14225,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
           chordMidi.forEach((midi, index) => {
             playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, 0)), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.026), eventDynamicGain, "triangle", finalPlaybackBar ? 0.38 : 0.08);
             if (index === 0) playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi - 12, melodyCeilingMidiForBeat(question, bar, 0)), startTime + chordStart, chordDuration, accompanimentVelocity, accompanimentVolume(0.02), eventDynamicGain, "sine", finalPlaybackBar ? 0.38 : 0.08);
-          });
-          return;
-        }
-
-        if (advancedHigherChordSlots.length) {
-          advancedHigherChordSlots.forEach((slot) => {
-            const slotStart = barStart + (slot.beat ?? 0) * beatSeconds;
-            const slotDuration = Math.max(0.04, (slot.beats ?? 1) * beatSeconds * 0.88);
-            if (slotStart + slotDuration <= offset) return;
-            const audibleStart = Math.max(slotStart, offset);
-            const audibleDuration = Math.max(0.04, slotStart + slotDuration - audibleStart);
-            const eventDynamicGain = dynamicGainForPoint(question, bar.barIndex, slot.beat ?? 0) * accompanimentGainScale;
-            const trebleMidis = (slot.trebleNote?.stack ?? []).map((tone) => effectiveMidiForNote(question, bar, tone));
-            const bassMidis = (slot.bassNote?.stack ?? []).map((tone) => effectiveMidiForNote(question, bar, tone));
-            [...trebleMidis, ...bassMidis].forEach((midi, index) => {
-              const hand = index >= trebleMidis.length ? "sine" : "triangle";
-              const volume = index >= trebleMidis.length ? 0.022 : 0.018;
-              playPianoMidi(ctx, gainNode, lowerAccompanimentMidiBelow(midi, melodyCeilingMidiForBeat(question, bar, slot.beat ?? 0)), startTime + audibleStart, audibleDuration, accompanimentVelocity, accompanimentVolume(volume), eventDynamicGain, hand, 0.08);
-            });
           });
           return;
         }
@@ -14355,10 +14341,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
           });
           if (question.questionType === "practicePaper" && question.accompanimentPattern) {
             const advancedHigherChordSlots = advancedHigherPlaybackSlotsForBar(question, bar);
-            advancedHigherChordSlots.forEach((slot) => {
-              (slot.trebleNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidiBelow(effectiveMidiForNote(question, bar, tone), melodyCeilingMidiForBeat(question, bar, slot.beat ?? 0)), accompanimentVelocity));
-              (slot.bassNote?.stack ?? []).forEach((tone) => addMidi(lowerAccompanimentMidiBelow(effectiveMidiForNote(question, bar, tone), melodyCeilingMidiForBeat(question, bar, slot.beat ?? 0)), accompanimentVelocity));
-            });
             const meterInfo = classifyMeter(timeSignatureForBar(question, bar));
             const pattern = getPatternVariant(question.accompanimentPattern, meterInfo);
             const safePattern = validateAccompanimentPattern(pattern, meterInfo)
