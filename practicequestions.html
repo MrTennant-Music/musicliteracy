@@ -3682,7 +3682,11 @@
       if (timeSignature?.id === "5/4") {
         return groupStartBeatsForTimeSignature(timeSignature).some((beat) => Math.abs((note.beat ?? 0) - beat) < 0.001);
       }
-      return note.beat === 0 || note.beat === 2 || note.beat === 3 || (note.beat === 1.5 && rhythmInfo(note.rhythm).beats >= 1);
+      if (timeSignature?.bottom === 8) {
+        return groupStartBeatsForTimeSignature(timeSignature).some((beat) => Math.abs((note.beat ?? 0) - beat) < 0.001);
+      }
+      if (timeSignature?.id === "4/4") return note.beat === 0 || note.beat === 2;
+      return note.beat === 0;
     }
 
     function pitchFitsStrongBeatChord(question, bar, note, pitch) {
@@ -3946,7 +3950,11 @@
     function makeEightBarRepetitionQuestion(level = "N5", attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = level, allowedTimeSignatureIds = null, allowRests = true, generationOptions = {}) {
       if (level === "H") return generateHigherPhraseQuestion(attempt, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests, generationOptions);
       const activeBarCount = level === "H" ? 16 : BAR_COUNT;
-      const timeSignature = withFiveFourGrouping(weightedRandomItem(requireSimpleTime ? simpleTimeSignaturesForLevel(level) : timeSignaturesForLevel(level)));
+      const timeSignatureOptions = requireSimpleTime ? simpleTimeSignaturesForLevel(level) : timeSignaturesForLevel(level);
+      const permittedTimeSignatureOptions = Array.isArray(allowedTimeSignatureIds)
+        ? timeSignatureOptions.filter((signature) => allowedTimeSignatureIds.includes(signature.id))
+        : timeSignatureOptions;
+      const timeSignature = withFiveFourGrouping(weightedRandomItem(permittedTimeSignatureOptions.length ? permittedTimeSignatureOptions : timeSignatureOptions));
       const key = level === "N3" || level === "N4"
         ? KEYS.find((item) => item.id === "C")
         : randomPracticeKey(timeSignatureLevel);
@@ -7035,10 +7043,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return Math.floor(barIndex / BARS_PER_SYSTEM) + 1;
     }
 
-    function makePracticePaperQuestion(level = "N5", attempt = 0, enabledQuestionTypes = DEFAULT_PRACTICE_QUESTION_TYPES, timeSignatureLevel = level) {
+    function makePracticePaperQuestion(level = "N5", attempt = 0, enabledQuestionTypes = DEFAULT_PRACTICE_QUESTION_TYPES, timeSignatureLevel = level, lockedTimeSignatureId = null) {
       const canRetryPracticeQuestion = canRetryForLevel(level, attempt);
       const canRetryQualityPracticeQuestion = canRetryQualityRules(level, attempt, timeSignatureLevel);
-      const retryPracticeQuestion = () => makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes, timeSignatureLevel);
+      let retryTimeSignatureId = lockedTimeSignatureId;
+      const retryPracticeQuestion = () => makePracticePaperQuestion(level, attempt + 1, enabledQuestionTypes, timeSignatureLevel, retryTimeSignatureId);
       const questionSelectionLevel = timeSignatureLevel === "AH" ? "AH" : level;
       const targetPracticeQuestionCount = practiceQuestionCountForLevel(questionSelectionLevel);
       const selectedSourceIds = new Set(selectedPracticeQuestionTypeIds(enabledQuestionTypes, questionSelectionLevel));
@@ -7077,6 +7086,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const allowedTimeSignatureIds = needsBarlines
         ? timeSignaturesForLevel(timeSignatureLevel).map((signature) => signature.id)
         : null;
+      const questionTimeSignatureIds = retryTimeSignatureId ? [retryTimeSignatureId] : allowedTimeSignatureIds;
       const forceAdvancedHigherDominantCadence = questionSelectionLevel === "AH"
         && selectedSourceIds.has("ahChordTypes")
         && selectedSourceIds.has("cadence")
@@ -7084,15 +7094,16 @@ function advancedHigherInversionAnswerLabel(inversion) {
       let cadenceId = forceAdvancedHigherDominantCadence ? "perfect" : choosePracticeCadenceId(level);
       const needsSimpleTime = needsTriplets || (level === "H" && needsRhythmicDictation);
       const generationOptions = { questionTypes: [...selectedSourceIds] };
-      let question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowGeneratedRests, generationOptions);
+      let question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, questionTimeSignatureIds, allowGeneratedRests, generationOptions);
       question.practiceLevel = questionSelectionLevel;
+      retryTimeSignatureId = question.timeSignature?.id ?? retryTimeSignatureId;
       if (questionSelectionLevel === "AH") {
         if (!applyAdvancedHigherBarEightCadenceApproach(question) && canRetryPracticeQuestion) return retryPracticeQuestion();
         if (needsMissing && !applyAdvancedHigherMissingNotesRule(question) && canRetryPracticeQuestion) return retryPracticeQuestion();
       }
       if (level === "H" && isMinorKey(question.key) && ["plagal", "interrupted"].includes(cadenceId)) {
         cadenceId = randomItem(["perfect", "imperfect"]);
-        question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowGeneratedRests, generationOptions);
+        question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, questionTimeSignatureIds, allowGeneratedRests, generationOptions);
         question.practiceLevel = questionSelectionLevel;
       }
       const timeChangeTarget = needsTime
@@ -7104,7 +7115,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return retryPracticeQuestion();
       }
       if (timeChangeTarget) question.timeChangeTarget = timeChangeTarget;
-      if (needsTime && needsMissing && (question.targetBar === 0 || question.missingSourceBar === 0) && canRetryPracticeQuestion) {
+      if (needsTime && needsMissing && question.targetBar === 0 && canRetryPracticeQuestion) {
         return retryPracticeQuestion();
       }
       const usedQuestionBars = new Set();
