@@ -13374,6 +13374,23 @@ function advancedHigherInversionAnswerLabel(inversion) {
         );
       }
 
+      function boldBarReferences(text) {
+        if (typeof text !== "string") return text;
+        const parts = [];
+        const pattern = /\bbars?\s+\d+(?:\s*(?:,|and|-|–|to)\s*\d+)*/gi;
+        let lastIndex = 0;
+        let match = pattern.exec(text);
+        while (match) {
+          if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+          parts.push(<strong key={`bar-reference-${match.index}`}>{match[0]}</strong>);
+          lastIndex = match.index + match[0].length;
+          match = pattern.exec(text);
+        }
+        if (!parts.length) return text;
+        if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+        return <>{parts}</>;
+      }
+
       function questionPrompt(part) {
         const sourceId = part.sourceId ?? part.id;
         if (part.type === "timeChoice" && question.timeChangeTarget) {
@@ -13448,7 +13465,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           return <>Apply a circle around the <strong>{SCALE_DEGREE_DETAILS[question.scaleDegreeTarget.degree].label}</strong> note of the key in <strong>bar {question.scaleDegreeTarget.barIndex + 1}</strong>.</>;
         }
         if (sourceId === "triplets") {
-          return <>Insert the triplet marking in the correct place between bars <strong>{tripletAnswerBoxRangeLabel(question, question.tripletTarget.barIndex)}</strong> to fix the rhythm.</>;
+          return <>Insert the triplet marking in the correct place between <strong>bars {tripletAnswerBoxRangeLabel(question, question.tripletTarget.barIndex)}</strong> to fix the rhythm.</>;
         }
         if (sourceId === "articulation") {
           if (question.articulationTarget?.variant === "identify") {
@@ -13494,7 +13511,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
               const beatDescription = rhythmBeatDescription(question.rhythmIdentificationTarget.targetRhythm);
               return <>What is the name given to this <strong>{beatDescription}</strong> note in <strong>bar {question.rhythmIdentificationTarget.barIndex + 1}</strong>?</>;
             }
-            return part.prompt;
+            return boldBarReferences(part.prompt);
           }
           if (question.rhythmIdentificationTarget?.variant === "noteValueGroup") {
             return <>What is the name given to these notes in <strong>bar {question.rhythmIdentificationTarget.barIndex + 1}</strong>?</>;
@@ -13504,7 +13521,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           }
           return <>Identify the number of beats for the note marked in <strong>bar {question.rhythmIdentificationTarget.barIndex + 1}</strong>.</>;
         }
-        return part.prompt;
+        return boldBarReferences(part.prompt);
       }
 
       function questionAudioGlyph(part) {
