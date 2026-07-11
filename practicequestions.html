@@ -9068,10 +9068,15 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return sameScotchSelection(selection, target);
       }
 
+      function circleRequiresTool(part) {
+        return (part?.sourceId ?? part?.id) === "noteIdentification";
+      }
+
       function selectScotchSnapCandidate(candidate) {
         const part = activeCirclePart();
         if (!part || part.type !== "scotchSnap" || feedback) return;
         const current = placementValue(part, { circleSelected: false, selected: null });
+        if (circleRequiresTool(part) && !current.circleSelected) return;
         setPracticeAnswers((answers) => ({ ...answers, [part.id]: { ...current, circleSelected: false, selected: candidate } }));
       }
 
@@ -10297,7 +10302,10 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const rhythmFeedback = rhythmDictationFeedback;
             const rhythmAnswer = placementValue(rhythmPart, { placements: {} });
             const rhythmBoxSourceId = rhythmDictationPart?.sourceId ?? "rhythmicDictation";
-            const scotchSnapCanInteract = circlePart?.type === "scotchSnap" && activeSourceId === (circlePart.sourceId ?? circlePart.id) && !feedback;
+            const scotchSnapCanInteract = circlePart?.type === "scotchSnap"
+              && activeSourceId === (circlePart.sourceId ?? circlePart.id)
+              && (!circleRequiresTool(circlePart) || circleAnswer.circleSelected)
+              && !feedback;
             const selectedScotchSnap = circleAnswer.selected?.barIndex === bar.barIndex ? circleAnswer.selected : null;
             const savedScaleDegreeAnswer = placementValue(scaleDegreesPart, { circleSelected: false, selected: null });
             const savedScaleDegreeSelection = scaleDegreesPart
@@ -12489,6 +12497,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
         );
       }
 
+      function CircleChoiceGlyph() {
+        return (
+          <svg viewBox="0 0 56 48" className="h-12 w-16 overflow-visible" aria-hidden="true">
+            <circle cx="28" cy="24" r="17" fill="none" stroke="currentColor" strokeWidth="1.8" />
+          </svg>
+        );
+      }
+
       function RhythmChoiceGlyph({ rhythm }) {
         if (rhythm === "tie") {
           const tieGlyph = sharedSymbolForKey("tie") || "\uE1FD";
@@ -12866,6 +12882,29 @@ function advancedHigherInversionAnswerLabel(inversion) {
           );
         }
         if (part.type === "scotchSnap") {
+          const value = makePlacementAnswer(practiceAnswers[part.id], { circleSelected: false, selected: null });
+          if (circleRequiresTool(part)) {
+            const chooseCircle = () => {
+              setActiveIndex(partIndex);
+              setPracticeAnswers((current) => ({ ...current, [part.id]: { ...value, circleSelected: true } }));
+            };
+            return (
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled={Boolean(feedback)}
+                  onPointerDown={(event) => answerButtonPress(event, chooseCircle)}
+                  onClick={(event) => answerButtonKeyboardClick(event, chooseCircle)}
+                  className={`answer-choice-button flex ${ANSWER_BUTTON_SIZE_CLASS} flex-col items-center justify-center rounded-xl border px-3 transition ${placementButtonState(value.circleSelected)}`}
+                  aria-label="Circle"
+                >
+                  <CircleChoiceGlyph />
+                  <span className="mt-1 text-sm font-bold leading-none">Circle</span>
+                </button>
+                <ScoreApplyHint>Select the circle first, then apply it to the score.</ScoreApplyHint>
+              </div>
+            );
+          }
           return (
             <div className="flex flex-wrap items-center gap-3">
               <ScoreApplyHint>Select a note to apply a circle.</ScoreApplyHint>
