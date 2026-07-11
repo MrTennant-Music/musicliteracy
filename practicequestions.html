@@ -9632,9 +9632,17 @@ function advancedHigherInversionAnswerLabel(inversion) {
         }));
       }
 
-      function scotchSelectionBounds(positions, startIndex, top, target = null) {
+      function scotchSelectionBounds(positions, startIndex, top, target = null, notes = [], clef = question.clef) {
         const singleNoteCircle = target?.variant === "circleNoteValue" || target?.variant === "scaleDegree";
         const span = target?.variant === "triplet" ? 2 : 1;
+        const endIndex = singleNoteCircle ? startIndex : startIndex + span;
+        const circledNoteYs = notes
+          .slice(startIndex, endIndex + 1)
+          .filter((note) => note && !note.rest)
+          .map((note) => yForStep(displayStep(note, clef), top));
+        const dynamicCy = circledNoteYs.length
+          ? (Math.min(...circledNoteYs) + Math.max(...circledNoteYs)) / 2
+          : top + STAFF.gap * 2;
         const left = singleNoteCircle
           ? positions[startIndex] - 24
           : Math.min(positions[startIndex], positions[startIndex + 1]) - 24;
@@ -9643,11 +9651,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
           : Math.max(positions[startIndex], positions[startIndex + span]) + 24;
         return {
           cx: (left + right) / 2,
-          cy: top + STAFF.gap * 2,
+          cy: dynamicCy,
           rx: (right - left) / 2,
           ry: STAFF.gap * 3.8,
           x: left,
-          y: top - 34,
+          y: dynamicCy - STAFF.gap * 4.1,
           width: right - left,
           height: STAFF.gap * 8.2,
         };
@@ -11477,7 +11485,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                 {transpositionMeaningTarget && <MarkingBox x={transpositionSignBoxX} y={transpositionSignBoxY} width={transpositionSignBoxWidth} height={transpositionSignBoxHeight} labelSourceId="transposition" label="Sign" layer="label" />}
                 {!hideBarNumber && <ScoreBarNumber label={bar.barIndex + 1} x={barNumberX} y={barNumberY} backdrop={barNumberNeedsBackdrop} />}
                 {selectedScotchSnap && (() => {
-                  const bounds = scotchSelectionBounds(positions, selectedScotchSnap.startIndex, top, circleTarget);
+                  const bounds = scotchSelectionBounds(positions, selectedScotchSnap.startIndex, top, circleTarget, bar.notes, question.clef);
                   const correct = circleSelectionCorrect(circlePart, selectedScotchSnap, circleTarget);
                   return (
                     <ellipse
@@ -11493,7 +11501,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                 })()}
                 {savedScaleDegreeSelection && (() => {
                   const target = question.scaleDegreeTarget;
-                  const bounds = scotchSelectionBounds(positions, savedScaleDegreeSelection.startIndex, top, target);
+                  const bounds = scotchSelectionBounds(positions, savedScaleDegreeSelection.startIndex, top, target, bar.notes, question.clef);
                   const correct = scaleDegreeSelectionCorrect(question, savedScaleDegreeSelection);
                   return (
                     <ellipse
@@ -11508,11 +11516,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
                   );
                 })()}
                 {!selectedScotchSnap && hoveredScotchSnap && scotchSnapCanInteract && (() => {
-                  const bounds = scotchSelectionBounds(positions, hoveredScotchSnap.startIndex, top, circleTarget);
+                  const bounds = scotchSelectionBounds(positions, hoveredScotchSnap.startIndex, top, circleTarget, bar.notes, question.clef);
                   return <ellipse cx={bounds.cx} cy={bounds.cy} rx={bounds.rx} ry={bounds.ry} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.35" />;
                 })()}
                 {circleFeedback && circleTargetForBar && !circleSelectionCorrect(circlePart, selectedScotchSnap, circleTarget) && (() => {
-                  const bounds = scotchSelectionBounds(positions, circleTargetForBar.startIndex, top, circleTargetForBar);
+                  const bounds = scotchSelectionBounds(positions, circleTargetForBar.startIndex, top, circleTargetForBar, bar.notes, question.clef);
                   return <ellipse cx={bounds.cx} cy={bounds.cy} rx={bounds.rx} ry={bounds.ry} fill="none" stroke={COLOUR.green} strokeWidth="2" opacity="0.9" />;
                 })()}
                 {accidentalPlacements.map((placement, index) => {
@@ -11917,7 +11925,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                   />
                 )}
                 {circleSelectionIndexes.map((index) => {
-                  const bounds = scotchSelectionBounds(positions, index, top, circleTarget);
+                  const bounds = scotchSelectionBounds(positions, index, top, circleTarget, bar.notes, question.clef);
                   return (
                     <rect
                       key={`scotch-snap-hit-${bar.barIndex}-${index}`}
