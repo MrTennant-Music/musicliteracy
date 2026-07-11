@@ -594,6 +594,26 @@
         ["crotchet", "crotchet", "crotchet", "semiquaver", "semiquaver", "quaver"],
       ],
     };
+    const NATIONAL5_EXTRA_BAR_PATTERNS = {
+      "2/4": [
+        ["semiquaver", "dottedQuaver", "crotchet"],
+        ["dottedQuaver", "semiquaver", "crotchet"],
+        ["crotchet", "semiquaver", "dottedQuaver"],
+        ["crotchet", "dottedQuaver", "semiquaver"],
+      ],
+      "3/4": [
+        ["semiquaver", "dottedQuaver", "crotchet", "crotchet"],
+        ["dottedQuaver", "semiquaver", "crotchet", "crotchet"],
+        ["crotchet", "semiquaver", "dottedQuaver", "crotchet"],
+        ["crotchet", "dottedQuaver", "semiquaver", "crotchet"],
+      ],
+      "4/4": [
+        ["crotchet", "semiquaver", "dottedQuaver", "crotchet", "crotchet"],
+        ["crotchet", "dottedQuaver", "semiquaver", "crotchet", "crotchet"],
+        ["crotchet", "crotchet", "semiquaver", "dottedQuaver", "crotchet"],
+        ["crotchet", "crotchet", "dottedQuaver", "semiquaver", "crotchet"],
+      ],
+    };
     const AH_BAR_PATTERNS = {
       "2/4": [
         ["quaver", "quaver", "quaver", "quaver"],
@@ -974,13 +994,18 @@
       return true;
     };
     const barPatternsForSignature = (signature, level = null) => {
+      const basePatterns = BAR_PATTERNS[signature.id] ?? BAR_PATTERNS["4/4"];
       const patterns = level === "N4"
-        ? [...(BAR_PATTERNS[signature.id] ?? BAR_PATTERNS["4/4"]), ...(NATIONAL4_EXTRA_BAR_PATTERNS[signature.id] ?? [])]
-        : BAR_PATTERNS[signature.id] ?? BAR_PATTERNS["4/4"];
+        ? [...basePatterns, ...(NATIONAL4_EXTRA_BAR_PATTERNS[signature.id] ?? [])]
+        : level === "N5"
+          ? [...basePatterns, ...(NATIONAL5_EXTRA_BAR_PATTERNS[signature.id] ?? [])]
+          : basePatterns;
       const generatedPatterns = patterns.filter((pattern) => (
         level === "N4"
           ? national4SemiquaverPatternIsAllowed(pattern, signature.id)
-          : !patternUsesRemovedGeneratedRhythm(pattern)
+          : level === "N5"
+            ? true
+            : !patternUsesRemovedGeneratedRhythm(pattern)
       ));
       const safePatterns = generatedPatterns.length ? generatedPatterns : patterns;
       const allowedRhythms = allowedRhythmsForLevel(level);
@@ -2022,7 +2047,7 @@
     }
 
     function national5PatternsForBar(timeSignature, barIndex) {
-      const options = barPatternsForSignature(timeSignature).filter((pattern) => {
+      const options = barPatternsForSignature(timeSignature, "N5").filter((pattern) => {
         if (pattern.length < 2) return false;
         if (pattern.some(isRestRhythm)) return false;
         if (pattern.includes("semibreve") || pattern.includes("dottedMinim")) return false;
@@ -2610,7 +2635,9 @@
         .map((bar) => bar.barIndex);
       if (!barCandidates.length) return null;
 
-      const variantPool = ["dottedCrotchet"];
+      const variantPool = question.level === "N5"
+        ? ["dottedCrotchet", "scotchSnap"]
+        : ["dottedCrotchet"];
       const preferredVariant = randomItem(variantPool);
       const variants = [
         preferredVariant,
