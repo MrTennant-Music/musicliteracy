@@ -9067,7 +9067,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
         const part = activeCirclePart();
         if (!part || part.type !== "scotchSnap" || feedback) return;
         const current = placementValue(part, { circleSelected: false, selected: null });
-        if (!current.circleSelected) return;
         setPracticeAnswers((answers) => ({ ...answers, [part.id]: { ...current, circleSelected: false, selected: candidate } }));
       }
 
@@ -10293,7 +10292,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const rhythmFeedback = rhythmDictationFeedback;
             const rhythmAnswer = placementValue(rhythmPart, { placements: {} });
             const rhythmBoxSourceId = rhythmDictationPart?.sourceId ?? "rhythmicDictation";
-            const scotchSnapCanInteract = circlePart?.type === "scotchSnap" && activeSourceId === (circlePart.sourceId ?? circlePart.id) && circleAnswer.circleSelected && !feedback;
+            const scotchSnapCanInteract = circlePart?.type === "scotchSnap" && activeSourceId === (circlePart.sourceId ?? circlePart.id) && !feedback;
             const selectedScotchSnap = circleAnswer.selected?.barIndex === bar.barIndex ? circleAnswer.selected : null;
             const savedScaleDegreeAnswer = placementValue(scaleDegreesPart, { circleSelected: false, selected: null });
             const savedScaleDegreeSelection = scaleDegreesPart
@@ -10309,11 +10308,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const circleSelectionIndexes = circlePart?.type === "scotchSnap"
               ? circleTarget?.variant === "scaleDegree"
                 ? scaleDegreeClickableBars.includes(bar.barIndex) ? positions.map((_, index) => index) : []
-                : circleTarget?.variant === "circleNoteValue"
+                : circleTarget?.barIndex === bar.barIndex && circleTarget?.variant === "circleNoteValue"
                   ? positions.map((_, index) => index)
-                : circleTarget?.variant === "triplet"
+                : circleTarget?.barIndex === bar.barIndex && circleTarget?.variant === "triplet"
                   ? positions.slice(0, -2).map((_, index) => index)
-                : positions.slice(0, -1).map((_, index) => index)
+                : circleTarget?.barIndex === bar.barIndex
+                  ? positions.slice(0, -1).map((_, index) => index)
+                  : []
               : [];
             const isRhythmTarget = Boolean(
               (rhythmDictationPart?.type === "rhythm" && bar.barIndex === question.rhythmTargetBar)
@@ -12483,14 +12484,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
         );
       }
 
-      function CircleChoiceGlyph() {
-        return (
-          <svg viewBox="0 0 56 48" className="h-12 w-16 overflow-visible" aria-hidden="true">
-            <circle cx="28" cy="24" r="17" fill="none" stroke="currentColor" strokeWidth="1.8" />
-          </svg>
-        );
-      }
-
       function RhythmChoiceGlyph({ rhythm }) {
         if (rhythm === "tie") {
           const tieGlyph = sharedSymbolForKey("tie") || "\uE1FD";
@@ -12868,25 +12861,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
           );
         }
         if (part.type === "scotchSnap") {
-          const value = makePlacementAnswer(practiceAnswers[part.id], { circleSelected: false, selected: null });
-          const chooseCircle = () => {
-            setActiveIndex(partIndex);
-            setPracticeAnswers((current) => ({ ...current, [part.id]: { ...value, circleSelected: true } }));
-          };
           return (
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                disabled={Boolean(feedback)}
-                onPointerDown={(event) => answerButtonPress(event, chooseCircle)}
-                onClick={(event) => answerButtonKeyboardClick(event, chooseCircle)}
-                className={`answer-choice-button flex ${ANSWER_BUTTON_SIZE_CLASS} flex-col items-center justify-center rounded-xl border px-3 transition ${placementButtonState(value.circleSelected)}`}
-                aria-label="Circle"
-              >
-                <CircleChoiceGlyph />
-                <span className="mt-1 text-sm font-bold leading-none">Circle</span>
-              </button>
-              <ScoreApplyHint />
+              <ScoreApplyHint>Select a note to apply a circle.</ScoreApplyHint>
             </div>
           );
         }
