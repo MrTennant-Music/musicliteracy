@@ -265,10 +265,6 @@ function randomItem(items) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
 function stripAccidental(pitch) {
   return pitch.replace(/[b#]/g, "");
 }
@@ -762,44 +758,45 @@ function getBeamLineYAtX(x, start, end) {
 function getBeamData(bar, group, positions, layout) {
   const notes = bar.slice(group.start, group.end + 1);
   const xs = positions.slice(group.start, group.end + 1);
-  const steps = notes.map((note) => staffStep(note.pitch));
-  const averageStep = steps.reduce((sum, step) => sum + step, 0) / steps.length;
-  const stemDown = averageStep > 4;
+  let downCount = 0;
+  let upCount = 0;
+  notes.forEach((note) => stemGoesDown(staffStep(note.pitch)) ? downCount++ : upCount++);
+  const stemDown = downCount > upCount;
   const stems = notes.map((note, index) => stemData(note, xs[index], layout.positions[note.id].y, stemDown));
-  const directions = steps.slice(1).map((step, index) => Math.sign(step - steps[index])).filter((direction) => direction !== 0);
-  const changesDirection = directions.some((direction, index) => index > 0 && direction !== directions[index - 1]);
-  const isStepwise = steps.every((step, index) => index === 0 || Math.abs(step - steps[index - 1]) <= 2);
-  const extend = 0.5;
-
-  if (changesDirection || !isStepwise) {
-    const anchorY = stems.reduce((sum, stem) => sum + stem.stemEndY, 0) / stems.length;
-    return {
-      stemDown,
-      start: { x: stems[0].stemX - extend, y: anchorY },
-      end: { x: stems[stems.length - 1].stemX + extend, y: anchorY },
-    };
-  }
-
-  const sortedSteps = [...steps].sort((a, b) => a - b);
-  const anchorStep = sortedSteps[Math.floor(sortedSteps.length / 2)];
-  const anchorIndex = steps.findIndex((step) => step === anchorStep);
-  const anchorStem = stems[anchorIndex];
   const firstStem = stems[0];
   const lastStem = stems[stems.length - 1];
-  const slope = clamp((steps[steps.length - 1] - steps[0]) * -1.2, -4, 4);
-  const slopePerX = slope / Math.max(1, lastStem.stemX - firstStem.stemX);
+  const beamSettings = sharedSymbolConfig("quaverBeam");
+  const xOffset = STAFF.gap * Number(beamSettings.xOffsetScale || 0);
+  const yOffset = STAFF.gap * Number(beamSettings.yOffsetScale || 0);
+  const stemLength = NOTE.stemLength * Number(beamSettings.heightScale || 1);
+  const beamWidthAdjust = 6 * (Number(beamSettings.widthScale || 1) - 1);
+  const startStep = staffStep(notes[0].pitch);
+  const endStep = staffStep(notes[notes.length - 1].pitch);
+  const startStemX = firstStem.stemX + xOffset;
+  const endStemX = lastStem.stemX + xOffset;
 
   return {
     stemDown,
     start: {
-      x: firstStem.stemX - extend,
-      y: anchorStem.stemEndY - slopePerX * (anchorStem.stemX - firstStem.stemX),
+      x: startStemX - beamWidthAdjust,
+      y: yForStep(startStep) + yOffset + (stemDown ? stemLength : -stemLength),
     },
     end: {
-      x: lastStem.stemX + extend,
-      y: anchorStem.stemEndY + slopePerX * (lastStem.stemX - anchorStem.stemX),
+      x: endStemX + beamWidthAdjust,
+      y: yForStep(endStep) + yOffset + (stemDown ? stemLength : -stemLength),
     },
   };
+}
+
+function beamPolygonPoints(x1, y1, x2, y2, thickness) {
+  const halfThickness = thickness / 2;
+  return [`${x1},${y1 - halfThickness}`, `${x2},${y2 - halfThickness}`, `${x2},${y2 + halfThickness}`, `${x1},${y1 + halfThickness}`].join(" ");
+}
+
+function BeamShape({ beam, colour = "currentColor" }) {
+  const beamSettings = sharedSymbolConfig("quaverBeam");
+  const beamThickness = Math.max(1, 4 * Number(beamSettings.fontSizeScale || 1));
+  return <polygon points={beamPolygonPoints(beam.start.x, beam.start.y, beam.end.x, beam.end.y, beamThickness)} fill={colour} />;
 }
 
 function ScoreArea({ question, selectedId, hoveredId, feedback, onSelect, onHover, onLeave }) {
@@ -870,10 +867,6 @@ function ScoreArea({ question, selectedId, hoveredId, feedback, onSelect, onHove
 
               const stem = stemData(note, position.x, position.y, beam.stemDown);
               forcedStemEndY = getBeamLineYAtX(stem.stemX, beam.start, beam.end);
-              const stemLength = Math.abs(forcedStemEndY - position.y);
-
-              if (stemLength > 42) forcedStemEndY = stem.stemDown ? position.y + 42 : position.y - 42;
-              if (stemLength < 22) forcedStemEndY = stem.stemDown ? position.y + 22 : position.y - 22;
             }
 
             const selected = selectedId === note.id && !feedback;
@@ -910,14 +903,7 @@ function ScoreArea({ question, selectedId, hoveredId, feedback, onSelect, onHove
                   const beamIsTarget = bar.slice(group.start, group.end + 1).some((groupNote) => feedback && targetIds.has(groupNote.id));
                   const beamIsIncorrect = feedback && bar.slice(group.start, group.end + 1).some((groupNote) => groupNote.id === selectedId && !selectedCorrect);
                   const beamColour = beamIsIncorrect ? COLOUR.red : beamIsTarget ? COLOUR.green : "currentColor";
-
-                  const beamShift = data.stemDown ? -1 : 1;
-                  const beamYOffset = data.stemDown ? 5.5 : -1.5;
-                  const beamStartX = data.stemDown ? data.start.x + beamShift + 1 : data.start.x + beamShift - 1;
-                  const beamEndX = data.stemDown ? data.end.x + beamShift + 1 : data.end.x + beamShift - 1;
-                  const beamSettings = sharedSymbolConfig("quaverBeam");
-                  const beamThickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42) * Number(beamSettings.fontSizeScale || 1));
-                  return <line x1={beamStartX} y1={data.start.y + beamYOffset} x2={beamEndX} y2={data.end.y + beamYOffset} stroke={beamColour} strokeWidth={beamThickness} strokeLinecap="butt" />;
+                  return <BeamShape beam={data} colour={beamColour} />;
                 })()}
               </React.Fragment>
             );
