@@ -186,10 +186,10 @@
     setScore?.({ correct: 0, attempted: 0, streak: 0, best: 0 });
   }
 
-  function SkipButton({ onClick, icon, resetStreak }) {
+  function SkipButton({ onClick, icon, resetStreak, disabled = false }) {
     return e(
       "button",
-      { type: "button", onClick: () => runSkipQuestion({ resetStreak, nextQuestion: onClick }), className: `${TOOLBAR_BUTTON_CLASS} shrink-0` },
+      { type: "button", disabled, onClick: () => runSkipQuestion({ resetStreak, nextQuestion: onClick }), className: `${TOOLBAR_BUTTON_CLASS} shrink-0 disabled:cursor-default disabled:opacity-40` },
       e(
         "span",
         { className: "flex w-full items-center justify-center sm:relative sm:left-[4px] sm:w-auto sm:gap-1" },

@@ -13590,6 +13590,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const nextTimer = useRef(null);
       const fadeTimer = useRef(null);
       const questionLoaderTimer = useRef(null);
+      const questionChangeInProgressRef = useRef(false);
       const pianoBufferCacheRef = useRef(new Map());
       const menuRef = useRef(null);
       const mainContainerRef = useRef(null);
@@ -13676,6 +13677,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
 
       function newQuestion(level = activeLevel, questionTypes = enabledQuestionTypes) {
+        if (questionChangeInProgressRef.current) return;
+        questionChangeInProgressRef.current = true;
         stopAudio();
         let nextQuestion;
         try {
@@ -13686,6 +13689,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             nextQuestion = makeInitialPracticeQuestion(level, questionTypes);
           } catch (fallbackError) {
             console.error(fallbackError);
+            questionChangeInProgressRef.current = false;
             setPrompt("A question could not be generated. Press Skip to try again.");
             return;
           }
@@ -13711,12 +13715,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
           setPrompt("");
           setPlaysRemaining(PRACTICE_PLAYS_PER_QUESTION);
           setVisible(true);
+          questionChangeInProgressRef.current = false;
           window.requestAnimationFrame(() => scrollPracticeScore("top", "auto"));
           window.setTimeout(() => setMainMinHeight(null), 320);
         }, 220);
       }
 
       function startFreshQuestion() {
+        if (questionChangeInProgressRef.current) return;
         setScore({ correct: 0, attempted: 0 });
         setTimerResetKey((value) => value + 1);
         setPlaysRemaining(PRACTICE_PLAYS_PER_QUESTION);
@@ -14907,6 +14913,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                 <div className="flex justify-end">
                   {!feedback ? (
                     <window.MLH.SkipButton
+                      disabled={!visible}
                       onClick={() => {
                         if (hasQuestionProgress()) {
                           setNewQuestionConfirmOpen(true);
