@@ -6939,6 +6939,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             timeChangeQuestion: index === barIndex,
           };
         }
+        if (question.bars[12]) question.bars[12] = { ...question.bars[12], timeSignatureRestore: true };
         question.bCadenceId = plan.bCadenceId;
         return true;
       }
@@ -8003,7 +8004,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
     function barPositions(bar, displayBarCount = BARS_PER_SYSTEM) {
       const start = barStart(bar.barIndex, displayBarCount);
       const end = start + barWidth(bar.barIndex, displayBarCount);
-      const scoreStart = start + (bar.barIndex === 0 ? 4 : bar.timeChangeQuestion ? 58 : 15);
+      const scoreStart = start + (bar.barIndex === 0 ? 4 : bar.timeChangeQuestion || bar.timeSignatureRestore ? 58 : 15);
       const scoreEnd = bar.barIndex === (bar.totalBars ?? BAR_COUNT) - 1 ? end - 24 : end - 4;
       const shownAccidentalsForUnits = new Set();
       const accidentalPreSpacing = bar.notes.map((_, index) => accidentalPreSpacingForNote(bar.notes, index, shownAccidentalsForUnits));
@@ -9979,6 +9980,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const end = start + barWidth(bar.barIndex);
             const positions = displayPositionsForBar(bar);
             const barTimeSignature = timeSignatureForBar(question, bar);
+            const restoresOriginalTimeSignature = Boolean(question.timeChangeTarget && bar.barIndex === question.timeChangeTarget.restoreBarIndex);
+            const endsTimeChange = Boolean(question.timeChangeTarget && bar.barIndex === question.timeChangeTarget.endBarIndex);
             const isTarget = bar.barIndex === question.targetBar;
             const missingNotesPart = question.subquestions?.find((part) => part.type === "notes");
             const intervalInsertPart = question.subquestions?.find((part) => part.type === "intervalInsert");
@@ -10784,6 +10787,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                 {transpositionMeaningTarget && <MarkingBox x={transpositionSignBoxX} y={transpositionSignBoxY} width={transpositionSignBoxWidth} height={transpositionSignBoxHeight} labelSourceId="transposition" label="Sign" layer="box" />}
                 {isMissingTarget && <RhythmGuide bar={bar} positions={positions} top={top} activeNoteId={activeNoteId} timeSignature={barTimeSignature} clef={question.clef} guideNoteIndices={isIntervalInsertTarget ? [question.intervalInsertTarget.answerIndex] : missingNoteIndices} />}
                 {transpositionMeaningTarget && <OctaveMeaningMarker target={transpositionMeaningTarget} start={start} end={end} top={top} />}
+                {restoresOriginalTimeSignature && <TimeSignature signature={question.timeSignature} top={top} xOverride={start + 28} />}
                 {transpositionAnswerOnMain ? (
                   <>
                     <MarkingBox x={start + 4} y={transpositionBoxY} width={Math.max(58, end - start - 8)} height={transpositionBoxHeight} labelSourceId="transposition" label="Transpose" layer="full" />
@@ -11364,7 +11368,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
                   </>
                 )}
                 {(isIntervalInsertTarget ? intervalInsertFeedback : missingFeedback) && isMissingTarget && <CorrectionLayer bar={bar} userNotes={userNotes} positions={positions} top={top} timeSignature={barTimeSignature} clef={question.clef} noteIndices={isIntervalInsertTarget ? [question.intervalInsertTarget.answerIndex] : null} />}
-                {!hideBarline && !hasEndRepeatOnBar && (bar.barIndex === question.bars.length - 1 ? (
+                {!hideBarline && !hasEndRepeatOnBar && (bar.barIndex === question.bars.length - 1 || endsTimeChange ? (
                   <g>
                     <line x1={end - 5} x2={end - 5} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="1.4" pointerEvents="none" />
                     <line x1={end} x2={end} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="4" pointerEvents="none" />
