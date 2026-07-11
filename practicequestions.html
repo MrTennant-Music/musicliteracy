@@ -2863,6 +2863,11 @@
       return Boolean(first && second && first.barIndex === second.barIndex && first.startIndex === second.startIndex);
     }
 
+    function circleQuestionRequiresTool(question, part) {
+      return (part?.sourceId ?? part?.id) === "noteIdentification"
+        || question.rhythmIdentificationTarget?.variant === "pairedQuaversCircle";
+    }
+
     function scaleDegreeAnswerBoxBars(question, targetBarIndex) {
       const systemStart = Math.floor(targetBarIndex / BARS_PER_SYSTEM) * BARS_PER_SYSTEM;
       const systemEnd = Math.min(question.bars.length - 1, systemStart + BARS_PER_SYSTEM - 1);
@@ -3553,7 +3558,21 @@
       return question;
     }
 
+    const HIGHER_PHRASE_RETRY = Symbol("higher-phrase-retry");
+
     function generateHigherPhraseQuestion(attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = "H", allowedTimeSignatureIds = null, allowRests = true, generationOptions = {}) {
+      let currentAttempt = attempt;
+      while (true) {
+        try {
+          return generateHigherPhraseQuestionAttempt(currentAttempt, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests, generationOptions);
+        } catch (error) {
+          if (error !== HIGHER_PHRASE_RETRY) throw error;
+          currentAttempt += 1;
+        }
+      }
+    }
+
+    function generateHigherPhraseQuestionAttempt(attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = "H", allowedTimeSignatureIds = null, allowRests = true, generationOptions = {}) {
       if (timeSignatureLevel === "AH") {
         return generateAdvancedHigherPhraseQuestion(cadenceId, requireMissingCopy, requireSimpleTime, allowedTimeSignatureIds, allowRests, generationOptions);
       }
@@ -3565,6 +3584,7 @@
         : timeSignatureOptions;
       const timeSignature = withFiveFourGrouping(weightedRandomItem(filteredTimeSignatureOptions.length ? filteredTimeSignatureOptions : timeSignatureOptions));
       const canRetryPhrase = canRetryQualityRules("H", attempt, timeSignatureLevel);
+      const retryHigherPhraseQuestion = () => { throw HIGHER_PHRASE_RETRY; };
       const key = randomPracticeKey(timeSignatureLevel);
       const progression = generateChordProgression16(cadenceId, key);
       const targetBarCandidates = [1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14];
@@ -3616,11 +3636,11 @@
         useShortPrompt: true,
       };
       if (requireMissingCopy && !makePreviousBarStepVariation(question) && canRetryPhrase) {
-        return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests, generationOptions);
+        return retryHigherPhraseQuestion();
       }
       Object.assign(question, chooseMissingNoteScope(question));
-      if (!strongBeatsUseChordTones(question) && canRetryPhrase) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests, generationOptions);
-      if (!validateMelodyStructure(question) && canRetryPhrase) return generateHigherPhraseQuestion(attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests, generationOptions);
+      if (!strongBeatsUseChordTones(question) && canRetryPhrase) return retryHigherPhraseQuestion();
+      if (!validateMelodyStructure(question) && canRetryPhrase) return retryHigherPhraseQuestion();
       return question;
     }
 
@@ -3963,8 +3983,24 @@
     const ADVANCED_HIGHER_DEVELOPMENT_BARS = [8, 9, 10, 11];
     const ADVANCED_HIGHER_VARIATION_BARS = [4, 5, 6, 7];
 
+    const EIGHT_BAR_QUESTION_RETRY = Symbol("eight-bar-question-retry");
+
     function makeEightBarRepetitionQuestion(level = "N5", attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = level, allowedTimeSignatureIds = null, allowRests = true, generationOptions = {}) {
       if (level === "H") return generateHigherPhraseQuestion(attempt, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests, generationOptions);
+      let currentAttempt = attempt;
+      while (true) {
+        try {
+          return makeEightBarRepetitionQuestionAttempt(level, currentAttempt, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests, generationOptions);
+        } catch (error) {
+          if (error !== EIGHT_BAR_QUESTION_RETRY) throw error;
+          currentAttempt += 1;
+        }
+      }
+    }
+
+    function makeEightBarRepetitionQuestionAttempt(level = "N5", attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = level, allowedTimeSignatureIds = null, allowRests = true, generationOptions = {}) {
+      if (level === "H") return generateHigherPhraseQuestion(attempt, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests, generationOptions);
+      const retryEightBarQuestion = () => { throw EIGHT_BAR_QUESTION_RETRY; };
       const activeBarCount = level === "H" ? 16 : BAR_COUNT;
       const timeSignatureOptions = requireSimpleTime ? simpleTimeSignaturesForLevel(level) : timeSignaturesForLevel(level);
       const permittedTimeSignatureOptions = Array.isArray(allowedTimeSignatureIds)
@@ -4074,7 +4110,7 @@
           })
           .filter(Boolean);
         const selectedSequence = sequenceOptions[0];
-        if (!selectedSequence && canRetryForLevel(level, attempt)) return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        if (!selectedSequence && canRetryForLevel(level, attempt)) return retryEightBarQuestion();
         if (selectedSequence) {
           bars[targetBar] = {
             ...bars[targetBar],
@@ -4096,7 +4132,7 @@
             && (bar.notes ?? []).some((note) => !note.rest)
           ));
         const source = level === "N3" ? sourceBars[0] : randomItem(sourceBars);
-        if (!source && canRetryForLevel(level, attempt)) return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        if (!source && canRetryForLevel(level, attempt)) return retryEightBarQuestion();
         if (source) {
           bars[targetBar] = {
             ...bars[targetBar],
@@ -4124,21 +4160,21 @@
       };
       const usesPreviousBarStepVariation = level === "H" && requireMissingCopy;
       if (usesPreviousBarStepVariation && !makePreviousBarStepVariation(question) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
       Object.assign(question, chooseMissingNoteScope(question));
 
       const targetMaximumInterval = level === "N5" ? national5MelodicLeapLimit() : maxStepForLevel(level, mode);
       if (!targetMovesWithinInterval(bars, targetBar, targetMaximumInterval) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
 
       if ((level === "N3" || level === "N4") && !hasEnoughPitchVariety(bars) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
 
       if (level === "N5" && requireMissingCopy && ((bars[targetBar]?.notes ?? []).filter((note) => !note.rest).length) < 3 && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
 
       if (
@@ -4146,27 +4182,27 @@
         && ((question.missingNoteIndices?.length ?? missingTaskNoteCount(bars, targetBar)) < MIN_MISSING_NOTES_PER_TASK || (question.missingNoteIndices?.length ?? missingTaskNoteCount(bars, targetBar)) > MAX_MISSING_NOTES_PER_TASK)
         && canRetryForLevel(level, attempt)
       ) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
 
       if (usesPreviousBarStepVariation && !targetIsPreviousBarWithOneStepChange(question) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
 
       if (!usesPreviousBarStepVariation && requiresExactMissingCopy(level, requireMissingCopy) && !targetHasSourcePattern(bars, targetBar, hasExactBarCopy) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
 
       if (!strongBeatsUseChordTones(question) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
 
       if ((level === "N3" || level === "N4") && melodyHasOctaveLeap(bars) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
 
       if ((level === "N5" || isHigherLevel(level)) && !melodyPassesQualityRules(question) && canRetryForLevel(level, attempt)) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests);
+        return retryEightBarQuestion();
       }
 
       return question;
@@ -9191,16 +9227,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return sameScotchSelection(selection, target);
       }
 
-      function circleRequiresTool(part) {
-        return (part?.sourceId ?? part?.id) === "noteIdentification"
-          || question.rhythmIdentificationTarget?.variant === "pairedQuaversCircle";
-      }
-
       function selectScotchSnapCandidate(candidate) {
         const part = activeCirclePart();
         if (!part || part.type !== "scotchSnap" || feedback) return;
         const current = placementValue(part, { circleSelected: false, selected: null });
-        if (circleRequiresTool(part) && !current.circleSelected) return;
+        if (circleQuestionRequiresTool(question, part) && !current.circleSelected) return;
         setPracticeAnswers((answers) => ({ ...answers, [part.id]: { ...current, circleSelected: false, selected: candidate } }));
       }
 
@@ -10415,7 +10446,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const rhythmBoxSourceId = rhythmDictationPart?.sourceId ?? "rhythmicDictation";
             const scotchSnapCanInteract = circlePart?.type === "scotchSnap"
               && activeSourceId === (circlePart.sourceId ?? circlePart.id)
-              && (!circleRequiresTool(circlePart) || circleAnswer.circleSelected)
+              && (!circleQuestionRequiresTool(question, circlePart) || circleAnswer.circleSelected)
               && !feedback;
             const selectedScotchSnap = circleAnswer.selected?.barIndex === bar.barIndex ? circleAnswer.selected : null;
             const savedScaleDegreeAnswer = placementValue(scaleDegreesPart, { circleSelected: false, selected: null });
@@ -13044,7 +13075,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         }
         if (part.type === "scotchSnap") {
           const value = makePlacementAnswer(practiceAnswers[part.id], { circleSelected: false, selected: null });
-          const requiresCircleTool = circleRequiresTool(part);
+          const requiresCircleTool = circleQuestionRequiresTool(question, part);
           if (requiresCircleTool) {
             const chooseCircle = () => {
               setActiveIndex(partIndex);
