@@ -24,11 +24,11 @@ includes("if (level === \"H\") return generateAdvancedHigherPhraseQuestion", "Hi
 includes("const chordBar = needsChord ? (level === \"H\" ? 8", "The Higher given chord must use bar 9");
 includes("const higherChordAnswerBars = needsChord && level === \"H\" ? [9, 10]", "The Higher chord answers must use bars 10 and 11");
 includes("? { startBarIndex: 6, endBarIndex: 7, cadenceId: \"perfect\" }", "Higher must be able to ask about the bar 8 cadence");
-includes("makePracticeTimeChangeTarget(question, timeSignatureLevel, [8], 11, 12)", "Higher time changes must run from bars 9-12 and restore in bar 13");
-includes("makePracticeTimeChangeTarget(question, timeSignatureLevel, [11], 11, 12)", "Higher chord papers must limit the time change to bar 12");
+includes("level === \"H\"\n          ? makePracticeTimeChangeTarget(question, timeSignatureLevel, [11], 11, 12)", "Higher time changes must happen in bar 12 and restore in bar 13");
 includes("question.practiceLevel === \"AH\" ? null : plantTranspositionFallbackBar", "AH transposition must not rewrite the generated melody");
-includes(".filter((bar) => bar.barIndex >= 1 && bar.barIndex < 8)", "AH transposition must select bars 2-8");
-includes("questionSelectionLevel === \"AH\" ? ADVANCED_HIGHER_DEVELOPMENT_BARS : null", "AH editable questions must be directed to the development line");
+includes("const transpositionStartBar = question.practiceLevel === \"AH\" ? 1 : 0;", "AH transposition must still avoid bar 1 while Higher can use the wider score");
+includes("const transpositionEndBar = question.practiceLevel === \"AH\" ? 8 : question.bars.length - 1;", "AH transposition must still stop at bar 8 while Higher can use later bars");
+includes("questionSelectionLevel === \"AH\" || level === \"H\" ? ADVANCED_HIGHER_DEVELOPMENT_BARS : null", "Higher and AH accidental questions must use the development line");
 includes("const targetBarIndex = randomItem(unusedQuestionBars([10, 11]));", "AH rhythmic dictation must target bars 11-12");
 includes("forceFinalDominantCadence: forceAdvancedHigherDominantCadence", "A cadence with a chord-type question must use the dominant-seventh exception");
 includes("!forceAdvancedHigherDominantCadence ? cadenceBarIndexes : []", "The dominant-seventh cadence exception must be allowed to share bars 15-16");

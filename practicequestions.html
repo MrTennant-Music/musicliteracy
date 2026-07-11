@@ -782,7 +782,6 @@
       { id: "scaleDegrees", weight: 4 },
       { id: "barlines", weight: 4 },
       { id: "time", weight: 4 },
-      { id: "enharmonics", weight: 2 },
       { id: "rhythmIdentification", weight: 1 },
       { id: "triplets", weight: 1 },
     ];
@@ -1049,6 +1048,7 @@
       ));
       if (level === "H") return PRACTICE_QUESTION_TYPES.filter((type) => (
         HIGHER_PRACTICE_QUESTION_TYPE_IDS.has(type.id)
+        && type.id !== "enharmonics"
         && !type.id.startsWith("ah")
         && (!TRANSPOSITION_QUESTION_TYPE_IDS.includes(type.id) || type.id === "transposition")
       ));
@@ -6656,8 +6656,10 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const variants = question.practiceLevel === "AH" ? ADVANCED_HIGHER_TRANSPOSITION_VARIANTS : HIGHER_TRANSPOSITION_VARIANTS;
       if (!variants.length) return null;
       const variant = question.practiceLevel === "AH" ? weightedRandomItem(variants) : randomItem(variants);
+      const transpositionStartBar = question.practiceLevel === "AH" ? 1 : 0;
+      const transpositionEndBar = question.practiceLevel === "AH" ? 8 : question.bars.length - 1;
       const eligibleBars = question.bars
-        .filter((bar) => bar.barIndex >= 1 && bar.barIndex < 8)
+        .filter((bar) => bar.barIndex >= transpositionStartBar && bar.barIndex < transpositionEndBar)
         .filter((bar) => (bar.notes ?? []).length >= 3 && (bar.notes ?? []).every((note) => !note.rest))
         .filter((bar) => bar.notes.every((note, noteIndex) => {
           const answer = transposedByOctaves(note, bar.barIndex, noteIndex, variant.answerOctavesFromMain, "transposition-answer");
@@ -7308,7 +7310,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       if (usesAdvancedHigherMelodyRules) {
         if (!applyAdvancedHigherBarEightCadenceApproach(question) && canRetryPracticeQuestion) return retryPracticeQuestion();
       }
-      if (questionSelectionLevel === "AH") {
+      if (questionSelectionLevel === "AH" || level === "H") {
         if (needsMissing && !applyAdvancedHigherMissingNotesRule(question) && canRetryPracticeQuestion) return retryPracticeQuestion();
       }
       const cadenceTarget = needsCadence && level === "H"
@@ -7319,9 +7321,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const timeChangeTarget = needsTime
         && (questionSelectionLevel === "AH" || (level === "H" && question.melodyGenerationStyle === "advancedHigher"))
         ? level === "H"
-          ? needsChord
-            ? makePracticeTimeChangeTarget(question, timeSignatureLevel, [11], 11, 12)
-            : makePracticeTimeChangeTarget(question, timeSignatureLevel, [8], 11, 12)
+          ? makePracticeTimeChangeTarget(question, timeSignatureLevel, [11], 11, 12)
           : Math.random() < 0.9
             ? makePracticeTimeChangeTarget(question, timeSignatureLevel, [10])
             : null
@@ -7534,7 +7534,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           excludedBars.push(enharmonicTarget.barIndex - 1);
         }
       }
-      const higherIntervalBars = level === "H" && questionSelectionLevel !== "AH" ? HIGHER_PRACTICE_LINE_BARS.interval : null;
+      const higherIntervalBars = null;
       const higherRestBars = level === "H"
         ? questionSelectionLevel === "AH" ? ADVANCED_HIGHER_DEVELOPMENT_BARS : HIGHER_PRACTICE_LINE_BARS.rests
         : null;
@@ -7596,7 +7596,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const accidentalTarget = needsAccidentals ? makeAccidentalQuestionTarget(
         question,
         [...usedQuestionBars],
-        questionSelectionLevel === "AH" ? ADVANCED_HIGHER_DEVELOPMENT_BARS : null
+        questionSelectionLevel === "AH" || level === "H" ? ADVANCED_HIGHER_DEVELOPMENT_BARS : null
       ) : null;
       if (needsAccidentals && !accidentalTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
       if (needsAccidentals && accidentalTarget) reserveQuestionBar(accidentalTarget.barIndex);
