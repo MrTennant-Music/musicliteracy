@@ -2487,7 +2487,15 @@
     function plantAdvancedHigherRhythmTotalTarget(question, excludedBars = [], allowedBars = null) {
       const excluded = new Set([...excludedBars, question.bars.length - 1]);
       const allowed = Array.isArray(allowedBars) ? new Set(allowedBars) : null;
-      const barCandidates = question.bars
+      const adjacentBarCandidates = question.bars
+        .filter((bar) => (
+          !excluded.has(bar.barIndex)
+          && bar.barIndex !== question.targetBar
+          && (!allowed || allowed.has(bar.barIndex))
+        ))
+        .map((bar) => bar.barIndex);
+      const adjacentTarget = findAdjacentRhythmTotalTarget(question, adjacentBarCandidates);
+      const tiedBarCandidates = question.bars
         .filter((bar) => {
           const nextBar = question.bars[bar.barIndex + 1];
           if (!nextBar) return false;
@@ -2497,9 +2505,10 @@
           return Math.floor(bar.barIndex / BARS_PER_SYSTEM) === Math.floor(nextBar.barIndex / BARS_PER_SYSTEM);
         })
         .map((bar) => bar.barIndex);
-      if (!barCandidates.length) return null;
+      if (adjacentTarget && (!tiedBarCandidates.length || Math.random() < 0.5)) return adjacentTarget;
+      if (!tiedBarCandidates.length) return adjacentTarget ?? null;
 
-      const startBarIndex = randomItem(barCandidates);
+      const startBarIndex = randomItem(tiedBarCandidates);
       const endBarIndex = startBarIndex + 1;
       const template = advancedHigherTiedRhythmTotalTemplate(timeSignatureForBar(question, startBarIndex));
       const firstBar = applyPracticeRhythmPattern(question, startBarIndex, template.first);
@@ -4605,33 +4614,19 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     function advancedHigherChordTypeCandidateBars(question, chordTypeId, protectedBars, options = {}) {
-      if (options.forceFinalDominantCadence) {
-        const finalDominantBar = question.bars.length - 2;
-        return chordTypeId === "dom7"
-          && question.bars?.[finalDominantBar]
-          && question.bars?.[finalDominantBar + 1]
-          && !protectedBars.has(finalDominantBar)
-          && !protectedBars.has(finalDominantBar + 1)
-          ? [finalDominantBar]
-          : [];
-      }
+      const finalDominantBar = question.bars.length - 2;
+      const isFree = (barIndex) => Boolean(question.bars?.[barIndex]) && !protectedBars.has(barIndex);
+      if (chordTypeId === "add6") return [7, question.bars.length - 1].filter(isFree);
       if (chordTypeId === "aug") {
-        const finalDominantBar = question.bars.length - 2;
-        return question.bars?.[finalDominantBar]
-          && question.bars?.[finalDominantBar + 1]
-          && !protectedBars.has(finalDominantBar)
-          && !protectedBars.has(finalDominantBar + 1)
+        return isFree(finalDominantBar)
+          && isFree(finalDominantBar + 1)
           && Boolean(advancedHigherAugmentedTriadSpelling(question))
           ? [finalDominantBar]
           : [];
       }
-      return [8, 9, 10].filter((barIndex) => {
-        if (!question.bars?.[barIndex] || protectedBars.has(barIndex)) return false;
-        if (chordTypeId === "dom7" || chordTypeId === "dim7") {
-          return barIndex < 10 && Boolean(question.bars?.[barIndex + 1]) && !protectedBars.has(barIndex + 1);
-        }
-        return true;
-      });
+      if (chordTypeId === "dim7") return isFree(finalDominantBar) && isFree(finalDominantBar + 1) ? [finalDominantBar] : [];
+      if (chordTypeId === "dom7") return [6, finalDominantBar].filter((barIndex) => isFree(barIndex) && isFree(barIndex + 1));
+      return [];
     }
 
     function advancedHigherChordTypeSpellingsForQuestion(question, chordTypeId) {
@@ -4641,10 +4636,10 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     const ADVANCED_HIGHER_CHORD_TYPE_SELECTION_WEIGHTS = {
-      dom7: 0.1,
-      dim7: 2,
+      dom7: 1,
+      dim7: 1,
       aug: 1,
-      add6: 2,
+      add6: 1,
     };
 
     function makeAdvancedHigherChordTypeNote(question, barIndex, spelling, chordType, rhythm = finalRhythmForSignature(question.timeSignature)) {
@@ -6652,8 +6647,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     function hasQuestionTypeConflict(ids, level = null) {
-      if (level === "AH") return false;
       const idSet = new Set(ids);
+      if (level === "AH") return idSet.has("ahChordTypes") && idSet.has("cadence");
       return QUESTION_TYPE_CONFLICT_PAIRS.some(([first, second]) => idSet.has(first) && idSet.has(second));
     }
 
@@ -6686,7 +6681,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     function hasAdvancedHigherFixedBarSelectionConflict(ids) {
-      return false;
+      return hasQuestionTypeConflict(ids, "AH");
     }
 
     function selectedAdvancedHigherPracticeQuestionTypeIds(enabledQuestionTypes, selectionAttempt = 0) {
@@ -6937,7 +6932,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         && barIndex <= 11
         && question.bars[barIndex]
       ));
-      const barIndex = randomItem(possibleBarIndexes.length ? possibleBarIndexes : [8]);
+      if (!possibleBarIndexes.length) return null;
+      const barIndex = randomItem(possibleBarIndexes);
       if (!rebuildPracticeBarsAfterTimeChange(question, barIndex, signature)) return null;
       return { barIndex, endBarIndex: 11, restoreBarIndex: 12, signature };
     }
@@ -7039,7 +7035,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const timeChangeTarget = needsTime
         && questionSelectionLevel === "AH"
         && Math.random() < 0.9
-        ? makePracticeTimeChangeTarget(question, timeSignatureLevel, needsAdvancedHigherChordTask ? [10, 11] : [8, 10, 11])
+        ? makePracticeTimeChangeTarget(question, timeSignatureLevel, [11])
         : null;
       if (questionSelectionLevel === "AH" && needsKey && needsTime && !timeChangeTarget && canRetryPracticeQuestion) {
         return retryPracticeQuestion();
@@ -7201,7 +7197,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const unusedNational4RepeatTargets = national4RepeatTargets.filter(repeatTargetFitsUsedBars);
       const unusedRepeatTargetOptions = higherRepeatTargetOptions.filter(repeatTargetFitsUsedBars);
       const repeatTarget = needsRepeatSigns
-        ? level === "N4" ? randomItem(unusedNational4RepeatTargets.length ? unusedNational4RepeatTargets : national4RepeatTargets) : randomItem(unusedRepeatTargetOptions.length ? unusedRepeatTargetOptions : higherRepeatTargetOptions)
+        ? level === "N4" ? randomItem(unusedNational4RepeatTargets.length ? unusedNational4RepeatTargets : national4RepeatTargets) : timeSignatureLevel === "AH" ? randomItem(higherRepeatTargetOptions) : randomItem(unusedRepeatTargetOptions.length ? unusedRepeatTargetOptions : higherRepeatTargetOptions)
         : null;
       const givenRepeatPlacements = needsRepeatSigns
         ? repeatTarget.symbolId === "repeat-pair" ? []
@@ -7215,7 +7211,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
           : repeatTarget.symbolId === "ds-fine" ? repeatTarget.givenPlacements ?? []
             : []
         : [];
-      if (needsRepeatSigns) repeatTargetOccupiedPlacements(repeatTarget).forEach((placement) => reserveQuestionBar(placement.barIndex));
+      const repeatSignsCanShareQuestionBars = timeSignatureLevel === "AH" && repeatTarget?.symbolId === "ds-fine";
+      if (needsRepeatSigns && !repeatSignsCanShareQuestionBars) repeatTargetOccupiedPlacements(repeatTarget).forEach((placement) => reserveQuestionBar(placement.barIndex));
       const excludedBars = [0, finalBarIndex];
       if (needsMissing) excludedBars.push(question.targetBar, question.missingSourceBar);
       if (needsChord) excludedBars.push(chordBar);
@@ -7279,7 +7276,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           : plantRhythmIdentificationTarget(
             question,
             [...usedQuestionBars],
-            questionSelectionLevel === "AH" ? ADVANCED_HIGHER_DEVELOPMENT_BARS : null
+            null
           )
         : null;
       if (needsRhythmIdentification && !rhythmIdentificationTarget && canRetryPracticeQuestion) return retryPracticeQuestion();
@@ -7333,8 +7330,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ...(needsChord ? [chordBar, ...higherChordAnswerBars] : []),
         ...(needsCadence && !(needsChord && level === "H") && !forceAdvancedHigherDominantCadence ? cadenceBarIndexes : []),
         ...(needsDynamic ? [dynamicBar] : []),
-        ...(needsRepeatSigns ? (repeatTarget.placements ?? [repeatTarget]).map((placement) => placement.barIndex) : []),
-        ...(needsRepeatSigns && repeatTarget.symbolId !== "ds-fine" ? givenRepeatPlacements.map((placement) => placement.barIndex) : []),
+        ...(needsRepeatSigns && !repeatSignsCanShareQuestionBars ? (repeatTarget.placements ?? [repeatTarget]).map((placement) => placement.barIndex) : []),
+        ...(needsRepeatSigns && !repeatSignsCanShareQuestionBars && repeatTarget.symbolId !== "ds-fine" ? givenRepeatPlacements.map((placement) => placement.barIndex) : []),
         ...(needsBarlines ? hiddenBarNumbers : []),
         ...(needsInterval && Number.isInteger(intervalQuestionBar) ? [intervalQuestionBar] : []),
         ...(needsNoteIdentification && Number.isInteger(noteIdentificationQuestionBar) ? [noteIdentificationQuestionBar] : []),
