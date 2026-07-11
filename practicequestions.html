@@ -1754,6 +1754,62 @@
       return true;
     }
 
+    function applyAdvancedHigherMissingNotesRule(question) {
+      const sourceBarIndex = 2;
+      const targetBarIndex = 6;
+      const source = question.bars?.[sourceBarIndex];
+      const target = question.bars?.[targetBarIndex];
+      if (!source?.notes?.length || !target) return false;
+      const changeableNotes = source.notes
+        .map((note, noteIndex) => ({ note, noteIndex }))
+        .filter(({ note, noteIndex }) => noteIndex > 0 && !note.rest)
+        .filter(({ note }) => [-1, 1].some((offset) => {
+          const candidate = NOTE_POOL[noteBaseIndex(note) + offset];
+          return candidate && noteAllowedForLevel(question.level, candidate);
+        }));
+      if (!changeableNotes.length) return false;
+      const changeCount = Math.min(changeableNotes.length, Math.random() < 0.5 ? 1 : 2);
+      const changes = new Map(shuffleItems(changeableNotes).slice(0, changeCount).map(({ note, noteIndex }) => {
+        const choices = [-1, 1]
+          .map((offset) => NOTE_POOL[noteBaseIndex(note) + offset])
+          .filter((candidate) => candidate && noteAllowedForLevel(question.level, candidate));
+        return [noteIndex, randomItem(choices)];
+      }));
+      if ([...changes.values()].some((note) => !note)) return false;
+      const notes = source.notes.map((note, noteIndex) => {
+        const pitch = changes.get(noteIndex) ?? note;
+        return makeNote(note.rest ? null : pitch, note.rhythm, targetBarIndex, noteIndex, note.beat, question.key, source.chordSymbol);
+      });
+      question.bars[targetBarIndex] = {
+        ...target,
+        chordSymbol: source.chordSymbol,
+        notes: applyMelodicAccidentals(notes, question.key),
+        pattern: source.notes.map((note) => note.rhythm),
+      };
+      question.targetBar = targetBarIndex;
+      question.missingSourceBar = sourceBarIndex;
+      question.missingNoteScope = "bar";
+      question.missingNoteIndices = notes.map((_, noteIndex) => noteIndex);
+      return true;
+    }
+
+    function applyAdvancedHigherBarEightCadenceApproach(question) {
+      const barIndex = 7;
+      const patterns = {
+        "2/4": ["minim"],
+        "3/4": ["minim", "crotchet"],
+        "4/4": ["dottedMinim", "crotchet"],
+        "6/8": ["dottedCrotchet", "dottedCrotchet"],
+        "9/8": ["dottedMinim", "dottedCrotchet"],
+        "12/8": ["dottedMinim", "dottedMinim"],
+      };
+      const pattern = patterns[timeSignatureForBar(question, barIndex)?.id];
+      if (!pattern || !question.bars?.[barIndex]) return false;
+      applyPracticeRhythmPattern(question, barIndex, pattern);
+      setFirstSoundingNoteToScaleDegree(question, barIndex, 1);
+      return true;
+    }
+
     function chooseNextNote({ key, chordLetters, previous, currentIndex, strongBeat, rhythm, maxLeap, level, forceDirection = 0, preferLeap = false, recentNotes = [] }) {
       const previousIndex = noteBaseIndex(previous) >= 0 ? noteBaseIndex(previous) : currentIndex;
       const previousMidi = previous?.midi ?? NOTE_POOL[previousIndex]?.midi ?? 72;
@@ -7033,6 +7089,10 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const generationOptions = { questionTypes: [...selectedSourceIds] };
       let question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowGeneratedRests, generationOptions);
       question.practiceLevel = questionSelectionLevel;
+      if (questionSelectionLevel === "AH") {
+        if (!applyAdvancedHigherBarEightCadenceApproach(question) && canRetryPracticeQuestion) return retryPracticeQuestion();
+        if (needsMissing && !applyAdvancedHigherMissingNotesRule(question) && canRetryPracticeQuestion) return retryPracticeQuestion();
+      }
       if (level === "H" && isMinorKey(question.key) && ["plagal", "interrupted"].includes(cadenceId)) {
         cadenceId = randomItem(["perfect", "imperfect"]);
         question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowGeneratedRests, generationOptions);
