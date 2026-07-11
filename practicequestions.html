@@ -5759,6 +5759,29 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const candidates = question.bars
         .flatMap((bar) => (bar.notes ?? []).map((note, noteIndex) => ({ bar, note, noteIndex })))
         .filter(({ bar, note }) => !excluded.has(bar.barIndex) && bar.barIndex !== question.targetBar && !note.rest && allowedRhythms.has(note.rhythm) && !excludedRhythmSet.has(note.rhythm));
+      const pairedQuaverCandidates = candidates.filter(({ bar, note, noteIndex }) => (
+        note.rhythm === "quaver" && bar.notes[noteIndex + 1]?.rhythm === "quaver"
+      ));
+      const national4Variant = level === "N4" && pairedQuaverCandidates.length
+        ? randomItem(["pairedQuaversCircle", "pairedQuaverBeats", "noteValue"])
+        : "noteValue";
+      if (national4Variant !== "noteValue") {
+        const target = randomItem(pairedQuaverCandidates);
+        if (national4Variant === "pairedQuaversCircle") {
+          return {
+            variant: "pairedQuaversCircle",
+            barIndex: target.bar.barIndex,
+            startIndex: target.noteIndex,
+            noteIndices: [target.noteIndex, target.noteIndex + 1],
+          };
+        }
+        return {
+          variant: "pairedQuaverBeats",
+          barIndex: target.bar.barIndex,
+          noteIndex: randomItem([target.noteIndex, target.noteIndex + 1]),
+          targetRhythm: "quaver",
+        };
+      }
       const questionStyle = randomItem(["beats", "name"]);
       const rhythmTypes = [...new Set(candidates.map(({ note }) => note.rhythm))];
       const targetRhythm = randomItem(rhythmTypes);
@@ -7526,6 +7549,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const rhythmIdentificationBeatAnswer = needsRhythmIdentification && rhythmIdentificationTarget?.variant === "noteValue"
         ? rhythmBeatAcceptedAnswers(rhythmIdentificationTarget.targetRhythm)
         : null;
+      const pairedQuaverBeatAnswer = needsRhythmIdentification && rhythmIdentificationTarget?.variant === "pairedQuaverBeats"
+        ? { answer: "0.5 beat", accepts: acceptedAnswers("0.5", "half", "1/2") }
+        : null;
       const rhythmIdentificationTotalAnswer = needsRhythmIdentification && rhythmIdentificationTarget?.variant === "noteValueTotal"
         ? rhythmTotalAcceptedAnswers(rhythmIdentificationTarget.totalBeats)
         : null;
@@ -7699,6 +7725,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
             : rhythmIdentificationNameAnswer.accepts,
           type: "text",
         }] : []),
+        ...(needsRhythmIdentification && rhythmIdentificationTarget?.variant === "pairedQuaverBeats" ? [{
+          id: "rhythmIdentification",
+          sourceId: "rhythmIdentification",
+          prompt: `How many beats does the marked quaver have in bar ${rhythmIdentificationTarget.barIndex + 1}?`,
+          answer: pairedQuaverBeatAnswer.answer,
+          accepts: pairedQuaverBeatAnswer.accepts,
+          type: "text",
+        }] : []),
         ...(needsRhythmIdentification && rhythmIdentificationTarget?.variant === "noteValueTotal" ? [{
           id: "rhythmIdentification",
           sourceId: "rhythmIdentification",
@@ -7714,6 +7748,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
           sourceId: "rhythmIdentification",
           prompt: "Place a circle around an example of a Scotch snap.",
           answer: "Scotch snap circled correctly",
+          type: "scotchSnap",
+        }] : []),
+        ...(needsRhythmIdentification && rhythmIdentificationTarget?.variant === "pairedQuaversCircle" ? [{
+          id: "rhythmIdentification",
+          sourceId: "rhythmIdentification",
+          prompt: "Place a circle around a group of paired quavers.",
+          answer: "Paired quavers circled correctly",
           type: "scotchSnap",
         }] : []),
         ...(needsScaleDegrees && scaleDegreeTarget ? [{
@@ -10659,7 +10700,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
               : intervalBaseBoxWidth;
             const barNumberX = ((bar.barIndex === 0 || bar.barIndex === 4) ? start - 15 : start + 5) + 4;
             const barNumberY = top - 17;
-            const valueTargetNote = rhythmIdentificationTarget && ["dottedCrotchet", "noteValue", "noteValueTotal"].includes(rhythmIdentificationTarget.variant) ? bar.notes[rhythmIdentificationTarget.noteIndex] : null;
+            const valueTargetNote = rhythmIdentificationTarget && ["dottedCrotchet", "noteValue", "noteValueTotal", "pairedQuaverBeats"].includes(rhythmIdentificationTarget.variant) ? bar.notes[rhythmIdentificationTarget.noteIndex] : null;
             const valueTargetEndBar = rhythmIdentificationTarget?.variant === "noteValueTotal"
               ? question.bars[rhythmIdentificationTarget.endBarIndex ?? rhythmIdentificationTarget.barIndex]
               : bar;
@@ -13208,6 +13249,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
               return <>What is the name given to this <strong>{beatDescription}</strong> note in <strong>bar {question.rhythmIdentificationTarget.barIndex + 1}</strong>?</>;
             }
             return part.prompt;
+          }
+          if (question.rhythmIdentificationTarget?.variant === "pairedQuaverBeats") {
+            return <>How many beats does the marked quaver have in <strong>bar {question.rhythmIdentificationTarget.barIndex + 1}</strong>?</>;
           }
           return <>Identify the number of beats for the note marked in <strong>bar {question.rhythmIdentificationTarget.barIndex + 1}</strong>.</>;
         }
