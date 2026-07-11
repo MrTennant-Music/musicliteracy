@@ -3545,20 +3545,20 @@
       };
     }
 
-    function generateAdvancedHigherPhraseQuestion(cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, allowedTimeSignatureIds = null, allowRests = true, generationOptions = {}) {
+    function generateAdvancedHigherPhraseQuestion(cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, allowedTimeSignatureIds = null, allowRests = true, generationOptions = {}, generationLevel = "AH") {
       const generator = window.PracticeMelodyGenerator;
       if (!generator?.generateAdvancedHigherPlan) {
-        return generateHigherPhraseQuestion(0, cadenceId, requireMissingCopy, requireSimpleTime, "H", allowedTimeSignatureIds, allowRests, generationOptions);
+        return generateHigherPhraseQuestion(0, cadenceId, requireMissingCopy, requireSimpleTime, generationLevel === "AH" ? "H" : generationLevel, allowedTimeSignatureIds, allowRests, generationOptions);
       }
-      higherPhraseGenerationLevel = "AH";
+      higherPhraseGenerationLevel = generationLevel;
       const seed = generationOptions.seed ?? `${Date.now()}-${Math.random()}`;
       const random = generator.createSeededRandom(seed);
-      const availableSignatures = (requireSimpleTime ? simpleTimeSignaturesForLevel("AH") : timeSignaturesForLevel("AH"))
+      const availableSignatures = (requireSimpleTime ? simpleTimeSignaturesForLevel(generationLevel) : timeSignaturesForLevel(generationLevel))
         .filter((signature) => signature.id !== "5/4")
         .filter((signature) => !Array.isArray(allowedTimeSignatureIds) || allowedTimeSignatureIds.includes(signature.id));
-      const fallbackSignatures = timeSignaturesForLevel("AH").filter((signature) => signature.id !== "5/4");
+      const fallbackSignatures = timeSignaturesForLevel(generationLevel).filter((signature) => signature.id !== "5/4");
       const timeSignature = withFiveFourGrouping(weightedItemWith(random, availableSignatures.length ? availableSignatures : fallbackSignatures));
-      const key = randomPracticeKeyWith(random, "AH");
+      const key = randomPracticeKeyWith(random, generationLevel);
       const questionTypes = Array.isArray(generationOptions.questionTypes) ? generationOptions.questionTypes : [];
       const plan = generator.generateAdvancedHigherPlan({
         seed,
@@ -3578,8 +3578,9 @@
         bars,
         targetBar,
         level: "H",
-        practiceLevel: "AH",
-        generationLevel: "AH",
+        practiceLevel: generationLevel,
+        generationLevel,
+        melodyGenerationStyle: "advancedHigher",
         mode: "phrase",
         cadenceId,
         bCadenceId: plan.bCadenceId,
@@ -4029,7 +4030,7 @@
     const EIGHT_BAR_QUESTION_RETRY = Symbol("eight-bar-question-retry");
 
     function makeEightBarRepetitionQuestion(level = "N5", attempt = 0, cadenceId = "perfect", requireMissingCopy = true, requireSimpleTime = false, timeSignatureLevel = level, allowedTimeSignatureIds = null, allowRests = true, generationOptions = {}) {
-      if (level === "H") return generateHigherPhraseQuestion(attempt, cadenceId, requireMissingCopy, requireSimpleTime, timeSignatureLevel, allowedTimeSignatureIds, allowRests, generationOptions);
+      if (level === "H") return generateAdvancedHigherPhraseQuestion(cadenceId, requireMissingCopy, requireSimpleTime, allowedTimeSignatureIds, allowRests, generationOptions, "H");
       let currentAttempt = attempt;
       while (true) {
         try {
@@ -7055,8 +7056,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ?? practiceQuestionTypesForLevel(level).slice(0, practiceQuestionCountForLevel(level)).map((type) => type.id);
     }
 
-    function rebuildPracticeBarsAfterTimeChange(question, barIndex, signature) {
-      if (question.practiceLevel === "AH" && window.PracticeMelodyGenerator?.generateAdvancedHigherPlan) {
+    function rebuildPracticeBarsAfterTimeChange(question, barIndex, signature, endBarIndex = 11, restoreBarIndex = 12) {
+      if (question.melodyGenerationStyle === "advancedHigher" && window.PracticeMelodyGenerator?.generateAdvancedHigherPlan) {
         const seed = `time-change-${question.id}-${signature.id}`;
         const plan = window.PracticeMelodyGenerator.generateAdvancedHigherPlan({
           seed,
@@ -7065,7 +7066,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
           allowRests: true,
           questionTypes: ["time"],
         });
-        for (let index = barIndex; index <= 11; index += 1) {
+        for (let index = barIndex; index <= endBarIndex; index += 1) {
           const rebuilt = advancedHigherBarFromPlan(plan.bars[index], question.key, signature, question.bars.length);
           question.bars[index] = {
             ...rebuilt,
@@ -7073,7 +7074,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             timeChangeQuestion: index === barIndex,
           };
         }
-        if (question.bars[12]) question.bars[12] = { ...question.bars[12], timeSignatureRestore: true };
+        if (question.bars[restoreBarIndex]) question.bars[restoreBarIndex] = { ...question.bars[restoreBarIndex], timeSignatureRestore: true };
         question.bCadenceId = plan.bCadenceId;
         return true;
       }
@@ -7114,8 +7115,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return true;
     }
 
-    function makePracticeTimeChangeTarget(question, timeSignatureLevel, preferredBarIndexes = [8]) {
-      if (timeSignatureLevel !== "AH" || question.bars.length <= 8) return null;
+    function makePracticeTimeChangeTarget(question, timeSignatureLevel, preferredBarIndexes = [8], endBarIndex = 11, restoreBarIndex = 12) {
+      const supportsAdvancedPlanTimeChange = question.melodyGenerationStyle === "advancedHigher";
+      if (!supportsAdvancedPlanTimeChange || !["H", "AH"].includes(timeSignatureLevel) || question.bars.length <= endBarIndex) return null;
       const options = TIME_SIGNATURES
         .filter((signature) => timeSignatureAnswerOptionsForLevel(timeSignatureLevel).includes(signature.id))
         .filter((signature) => !TIME_SIGNATURE_DISTRACTOR_ONLY_IDS.has(signature.id))
@@ -7126,13 +7128,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const possibleBarIndexes = preferredBarIndexes.filter((barIndex) => (
         Number.isInteger(barIndex)
         && barIndex >= 8
-        && barIndex <= 11
+        && barIndex <= endBarIndex
         && question.bars[barIndex]
       ));
       if (!possibleBarIndexes.length) return null;
       const barIndex = randomItem(possibleBarIndexes);
-      if (!rebuildPracticeBarsAfterTimeChange(question, barIndex, signature)) return null;
-      return { barIndex, endBarIndex: 11, restoreBarIndex: 12, signature };
+      if (!rebuildPracticeBarsAfterTimeChange(question, barIndex, signature, endBarIndex, restoreBarIndex)) return null;
+      return { barIndex, endBarIndex, restoreBarIndex, signature };
     }
 
     function barlineWindowHasRest(question, barIndex) {
@@ -7262,12 +7264,22 @@ function advancedHigherInversionAnswerLabel(inversion) {
         question = makeEightBarRepetitionQuestion(level, 0, cadenceId, needsMissing, needsSimpleTime, timeSignatureLevel, questionTimeSignatureIds, allowGeneratedRests, generationOptions);
         question.practiceLevel = questionSelectionLevel;
       }
+      const cadenceTarget = needsCadence && level === "H"
+        ? Math.random() < 0.5
+          ? { startBarIndex: 6, endBarIndex: 7, cadenceId: "perfect" }
+          : { startBarIndex: question.bars.length - 2, endBarIndex: question.bars.length - 1, cadenceId }
+        : { startBarIndex: question.bars.length - 2, endBarIndex: question.bars.length - 1, cadenceId };
       const timeChangeTarget = needsTime
-        && questionSelectionLevel === "AH"
-        && Math.random() < 0.9
-        ? makePracticeTimeChangeTarget(question, timeSignatureLevel, [10])
+        && (questionSelectionLevel === "AH" || (level === "H" && question.melodyGenerationStyle === "advancedHigher"))
+        ? level === "H"
+          ? needsChord
+            ? makePracticeTimeChangeTarget(question, timeSignatureLevel, [11], 11, 12)
+            : makePracticeTimeChangeTarget(question, timeSignatureLevel, [8], 11, 12)
+          : Math.random() < 0.9
+            ? makePracticeTimeChangeTarget(question, timeSignatureLevel, [10])
+            : null
         : null;
-      if (questionSelectionLevel === "AH" && needsKey && needsTime && !timeChangeTarget && canRetryPracticeQuestion) {
+      if ((questionSelectionLevel === "AH" || level === "H") && needsTime && !timeChangeTarget && canRetryPracticeQuestion) {
         return retryPracticeQuestion();
       }
       if (timeChangeTarget) question.timeChangeTarget = timeChangeTarget;
@@ -7312,11 +7324,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
       if (needsTime && timeChangeTarget) reserveQuestionBar(timeChangeTarget.barIndex);
       if (needsMissing) reserveQuestionBar(question.targetBar);
       if (needsMissing) reserveQuestionBar(question.missingSourceBar);
-      const cadenceBarIndexes = [question.bars.length - 2, question.bars.length - 1];
+      const cadenceBarIndexes = [cadenceTarget.startBarIndex, cadenceTarget.endBarIndex];
       if (needsCadence) cadenceBarIndexes.forEach(reserveQuestionBar);
 
-      const chordBar = needsChord ? (level === "H" ? 11 : chooseChordQuestionBar(question, usedQuestionBars)) : null;
-      const higherChordAnswerBars = needsChord && level === "H" ? [12, 13] : [];
+      const chordBar = needsChord ? (level === "H" ? 8 : chooseChordQuestionBar(question, usedQuestionBars)) : null;
+      const higherChordAnswerBars = needsChord && level === "H" ? [9, 10] : [];
       const higherChordGuideProtectedBars = needsChord && level === "H" ? [chordBar - 1, chordBar] : [];
       if (needsChord && chordBar === null) {
         return retryPracticeQuestion();
@@ -7668,6 +7680,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
       const keyAnswer = KEY_ANSWERS[question.key.id] ?? KEY_ANSWERS.C;
       const timeAnswer = timeChangeTarget ? timeChangeTarget.signature.id : question.timeSignature.id;
+      const cadenceQuestionId = cadenceTarget.cadenceId;
       const chordAnswer = needsChord ? chordAnswerForQuestion(question, question.bars[chordBar].chordSymbol) : null;
       const higherChordAnswers = level === "H" && needsChord ? higherChordAnswerBars.map((barIndex) => ({
         barIndex,
@@ -7702,7 +7715,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         {
           id: "time",
           sourceId: "time",
-          prompt: timeChangeTarget ? "Identify the time change in bar 9." : "Identify the time signature.",
+          prompt: timeChangeTarget ? `Identify the time change in bar ${timeChangeTarget.barIndex + 1}.` : "Identify the time signature.",
           answer: timeAnswer,
           options: TIME_SIGNATURES.filter((signature) => timeSignatureAnswerOptionsForLevel(timeSignatureLevel).includes(signature.id)),
           type: "timeChoice",
@@ -7755,9 +7768,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
         {
           id: "cadence",
           sourceId: "cadence",
-          prompt: "Name the cadence at the end of the excerpt.",
-          answer: cadenceId.replace(/\b\w/g, (letter) => letter.toUpperCase()),
-          accepts: acceptedAnswers(cadenceId, `${cadenceId} cadence`),
+          prompt: level === "H" ? `Name the cadence in bar ${cadenceTarget.endBarIndex + 1}.` : "Name the cadence at the end of the excerpt.",
+          answer: cadenceQuestionId.replace(/\b\w/g, (letter) => letter.toUpperCase()),
+          accepts: acceptedAnswers(cadenceQuestionId, `${cadenceQuestionId} cadence`),
           type: "text",
         },
         ...(needsDynamic ? [{
@@ -8099,7 +8112,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         level,
         questionType: "practicePaper",
         cadenceId,
-        cadenceAnswer: `${cadenceId.replace(/\b\w/g, (letter) => letter.toUpperCase())} cadence`,
+        cadenceTarget,
+        cadenceAnswer: `${cadenceQuestionId.replace(/\b\w/g, (letter) => letter.toUpperCase())} cadence`,
         chordBar,
         advancedHigherChordTarget,
         higherChordTargets: level === "H" && needsChord ? higherChordAnswers.map((item) => item.barIndex) : [],
@@ -10805,8 +10819,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const rhythmBoxY = sharedBoxY;
             const rhythmBoxWidth = Math.max(58, end - start - 8);
             const rhythmBoxLabel = rhythmBoxSourceId === "rests" ? "Rest(s)" : "Rhythm";
-            const scoreCadenceStartBar = question.bars.length - 2;
-            const scoreCadenceEndBar = question.bars.length - 1;
+            const scoreCadenceStartBar = question.cadenceTarget?.startBarIndex ?? question.bars.length - 2;
+            const scoreCadenceEndBar = question.cadenceTarget?.endBarIndex ?? question.bars.length - 1;
             const showCadenceBox = cadencePart && bar.barIndex === scoreCadenceStartBar;
             const cadenceBoxSpansBar = cadencePart && bar.barIndex >= scoreCadenceStartBar && bar.barIndex <= scoreCadenceEndBar;
             const cadenceBoxX = cadencePart

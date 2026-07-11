@@ -4,10 +4,10 @@ const assert = require("node:assert/strict");
 const generator = require("./practice-melody-generator.js");
 
 const CADENCES = ["perfect", "imperfect", "plagal", "interrupted"];
-const SIGNATURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "9/8"];
+const SIGNATURES = ["2/4", "3/4", "4/4", "5/4", "6/8", "9/8", "12/8"];
 const EXPECTED_FINAL_DEGREE = { perfect: 1, plagal: 1, imperfect: 5, interrupted: 6 };
 const BEATS = { semibreve: 4, dottedMinim: 3, minim: 2, dottedCrotchet: 1.5, crotchet: 1, quaver: 0.5, dottedCrotchetRest: 1.5, crotchetRest: 1, quaverRest: 0.5 };
-const BAR_BEATS = { "2/4": 2, "3/4": 3, "4/4": 4, "5/4": 5, "6/8": 3, "9/8": 4.5 };
+const BAR_BEATS = { "2/4": 2, "3/4": 3, "4/4": 4, "5/4": 5, "6/8": 3, "9/8": 4.5, "12/8": 6 };
 
 function degreeClass(relativeStep) {
   return ((relativeStep % 7) + 7) % 7 + 1;

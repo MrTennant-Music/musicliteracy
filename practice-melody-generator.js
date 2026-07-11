@@ -57,6 +57,12 @@
       ["crotchet", "quaver", "dottedCrotchet", "dottedCrotchet"],
       ["dottedCrotchet", "dottedCrotchet", "dottedCrotchet"],
     ],
+    "12/8": [
+      ["dottedMinim", "dottedMinim"],
+      ["dottedCrotchet", "dottedCrotchet", "dottedCrotchet", "dottedCrotchet"],
+      ["dottedMinim", "dottedCrotchet", "dottedCrotchet"],
+      ["dottedCrotchet", "dottedCrotchet", "dottedMinim"],
+    ],
   };
 
   const CADENCE_TEMPLATES = {
@@ -212,7 +218,7 @@
   }
 
   function expectedBeats(timeSignatureId) {
-    return { "2/4": 2, "3/4": 3, "4/4": 4, "5/4": 5, "6/8": 3, "9/8": 4.5 }[timeSignatureId] || 4;
+    return { "2/4": 2, "3/4": 3, "4/4": 4, "5/4": 5, "6/8": 3, "9/8": 4.5, "12/8": 6 }[timeSignatureId] || 4;
   }
 
   function patternBeats(pattern) {
@@ -233,6 +239,7 @@
       "5/4": ["dottedMinim", "minim"],
       "6/8": ["dottedMinim"],
       "9/8": ["dottedMinim", "dottedCrotchet"],
+      "12/8": ["dottedMinim", "dottedMinim"],
     }[timeSignatureId] || ["semibreve"];
   }
 
