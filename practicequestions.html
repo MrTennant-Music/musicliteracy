@@ -1272,6 +1272,21 @@
     const noteInHigherTrebleRange = (note) => (
       note?.midi >= HIGHER_TREBLE_MIN.midi && note?.midi <= HIGHER_TREBLE_MAX.midi
     );
+    const fitNoteToHigherTrebleRange = (note) => {
+      if (!note || note.rest || noteInHigherTrebleRange(note)) return note;
+      const sameLetter = NOTE_POOL
+        .filter((candidate) => candidate.letter === note.letter && noteInHigherTrebleRange(candidate))
+        .sort((first, second) => Math.abs(first.midi - note.midi) - Math.abs(second.midi - note.midi));
+      const fitted = sameLetter[0] ?? (note.midi < HIGHER_TREBLE_MIN.midi ? HIGHER_TREBLE_MIN : HIGHER_TREBLE_MAX);
+      return { ...note, ...fitted };
+    };
+    const enforceHigherTrebleRange = (question) => {
+      if (question?.practiceLevel !== "H" && question?.generationLevel !== "H") return question;
+      (question.bars ?? []).forEach((bar) => {
+        bar.notes = (bar.notes ?? []).map(fitNoteToHigherTrebleRange);
+      });
+      return question;
+    };
     const stemDown = (step) => step > 4;
     const midiToFrequency = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
     const LEGACY_NOTE_INDEX_OFFSET = 7;
@@ -3532,7 +3547,8 @@
       const notes = planBar.notes.map((plannedNote, noteIndex) => {
         const base = plannedNote.rest ? null : noteBaseForStep(tonicStep + plannedNote.relativeStep);
         const note = makeNote(base, plannedNote.rhythm, planBar.barIndex, noteIndex, plannedNote.beat, key, planBar.chordSymbol);
-        return plannedNote.rest ? note : { ...note, relativeStep: plannedNote.relativeStep };
+        const rangedNote = higherPhraseGenerationLevel === "H" ? fitNoteToHigherTrebleRange(note) : note;
+        return plannedNote.rest ? note : { ...rangedNote, relativeStep: plannedNote.relativeStep };
       });
       return {
         barIndex: planBar.barIndex,
@@ -6552,6 +6568,24 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return { answerNotes, sourceNotes };
     }
 
+    function refreshTranspositionTargetNotes(question, target) {
+      if (target?.type !== "notes") return target;
+      const variant = [...HIGHER_TRANSPOSITION_VARIANTS, ...ADVANCED_HIGHER_TRANSPOSITION_VARIANTS]
+        .find((item) => item.id === target.variantId);
+      const bar = question.bars?.[target.barIndex];
+      if (!variant || !bar) return target;
+      const { answerNotes, sourceNotes } = transpositionVariantNotesForBar(bar, variant);
+      const notesFitSelectedClefs = answerNotes.every((note) => transpositionNoteFitsClefForQuestion(note, variant.answerClef, question))
+        && sourceNotes.every((note) => transpositionNoteFitsClefForQuestion(note, variant.sourceClef, question));
+      if (!notesFitSelectedClefs) return target;
+      return {
+        ...target,
+        sourceNotes,
+        answerNotes,
+        rhythms: Object.fromEntries(bar.notes.map((note, noteIndex) => [noteIndex, note.rhythm])),
+      };
+    }
+
     function transpositionFallbackPatternForSignature(timeSignature) {
       const patterns = {
         "2/4": ["quaver", "quaver", "crotchet"],
@@ -7461,6 +7495,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       excludedBars.push(...usedQuestionBars);
       ensureRequiredMelodicAccidental(question, excludedBars);
       forceFirstNoteToTonic(question.bars, level, question.key);
+      if (level === "H" && questionSelectionLevel !== "AH") enforceHigherTrebleRange(question);
       const transpositionTarget = needsTransposition ? makeTranspositionTarget(question, [...usedQuestionBars]) : null;
       if (needsTransposition && !transpositionTarget) {
         return canRetryPracticeQuestion
@@ -8105,6 +8140,11 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return retryPracticeQuestion();
       }
 
+      if (level === "H" && questionSelectionLevel !== "AH") enforceHigherTrebleRange(question);
+      const finalTranspositionTarget = needsTransposition
+        ? refreshTranspositionTargetNotes(question, transpositionTarget)
+        : transpositionTarget;
+
       if (questionSelectionLevel === "AH") recordAdvancedHigherKeySuccess(question);
 
       return {
@@ -8150,7 +8190,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         givenTriplets,
         accidentalTarget,
         articulationTarget,
-        transpositionTarget,
+        transpositionTarget: finalTranspositionTarget,
         enharmonicTarget,
         advancedHigherChordTypeTarget,
         answerTargets: {
@@ -10336,7 +10376,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const transpositionAnswerOnMain = Boolean(transpositionTarget?.answerOnMain);
             const transpositionAnswerClef = transpositionTarget?.answerClef ?? "bass";
             const transpositionLowerClef = transpositionAnswerOnMain ? transpositionTarget?.sourceClef ?? "bass" : transpositionAnswerClef;
-            const transpositionLowerTop = top + 97;
+            const transpositionLowerTop = top + 97 + (transpositionLowerClef === "bass" ? 15 : 0);
             const transpositionAnswerTop = transpositionAnswerOnMain ? top : transpositionLowerTop;
             const transpositionBoxY = top - 49 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
             const transpositionBoxHeight = transpositionLowerTop + STAFF.gap * 8 - transpositionBoxY - 5;
