@@ -36,7 +36,7 @@ includes("&& Math.random() < 0.1;", "The dominant-seventh cadence exception must
 includes("const activeTimeSignature = timeSignatureForBar(question, barIndex);", "Chord slots must follow a line-3 time change");
 includes("{ beat: 3, beats: 2, rhythm: \"minim\" }", "AH chord slots in 5/4 must preserve the 3+2 grouping");
 includes("barlineQuestionPromptText(barlineTargets[0], question.bars.length)", "AH barline prompts must retain two-digit bar numbers");
-includes("question.transpositionTarget?.type === \"meaning\" ? 0 : 80", "A written transposition stave must add 80 pixels below its system");
+includes("question.transpositionTarget?.type === \"meaning\" ? 0 : 95", "A written transposition stave must add 95 pixels below its system");
 includes("const scaleDegreeBoxHeight = MARKING_BOX_HEIGHT + 10;", "Scale-degree boxes must extend 10 pixels farther downward");
 includes("reserveExtraSpacingAfterSystem(ahChordSystemIndex, 300);", "Chord and bass-line boxes must push line 4 down by 300 pixels");
 includes("sharedBoxY - 10", "Total-value boxes must extend 10 pixels upward from the top");
