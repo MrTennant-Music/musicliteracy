@@ -3623,6 +3623,7 @@
         barCount: 16,
         useShortPrompt: true,
       };
+      if (generationLevel === "H") avoidConsecutiveHigherDevelopmentChords(question);
       Object.assign(question, chooseMissingNoteScope(question));
       return question;
     }
@@ -3855,6 +3856,26 @@
           chordSymbol: bestChord,
           notes: (bar.notes ?? []).map((note) => note.rest ? note : makeNote(note, note.rhythm, bar.barIndex, note.noteIndex, note.beat, question.key, bestChord)),
         };
+      });
+      return question;
+    }
+
+    function avoidConsecutiveHigherDevelopmentChords(question) {
+      const higherDevelopmentBars = [8, 9, 10, 11];
+      const availableChords = ["I", "IV", "V", "V7", "VI"].filter((symbol) => question.key?.chords?.[symbol]);
+      if (availableChords.length < 2) return question;
+      let previousChord = null;
+      higherDevelopmentBars.forEach((barIndex) => {
+        const bar = question.bars?.[barIndex];
+        if (!bar) return;
+        if (bar.chordSymbol === previousChord) {
+          const alternatives = availableChords.filter((symbol) => symbol !== previousChord);
+          const bestChord = alternatives.reduce((best, chordSymbol) => (
+            chordFitScore(question.key, bar, chordSymbol) > chordFitScore(question.key, bar, best) ? chordSymbol : best
+          ), alternatives[0]);
+          setBarHarmony(question, barIndex, bestChord);
+        }
+        previousChord = question.bars?.[barIndex]?.chordSymbol ?? bar.chordSymbol;
       });
       return question;
     }
@@ -7688,6 +7709,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         ...(needsAccidentals && Number.isInteger(accidentalTarget?.resolutionBarIndex) ? [accidentalTarget.resolutionBarIndex] : []),
       ];
       if (level !== "N3" && level !== "N4" && questionSelectionLevel !== "AH") refitQuestionChordsToMelody(question, chordRefitProtectedBars);
+      if (level === "H") avoidConsecutiveHigherDevelopmentChords(question);
       enforceFinalBarLongestRhythm(question);
       if (!validateRhythmBars(question) && canRetryQualityPracticeQuestion) {
         return retryPracticeQuestion();

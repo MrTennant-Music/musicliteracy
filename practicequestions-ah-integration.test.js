@@ -23,6 +23,8 @@ includes("return { barIndex, endBarIndex, restoreBarIndex, signature };", "Time 
 includes("if (level === \"H\") return generateAdvancedHigherPhraseQuestion", "Higher must use the Advanced Higher melody and harmony plan");
 includes("const chordBar = needsChord ? (level === \"H\" ? 8", "The Higher given chord must use bar 9");
 includes("const higherChordAnswerBars = needsChord && level === \"H\" ? [9, 10]", "The Higher chord answers must use bars 10 and 11");
+includes("function avoidConsecutiveHigherDevelopmentChords(question)", "Higher bars 9-12 must avoid consecutive repeating chords");
+includes("if (level === \"H\") avoidConsecutiveHigherDevelopmentChords(question);", "Higher chord de-duplication must run after later harmony changes");
 includes("? { startBarIndex: 6, endBarIndex: 7, cadenceId: \"perfect\" }", "Higher must be able to ask about the bar 8 cadence");
 includes("level === \"H\"\n          ? makePracticeTimeChangeTarget(question, timeSignatureLevel, [11], 11, 12)", "Higher time changes must happen in bar 12 and restore in bar 13");
 includes("question.practiceLevel === \"AH\" ? null : plantTranspositionFallbackBar", "AH transposition must not rewrite the generated melody");
