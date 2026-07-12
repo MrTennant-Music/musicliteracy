@@ -1,7 +1,16 @@
 (function () {
   const MLH = window.MLH || {};
   const pianoBuffersByContext = new WeakMap();
+  const metronomeBuffersByContext = new WeakMap();
   let pianoMapPromise = null;
+  const METRONOME_SAMPLE_URLS = {
+    accented: "./Metronome%20-%201st%20beat.ogg",
+    regular: "./Metronome%20-%202nd%20beat.ogg",
+  };
+  const metronomeSampleData = Object.fromEntries(Object.entries(METRONOME_SAMPLE_URLS).map(([key, url]) => [key, fetch(url).then((response) => {
+    if (!response.ok) throw new Error(`Could not load ${url}`);
+    return response.arrayBuffer();
+  }).catch(() => null)]));
 
   function ensurePianoMap() {
     if (window.MLH_PIANO_SAMPLE_MAP) return Promise.resolve(window.MLH_PIANO_SAMPLE_MAP);
@@ -231,27 +240,42 @@
     return null;
   }
 
+  function metronomeBuffer(context, accented) {
+    if (!metronomeBuffersByContext.has(context)) metronomeBuffersByContext.set(context, new Map());
+    const cache = metronomeBuffersByContext.get(context);
+    const key = accented ? "accented" : "regular";
+    if (cache.has(key)) return cache.get(key);
+    const request = metronomeSampleData[key]
+      .then((data) => {
+        if (!data) throw new Error(`Could not load the ${key} metronome sample`);
+        return context.decodeAudioData(data.slice(0));
+      })
+      .then((buffer) => { cache.set(key, buffer); return buffer; })
+      .catch((error) => { cache.delete(key); throw error; });
+    cache.set(key, request);
+    return request;
+  }
+
+  function scheduleMetronomeSample(context, destination, start, buffer) {
+    if (!buffer || context.state === "closed") return;
+    const actualStart = Math.max(start, context.currentTime + 0.005);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(destination);
+    source.start(actualStart);
+    source.stop(actualStart + buffer.duration);
+  }
+
   function playMetronomeClick(context, destination, start, accented = false) {
     if (!context || !destination || !Number.isFinite(start)) return;
-    const duration = accented ? 0.032 : 0.024;
-    const buffer = context.createBuffer(1, Math.max(1, Math.floor(context.sampleRate * duration)), context.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i += 1) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2.4);
+    const cached = metronomeBuffer(context, accented);
+    if (cached && typeof cached.duration === "number") {
+      scheduleMetronomeSample(context, destination, start, cached);
+      return;
     }
-    const noise = context.createBufferSource();
-    const filter = context.createBiquadFilter();
-    const gain = context.createGain();
-    noise.buffer = buffer;
-    filter.type = "highpass";
-    filter.frequency.setValueAtTime(accented ? 1800 : 2200, start);
-    gain.gain.setValueAtTime(accented ? 0.08 : 0.052, start);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(destination);
-    noise.start(start);
-    noise.stop(start + duration);
+    Promise.resolve(cached)
+      .then((buffer) => scheduleMetronomeSample(context, destination, start, buffer))
+      .catch(() => {});
   }
 
   MLH.audio = {

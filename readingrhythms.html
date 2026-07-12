@@ -13,7 +13,7 @@
   <script src="./bravura-symbols.js?v=20260629"></script>
   <script src="./shared-notation-config.js?v=20260629"></script>
   <script src="./hub-mobile.js?v=20260629"></script>
-  <script src="./hub-audio.js?v=20260712-piano-playback"></script>
+  <script src="./hub-audio.js?v=20260712-metronome-samples"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./reading-rhythms-core.js?v=20260712"></script>
@@ -38,11 +38,21 @@ const CORE = window.READING_RHYTHMS_CORE;
 const SYMBOLS = window.BRAVURA_SYMBOLS || {};
 const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || {};
 const ACTIVITY_STATES = Object.freeze({ READY: "ready", COUNTING: "countingIn", PERFORMING: "performing", CALCULATING: "calculating", RESULTS: "results", REFERENCE: "playingReference" });
-const ASSET = { appIcon: "readingrhythm-icon.svg", levels: "levels.svg", customise: "customise.svg", next: "next.svg", bronze: "bronze.svg", silver: "silver.svg", gold: "gold.svg", diamond: "diamond.svg", tempo: "tempo.svg", tap: "tap.svg", spacebar: "spacebar.svg", mouse: "mouse.svg" };
+const ASSET = { appIcon: "readingrhythm-icon.svg", levels: "levels.svg", customise: "customise.svg", next: "next.svg", restart: "restart.svg", bronze: "bronze.svg", silver: "silver.svg", gold: "gold.svg", diamond: "diamond.svg", tempo: "tempo.svg", tap: "tap.svg", spacebar: "spacebar.svg", mouse: "mouse.svg" };
 const LEVELS = Object.fromEntries(Object.entries(CORE.LEVELS).map(([key, level]) => [key, { ...level, shortLabel: key, description: level === CORE.LEVELS.N3 ? "Crotchet • Minim • Dotted minim • Semibreve" : level === CORE.LEVELS.N4 ? "Paired quavers • Grouped semiquavers" : level === CORE.LEVELS.N5 ? "Dotted rhythms • Scotch snap" : key === "H" ? "Compound time • Rests • Triplets" : "5/4 • Ties • Syncopation" }]));
 const NEUTRAL_CLEF = "\uE069";
 const SCORE = { width: 920, height: 180, lineY: 88, musicLeft: 145, right: 880, barWidth: (880 - 145) / 2 };
 const RESULT_STYLE = { perfect: { colour: "#16a34a", label: "Perfect", mark: "✓" }, acceptable: { colour: "#16a34a", label: "Acceptable", mark: "✓" }, early: { colour: "#dc2626", label: "Early", mark: "E" }, late: { colour: "#dc2626", label: "Late", mark: "L" }, missed: { colour: "#dc2626", label: "Missed", mark: "×" } };
+const RHYTHM_OPTIONS = [
+  { id: "crotchet", label: "Crotchet", symbol: "quarterNoteStemUp" },
+  { id: "minim", label: "Minim", symbol: "halfNoteStemUp" },
+  { id: "dotted-minim", label: "Dotted minim", symbol: "halfNoteStemUp", dotted: true },
+  { id: "semibreve", label: "Semibreve", symbol: "wholeNote" },
+  { id: "quaver", label: "Quaver", symbol: "eighthNoteStemUp" },
+  { id: "semiquaver", label: "Semiquaver", symbol: "sixteenthNoteStemUp" },
+  { id: "dotted-crotchet", label: "Dotted crotchet", symbol: "quarterNoteStemUp", dotted: true },
+  { id: "dotted-quaver", label: "Dotted quaver", symbol: "eighthNoteStemUp", dotted: true },
+];
 
 function initialLevel() { const requested = new URLSearchParams(window.location.search).get("level")?.toUpperCase(); return CORE.LEVELS[requested] ? requested : "N3"; }
 function glyph(key, fallback = "") { return SYMBOLS[key] || fallback; }
@@ -63,19 +73,19 @@ function CalibratedSymbol({ symbolKey, x, y, fontSize = 40, settingOverrides = {
   return <text className="music-symbol" x={adjustedX} y={adjustedY} fill="currentColor" fontSize={size} textAnchor="middle" transform={`translate(${adjustedX} ${adjustedY}) scale(${config.widthScale || 1} ${config.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`}>{glyph(alias)}</text>;
 }
 
-function RestGlyph({ event, x }) {
+function RestGlyph({ event, x, colour = "currentColor" }) {
   const info = CORE.RHYTHMS[event.rhythm];
   const base = info.restBase;
   const symbolKey = base === "minim" ? "halfRest" : base === "quaver" ? "eighthRest" : "quarterRest";
-  return <g><CalibratedSymbol symbolKey={symbolKey} x={x} y={SCORE.lineY} />{info.dotted && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + 13} y={SCORE.lineY - 2.5} fontSize={25} />}</g>;
+  return <g style={{ color: colour }}><CalibratedSymbol symbolKey={symbolKey} x={x} y={SCORE.lineY} />{info.dotted && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + 13} y={SCORE.lineY - 2.5} fontSize={25} />}</g>;
 }
 
-function NoteGlyph({ event, x, beamed }) {
+function NoteGlyph({ event, x, beamed, colour = "currentColor" }) {
   const info = CORE.RHYTHMS[event.rhythm];
-  if (event.type === "rest") return <RestGlyph event={event} x={x} />;
-  if (beamed) return <g><CalibratedSymbol symbolKey="noteheadBlack" x={x} y={SCORE.lineY} fontSize={34} /><line x1={x + 5.5} x2={x + 5.5} y1={SCORE.lineY - .5} y2={SCORE.lineY - 34} stroke="currentColor" strokeWidth={Math.max(1, 10 * Number(SHARED_CONFIG.drawing?.stemThicknessScale || .12))} />{info.dotted && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + 13} y={SCORE.lineY - 2.5} fontSize={24} />}</g>;
+  if (event.type === "rest") return <RestGlyph event={event} x={x} colour={colour} />;
+  if (beamed) return <g style={{ color: colour }}><CalibratedSymbol symbolKey="noteheadBlack" x={x} y={SCORE.lineY} fontSize={34} /><line x1={x + 4.5} x2={x + 4.5} y1={SCORE.lineY - .5} y2={SCORE.lineY - 34} stroke="currentColor" strokeWidth={Math.max(1, 10 * Number(SHARED_CONFIG.drawing?.stemThicknessScale || .12))} />{info.dotted && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + 13} y={SCORE.lineY - 2.5} fontSize={24} />}</g>;
   const symbolKey = event.rhythm === "semibreve" ? "wholeNote" : ["minim", "dotted-minim"].includes(event.rhythm) ? "halfNoteStemUp" : event.rhythm === "semiquaver" ? "sixteenthNoteStemUp" : ["quaver", "dotted-quaver", "triplet-quaver"].includes(event.rhythm) ? "eighthNoteStemUp" : "quarterNoteStemUp";
-  return <g><CalibratedSymbol symbolKey={symbolKey} x={x} y={SCORE.lineY} />{info.dotted && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + 14} y={SCORE.lineY - 2.5} fontSize={24} />}</g>;
+  return <g style={{ color: colour }}><CalibratedSymbol symbolKey={symbolKey} x={x} y={SCORE.lineY} />{info.dotted && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + 14} y={SCORE.lineY - 2.5} fontSize={24} />}</g>;
 }
 
 function secondaryBeamSegments(events) {
@@ -89,8 +99,52 @@ function secondaryBeamSegments(events) {
   return segments;
 }
 
-function RhythmScore({ rhythm, results, tempo }) {
+function TripletMark({ group, positions }) {
+  if (!group?.triplet || group.events.length !== 3) return null;
+  const centreX = positions.get(group.events[1].id).x;
+  if (group.events[0].rhythm === "triplet-quaver") {
+    return <text x={centreX + 4} y={SCORE.lineY - 40} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="20" fill="currentColor">3</text>;
+  }
+  const x1 = positions.get(group.events[0].id).x - 4;
+  const x2 = positions.get(group.events[2].id).x + 4;
+  const y = SCORE.lineY - 40;
+  return <g transform="translate(4 0)" stroke="currentColor" fill="currentColor"><g stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d={`M ${x1} ${y + 6} L ${x1} ${y} L ${centreX - 10} ${y}`} /><path d={`M ${centreX + 10} ${y} L ${x2} ${y} L ${x2} ${y + 6}`} /></g><text x={centreX} y={y + 5} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="20">3</text></g>;
+}
+
+function TimingFeedback({ rhythm, results, positions, tempo }) {
+  if (!results) return null;
+  const lineY = 146;
+  const pixelsPerSecond = ((SCORE.barWidth - 44) / rhythm.timeSignature.quarterBeatsPerBar) * rhythm.timeSignature.pulseQuarterBeats * tempo / 60;
+  const toleranceWidth = Math.max(7, Math.min(24, results.thresholds.acceptableMs / 1000 * pixelsPerSecond));
+  const timingXs = results.results.map((item) => positions.get(item.eventId)?.x).filter(Number.isFinite);
+  function xForTime(time) {
+    const beat = time * rhythm.timeSignature.pulseQuarterBeats * tempo / 60;
+    const barIndex = Math.max(0, Math.min(1, Math.floor(beat / rhythm.timeSignature.quarterBeatsPerBar)));
+    const beatInBar = beat - barIndex * rhythm.timeSignature.quarterBeatsPerBar;
+    return SCORE.musicLeft + barIndex * SCORE.barWidth + 22 + (beatInBar / rhythm.timeSignature.quarterBeatsPerBar) * (SCORE.barWidth - 44);
+  }
+  return <g aria-label="Timing tolerance and pupil inputs">
+    {timingXs.length > 1 && <>
+      <g opacity="0.35" stroke="#78716c" strokeWidth="1.4">
+        <line x1="38" x2={SCORE.right} y1={lineY} y2={lineY} />
+        <line x1="38" x2="38" y1={lineY - 5} y2={lineY + 5} />
+        <line x1={SCORE.right} x2={SCORE.right} y1={lineY - 5} y2={lineY + 5} />
+      </g>
+      <line x1={SCORE.musicLeft + SCORE.barWidth} x2={SCORE.musicLeft + SCORE.barWidth} y1={lineY - 22} y2={lineY + 22} stroke="#000" strokeWidth="1.4" />
+    </>}
+    {results.results.map((item) => {
+      const position = positions.get(item.eventId); if (!position) return null;
+      const accurate = item.category === "perfect" || item.category === "acceptable";
+      const inputX = Number.isFinite(item.errorMs) ? position.x + item.errorMs / 1000 * pixelsPerSecond : null;
+      return <g key={`timing-${item.eventId}`}><g><line x1={position.x - toleranceWidth} x2={position.x - toleranceWidth} y1={lineY - 4} y2={lineY + 4} stroke="#000" strokeWidth="1.4" /><circle cx={position.x} cy={lineY} r="5" fill="#000" /><line x1={position.x + toleranceWidth} x2={position.x + toleranceWidth} y1={lineY - 4} y2={lineY + 4} stroke="#000" strokeWidth="1.4" /></g>{inputX !== null && <circle cx={inputX} cy={lineY} r="2.5" fill={accurate ? "#16a34a" : "#dc2626"} />}</g>;
+    })}
+    {results.extras.map((item, index) => <circle key={`extra-${index}`} cx={xForTime(item.time)} cy={lineY} r="2.5" fill="#dc2626" />)}
+  </g>;
+}
+
+function RhythmScore({ rhythm, results, tempo, activePlaybackEventId = null }) {
   const positions = useMemo(() => eventMap(rhythm), [rhythm]);
+  const resultByEventId = new Map((results?.results || []).map((item) => [item.eventId, item]));
   const groups = [];
   rhythm.bars.forEach((bar) => {
     const ids = [...new Set(bar.events.map((event) => event.groupId).filter(Boolean))];
@@ -108,122 +162,209 @@ function RhythmScore({ rhythm, results, tempo }) {
       <text className="music-symbol" x="68" y={SCORE.lineY} textAnchor="middle" fontSize="44" fill="currentColor">{NEUTRAL_CLEF}</text>
       <text className="music-symbol" x="108" y={SCORE.lineY - 12} textAnchor="middle" fontSize="34" fill="currentColor">{timeDigit(rhythm.timeSignature.numerator)}</text>
       <text className="music-symbol" x="108" y={SCORE.lineY + 11} textAnchor="middle" fontSize="34" fill="currentColor">{timeDigit(rhythm.timeSignature.denominator)}</text>
-      <CalibratedSymbol symbolKey="quarterNoteStemUp" x="150" y="42" />
-      {rhythm.timeSignature.compound && <CalibratedSymbol symbolKey="augmentationDot" x="163" y="39.5" fontSize={24} />}
-      <text x={rhythm.timeSignature.compound ? 174 : 164} y="32" fontSize="16" fontWeight="700" fill="currentColor">= {tempo}</text>
+      <g transform={`translate(${rhythm.timeSignature.compound ? 5 : 0} -22)`}><g transform="translate(150 42) scale(.65) translate(-150 -42)"><text className="music-symbol" x="150" y="42" textAnchor="middle" fontSize="40" fontWeight="400" fill="currentColor">{glyph("quarterNoteStemUp")}</text>{rhythm.timeSignature.compound && <text className="music-symbol" x="163" y="39.5" textAnchor="middle" fontSize="52" fontWeight="400" fill="currentColor">{glyph("augmentationDot")}</text>}</g></g>
+      <text x={rhythm.timeSignature.compound ? 174 : 164} y="22" fontSize="16" fontWeight="700" fill="currentColor">= {tempo}</text>
       {rhythm.bars.map((bar) => <React.Fragment key={bar.barIndex}>
-        {bar.events.map((event) => <NoteGlyph key={event.id} event={event} x={positions.get(event.id).x} beamed={beamedIds.has(event.id)} />)}
-        {bar.events.map((event, index) => event.tiedToNext && bar.events[index + 1] ? <text key={`tie-${event.id}`} className="music-symbol" x="0" y="0" fontSize="58" textAnchor="middle" fill="currentColor" transform={`translate(${(positions.get(event.id).x + positions.get(bar.events[index + 1].id).x) / 2} ${SCORE.lineY + 5}) scale(${Math.max(1.4, Math.min(7.2, Math.abs(positions.get(bar.events[index + 1].id).x - positions.get(event.id).x) / 20))} 1)`}>{glyph("tie", "\uE1FD")}</text> : null)}
+        {bar.events.map((event) => { const eventResult = resultByEventId.get(event.id); const colour = activePlaybackEventId === event.id ? "#2563eb" : eventResult ? RESULT_STYLE[eventResult.category].colour : "currentColor"; return <NoteGlyph key={event.id} event={event} x={positions.get(event.id).x} beamed={beamedIds.has(event.id)} colour={colour} />; })}
+{bar.events.map((event, index) => event.tiedToNext && bar.events[index + 1] ? <text key={`tie-${event.id}`} className="music-symbol" x="0" y="0" fontSize="58" textAnchor="middle" fill={activePlaybackEventId === event.id || activePlaybackEventId === bar.events[index + 1].id ? "#2563eb" : resultByEventId.has(event.id) ? (RESULT_STYLE[resultByEventId.get(event.id).category].colour) : "currentColor"} transform={`translate(${(positions.get(event.id).x + positions.get(bar.events[index + 1].id).x) / 2} ${SCORE.lineY - 1}) scale(${Math.max(1.4, Math.min(7.2, Math.abs(positions.get(bar.events[index + 1].id).x - positions.get(event.id).x) / 20))} 1)`}>{glyph("tie", "\uE1FD")}</text> : null)}
       </React.Fragment>)}
       {groups.map((group) => {
         const first = group.beamEvents[0], last = group.beamEvents[group.beamEvents.length - 1];
-        const firstX = first ? positions.get(first.id).x + 5.5 : positions.get(group.events[0].id).x;
-        const lastX = last ? positions.get(last.id).x + 5.5 : positions.get(group.events[group.events.length - 1].id).x;
+        const firstX = first ? positions.get(first.id).x + 4.5 : positions.get(group.events[0].id).x;
+        const lastX = last ? positions.get(last.id).x + 4.5 : positions.get(group.events[group.events.length - 1].id).x;
         const segments = secondaryBeamSegments(group.beamEvents);
-        return <g key={group.id}>{first && <line x1={firstX} x2={lastX} y1={SCORE.lineY - 34} y2={SCORE.lineY - 34} stroke="currentColor" strokeWidth="5" />}{segments.map((segment, index) => { const x1 = positions.get(group.beamEvents[segment.start].id).x + 5.5; const x2 = segment.hook ? x1 + (segment.start > 0 ? -12 : 12) : positions.get(group.beamEvents[segment.end].id).x + 5.5; return <line key={index} x1={x1} x2={x2} y1={SCORE.lineY - 26} y2={SCORE.lineY - 26} stroke="currentColor" strokeWidth="4" />; })}{group.triplet && <><path d={`M ${positions.get(group.events[0].id).x - 4} ${SCORE.lineY - 46} L ${positions.get(group.events[group.events.length - 1].id).x + 4} ${SCORE.lineY - 46}`} stroke="currentColor" strokeWidth="1.2" /><text x={(positions.get(group.events[0].id).x + positions.get(group.events[group.events.length - 1].id).x) / 2} y={SCORE.lineY - 49} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">3</text></>}</g>;
+        const groupResults = group.events.map((event) => resultByEventId.get(event.id)).filter(Boolean);
+        const groupColour = group.events.some((event) => event.id === activePlaybackEventId) ? "#2563eb" : groupResults.length ? (groupResults.every((item) => item.category === "perfect" || item.category === "acceptable") ? "#16a34a" : "#dc2626") : "currentColor";
+        return <g key={group.id} style={{ color: groupColour }}>{first && <line x1={firstX - .5} x2={lastX + .5} y1={SCORE.lineY - 34} y2={SCORE.lineY - 34} stroke="currentColor" strokeWidth="5" />}{segments.map((segment, index) => { const x1 = positions.get(group.beamEvents[segment.start].id).x + 4.5; const x2 = segment.hook ? x1 + (segment.start > 0 ? -12 : 12) : positions.get(group.beamEvents[segment.end].id).x + 4.5; return <line key={index} x1={x1} x2={x2} y1={SCORE.lineY - 26} y2={SCORE.lineY - 26} stroke="currentColor" strokeWidth="4" />; })}<TripletMark group={group} positions={positions} /></g>;
       })}
       <line x1={SCORE.musicLeft + SCORE.barWidth} x2={SCORE.musicLeft + SCORE.barWidth} y1={SCORE.lineY - 22} y2={SCORE.lineY + 22} stroke="currentColor" strokeWidth="1.4" />
       <line x1={SCORE.right - 6} x2={SCORE.right - 6} y1={SCORE.lineY - 22} y2={SCORE.lineY + 22} stroke="currentColor" strokeWidth="1.4" />
       <line x1={SCORE.right} x2={SCORE.right} y1={SCORE.lineY - 22} y2={SCORE.lineY + 22} stroke="currentColor" strokeWidth="4" />
-      {(results?.results || []).map((result) => {
-        const position = positions.get(result.eventId); if (!position) return null;
-        const style = RESULT_STYLE[result.category];
-        return <g key={`result-${result.eventId}`}><title>{style.label}{Number.isFinite(result.errorMs) ? `: ${Math.round(result.errorMs)} ms` : ""}</title><circle cx={position.x} cy="151" r="12" fill={style.colour} /><text x={position.x} y="156" textAnchor="middle" fontSize="13" fontWeight="900" fill="#fff">{style.mark}</text></g>;
-      })}
+      <TimingFeedback rhythm={rhythm} results={results} positions={positions} tempo={tempo} />
     </svg>
   </div>;
 }
 
-function playPerformanceHit(ctx, destination, start, volume = .095) {
-  const oscillator = ctx.createOscillator(), gain = ctx.createGain();
-  oscillator.type = "triangle";
-  oscillator.frequency.setValueAtTime(240, start);
-  oscillator.frequency.exponentialRampToValueAtTime(165, start + .075);
-  gain.gain.setValueAtTime(.0001, start);
-  gain.gain.exponentialRampToValueAtTime(volume, start + .006);
-  gain.gain.exponentialRampToValueAtTime(.0001, start + .11);
-  oscillator.connect(gain); gain.connect(destination); oscillator.start(start); oscillator.stop(start + .13);
+function playPerformanceHit(ctx, destination, start, duration = .18, volume = .095) {
+  window.MLH.playPianoFrequency?.(ctx, destination, 261.6256, start, duration, volume, 96);
 }
 
-function TempoMenu({ tempo, setTempo, disabled }) {
-  return <><window.MLH.MenuSubheading>Tempo</window.MLH.MenuSubheading><div className="hub-toggle-row flex-col !items-stretch gap-2 px-3 py-3"><div className="flex items-center justify-between gap-4"><span className="hub-toggle-label"><span className="hub-toggle-glyph"><img src={ASSET.tempo} alt="" className="h-5 w-5" /></span><span>Tempo</span></span><strong>{tempo} bpm</strong></div><input type="range" min="60" max="120" step="5" value={tempo} disabled={disabled} aria-label="Tempo in beats per minute" onChange={(event) => setTempo(Number(event.target.value))} className="w-full accent-black disabled:opacity-50" /></div></>;
+function RhythmMenuGlyph({ option }) {
+  const dotAdjust = option.id === "dotted-quaver" ? 10 : option.id === "dotted-crotchet" ? 4 : 0;
+  return <svg viewBox="0 0 70 70" className="relative -left-[11px] h-12 w-20 overflow-visible" aria-hidden="true"><g transform="translate(0, 12) scale(1.05)"><CalibratedSymbol symbolKey={option.symbol} x={32} y={28} /></g>{option.dotted && <g transform={`translate(${dotAdjust}, 12) scale(1.05)`}><CalibratedSymbol symbolKey="augmentationDotLine" x={45} y={25.5} fontSize={24} /></g>}</svg>;
 }
 
-function ResultsSummary({ result }) {
-  if (!result) return null;
-  return <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-sm" aria-label="Performance results">
-    <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-xl font-black">{result.passed ? "Accurate performance" : "Keep practising"}</h2><div className={`rounded-full px-3 py-1 text-lg font-black text-white ${result.passed ? "bg-green-600" : "bg-red-600"}`}>{result.percentage}%</div></div>
-    <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
-      <div><strong>{result.accurate}/{result.totalExpected}</strong><br/>Accurate</div><div><strong>{result.counts.early}</strong><br/>Early</div><div><strong>{result.counts.late}</strong><br/>Late</div><div><strong>{result.counts.missed}</strong><br/>Missed</div><div><strong>{result.counts.extra}</strong><br/>Extra</div><div><strong>{result.averageAbsoluteErrorMs} ms</strong><br/>Average error</div>
-    </div>
-  </div>;
+function CompactToggleButton({ label, glyph: glyphContent, checked, onChange, disabled, visibleLabel = "", tall = true, glyphShiftX = 15, glyphShiftY = 3 }) {
+  useEffect(() => {
+    const restored = window.MLH.profileSettings?.getToggle(label);
+    if (typeof restored !== "boolean" || restored === checked) return undefined;
+    const timer = window.setTimeout(onChange, restored ? 0 : 70);
+    return () => window.clearTimeout(timer);
+  }, [label, checked, onChange]);
+  return <button type="button" disabled={disabled} onClick={() => { window.MLH.profileSettings?.setToggle(label, !checked); onChange(); }} aria-label={`Toggle ${label}`} title={label} aria-pressed={checked} data-profile-toggle={label} className="hub-toggle-row" style={{ height: tall ? "56px" : "44px", minHeight: tall ? "56px" : "44px", padding: tall ? "7px 64px 7px 10px" : "10px 64px 10px 14px", overflow: "visible", position: "relative" }}><span className="flex h-full items-center justify-center"><span className={visibleLabel ? "absolute flex h-9 w-9 items-center justify-center" : "relative flex h-full items-center justify-center"} style={visibleLabel ? { left: `${12 + glyphShiftX}px`, top: "50%", transform: `translateY(calc(-50% + ${glyphShiftY}px))` } : { left: `${glyphShiftX}px`, top: `${glyphShiftY}px` }}>{glyphContent}</span>{visibleLabel && <span className="absolute left-[46px] top-1/2 -translate-y-1/2 whitespace-nowrap text-sm font-semibold leading-none">{visibleLabel}</span>}</span><span className={`hub-toggle-track shrink-0 ${checked ? "is-on" : ""}`} style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)" }}><span className="hub-toggle-thumb" /></span></button>;
+}
+
+function RhythmToggleButton({ option, checked, onChange, disabled }) { return <CompactToggleButton label={option.label} glyph={<RhythmMenuGlyph option={option} />} checked={checked} onChange={onChange} disabled={disabled} />; }
+
+function TimeSignatureMenuGlyph({ signatureId }) {
+  const [top, bottom] = signatureId.split("/");
+  const topGlyph = top.split("").map((digit) => glyph(`timeSig${digit}`, digit)).join("");
+  return <span className="inline-flex h-[42px] w-[56px] shrink-0 items-center justify-center leading-none"><svg viewBox="0 0 24 34" className="relative -top-[6px] h-[48px] w-[20px] text-stone-800" aria-hidden="true"><text className="music-symbol" x="12" y="14" textAnchor="middle" fontSize="32" fill="currentColor" style={{ transform: "translateY(-2px)" }}>{topGlyph}</text><text className="music-symbol" x="12" y="28" textAnchor="middle" fontSize="32" fill="currentColor" style={{ transform: "translateY(2px)" }}>{glyph(`timeSig${bottom}`, bottom)}</text></svg></span>;
+}
+
+function OptionMenuGlyph({ type }) {
+  if (type === "ties") return <span className="music-symbol relative -left-[5px] -top-[6px] inline-flex h-9 w-9 items-center justify-center text-[34px] leading-none">{glyph("tie", "\uE1FD")}</span>;
+  return <svg viewBox="0 0 70 70" className="relative -left-[3px] -top-px h-9 w-9 overflow-visible" aria-hidden="true"><g transform="translate(0, 7) scale(1.05)"><CalibratedSymbol symbolKey="quarterRest" x={32} y={28} /></g></svg>;
+}
+
+function CustomiseMenu({ activeLevel, enabledRhythms, enabledTimeSignatures, restsEnabled, tiesEnabled, toggleRhythm, toggleTimeSignature, toggleRests, toggleTies, tempo, setTempo, disabled }) {
+  const options = RHYTHM_OPTIONS.filter((option) => CORE.LEVELS[activeLevel].rhythmIds.includes(option.id));
+  const signatureIds = CORE.LEVELS[activeLevel].timeSignatureIds;
+  return <>
+    <window.MLH.MenuSubheading>Tempo</window.MLH.MenuSubheading>
+    <div className="hub-toggle-row flex-col !items-stretch gap-2 px-3 py-3"><div className="flex items-center justify-between gap-4"><span className="hub-toggle-label"><span className="hub-toggle-glyph"><img src={ASSET.tempo} alt="" className="h-5 w-5" /></span><span>Tempo</span></span><strong>{tempo} bpm</strong></div><input type="range" min="60" max="120" step="5" value={tempo} disabled={disabled} aria-label="Tempo in beats per minute" onChange={(event) => setTempo(Number(event.target.value))} className="w-full accent-black disabled:opacity-50" /></div>
+    <window.MLH.MenuSubheading>Time Signatures</window.MLH.MenuSubheading>
+    <div className="grid grid-cols-2 gap-2"><div className="space-y-2">{signatureIds.filter((id) => !CORE.TIME_SIGNATURES[id].compound).map((id) => <CompactToggleButton key={id} label={id} glyph={<TimeSignatureMenuGlyph signatureId={id} />} checked={Boolean(enabledTimeSignatures[id])} disabled={disabled} onChange={() => toggleTimeSignature(id)} />)}</div><div className="space-y-2">{signatureIds.filter((id) => CORE.TIME_SIGNATURES[id].compound).map((id) => <CompactToggleButton key={id} label={id} glyph={<TimeSignatureMenuGlyph signatureId={id} />} checked={Boolean(enabledTimeSignatures[id])} disabled={disabled} onChange={() => toggleTimeSignature(id)} />)}</div></div>
+    <window.MLH.MenuSubheading>Rhythms</window.MLH.MenuSubheading>
+    <div className="grid grid-cols-2 gap-2">{options.map((option) => <RhythmToggleButton key={option.id} option={option} checked={Boolean(enabledRhythms[option.id])} disabled={disabled} onChange={() => toggleRhythm(option.id)} />)}</div>
+    {(CORE.LEVELS[activeLevel].rests || CORE.LEVELS[activeLevel].ties) && <><window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading><div className="grid grid-cols-2 gap-2">{CORE.LEVELS[activeLevel].rests && <CompactToggleButton label="Rests" visibleLabel="Rests" glyph={<OptionMenuGlyph type="rests" />} checked={restsEnabled} disabled={disabled} glyphShiftX={0} glyphShiftY={0} onChange={toggleRests} />}{CORE.LEVELS[activeLevel].ties && <CompactToggleButton label="Ties" visibleLabel="Ties" glyph={<OptionMenuGlyph type="ties" />} checked={tiesEnabled} disabled={disabled} glyphShiftX={0} glyphShiftY={0} onChange={toggleTies} />}</div></>}
+  </>;
+}
+
+function ToolbarFeedback({ result }) {
+  return <div className="relative flex items-center justify-center text-center"><window.MLH.FeedbackBadge feedback={result ? { correct: result.passed } : null} fading={false} animationPrefix="note" />{result && <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-xs font-semibold leading-none text-stone-500">{result.percentage}% Accuracy</span>}</div>;
+}
+
+function BeatBoxGroup({ label, pulsesPerBar, bars = 2, currentIndex, showNumbers = false }) {
+  function barBoxes(barIndex) {
+    return <div className="grid grid-flow-col auto-cols-[26px] gap-1.5 sm:auto-cols-[32px] sm:gap-2">{Array.from({ length: pulsesPerBar }, (_, beatIndex) => { const index = barIndex * pulsesPerBar + beatIndex; const current = currentIndex === index; return <span key={index} className={`flex h-[26px] w-[26px] items-center justify-center rounded border border-black text-center text-[10px] font-black leading-none text-black sm:h-8 sm:w-8 sm:text-sm ${current && !showNumbers ? "bg-black" : "bg-white"}`}>{current && showNumbers ? beatIndex + 1 : ""}</span>; })}</div>;
+  }
+  return <div className="flex shrink-0 flex-col gap-1 text-black"><span className="text-left text-xs font-black uppercase leading-none tracking-wider">{label}</span><div className="flex items-center gap-2">{Array.from({ length: bars }, (_, barIndex) => <React.Fragment key={barIndex}>{barIndex > 0 && <span className="h-8 shrink-0 border-l border-black" aria-hidden="true" />}{barBoxes(barIndex)}</React.Fragment>)}</div></div>;
 }
 
 function App() {
   const startLevel = initialLevel();
+  const initialEnabled = Object.fromEntries(CORE.LEVELS[startLevel].rhythmIds.map((id) => [id, true]));
+  const initialTimeSignatures = Object.fromEntries(CORE.LEVELS[startLevel].timeSignatureIds.map((id) => [id, true]));
   const [activeLevel, setActiveLevel] = useState(startLevel);
+  const [enabledRhythms, setEnabledRhythms] = useState(initialEnabled);
+  const [enabledTimeSignatures, setEnabledTimeSignatures] = useState(initialTimeSignatures);
+  const [restsEnabled, setRestsEnabled] = useState(CORE.LEVELS[startLevel].rests);
+  const [tiesEnabled, setTiesEnabled] = useState(CORE.LEVELS[startLevel].ties);
   const [tempo, setTempo] = useState(90);
-  const [rhythm, setRhythm] = useState(() => CORE.generateRhythm(startLevel));
+  const [rhythm, setRhythm] = useState(() => CORE.generateRhythm(startLevel, Math.random, "", initialEnabled, { timeSignatureIds: CORE.LEVELS[startLevel].timeSignatureIds, restsEnabled: CORE.LEVELS[startLevel].rests, tiesEnabled: CORE.LEVELS[startLevel].ties }));
   const [activityState, setActivityState] = useState(ACTIVITY_STATES.READY);
   const [countInNumber, setCountInNumber] = useState(null);
+  const [playBeatNumber, setPlayBeatNumber] = useState(null);
+  const [activePlaybackEventId, setActivePlaybackEventId] = useState(null);
   const [result, setResult] = useState(null);
   const [tapPulse, setTapPulse] = useState(0);
+  const [tapFlashPosition, setTapFlashPosition] = useState({ centred: true, x: 0, y: 0 });
   const [status, setStatus] = useState("Ready. Review the rhythm, then start when prepared.");
   const [correct, setCorrect] = useState(0), [attempted, setAttempted] = useState(0), [streak, setStreak] = useState(0), [bestStreak, setBestStreak] = useState(0), [confettiKey, setConfettiKey] = useState(0);
   const [levelOpen, setLevelOpen] = useState(false), [customiseOpen, setCustomiseOpen] = useState(false);
-  const levelRef = useRef(null), customiseRef = useRef(null), tapAreaRef = useRef(null), audioRef = useRef(null), stateRef = useRef(activityState), performanceStartRef = useRef(0), tapsRef = useRef([]), timersRef = useRef([]), lastPointerTimeRef = useRef(-Infinity), resultsCalculatedRef = useRef(false);
+  const levelRef = useRef(null), customiseRef = useRef(null), tapAreaRef = useRef(null), audioRef = useRef(null), stateRef = useRef(activityState), performanceStartRef = useRef(0), tapsRef = useRef([]), inputTimesRef = useRef([]), timersRef = useRef([]), lastPointerTimeRef = useRef(-Infinity), resultsCalculatedRef = useRef(false);
   const activeAttempt = [ACTIVITY_STATES.COUNTING, ACTIVITY_STATES.PERFORMING, ACTIVITY_STATES.CALCULATING, ACTIVITY_STATES.REFERENCE].includes(activityState);
+  const feedbackRevealed = [ACTIVITY_STATES.RESULTS, ACTIVITY_STATES.REFERENCE].includes(activityState);
+  const countInBars = ["2/4", "6/8"].includes(rhythm.timeSignature.id) ? 2 : 1;
+  const countInPulses = rhythm.timeSignature.pulsesPerBar * countInBars;
+  const countInCue = activityState === ACTIVITY_STATES.COUNTING && countInNumber >= countInPulses - 2 ? ["Ready", "Set", "Go!"][countInNumber - (countInPulses - 2)] : "";
   const accuracy = attempted ? Math.round(correct / attempted * 100) : 0;
   window.MLH.useClickOutside([levelRef, customiseRef], [() => setLevelOpen(false), () => setCustomiseOpen(false)]);
 
   function transition(next) { stateRef.current = next; setActivityState(next); }
   function clearTimers() { timersRef.current.forEach((timer) => window.clearTimeout(timer)); timersRef.current = []; }
   function closeAudio() { if (!audioRef.current) return; try { audioRef.current.close(); } catch {} audioRef.current = null; }
-  function cancelAudioAndTimers() { clearTimers(); closeAudio(); setCountInNumber(null); }
-  function resetAttempt(nextState = ACTIVITY_STATES.READY) { cancelAudioAndTimers(); tapsRef.current = []; resultsCalculatedRef.current = false; setResult(null); transition(nextState); }
+  function cancelAudioAndTimers() { clearTimers(); closeAudio(); setCountInNumber(null); setPlayBeatNumber(null); setActivePlaybackEventId(null); }
+  function resetAttempt(nextState = ACTIVITY_STATES.READY) { cancelAudioAndTimers(); tapsRef.current = []; inputTimesRef.current = []; resultsCalculatedRef.current = false; setResult(null); transition(nextState); }
   function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); setConfettiKey(0); resetAttempt(); }
-  function makeNewRhythm(level = activeLevel) { const next = CORE.generateRhythm(level, Math.random, CORE.rhythmSignature(rhythm)); setRhythm(next); resetAttempt(); setStatus("New rhythm ready."); }
-  function applyLevel(level) { cancelAudioAndTimers(); setActiveLevel(level); setRhythm(CORE.generateRhythm(level)); setLevelOpen(false); setCustomiseOpen(false); setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); setConfettiKey(0); setResult(null); transition(ACTIVITY_STATES.READY); setStatus(`${CORE.LEVELS[level].label} rhythm ready.`); }
+  function generationOptions(times = enabledTimeSignatures, rests = restsEnabled, ties = tiesEnabled) { return { timeSignatureIds: CORE.LEVELS[activeLevel].timeSignatureIds.filter((id) => times[id]), restsEnabled: rests, tiesEnabled: ties }; }
+  function makeNewRhythm(level = activeLevel, enabled = enabledRhythms, options = generationOptions()) { const next = CORE.generateRhythm(level, Math.random, CORE.rhythmSignature(rhythm), enabled, options); setRhythm(next); resetAttempt(); setStatus("New rhythm ready."); }
+  function applyLevel(level) { cancelAudioAndTimers(); const levelInfo = CORE.LEVELS[level]; const nextEnabled = Object.fromEntries(levelInfo.rhythmIds.map((id) => [id, true])); const nextTimes = Object.fromEntries(levelInfo.timeSignatureIds.map((id) => [id, true])); const nextOptions = { timeSignatureIds: levelInfo.timeSignatureIds, restsEnabled: levelInfo.rests, tiesEnabled: levelInfo.ties }; setActiveLevel(level); setEnabledRhythms(nextEnabled); setEnabledTimeSignatures(nextTimes); setRestsEnabled(levelInfo.rests); setTiesEnabled(levelInfo.ties); setRhythm(CORE.generateRhythm(level, Math.random, "", nextEnabled, nextOptions)); setLevelOpen(false); setCustomiseOpen(false); setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); setConfettiKey(0); setResult(null); transition(ACTIVITY_STATES.READY); setStatus(`${levelInfo.label} rhythm ready.`); }
+  function toggleRhythm(id) {
+    if (activeAttempt) return;
+    setEnabledRhythms((current) => {
+      const next = { ...current, [id]: !current[id] };
+      const options = generationOptions();
+      if (!Object.values(next).some(Boolean) || !CORE.canGenerateWithEnabled(activeLevel, next, options)) return current;
+      window.setTimeout(() => makeNewRhythm(activeLevel, next, options), 0);
+      return next;
+    });
+  }
+  function toggleTimeSignature(id) {
+    if (activeAttempt) return;
+    setEnabledTimeSignatures((current) => {
+      const next = { ...current, [id]: !current[id] };
+      const options = generationOptions(next);
+      if (!options.timeSignatureIds.length || !CORE.canGenerateWithEnabled(activeLevel, enabledRhythms, options)) return current;
+      window.setTimeout(() => makeNewRhythm(activeLevel, enabledRhythms, options), 0);
+      return next;
+    });
+  }
+  function toggleRests() { if (activeAttempt) return; const next = !restsEnabled; const options = generationOptions(enabledTimeSignatures, next, tiesEnabled); setRestsEnabled(next); window.setTimeout(() => makeNewRhythm(activeLevel, enabledRhythms, options), 0); }
+  function toggleTies() { if (activeAttempt) return; const next = !tiesEnabled; const options = generationOptions(enabledTimeSignatures, restsEnabled, next); setTiesEnabled(next); window.setTimeout(() => makeNewRhythm(activeLevel, enabledRhythms, options), 0); }
 
   function finishAttempt() {
     if (resultsCalculatedRef.current || stateRef.current !== ACTIVITY_STATES.PERFORMING) return;
     resultsCalculatedRef.current = true; transition(ACTIVITY_STATES.CALCULATING);
     const expected = CORE.expectedOnsetsSeconds(rhythm, tempo);
     const nextResult = CORE.matchPerformance(expected, tapsRef.current, tempo);
+    const nextStreak = nextResult.passed ? streak + 1 : 0;
+    window.MLH.playFeedbackSound?.(nextResult.passed, false, null);
     setResult(nextResult); setAttempted((value) => value + 1);
-    if (nextResult.passed) { setCorrect((value) => value + 1); setStreak((value) => { const next = value + 1; setBestStreak((best) => Math.max(best, next)); if ([10,15,20,30].includes(next)) setConfettiKey((key) => key + 1); return next; }); }
+    if (nextResult.passed) { setCorrect((value) => value + 1); setStreak(nextStreak); setBestStreak((best) => Math.max(best, nextStreak)); if ([10,15,20,30].includes(nextStreak)) { const medal = window.MLH.getStreakMedal?.(nextStreak); setConfettiKey((key) => key + 1); window.setTimeout(() => window.MLH.playFeedbackSound?.(true, true, medal?.sound), 180); } }
     else setStreak(0);
     transition(ACTIVITY_STATES.RESULTS); setStatus(`Results: ${nextResult.percentage}% accuracy. ${nextResult.accurate} of ${nextResult.totalExpected} notes accurate.`); closeAudio();
   }
 
+  function stopForExcessiveInputs() {
+    if (resultsCalculatedRef.current || ![ACTIVITY_STATES.COUNTING, ACTIVITY_STATES.PERFORMING].includes(stateRef.current)) return;
+    resultsCalculatedRef.current = true;
+    const expected = CORE.expectedOnsetsSeconds(rhythm, tempo);
+    const measured = CORE.matchPerformance(expected, tapsRef.current, tempo);
+    const nextResult = { ...measured, passed: false, spamDetected: true };
+    window.MLH.playFeedbackSound?.(false, false, null);
+    cancelAudioAndTimers(); setResult(nextResult); setAttempted((value) => value + 1); setStreak(0); transition(ACTIVITY_STATES.RESULTS);
+    setStatus("Attempt stopped because too many successive inputs were detected.");
+  }
+
   async function startAttempt() {
     if (activeAttempt) return;
-    cancelAudioAndTimers(); setResult(null); tapsRef.current = []; resultsCalculatedRef.current = false; lastPointerTimeRef.current = -Infinity;
+    cancelAudioAndTimers(); setResult(null); setTapPulse(0); tapsRef.current = []; inputTimesRef.current = []; resultsCalculatedRef.current = false; lastPointerTimeRef.current = -Infinity;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) { setStatus("Audio playback is not supported in this browser."); return; }
     const ctx = new AudioContextClass(); audioRef.current = ctx; await ctx.resume?.(); setLevelOpen(false); setCustomiseOpen(false);
-    const pulseSeconds = 60 / tempo, pulsesPerBar = rhythm.timeSignature.pulsesPerBar, countPulses = pulsesPerBar * 2, totalPulses = pulsesPerBar * 2;
+    const pulseSeconds = 60 / tempo, pulsesPerBar = rhythm.timeSignature.pulsesPerBar, countBars = ["2/4", "6/8"].includes(rhythm.timeSignature.id) ? 2 : 1, countPulses = pulsesPerBar * countBars, totalPulses = pulsesPerBar * 2;
     const countStart = ctx.currentTime + .14, performanceStart = countStart + countPulses * pulseSeconds;
-    performanceStartRef.current = performanceStart; transition(ACTIVITY_STATES.COUNTING); setStatus("Two-bar count in before you begin."); tapAreaRef.current?.focus();
+    performanceStartRef.current = performanceStart; transition(ACTIVITY_STATES.COUNTING); setStatus(`${countBars === 1 ? "One-bar" : "Two-bar"} count in before you begin.`); tapAreaRef.current?.focus();
     for (let pulse = 0; pulse < countPulses; pulse += 1) {
       const clickTime = countStart + pulse * pulseSeconds;
       window.MLH.playMetronomeClick?.(ctx, ctx.destination, clickTime, pulse % pulsesPerBar === 0);
       timersRef.current.push(window.setTimeout(() => setCountInNumber(pulse + 1), Math.max(0, (clickTime - ctx.currentTime) * 1000)));
     }
     for (let pulse = 0; pulse < totalPulses; pulse += 1) window.MLH.playMetronomeClick?.(ctx, ctx.destination, performanceStart + pulse * pulseSeconds, pulse % pulsesPerBar === 0);
+    for (let pulse = 0; pulse < totalPulses; pulse += 1) {
+      const beatTime = performanceStart + pulse * pulseSeconds;
+      timersRef.current.push(window.setTimeout(() => setPlayBeatNumber(pulse + 1), Math.max(0, (beatTime - ctx.currentTime) * 1000)));
+      timersRef.current.push(window.setTimeout(() => setPlayBeatNumber((current) => current === pulse + 1 ? null : current), Math.max(0, (beatTime - ctx.currentTime) * 1000 + Math.min(150, pulseSeconds * 320))));
+    }
     timersRef.current.push(window.setTimeout(() => { setCountInNumber(null); transition(ACTIVITY_STATES.PERFORMING); setStatus("Begin. Tap with each written note."); }, Math.max(0, (performanceStart - ctx.currentTime) * 1000)));
     const performanceDuration = totalPulses * pulseSeconds;
     const associationSeconds = CORE.timingThresholds(tempo).associationMs / 1000;
     timersRef.current.push(window.setTimeout(finishAttempt, Math.max(0, (performanceStart - ctx.currentTime + performanceDuration + associationSeconds) * 1000)));
   }
 
-  function registerTap(source) {
-    if (stateRef.current !== ACTIVITY_STATES.PERFORMING || !audioRef.current) return;
+  function registerTap(source, position = null) {
+    if (![ACTIVITY_STATES.COUNTING, ACTIVITY_STATES.PERFORMING].includes(stateRef.current) || !audioRef.current) return;
     const tapTime = audioRef.current.currentTime - performanceStartRef.current;
-    if (tapTime < 0) return;
-    tapsRef.current.push(tapTime); setTapPulse((value) => value + 1);
+    const earlyCaptureSeconds = CORE.timingThresholds(tempo).acceptableMs / 1000;
+    if (tapTime < -earlyCaptureSeconds) return;
+    const now = performance.now();
+    inputTimesRef.current = [...inputTimesRef.current.filter((time) => now - time <= 1000), now];
+    tapsRef.current.push(tapTime); setTapFlashPosition(position ? { centred: false, ...position } : { centred: true, x: 0, y: 0 }); setTapPulse((value) => value + 1);
+    if (inputTimesRef.current.length >= 7) stopForExcessiveInputs();
   }
-  function handlePointer(event) { if (event.target.closest("button,input,select,a,[data-menu-panel],[data-menu-trigger]")) return; if (event.pointerType === "mouse" && event.button !== 0) return; const now = performance.now(); if (now - lastPointerTimeRef.current < 45) return; lastPointerTimeRef.current = now; event.preventDefault(); registerTap(event.pointerType === "mouse" ? "Mouse" : "Touch"); }
+  function handlePointer(event) { if (event.target.closest("button,input,select,a,[data-menu-panel],[data-menu-trigger]")) return; if (event.pointerType === "mouse" && event.button !== 0) return; const now = performance.now(); if (now - lastPointerTimeRef.current < 45) return; lastPointerTimeRef.current = now; event.preventDefault(); const rect = tapAreaRef.current?.getBoundingClientRect(); const touchPosition = event.pointerType === "mouse" || !rect ? null : { x: event.clientX - rect.left, y: event.clientY - rect.top }; registerTap(event.pointerType === "mouse" ? "Mouse" : "Touch", touchPosition); }
 
   async function playReference() {
     if (activeAttempt || activityState !== ACTIVITY_STATES.RESULTS) return;
@@ -231,46 +372,58 @@ function App() {
     const ctx = new AudioContextClass(); audioRef.current = ctx; await ctx.resume?.(); transition(ACTIVITY_STATES.REFERENCE); setStatus("Playing the correct rhythm with metronome.");
     const start = ctx.currentTime + .12, pulseSeconds = 60 / tempo, pulsesPerBar = rhythm.timeSignature.pulsesPerBar, totalPulses = pulsesPerBar * 2;
     for (let pulse = 0; pulse < totalPulses; pulse += 1) window.MLH.playMetronomeClick?.(ctx, ctx.destination, start + pulse * pulseSeconds, pulse % pulsesPerBar === 0);
-    CORE.expectedOnsetsSeconds(rhythm, tempo).forEach((onset) => playPerformanceHit(ctx, ctx.destination, start + onset.time));
+    rhythm.bars.forEach((bar) => bar.events.filter((event) => event.type === "note").forEach((event) => {
+      const eventStart = (bar.barIndex * rhythm.timeSignature.quarterBeatsPerBar + event.startBeats) / rhythm.timeSignature.pulseQuarterBeats * pulseSeconds;
+      const eventDuration = event.durationBeats / rhythm.timeSignature.pulseQuarterBeats * pulseSeconds;
+      if (event.requiresTap) {
+        const eventIndex = bar.events.findIndex((candidate) => candidate.id === event.id);
+        let soundingBeats = event.durationBeats;
+        for (let index = eventIndex + 1; bar.events[index]?.tiedFromPrevious; index += 1) soundingBeats += bar.events[index].durationBeats;
+        const soundingDuration = soundingBeats / rhythm.timeSignature.pulseQuarterBeats * pulseSeconds;
+        playPerformanceHit(ctx, ctx.destination, start + eventStart, soundingDuration);
+      }
+      timersRef.current.push(window.setTimeout(() => setActivePlaybackEventId(event.id), Math.max(0, (start + eventStart - ctx.currentTime) * 1000)));
+      timersRef.current.push(window.setTimeout(() => setActivePlaybackEventId((current) => current === event.id ? null : current), Math.max(0, (start + eventStart + eventDuration * .92 - ctx.currentTime) * 1000)));
+    }));
     timersRef.current.push(window.setTimeout(() => { closeAudio(); transition(ACTIVITY_STATES.RESULTS); setStatus("Correct rhythm playback finished."); }, totalPulses * pulseSeconds * 1000 + 250));
   }
 
+  function toggleReference() {
+    if (activityState === ACTIVITY_STATES.REFERENCE) { cancelAudioAndTimers(); transition(ACTIVITY_STATES.RESULTS); setStatus("Correct rhythm playback stopped."); return; }
+    playReference();
+  }
+
   useEffect(() => {
-    function onKeyDown(event) { if (event.code !== "Space" || event.repeat || event.target.closest?.("button,input,select,textarea,a")) return; if (stateRef.current === ACTIVITY_STATES.PERFORMING) { event.preventDefault(); registerTap("Spacebar"); } }
+    function onKeyDown(event) { if (event.code !== "Space" || event.repeat || event.target.closest?.("button,input,select,textarea,a")) return; if ([ACTIVITY_STATES.COUNTING, ACTIVITY_STATES.PERFORMING].includes(stateRef.current)) { event.preventDefault(); registerTap("Spacebar"); } }
+    function onGlobalPointerDown(event) { if (event.pointerType === "mouse" || tapAreaRef.current?.contains(event.target)) return; handlePointer(event); }
     function onVisibilityChange() { if (!document.hidden || ![ACTIVITY_STATES.COUNTING, ACTIVITY_STATES.PERFORMING].includes(stateRef.current)) return; cancelAudioAndTimers(); transition(ACTIVITY_STATES.READY); setStatus("Attempt cancelled because the activity moved into the background."); }
-    window.addEventListener("keydown", onKeyDown); document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => { window.removeEventListener("keydown", onKeyDown); document.removeEventListener("visibilitychange", onVisibilityChange); cancelAudioAndTimers(); };
+    window.addEventListener("keydown", onKeyDown); window.addEventListener("pointerdown", onGlobalPointerDown, { passive: false }); document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("pointerdown", onGlobalPointerDown); document.removeEventListener("visibilitychange", onVisibilityChange); cancelAudioAndTimers(); };
   }, [rhythm, tempo]);
 
-  const countBoxes = rhythm.timeSignature.pulsesPerBar * 2;
   return <div className={window.MLH.shell.pageShellClass}>
     <window.MLH.AppHeader icon={ASSET.appIcon} title="Reading Rhythms" subtitle="Perform rhythms in time with the music by reading notation.">
       <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} medalThresholdValues={[10,15,20,30]} />
     </window.MLH.AppHeader>
     <div className={window.MLH.shell.pageContentClass}>
       <main ref={tapAreaRef} tabIndex="0" role="region" aria-label="Reading Rhythms performance area" className={`${window.MLH.shell.mainShellClass} reading-tap-area flex min-h-[620px] flex-col gap-4 pb-5 md:min-h-[520px]`} onPointerDown={handlePointer}>
-        <window.MLH.AppToolbar left={<div className={`flex items-center gap-2 ${activeAttempt ? "opacity-50" : ""}`}><div className="hub-menu-anchor relative" ref={levelRef}><window.MLH.LevelButton icon={<img src={ASSET.levels} alt="" className="h-[26px] w-[26px]" />} activeLevel={activeLevel} activeLabel={CORE.LEVELS[activeLevel].label} onClick={() => { if (activeAttempt) return; setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />{levelOpen && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS} /></window.MLH.MenuPanel>}</div><div className="hub-menu-anchor relative" ref={customiseRef}><window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" className="h-[26px] w-[26px]" />} onClick={() => { if (activeAttempt) return; setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />{customiseOpen && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}><TempoMenu tempo={tempo} setTempo={setTempo} disabled={activeAttempt} /></window.MLH.MenuPanel>}</div></div>} feedback={null} right={<window.MLH.SkipButton disabled={activeAttempt} resetStreak={() => setStreak(0)} onClick={() => makeNewRhythm()} icon={<img src={ASSET.next} alt="" className="h-[27px] w-[27px]" />} />} />
-        <div className="flex min-h-[62px] flex-col items-center gap-3 px-1 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:items-start sm:px-3">
-          <div className="flex flex-col gap-1 justify-self-start" aria-label="Two-bar count-in">
-            <span className="text-xs font-black uppercase tracking-wider text-stone-500">Count in</span>
-            <div className="grid grid-flow-col auto-cols-[26px] gap-1 sm:auto-cols-[30px]">{Array.from({ length: countBoxes }, (_, index) => { const reached = countInNumber !== null && index < countInNumber; const current = countInNumber === index + 1; return <span key={index} className={`flex h-[28px] items-center justify-center rounded border text-sm font-black sm:h-[30px] ${current ? "border-black bg-black text-white" : reached ? "border-stone-500 bg-stone-300 text-black" : "border-stone-300 bg-white text-stone-400"}`}>{reached ? index % rhythm.timeSignature.pulsesPerBar + 1 : ""}</span>; })}</div>
-          </div>
-          <div className="flex items-center justify-center gap-4 self-center" aria-label="Tap, press the spacebar, or click in time with the notes">
-            {[{ icon: ASSET.tap, label: "Tap" }, { icon: ASSET.spacebar, label: "Spacebar" }, { icon: ASSET.mouse, label: "Click" }].map((item) => <div key={item.label} className="flex flex-col items-center gap-1 text-xs font-bold"><img src={item.icon} alt="" className="h-7 w-7 object-contain" /><span>{item.label}</span></div>)}
-          </div>
-          <div />
-        </div>
+        <window.MLH.AppToolbar left={<div className={`flex items-center gap-2 ${activeAttempt ? "opacity-50" : ""}`}><div className="hub-menu-anchor relative" ref={levelRef}><window.MLH.LevelButton icon={<img src={ASSET.levels} alt="" className="h-[26px] w-[26px]" />} activeLevel={activeLevel} activeLabel={CORE.LEVELS[activeLevel].label} onClick={() => { if (activeAttempt) return; setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />{levelOpen && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS} /></window.MLH.MenuPanel>}</div><div className="hub-menu-anchor relative" ref={customiseRef}><window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" className="h-[26px] w-[26px]" />} onClick={() => { if (activeAttempt) return; setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />{customiseOpen && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}><CustomiseMenu activeLevel={activeLevel} enabledRhythms={enabledRhythms} enabledTimeSignatures={enabledTimeSignatures} restsEnabled={restsEnabled} tiesEnabled={tiesEnabled} toggleRhythm={toggleRhythm} toggleTimeSignature={toggleTimeSignature} toggleRests={toggleRests} toggleTies={toggleTies} tempo={tempo} setTempo={setTempo} disabled={activeAttempt} /></window.MLH.MenuPanel>}</div></div>} feedback={<ToolbarFeedback result={result} />} right={<window.MLH.SkipButton resetStreak={() => setStreak(0)} onClick={() => makeNewRhythm()} icon={<img src={ASSET.next} alt="" className="h-[27px] w-[27px]" />} />} />
+        {activityState === ACTIVITY_STATES.PERFORMING && tapPulse > 0 && <div key={tapPulse} className="pointer-events-none absolute z-30" style={tapFlashPosition.centred ? { left: "50%", top: "92px", transform: "translate(-50%, -50%)" } : { left: `${tapFlashPosition.x}px`, top: `${tapFlashPosition.y}px`, transform: "translate(-50%, -50%)" }}><span className="reading-tap-pulse block h-5 w-5 rounded-full bg-black" /></div>}
         <div className="relative flex min-h-[220px] flex-1 items-center justify-center px-1 sm:px-3">
-          <RhythmScore rhythm={rhythm} tempo={tempo} results={activityState === ACTIVITY_STATES.RESULTS || activityState === ACTIVITY_STATES.REFERENCE ? result : null} />
-          {activityState === ACTIVITY_STATES.PERFORMING && <div className="pointer-events-none absolute right-5 top-5"><span key={tapPulse} className="reading-tap-pulse block h-5 w-5 rounded-full bg-blue-600"></span></div>}
+          <RhythmScore rhythm={rhythm} tempo={tempo} activePlaybackEventId={activityState === ACTIVITY_STATES.REFERENCE ? activePlaybackEventId : null} results={activityState === ACTIVITY_STATES.RESULTS || activityState === ACTIVITY_STATES.REFERENCE ? result : null} />
         </div>
         <div aria-live="polite" className="sr-only">{status}</div>
-        <section className="mx-1 rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md sm:mx-3">
-          <p className="mb-4 text-center text-base font-bold">Tap, click, or press the spacebar in time with each written note.</p>
-          {activityState === ACTIVITY_STATES.READY && <button type="button" onClick={startAttempt} className="mx-auto flex h-14 w-full max-w-[260px] items-center justify-center rounded-xl bg-black px-6 text-lg font-black text-white shadow-md">Start</button>}
-          {activityState === ACTIVITY_STATES.COUNTING && <div className="text-center text-xl font-black" aria-hidden="true">Count in</div>}
-          {activityState === ACTIVITY_STATES.PERFORMING && <div className="text-center text-xl font-black" aria-hidden="true">Perform now</div>}
-          {(activityState === ACTIVITY_STATES.RESULTS || activityState === ACTIVITY_STATES.REFERENCE) && <><ResultsSummary result={result} /><div className="mt-3 grid gap-2 sm:grid-cols-3"><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={playReference} className="h-12 rounded-xl border border-black bg-black px-4 font-black text-white disabled:opacity-50">Hear Correct Rhythm</button><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={() => { resetAttempt(); setStatus("Same rhythm ready to try again."); }} className="h-12 rounded-xl border border-stone-300 bg-white px-4 font-black disabled:opacity-50">Try Again</button><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={() => makeNewRhythm()} className="h-12 rounded-xl border border-stone-300 bg-white px-4 font-black disabled:opacity-50">New Rhythm</button></div></>}
+        <section className="mx-1 h-[305px] overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md sm:mx-3 sm:h-[280px]">
+          <div className="flex h-full flex-col">
+            <div className={`flex min-h-0 flex-1 flex-col gap-2 transition-all duration-300 ${feedbackRevealed ? "pointer-events-none" : ""}`}>
+              <p className={`text-base font-semibold leading-relaxed transition-all duration-300 ${feedbackRevealed ? "opacity-[0.65] grayscale" : "opacity-100"}`}>Perform the rhythm above in time with the beat using one of these methods: <span className="inline-flex items-center gap-1 whitespace-nowrap">tap anywhere<img src={ASSET.tap} alt="" className="inline-block h-4 w-4 object-contain" /></span>, <span className="inline-flex items-center gap-1 whitespace-nowrap">press spacebar<img src={ASSET.spacebar} alt="" className="inline-block h-4 w-4 object-contain" /></span>, or <span className="inline-flex items-center gap-1 whitespace-nowrap">click<img src={ASSET.mouse} alt="" className="inline-block h-4 w-4 object-contain" /></span>. A point will be awarded for an accuracy rate of <strong className="inline-flex min-w-[46px] items-center justify-center rounded-full bg-green-600 px-2 py-0.5 text-sm font-black leading-tight text-white">60%</strong> or above.</p>
+              <div className="mx-auto flex min-h-0 w-full flex-1 flex-col justify-center overflow-x-auto pb-2"><div className="mx-auto grid w-full min-w-[720px] grid-cols-2 items-start gap-3"><div className="justify-self-end rounded-xl border border-stone-200 bg-stone-100 px-4 py-3 shadow-sm"><div><BeatBoxGroup label="Count in" pulsesPerBar={rhythm.timeSignature.pulsesPerBar} bars={countInBars} currentIndex={activityState === ACTIVITY_STATES.COUNTING && countInNumber ? countInNumber - 1 : null} showNumbers={true} /></div></div><div className="justify-self-start rounded-xl border border-stone-200 bg-white px-4 py-3 text-black opacity-100 shadow-sm"><BeatBoxGroup label="Play" pulsesPerBar={rhythm.timeSignature.pulsesPerBar} currentIndex={activityState === ACTIVITY_STATES.PERFORMING && playBeatNumber ? playBeatNumber - 1 : null} /></div></div><span className="mt-1 block h-5 w-full text-center text-sm font-black leading-5 text-black">{countInCue}</span></div>
+            </div>
+            <div className="mt-auto border-t border-stone-300 pt-3">
+              {!feedbackRevealed && <button type="button" disabled={activityState !== ACTIVITY_STATES.READY} onClick={startAttempt} className={`mx-auto flex h-11 w-[200px] shrink-0 items-center justify-center rounded-xl px-4 text-base font-semibold shadow-md ${activityState === ACTIVITY_STATES.READY ? "bg-black text-white" : "bg-stone-300 text-stone-500"}`}>Start</button>}
+              {feedbackRevealed && <div className="flex flex-nowrap items-center gap-2 overflow-x-auto"><div className="flex shrink-0 items-center gap-2"><button type="button" onClick={toggleReference} className="flex h-11 w-[112px] items-center justify-center gap-2 rounded-xl border border-black bg-black px-3 text-sm font-semibold text-white"><span className="text-base leading-none">{activityState === ACTIVITY_STATES.REFERENCE ? "■" : "▶"}</span><span>{activityState === ACTIVITY_STATES.REFERENCE ? "Stop" : "Play"}</span></button><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={() => { resetAttempt(); setStatus("Same rhythm ready to try again."); }} className="flex h-11 w-[132px] items-center justify-center gap-1 rounded-xl border border-stone-300 bg-white px-3 text-sm font-semibold text-stone-800 disabled:opacity-50"><img src={ASSET.restart} alt="" className="h-5 w-5 shrink-0" /><span className="whitespace-nowrap">Try Again</span></button></div>{result?.spamDetected && <p className="mx-auto max-w-[360px] px-2 text-center text-xs font-bold leading-tight text-red-600">Too many successive inputs detected. Repeatedly tapping ends the question.</p>}<button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={() => makeNewRhythm()} className="ml-auto flex h-11 w-[150px] shrink-0 items-center justify-center gap-2 rounded-xl border border-black bg-black px-3 text-sm font-semibold text-white disabled:opacity-50"><span className="whitespace-nowrap">Next Question</span><img src={ASSET.next} alt="" className="h-[27px] w-[27px] invert" /></button></div>}
+            </div>
+          </div>
         </section>
       </main>
     </div>
