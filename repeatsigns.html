@@ -744,7 +744,6 @@ function makeQuestion(level = "N4", enabledTypes = null) {
     required = [
       { symbolId: "segno", barIndex: dsOption === "start-to-four" ? 0 : 4, anchor: "above" },
       { symbolId: "fine", barIndex: dsOption === "start-to-four" ? 3 : 6, anchor: "above" },
-      { symbolId: "ds", barIndex: 7, anchor: "above" },
     ];
   }
 
@@ -757,6 +756,7 @@ function makeQuestion(level = "N4", enabledTypes = null) {
     bars,
     performedOrder,
     required,
+    givenPlacements: type === "ds-fine" ? [{ symbolId: "ds", barIndex: BAR_COUNT - 1, anchor: "above" }] : [],
     prompt: questionPrompt(type, required),
   };
 }
@@ -776,7 +776,7 @@ function questionPrompt(type, required) {
   }
   if (type === "first-second") return "Listen to the music and apply the 1st and 2nd time bars with the required repeat signs.";
   if (type === "dc") return "Listen to the music and apply the D.C. sign in the appropriate place.";
-  if (type === "ds-fine") return "Listen to the music and apply the Segno, Fine and D.S. al Fine markings in the appropriate places.";
+  if (type === "ds-fine") return "Listen to the music and apply the Segno and Fine markings in the appropriate places.";
   return "Listen to the music and apply the appropriate repeat marking.";
 }
 
@@ -1039,7 +1039,7 @@ function DcGlyph({ placement, colour = "currentColor", opacity = 1 }) {
 
 function DsGlyph({ placement, colour = "currentColor", opacity = 1 }) {
   const pos = placementPos(placement);
-  return <text x={pos.x} y={pos.y} opacity={opacity} fill={colour} fontFamily="Georgia, serif" fontSize="18" fontStyle="italic" fontWeight="700" textAnchor="middle" style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 6, strokeLinejoin: "round" }}>D.S. al Fine</text>;
+  return <text x={pos.end - 48} y={pos.top - 20} opacity={opacity} fill={colour} fontFamily="Georgia, serif" fontSize="15" fontStyle="italic" fontWeight="700" textAnchor="middle" style={{ paintOrder: "stroke", stroke: "white", strokeWidth: 6, strokeLinejoin: "round" }}>D.S. al Fine</text>;
 }
 
 function FineGlyph({ placement, colour = "currentColor", opacity = 1 }) {
@@ -1151,6 +1151,7 @@ function Score({ question, selectedSymbolId, placements, hoverPlacement, feedbac
       </g>;
     })}
 
+    {(question.givenPlacements || []).map((placement, i) => <PlacementGlyph key={`given-${i}`} placement={placement} />)}
     {placements.map(placement => {
       const isWrong = feedback && wrong.some(w => placeKey(w) === placeKey(placement));
       return <PlacementGlyph key={placement.localId} placement={placement} colour={isWrong ? COLOUR.red : feedback ? COLOUR.green : COLOUR.black} />;
@@ -1536,7 +1537,7 @@ function App() {
       if (hasFirst && !hasSecond) setPromptMessage("A 1st time bar also needs a 2nd time bar.");
       if (!hasFirst && hasSecond) setPromptMessage("A 2nd time bar needs a matching 1st time bar.");
     }
-    if (question.type === "ds-fine" && placements.some(p => ["ds", "fine", "segno"].includes(p.symbolId) && p.anchor === "below")) setPromptMessage("D.S., Segno and Fine should be placed above the stave.");
+    if (question.type === "ds-fine" && placements.some(p => ["fine", "segno"].includes(p.symbolId) && p.anchor === "below")) setPromptMessage("Segno and Fine should be placed above the stave.");
 
     score(placementsMatch(question, placements) && wrongs.length === 0 && miss.length === 0);
   }
