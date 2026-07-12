@@ -106,7 +106,7 @@
     );
   }
 
-  function ToolbarButton({ icon, label, mobileLabel = "", onClick, className = "", textClassName = "", iconClassName = "", dataMenuTrigger = false }) {
+  function ToolbarButton({ icon, label, mobileLabel = "", onClick, className = "", textClassName = "", iconClassName = "", dataMenuTrigger = false, dataProfileCustomise = false }) {
     const props = {
       type: "button",
       onClick,
@@ -120,6 +120,7 @@
       children.push(e("span", { key: "desktop-label", className: `hidden sm:inline ${textClassName}`.trim() }, label));
     }
     if (dataMenuTrigger) props["data-menu-trigger"] = true;
+    if (dataProfileCustomise) props["data-profile-customise"] = true;
     return e(
       "button",
       props,
@@ -145,6 +146,7 @@
       label: "Customise",
       onClick,
       dataMenuTrigger,
+      dataProfileCustomise: true,
       className: "gap-2",
     });
   }
@@ -246,12 +248,25 @@
   }
 
   function MenuToggleRow({ glyph, label, checked, disabled = false, onChange, labelWidthClass = "min-w-[145px]" }) {
+    useEffect(() => {
+      const restored = MLH.profileSettings?.getToggle(label);
+      if (typeof restored !== "boolean" || restored === checked) return;
+      // Enable extra choices before disabling defaults so minimum-choice rules
+      // cannot block restoration of a valid shared profile.
+      const timer = window.setTimeout(() => onChange?.(), restored ? 0 : 70);
+      return () => window.clearTimeout(timer);
+    }, [label, checked, onChange]);
     return e(
       "button",
       {
         type: "button",
         disabled,
-        onClick: onChange,
+        onClick: () => {
+          MLH.profileSettings?.setToggle(label, !checked);
+          onChange?.();
+        },
+        "aria-pressed": checked,
+        "data-profile-toggle": label,
         className: "hub-toggle-row",
       },
       e(
@@ -289,7 +304,15 @@
           {
             key,
             type: "button",
-            onClick: () => onSelect(key),
+            onClick: () => {
+              const url = new URL(window.location.href);
+              url.searchParams.set("level", key);
+              url.searchParams.delete("profile");
+              url.searchParams.delete("settings");
+              window.history.replaceState(null, "", url.toString());
+              MLH.profileSettings?.clear();
+              onSelect(key);
+            },
             className: `w-full rounded-xl border px-3 py-2 text-left transition sm:px-4 ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`,
           },
           e(

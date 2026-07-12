@@ -1,6 +1,87 @@
 (function () {
   const MLH = window.MLH || {};
 
+  function decodeSharedSettings() {
+    const encoded = new URLSearchParams(window.location.search).get("settings");
+    if (!encoded) return { toggles: {}, fields: {}, buttons: {} };
+    try {
+      const json = decodeURIComponent(escape(window.atob(encoded.replace(/-/g, "+").replace(/_/g, "/"))));
+      const parsed = JSON.parse(json);
+      return {
+        toggles: parsed?.version === 1 && parsed.toggles && typeof parsed.toggles === "object" ? parsed.toggles : {},
+        fields: parsed?.version === 1 && parsed.fields && typeof parsed.fields === "object" ? parsed.fields : {},
+        buttons: parsed?.version === 1 && parsed.buttons && typeof parsed.buttons === "object" ? parsed.buttons : {},
+      };
+    } catch {
+      return { toggles: {}, fields: {}, buttons: {} };
+    }
+  }
+
+  const initialSharedSettings = decodeSharedSettings();
+  const sharedSettings = {
+    toggles: { ...initialSharedSettings.toggles },
+    fields: { ...initialSharedSettings.fields },
+    buttons: { ...initialSharedSettings.buttons },
+    restoring: Boolean(Object.keys(initialSharedSettings.toggles).length || Object.keys(initialSharedSettings.fields).length || Object.keys(initialSharedSettings.buttons).length),
+  };
+
+  function notifySharedSettingsChanged() {
+    window.dispatchEvent(new CustomEvent("mlh-profile-settings-change"));
+  }
+
+  MLH.profileSettings = {
+    getToggle(label) { return sharedSettings.toggles[label]; },
+    setToggle(label, value) {
+      if (sharedSettings.restoring) return;
+      sharedSettings.toggles[label] = Boolean(value);
+      notifySharedSettingsChanged();
+    },
+    hasCustomSettings() {
+      return Boolean(Object.keys(sharedSettings.toggles).length || Object.keys(sharedSettings.fields).length || Object.keys(sharedSettings.buttons).length);
+    },
+    clear() {
+      sharedSettings.toggles = {};
+      sharedSettings.fields = {};
+      sharedSettings.buttons = {};
+      sharedSettings.restoring = false;
+      notifySharedSettingsChanged();
+    },
+    encoded() {
+      const json = JSON.stringify({ version: 1, toggles: sharedSettings.toggles, fields: sharedSettings.fields, buttons: sharedSettings.buttons });
+      return window.btoa(unescape(encodeURIComponent(json))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    },
+  };
+
+  function profileFieldKey(element) {
+    const panel = element.closest("[data-menu-panel]");
+    if (!panel) return null;
+    const fields = Array.from(panel.querySelectorAll("select,input[type='range'],input[type='number'],input[type='checkbox']"));
+    const index = fields.indexOf(element);
+    return index < 0 ? null : `${element.tagName.toLowerCase()}:${element.type || "select"}:${index}`;
+  }
+
+  document.addEventListener("change", (event) => {
+    const element = event.target;
+    if (sharedSettings.restoring || !(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)) return;
+    const key = profileFieldKey(element);
+    if (!key) return;
+    sharedSettings.fields[key] = element.type === "checkbox" ? element.checked : element.value;
+    notifySharedSettingsChanged();
+  });
+
+  document.addEventListener("click", (event) => {
+    if (sharedSettings.restoring) return;
+    const button = event.target.closest?.("[data-menu-panel] .hub-toggle-row button:not([data-profile-toggle])");
+    if (!button) return;
+    const row = button.closest(".hub-toggle-row");
+    const label = row?.querySelector(".hub-toggle-label")?.textContent?.trim();
+    if (!label) return;
+    window.setTimeout(() => {
+      sharedSettings.buttons[label] = button.textContent.trim();
+      notifySharedSettingsChanged();
+    }, 0);
+  });
+
   MLH.shell = {
     scoreTileClass: "relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm outline-none transition active:scale-[0.98] sm:h-[64px]",
     scoreTileActiveClass: "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg",
@@ -36,21 +117,138 @@
     return true;
   }
 
-  function AppHeader({ icon, title, subtitle, children }) {
+  function ProfileQrButton({ onClick }) {
+    return React.createElement("button", {
+      type: "button",
+      onClick,
+      className: "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 shadow-sm transition hover:border-stone-500 hover:bg-stone-50",
+      "aria-label": "Share this profile by QR code",
+      title: "Share QR code",
+    }, React.createElement("svg", { viewBox: "0 0 24 24", className: "h-5 w-5", "aria-hidden": "true", fill: "currentColor" },
+      React.createElement("path", { d: "M5,15v2H3V15ZM3,21H5V19H3Zm2-4v2H7V17Zm4-6H7v2H5v2H9ZM3,11v2H5V11Zm6,8H7v2h5V19H11V17H9ZM13,4H11V6h2Zm-2,7h2V8H11ZM4,9A1,1,0,0,1,3,8V4A1,1,0,0,1,4,3H8A1,1,0,0,1,9,4V8A1,1,0,0,1,8,9ZM5,7H7V5H5ZM21,4v8H19V9H16a1,1,0,0,1-1-1V4a1,1,0,0,1,1-1h4A1,1,0,0,1,21,4ZM19,5H17V7h2Zm2,11v4a1,1,0,0,1-1,1H16a1,1,0,0,1-1-1V17H11V13h2v2h1V11h2v2h1V11h2v4h4A1,1,0,0,1,21,16Zm-2,1H17v2h2Z" })
+    ));
+  }
+
+  function ProfileQrOverlay({ title, subtitle, shareUrl, onClose }) {
+    const [copied, setCopied] = React.useState(false);
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=560x560&data=${encodeURIComponent(shareUrl)}`;
+    async function copyLink() {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1800);
+      } catch {
+        setCopied(false);
+      }
+    }
+    return React.createElement("div", {
+      className: "fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/70 p-6 backdrop-blur-sm",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": "Share QR code",
+      onPointerDown: (event) => { if (event.target === event.currentTarget) onClose(); },
+    }, React.createElement("div", { className: "relative w-full max-w-2xl rounded-3xl bg-white p-10 text-center shadow-2xl" },
+      React.createElement("button", { type: "button", onClick: onClose, className: "absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-xl font-bold text-stone-700", "aria-label": "Close QR code" }, "×"),
+      React.createElement("h2", { className: "text-3xl font-semibold text-stone-900" }, title),
+      React.createElement("p", { className: "mt-2 text-lg text-stone-600" }, subtitle),
+      React.createElement("img", { className: "mx-auto mt-6 w-[min(560px,100%)] rounded-2xl border border-stone-200", src: qrUrl, alt: `QR code linking to ${title} ${subtitle}` }),
+      React.createElement("button", { type: "button", onClick: copyLink, className: "mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-blue-700" }, copied ? "Copied" : "Copy Link")
+    ));
+  }
+
+  function defaultProfileShareUrl() {
+    const fileName = window.location.pathname.split("/").filter(Boolean).pop() || "index.html";
+    return `https://mrtennant-music.github.io/musicliteracy/${fileName}${window.location.search}`;
+  }
+
+  function defaultProfileLabel() {
+    const level = new URLSearchParams(window.location.search).get("level");
+    return ({ N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher" })[level] || "Custom";
+  }
+
+  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl }) {
+    const [qrOpen, setQrOpen] = React.useState(false);
+    const [, setProfileRevision] = React.useState(0);
+    const activityTitle = profileTitle || (typeof title === "string" ? title : "Activity");
+    const hasSharedSettings = MLH.profileSettings.hasCustomSettings();
+    const shareLabel = hasSharedSettings ? "Custom" : (profileLabel || defaultProfileLabel());
+    const shareUrlObject = new URL(profileShareUrl || defaultProfileShareUrl());
+    if (hasSharedSettings) shareUrlObject.searchParams.set("settings", MLH.profileSettings.encoded());
+    else shareUrlObject.searchParams.delete("settings");
+    const shareUrl = shareUrlObject.toString();
+    React.useEffect(() => {
+      const refresh = () => setProfileRevision((value) => value + 1);
+      window.addEventListener("mlh-profile-settings-change", refresh);
+      return () => window.removeEventListener("mlh-profile-settings-change", refresh);
+    }, []);
+    React.useEffect(() => {
+      if (!sharedSettings.restoring) return undefined;
+      let closeTimer;
+      const openTimer = window.setTimeout(() => {
+        const customiseButton = document.querySelector("button[data-profile-customise]");
+        if (!customiseButton) return;
+        customiseButton.click();
+        window.setTimeout(() => {
+          const panel = document.querySelector("[data-menu-panel]");
+          if (panel) {
+            const fields = Array.from(panel.querySelectorAll("select,input[type='range'],input[type='number'],input[type='checkbox']"));
+            fields.forEach((field, index) => {
+              const key = `${field.tagName.toLowerCase()}:${field.type || "select"}:${index}`;
+              if (!(key in sharedSettings.fields)) return;
+              if (field.type === "checkbox") field.checked = Boolean(sharedSettings.fields[key]);
+              else field.value = sharedSettings.fields[key];
+              field.dispatchEvent(new Event("change", { bubbles: true }));
+            });
+          }
+          const cycleButtons = Array.from(panel?.querySelectorAll(".hub-toggle-row button:not([data-profile-toggle])") || []);
+          const restoreNextButton = (index = 0, attempts = 0) => {
+            if (index >= cycleButtons.length) {
+              sharedSettings.restoring = false;
+              notifySharedSettingsChanged();
+              closeTimer = window.setTimeout(() => customiseButton.click(), 80);
+              return;
+            }
+            const button = cycleButtons[index];
+            const label = button.closest(".hub-toggle-row")?.querySelector(".hub-toggle-label")?.textContent?.trim();
+            const wanted = label ? sharedSettings.buttons[label] : null;
+            if (!wanted || button.textContent.trim() === wanted || attempts >= 8) {
+              restoreNextButton(index + 1, 0);
+              return;
+            }
+            button.click();
+            window.setTimeout(() => restoreNextButton(index, attempts + 1), 30);
+          };
+          restoreNextButton();
+        }, 180);
+      }, 120);
+      return () => { window.clearTimeout(openTimer); window.clearTimeout(closeTimer); };
+    }, []);
+    React.useEffect(() => {
+      if (!qrOpen) return undefined;
+      const closeOnEscape = (event) => { if (event.key === "Escape") setQrOpen(false); };
+      window.addEventListener("keydown", closeOnEscape);
+      return () => window.removeEventListener("keydown", closeOnEscape);
+    }, [qrOpen]);
     return (
-      React.createElement("header", { className: "fixed left-0 right-0 top-0 z-[1000] w-full overflow-visible border-b border-stone-200 bg-white/95 py-2 shadow-sm backdrop-blur sm:py-3" },
-        React.createElement("div", { className: "mx-auto flex w-full max-w-6xl flex-col gap-3 overflow-visible px-3 sm:px-4 md:flex-row md:items-center md:justify-between md:px-8" },
-          React.createElement("div", { className: "flex items-center gap-3 sm:gap-4" },
-            React.createElement("div", { className: "flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 text-black shadow-sm" },
-              React.createElement("img", { src: icon, alt: "", "aria-hidden": "true", className: "block h-full w-full object-contain" })
+      React.createElement(React.Fragment, null,
+        React.createElement("header", { className: "fixed left-0 right-0 top-0 z-[1000] w-full overflow-visible border-b border-stone-200 bg-white/95 py-2 shadow-sm backdrop-blur sm:py-3" },
+          React.createElement("div", { className: "mx-auto flex w-full max-w-6xl flex-col gap-3 overflow-visible px-3 sm:px-4 md:flex-row md:items-center md:justify-between md:px-8" },
+            React.createElement("div", { className: "flex items-center gap-3 sm:gap-4" },
+              React.createElement("div", { className: "flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 text-black shadow-sm" },
+                React.createElement("img", { src: icon, alt: "", "aria-hidden": "true", className: "block h-full w-full object-contain" })
+              ),
+              React.createElement("div", { className: "flex h-14 flex-col justify-center" },
+                React.createElement("h1", { className: "relative top-[1px] inline-flex items-center gap-2 text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl" },
+                  title,
+                  React.createElement(ProfileQrButton, { onClick: () => setQrOpen(true) })
+                ),
+                React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap" }, subtitle)
+              )
             ),
-            React.createElement("div", { className: "flex h-14 flex-col justify-center" },
-              React.createElement("h1", { className: "relative top-[1px] text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl" }, title),
-              React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap" }, subtitle)
-            )
-          ),
-          React.createElement("div", { className: "relative z-50 flex flex-wrap items-center gap-2 overflow-visible md:ml-auto md:justify-end" }, children)
-        )
+            React.createElement("div", { className: "relative z-50 flex flex-wrap items-center gap-2 overflow-visible md:ml-auto md:justify-end" }, children)
+          )
+        ),
+        qrOpen && React.createElement(ProfileQrOverlay, { title: activityTitle, subtitle: shareLabel, shareUrl, onClose: () => setQrOpen(false) })
       )
     );
   }
@@ -230,6 +428,8 @@
   }
 
   MLH.AppHeader = AppHeader;
+  MLH.ProfileQrButton = ProfileQrButton;
+  MLH.ProfileQrOverlay = ProfileQrOverlay;
   MLH.FeedbackBadge = FeedbackBadge;
   MLH.ScoreStreakPanel = ScoreStreakPanel;
   MLH.advanceFeedbackPointerDown = advanceFeedbackPointerDown;

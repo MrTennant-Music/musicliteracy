@@ -14,8 +14,8 @@
   <script src="./shared-notation-config.js?v=20260629"></script>
   <script src="./hub-mobile.js?v=20260629"></script>
   <script src="./hub-audio.js?v=20260629"></script>
-  <script src="./hub-shell.js?v=20260629"></script>
-  <script src="./hub-menu.js?v=20260702-menu-position"></script>
+  <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face {
@@ -241,6 +241,22 @@ function enabledMapMatchesLevel(levelKey, enabledRhythms) {
 function taskMatchesLevel(levelKey, enabledRhythms, restsEnabled) {
   const officialRests = LEVELS[levelKey].rhythmIds.includes("rests");
   return enabledMapMatchesLevel(levelKey, enabledRhythms) && restsEnabled === officialRests;
+}
+
+function sharedProfileFromUrl() {
+  const encoded = new URLSearchParams(window.location.search).get("profile");
+  if (!encoded) return null;
+  try {
+    const profile = JSON.parse(atob(encoded));
+    if (profile.version !== 1 || !LEVELS[profile.level] || !profile.enabledRhythms) return null;
+    const enabledRhythms = { ...levelEnabledMap(profile.level) };
+    Object.keys(enabledRhythms).forEach((key) => { if (typeof profile.enabledRhythms[key] === "boolean") enabledRhythms[key] = profile.enabledRhythms[key]; });
+    return { level: profile.level, enabledRhythms, restsEnabled: Boolean(profile.restsEnabled), showRhythmGuide: Boolean(profile.showRhythmGuide) };
+  } catch { return null; }
+}
+
+function encodedSharedProfile(level, enabledRhythms, restsEnabled, showRhythmGuide) {
+  return btoa(JSON.stringify({ version: 1, level, enabledRhythms, restsEnabled, showRhythmGuide }));
 }
 
 function activeKeyIds(enabledRhythms, level) {
@@ -1218,15 +1234,18 @@ const useClickOutside = window.MLH.useClickOutside;
 
 function App() {
   useInjectedStyles();
-  const initialLevel = initialLevelFromUrl();
+  const initialProfile = useMemo(() => sharedProfileFromUrl(), []);
+  const initialLevel = initialProfile?.level || initialLevelFromUrl();
+  const initialEnabledRhythms = initialProfile?.enabledRhythms || levelEnabledMap(initialLevel);
+  const initialRestsEnabled = initialProfile?.restsEnabled ?? LEVELS[initialLevel].rhythmIds.includes("rests");
   const [activeLevel, setActiveLevel] = useState(initialLevel);
-  const [enabledRhythms, setEnabledRhythms] = useState(() => levelEnabledMap(initialLevel));
-  const [restsEnabled, setRestsEnabled] = useState(() => LEVELS[initialLevel].rhythmIds.includes("rests"));
-  const [question, setQuestion] = useState(() => makeQuestion(initialLevel, levelEnabledMap(initialLevel), LEVELS[initialLevel].rhythmIds.includes("rests")));
+  const [enabledRhythms, setEnabledRhythms] = useState(() => initialEnabledRhythms);
+  const [restsEnabled, setRestsEnabled] = useState(initialRestsEnabled);
+  const [question, setQuestion] = useState(() => makeQuestion(initialLevel, initialEnabledRhythms, initialRestsEnabled));
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [showRhythmGuide, setShowRhythmGuide] = useState(false);
+  const [showRhythmGuide, setShowRhythmGuide] = useState(initialProfile?.showRhythmGuide || false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [feedbackFading, setFeedbackFading] = useState(false);
@@ -1244,8 +1263,12 @@ function App() {
 
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const medalEligible = taskMatchesLevel(activeLevel, enabledRhythms, restsEnabled);
-  const displayedLevel = medalEligible ? activeLevel : "Custom";
-  const displayedLevelLabel = medalEligible ? LEVELS[activeLevel].label : "Custom";
+  const profileMatchesLevel = medalEligible && !showRhythmGuide;
+  const displayedLevel = profileMatchesLevel ? activeLevel : "Custom";
+  const displayedLevelLabel = profileMatchesLevel ? LEVELS[activeLevel].label : "Custom";
+  const profileLabel = profileMatchesLevel ? LEVELS[activeLevel].label : "Custom";
+  const baseProfileUrl = `https://mrtennant-music.github.io/musicliteracy/timesig.html?level=${encodeURIComponent(activeLevel)}`;
+  const profileShareUrl = profileMatchesLevel ? baseProfileUrl : `${baseProfileUrl}&profile=${encodeURIComponent(encodedSharedProfile(activeLevel, enabledRhythms, restsEnabled, showRhythmGuide))}`;
 
   useEffect(() => {
     if (levelTaskStatusRef.current === null) {
@@ -1296,6 +1319,7 @@ function App() {
     setActiveLevel(levelKey);
     setEnabledRhythms(nextEnabled);
     setRestsEnabled(nextRests);
+    setShowRhythmGuide(false);
     setLevelOpen(false);
     setCustomiseOpen(false);
     setCorrect(0);
@@ -1352,7 +1376,7 @@ function App() {
 
   return (
     <div className={window.MLH.shell.pageShellClass}>
-      <window.MLH.AppHeader icon={ASSET.appIcon} title="Time Signatures" subtitle="Identify time signatures.">
+      <window.MLH.AppHeader icon={ASSET.appIcon} title="Time Signatures" subtitle="Identify time signatures." profileTitle="Time Signatures" profileLabel={profileLabel} profileShareUrl={profileShareUrl}>
         <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} medalEligible={medalEligible} />
       </window.MLH.AppHeader>
 
@@ -1366,7 +1390,7 @@ function App() {
                     icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
                     activeLevel={displayedLevel}
                     activeLabel={displayedLevelLabel}
-                    isCustom={!medalEligible}
+                    isCustom={!profileMatchesLevel}
                     onClick={() => { setCustomiseOpen(false); setLevelOpen((value) => !value); }}
                     dataMenuTrigger={true}
                   />
