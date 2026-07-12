@@ -350,6 +350,36 @@ function initialLevelFromUrl() {
   return LEVELS[requested] ? requested : "N3";
 }
 
+function sharedProfileFromUrl() {
+  const encodedProfile = new URLSearchParams(window.location.search).get("profile");
+  if (!encodedProfile) return null;
+  try {
+    const profile = JSON.parse(atob(encodedProfile));
+    if (profile.version !== 1 || !LEVELS[profile.level] || !profile.enabledRhythms) return null;
+    const enabledRhythms = { ...levelEnabledMap(profile.level) };
+    Object.keys(enabledRhythms).forEach((key) => {
+      if (typeof profile.enabledRhythms[key] === "boolean") enabledRhythms[key] = profile.enabledRhythms[key];
+    });
+    const level = LEVELS[profile.level];
+    const hasRhythm = level.rhythmIds.some((id) => enabledRhythms[id] && !["rests", "ties", "syncopation", "time-changes"].includes(id));
+    const hasTimeSignature = level.timeSignatureIds.some((id) => enabledRhythms[`time-${id}`]);
+    const hasKey = level.keyIds.some((id) => enabledRhythms[`key-${id}`]);
+    if (!hasRhythm || !hasTimeSignature || !hasKey) return null;
+    return {
+      level: profile.level,
+      enabledRhythms,
+      restsEnabled: typeof profile.restsEnabled === "boolean" ? profile.restsEnabled : level.rhythmIds.includes("rests"),
+      showRhythmGuide: Boolean(profile.showRhythmGuide),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function encodedSharedProfile(level, enabledRhythms, restsEnabled, showRhythmGuide) {
+  return btoa(JSON.stringify({ version: 1, level, enabledRhythms, restsEnabled, showRhythmGuide }));
+}
+
 function chooseSimplePattern(timeSignature, enabledRhythms, restsEnabled) {
   const allPatterns = SIMPLE_FULL_BAR_PATTERNS[timeSignature.id] || SIMPLE_FULL_BAR_PATTERNS["4/4"];
   const filtered = allPatterns.filter((pattern) => patternAllowed(pattern, enabledRhythms, restsEnabled));
@@ -976,6 +1006,35 @@ function FeedbackBanner({ feedback, fading }) {
   return <window.MLH.FeedbackBadge feedback={feedback} fading={fading} animationPrefix="note" />;
 }
 
+function ProfileQrButton({ onClick }) {
+  return <button type="button" onClick={onClick} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 shadow-sm transition hover:border-stone-500 hover:bg-stone-50" aria-label="Share this profile by QR code" title="Share QR code">
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="currentColor"><path d="M5,15v2H3V15ZM3,21H5V19H3Zm2-4v2H7V17Zm4-6H7v2H5v2H9ZM3,11v2H5V11Zm6,8H7v2h5V19H11V17H9ZM13,4H11V6h2Zm-2,7h2V8H11ZM4,9A1,1,0,0,1,3,8V4A1,1,0,0,1,4,3H8A1,1,0,0,1,9,4V8A1,1,0,0,1,8,9ZM5,7H7V5H5ZM21,4v8H19V9H16a1,1,0,0,1-1-1V4a1,1,0,0,1,1-1h4A1,1,0,0,1,21,4ZM19,5H17V7h2Zm2,11v4a1,1,0,0,1-1,1H16a1,1,0,0,1-1-1V17H11V13h2v2h1V11h2v2h1V11h2v4h4A1,1,0,0,1,21,16Zm-2,1H17v2h2Z"/></svg>
+  </button>;
+}
+
+function ProfileQrOverlay({ profileLabel, shareUrl, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=560x560&data=${encodeURIComponent(shareUrl)}`;
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/70 p-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Share QR code" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div className="relative w-full max-w-2xl rounded-3xl bg-white p-10 text-center shadow-2xl">
+      <button type="button" onClick={onClose} className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-xl font-bold text-stone-700" aria-label="Close QR code">×</button>
+      <h2 className="text-3xl font-semibold text-stone-900">Barlines</h2>
+      <p className="mt-2 text-lg text-stone-600">{profileLabel}</p>
+      <img className="mx-auto mt-6 w-[min(560px,100%)] rounded-2xl border border-stone-200" src={qrUrl} alt={`QR code linking to the ${profileLabel} Barlines profile`} />
+      <button type="button" onClick={copyLink} className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-blue-700">{copied ? "Copied" : "Copy Link"}</button>
+    </div>
+  </div>;
+}
+
 function TimeSignatureMenuGlyph({ signatures }) {
   return <span className="inline-flex h-[42px] w-[56px] shrink-0 items-center justify-center gap-[-12px] leading-none">{signatures.map((signature) => { const [top, bottom] = signature.split("/"); const topGlyph = top.split("").map((digit) => sharedSymbolForKey(`timeSig${digit}`)).join(""); return <svg key={signature} viewBox="0 0 24 34" className="relative -top-[6px] h-[48px] w-[20px] text-stone-800" aria-hidden="true"><text className="music-symbol" x="12" y="14" textAnchor="middle" fontSize="32" fill="currentColor" style={{ transform: "translateY(-2px)" }}>{topGlyph}</text><text className="music-symbol" x="12" y="28" textAnchor="middle" fontSize="32" fill="currentColor" style={{ transform: "translateY(2px)" }}>{sharedSymbolForKey(`timeSig${bottom}`)}</text></svg>; })}</span>;
 }
@@ -1228,15 +1287,20 @@ const useClickOutside = window.MLH.useClickOutside;
 
 function App() {
   useInjectedStyles();
-  const initialLevel = initialLevelFromUrl();
+  const initialProfile = useMemo(() => sharedProfileFromUrl(), []);
+  const initialLevel = initialProfile?.level || initialLevelFromUrl();
+  const initialEnabledRhythms = initialProfile?.enabledRhythms || levelEnabledMap(initialLevel);
+  const initialRestsEnabled = initialProfile?.restsEnabled ?? LEVELS[initialLevel].rhythmIds.includes("rests");
+  const initialShowRhythmGuide = initialProfile?.showRhythmGuide || false;
   const [activeLevel, setActiveLevel] = useState(initialLevel);
-  const [enabledRhythms, setEnabledRhythms] = useState(() => levelEnabledMap(initialLevel));
-  const [restsEnabled, setRestsEnabled] = useState(() => LEVELS[initialLevel].rhythmIds.includes("rests"));
-  const [question, setQuestion] = useState(() => buildQuestion(initialLevel, levelTimeTypes(initialLevel), levelEnabledMap(initialLevel), LEVELS[initialLevel].rhythmIds.includes("rests")));
+  const [enabledRhythms, setEnabledRhythms] = useState(() => initialEnabledRhythms);
+  const [restsEnabled, setRestsEnabled] = useState(initialRestsEnabled);
+  const [question, setQuestion] = useState(() => buildQuestion(initialLevel, levelTimeTypes(initialLevel, initialEnabledRhythms), initialEnabledRhythms, initialRestsEnabled));
   const [questionVisible, setQuestionVisible] = useState(true);
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
-  const [showRhythmGuide, setShowRhythmGuide] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [showRhythmGuide, setShowRhythmGuide] = useState(initialShowRhythmGuide);
   const [placedBoundaries, setPlacedBoundaries] = useState({});
   const [selectedBarlineType, setSelectedBarlineType] = useState("single");
   const [hoverBoundaryId, setHoverBoundaryId] = useState(null);
@@ -1260,8 +1324,19 @@ function App() {
   const canConfirm = placedBoundaryCount > 0;
   const accuracy = attempted === 0 ? 0 : Math.round((correct / attempted) * 100);
   const medalEligible = taskMatchesLevel(activeLevel, enabledRhythms, restsEnabled);
-  const displayedLevel = medalEligible ? activeLevel : "Custom";
-  const displayedLevelLabel = medalEligible ? LEVELS[activeLevel].label : "Custom";
+  const profileMatchesLevel = medalEligible && !showRhythmGuide;
+  const displayedLevel = profileMatchesLevel ? activeLevel : "Custom";
+  const displayedLevelLabel = profileMatchesLevel ? LEVELS[activeLevel].label : "Custom";
+  const profileLabel = profileMatchesLevel ? LEVELS[activeLevel].label : "Custom";
+  const baseProfileUrl = `https://mrtennant-music.github.io/musicliteracy/barlines.html?level=${encodeURIComponent(activeLevel)}`;
+  const profileShareUrl = profileMatchesLevel ? baseProfileUrl : `${baseProfileUrl}&profile=${encodeURIComponent(encodedSharedProfile(activeLevel, enabledRhythms, restsEnabled, showRhythmGuide))}`;
+
+  useEffect(() => {
+    if (!qrOpen) return undefined;
+    const closeOnEscape = (event) => { if (event.key === "Escape") setQrOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [qrOpen]);
 
   useEffect(() => {
     if (levelTaskStatusRef.current === null) {
@@ -1317,6 +1392,7 @@ function App() {
     setActiveLevel(levelKey);
     setEnabledRhythms(nextEnabled);
     setRestsEnabled(nextRests);
+    setShowRhythmGuide(false);
     setLevelOpen(false);
     setCustomiseOpen(false);
     setCorrect(0);
@@ -1389,7 +1465,7 @@ function App() {
 
   return (
     <div className={window.MLH.shell.pageShellClass}>
-      <window.MLH.AppHeader icon={ASSET.appIcon} title="Barlines" subtitle="Insert barlines at the correct place in the music.">
+      <window.MLH.AppHeader icon={ASSET.appIcon} title={<span className="inline-flex items-center gap-2">Barlines <ProfileQrButton onClick={() => setQrOpen(true)} /></span>} subtitle="Insert barlines at the correct place in the music.">
         <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} medalEligible={medalEligible} />
       </window.MLH.AppHeader>
 
@@ -1403,7 +1479,7 @@ function App() {
                     icon={<img src={ASSET.levels} alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />}
                     activeLevel={displayedLevel}
                     activeLabel={displayedLevelLabel}
-                    isCustom={!medalEligible}
+                    isCustom={!profileMatchesLevel}
                     onClick={() => { setCustomiseOpen(false); setLevelOpen((value) => !value); }}
                     dataMenuTrigger={true}
                   />
@@ -1434,6 +1510,7 @@ function App() {
           <div className={`relative z-10 mt-auto overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 shadow-md md:mx-3 ${question.systemCount === 1 ? 'md:-mt-[0px]' : 'md:-mt-[10px]'}`}><div className={`flex flex-wrap ${question.activeLevel === "N3" ? "items-end" : "items-center"} justify-between gap-3 text-stone-900`}><div className="flex min-w-0 flex-col justify-center"><p className="text-base font-semibold leading-tight">{promptText}</p>{question.activeLevel === "N3" && <div className="mt-3 flex flex-wrap gap-3">{BARLINE_TOOLS.map((tool) => <button key={tool.id} type="button" aria-label={tool.label} title={tool.label} onClick={() => setSelectedBarlineType(tool.id)} disabled={!!feedback} className={`flex h-20 w-28 items-center justify-center rounded-xl border ${selectedBarlineType === tool.id ? "border-black bg-black text-white" : "border-stone-300 bg-white text-stone-900"}`}><BarlineToolGlyph type={tool.id} /></button>)}</div>}</div><div className={`${window.MLH.ActionButtonGroupClass} ml-auto`}><button type="button" onClick={clearBarlines} disabled={!!feedback || placedBoundaryCount === 0} className={window.MLH.ClearButtonClass}>Clear</button><window.MLH.ConfirmButton onClick={confirmAnswer} disabled={!canConfirm || !!feedback}>Confirm</window.MLH.ConfirmButton></div></div></div>
         </main>
       </div>
+      {qrOpen && <ProfileQrOverlay profileLabel={profileLabel} shareUrl={profileShareUrl} onClose={() => setQrOpen(false)} />}
     </div>
   );
 }
