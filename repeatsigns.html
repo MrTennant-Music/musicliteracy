@@ -11,7 +11,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-mobile.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=20260703-metronome"></script>
+  <script src="./hub-audio.js?v=20260712-piano-playback"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -1281,19 +1281,7 @@ const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 function barDuration(bar, beatSeconds) { return bar.notes.reduce((sum, note) => sum + rhythm(note.rhythm).beats * beatSeconds, 0); }
 
 function playOscillator(ctx, { frequency, start, duration, volume = 0.16, type = "triangle", destination = ctx.destination }) {
-  if (!Number.isFinite(frequency) || !Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) return;
-  const oscillator = ctx.createOscillator();
-  const gain = ctx.createGain();
-  oscillator.type = type;
-  oscillator.frequency.setValueAtTime(frequency, start);
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(volume, start + 0.03);
-  gain.gain.setValueAtTime(volume * 0.92, start + Math.max(0.04, duration));
-  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + 0.08);
-  oscillator.connect(gain);
-  gain.connect(destination);
-  oscillator.start(start);
-  oscillator.stop(start + duration + 0.1);
+  window.MLH?.playPianoFrequency?.(ctx, destination, frequency, start, duration, volume);
 }
 
 function playDrumHit(ctx, start, accented = false, destination = ctx.destination) {
@@ -1582,7 +1570,6 @@ function App() {
 
         const noteFrequency = note.freq || freqForStep(note.step);
         playOscillator(ctx, { frequency: noteFrequency, start: t, duration: dur * 0.96, volume: 0.078, type: "triangle", destination: master });
-        playOscillator(ctx, { frequency: noteFrequency * 2, start: t, duration: dur * 0.9, volume: 0.012, type: "sine", destination: master });
         t += dur;
       });
 

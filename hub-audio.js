@@ -1,5 +1,129 @@
 (function () {
   const MLH = window.MLH || {};
+  const pianoBuffersByContext = new WeakMap();
+  let pianoMapPromise = null;
+
+  function ensurePianoMap() {
+    if (window.MLH_PIANO_SAMPLE_MAP) return Promise.resolve(window.MLH_PIANO_SAMPLE_MAP);
+    if (pianoMapPromise) return pianoMapPromise;
+    pianoMapPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "./piano%20audio/salamander-browser-map.js";
+      script.onload = () => resolve(window.MLH_PIANO_SAMPLE_MAP);
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+    return pianoMapPromise;
+  }
+
+  function midiFromFrequency(frequency) {
+    return Math.max(21, Math.min(108, Math.round(69 + 12 * Math.log2(frequency / 440))));
+  }
+
+  function pianoLayerForFrequency(frequency, velocity = 96) {
+    const midi = midiFromFrequency(frequency);
+    const layers = window.MLH_PIANO_SAMPLE_MAP?.notes?.[String(midi)] || [];
+    return layers.find((layer) => velocity >= layer.loVel && velocity <= layer.hiVel) || layers[layers.length - 1] || null;
+  }
+
+  function pianoBufferCache(context) {
+    if (!pianoBuffersByContext.has(context)) pianoBuffersByContext.set(context, new Map());
+    return pianoBuffersByContext.get(context);
+  }
+
+  async function loadPianoLayer(context, layer) {
+    if (!layer) return null;
+    const cache = pianoBufferCache(context);
+    if (cache.has(layer.sample)) return cache.get(layer.sample);
+    const request = fetch(`./piano%20audio/${encodeURIComponent(layer.sample)}`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Could not load ${layer.sample}`);
+        return response.arrayBuffer();
+      })
+      .then((data) => context.decodeAudioData(data));
+    cache.set(layer.sample, request);
+    try {
+      const buffer = await request;
+      cache.set(layer.sample, buffer);
+      return buffer;
+    } catch (error) {
+      cache.delete(layer.sample);
+      throw error;
+    }
+  }
+
+  function synthesisedPiano(context, destination, frequency, start, duration, volume) {
+    [
+      { ratio: 1, gain: 1, type: "triangle" },
+      { ratio: 2, gain: 0.28, type: "sine" },
+      { ratio: 3, gain: 0.11, type: "sine" },
+    ].forEach((partial) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = partial.type;
+      oscillator.frequency.setValueAtTime(frequency * partial.ratio, start);
+      const peak = Math.max(0.0002, volume * partial.gain);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(peak, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * 0.32), start + Math.min(0.28, duration * 0.42));
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + 0.18);
+      oscillator.connect(gain);
+      gain.connect(destination);
+      oscillator.start(start);
+      oscillator.stop(start + duration + 0.22);
+    });
+  }
+
+  function playPianoFrequency(context, destination, frequency, start, duration, volume = 0.08, velocity = 96) {
+    if (!context || !destination || !Number.isFinite(frequency) || !Number.isFinite(start) || !Number.isFinite(duration)) return;
+    const layer = pianoLayerForFrequency(frequency, velocity);
+    const cached = layer ? pianoBufferCache(context).get(layer.sample) : null;
+    if (!cached || typeof cached.duration !== "number") {
+      ensurePianoMap()
+        .then(() => {
+          const loadedLayer = pianoLayerForFrequency(frequency, velocity);
+          return loadPianoLayer(context, loadedLayer).then((buffer) => ({ buffer, layer: loadedLayer }));
+        })
+        .then(({ buffer, layer: loadedLayer }) => {
+          if (!buffer || context.state === "closed") return;
+          const actualStart = Math.max(start, context.currentTime + 0.005);
+          const source = context.createBufferSource();
+          const gain = context.createGain();
+          source.buffer = buffer;
+          source.playbackRate.setValueAtTime(loadedLayer.rate || 1, actualStart);
+          const peak = Math.max(0.0002, Math.min(0.55, volume * 4 * (loadedLayer.gain || 1)));
+          gain.gain.setValueAtTime(0.0001, actualStart);
+          gain.gain.exponentialRampToValueAtTime(peak, actualStart + 0.012);
+          gain.gain.setValueAtTime(peak * 0.94, actualStart + Math.max(0.04, duration));
+          gain.gain.exponentialRampToValueAtTime(0.0001, actualStart + duration + 0.16);
+          source.connect(gain);
+          gain.connect(destination);
+          source.start(actualStart);
+          source.stop(actualStart + duration + 0.22);
+        })
+        .catch(() => {
+          if (context.state !== "closed") synthesisedPiano(context, destination, frequency, Math.max(start, context.currentTime + 0.005), duration, volume);
+        });
+      return;
+    }
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = cached;
+    source.playbackRate.setValueAtTime(layer.rate || 1, start);
+    const peak = Math.max(0.0002, Math.min(0.55, volume * 4 * (layer.gain || 1)));
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(peak, start + 0.012);
+    gain.gain.setValueAtTime(peak * 0.94, start + Math.max(0.04, duration));
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + 0.16);
+    source.connect(gain);
+    gain.connect(destination);
+    source.start(start);
+    source.stop(start + duration + 0.22);
+  }
+
+  // The map is small and contains no audio. Loading it early means the first
+  // press of Play can immediately request only the samples that are needed.
+  ensurePianoMap().catch(() => {});
 
   function playFeedbackSound(correct, celebration = false, medal = null) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -135,9 +259,11 @@
     playFeedbackSound,
     getStreakMedal,
     playMetronomeClick,
+    playPianoFrequency,
   };
   MLH.playFeedbackSound = playFeedbackSound;
   MLH.getStreakMedal = getStreakMedal;
   MLH.playMetronomeClick = playMetronomeClick;
+  MLH.playPianoFrequency = playPianoFrequency;
   window.MLH = MLH;
 })();

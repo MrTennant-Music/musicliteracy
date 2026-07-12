@@ -11,7 +11,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-mobile.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=1.4"></script>
+  <script src="./hub-audio.js?v=20260712-piano-playback"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -1125,7 +1125,7 @@ function App() {
   function confirmPlacement() { if (feedback) return; stopAudio(); if (!placements.length) return showWarning("Place an accidental on the score before pressing Confirm."); const missingNow = missingPlacements(question, placements); const wrongNow = wrongPlacements(question, placements); setMissing(missingNow); setWrong(wrongNow); scoreAnswer(placementsMatch(question, placements)); }
   function pitch(barIndex, noteIndex) { const note = question.bars[barIndex].notes[noteIndex]; let accidental = effectiveAccidental(question, barIndex, noteIndex); if (note.hiddenAccidental !== null && note.hiddenAccidental !== undefined) accidental = note.hiddenAccidental; return note.midi + accidental; }
   function playQuestion() {
-    function playChord(context, output, notes, startTime, duration, type = "sine", volume = 0.022) { notes.forEach((midi) => { const osc = context.createOscillator(); const gain = context.createGain(); osc.type = type; osc.frequency.setValueAtTime(midiFreq(midi), startTime); gain.gain.setValueAtTime(0.0001, startTime); gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.04); gain.gain.exponentialRampToValueAtTime(volume * 0.7, startTime + duration * 0.7); gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration); osc.connect(gain); gain.connect(output); osc.start(startTime); osc.stop(startTime + duration + 0.05); }); }
+    function playChord(context, output, notes, startTime, duration, type = "sine", volume = 0.022) { notes.forEach((midi) => window.MLH?.playPianoFrequency?.(context, output, midiFreq(midi), startTime, duration, volume)); }
     const accompanimentPatterns = { "2/4": [0, 1], "3/4": [0, 1, 2], "4/4": [0, 1, 2, 3], "6/8": [0, 0.5, 1, 1.5, 2, 2.5] };
     if (playing) return;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -1150,10 +1150,7 @@ function App() {
       accompaniment.forEach((beatOffset) => { const chordMidis = chordLetters.map((letter, idx) => { const tone = noteFromChordTone(letter, 5 + (idx === 0 ? 0 : 1)); const accidental = tone.writtenAccidental ?? 0; return tone.midi + accidental - 12; }); playChord(context, master, chordMidis, time + beatOffset * beat, beat * 0.9); });
       question.bars[barIndex].notes.forEach((note, noteIndex) => {
         const duration = rhythmInfo(note.rhythm).beats * beat;
-        const osc = context.createOscillator(); const gain = context.createGain();
-        osc.type = "triangle"; osc.frequency.setValueAtTime(midiFreq(pitch(barIndex, noteIndex)), time);
-        gain.gain.setValueAtTime(0.0001, time); gain.gain.exponentialRampToValueAtTime(question.audioQuestionKind === "one-bar-hearing" ? 0.14 : 0.095, time + 0.08); gain.gain.exponentialRampToValueAtTime(question.audioQuestionKind === "one-bar-hearing" ? 0.09 : 0.052, time + duration * 0.9); gain.gain.exponentialRampToValueAtTime(0.0001, time + duration + 0.08);
-        osc.connect(gain); gain.connect(master); osc.start(time); osc.stop(time + duration + 0.15);
+        window.MLH?.playPianoFrequency?.(context, master, midiFreq(pitch(barIndex, noteIndex)), time, duration, question.audioQuestionKind === "one-bar-hearing" ? 0.11 : 0.075);
         time += duration;
       });
     });

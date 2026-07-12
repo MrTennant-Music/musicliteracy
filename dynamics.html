@@ -11,7 +11,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-mobile.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=20260703-metronome"></script>
+  <script src="./hub-audio.js?v=20260712-piano-playback"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -977,18 +977,7 @@ const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 function frequencyForLetter(letter, octave = 3) { const semitone = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 }; return 440 * Math.pow(2, (semitone[letter] + (octave - 4) * 12) / 12); }
 function barDuration(bar, beatSeconds) { return bar.notes.reduce((sum, note) => sum + rhythm(note.rhythm).beats * beatSeconds, 0); }
 function oscillator(ctx, gainNode, frequency, start, duration, volume = 0.035, type = "sine", release = 0.08) {
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(frequency, start);
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(volume, start + 0.03);
-  gain.gain.setValueAtTime(volume * 0.92, start + Math.max(0.04, duration));
-  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + release);
-  osc.connect(gain);
-  gain.connect(gainNode);
-  osc.start(start);
-  osc.stop(start + duration + release + 0.02);
+  window.MLH?.playPianoFrequency?.(ctx, gainNode, frequency, start, duration, volume);
 }
 function chordLetterFrequency(letter, octave = 3) {
   return frequencyForLetter(letter, letter === "B" ? octave - 1 : octave);
@@ -1288,22 +1277,9 @@ function App() {
         const startMs = Math.max(0, (t - ctx.currentTime) * 1000);
         highlightTimersRef.current.push(setTimeout(() => setActiveNoteId(note.id), startMs));
         highlightTimersRef.current.push(setTimeout(() => setActiveNoteId(null), startMs + dur * 1000));
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
         const targetGain = gainForNote(barIndex, noteIndex, bar.notes.length);
         const isSfzHit = question.audioPlan?.kind === "sfz" && barIndex === question.audioPlan.accentBar && noteIndex === question.audioPlan.accentNoteIndex;
-        o.type = "triangle";
-        o.frequency.setValueAtTime(freqForStep(note.step), t);
-        g.gain.setValueAtTime(0.0001, t);
-        if (isSfzHit) {
-          g.gain.exponentialRampToValueAtTime(0.56, t + 0.006);
-          g.gain.exponentialRampToValueAtTime(0.12, t + Math.min(0.22, dur * 0.45));
-        } else {
-          g.gain.exponentialRampToValueAtTime(Math.max(0.002, targetGain), t + 0.015);
-          g.gain.exponentialRampToValueAtTime(Math.max(0.001, targetGain * 0.45), t + dur * 0.86);
-        }
-        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        o.connect(g); g.connect(master); o.start(t); o.stop(t + dur);
+        window.MLH?.playPianoFrequency?.(ctx, master, freqForStep(note.step), t, dur, isSfzHit ? 0.14 : Math.max(0.002, targetGain));
         t += dur;
       });
     });

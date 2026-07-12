@@ -11,7 +11,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-mobile.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=20260703-metronome"></script>
+  <script src="./hub-audio.js?v=20260712-piano-playback"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -1698,7 +1698,7 @@ function App(){
     setAnswers({ahChoice:id});
     score(id===question.chordType.id);
   }
-  function playOscillator(ctx,{frequency,start,duration,volume=.16,type="triangle"}){ if(!Number.isFinite(frequency)||!Number.isFinite(start)||!Number.isFinite(duration)||duration<=0)return; const o=ctx.createOscillator(), g=ctx.createGain(); o.type=type; o.frequency.setValueAtTime(frequency,start); g.gain.setValueAtTime(.0001,start); g.gain.exponentialRampToValueAtTime(volume,start+.035); g.gain.exponentialRampToValueAtTime(Math.max(.0002,volume*.55),start+Math.max(.05,duration*.86)); g.gain.exponentialRampToValueAtTime(.0001,start+duration+.04); o.connect(g); g.connect(ctx.destination); o.start(start); o.stop(start+duration+.08); }
+  function playOscillator(ctx,{frequency,start,duration,volume=.16}){ window.MLH?.playPianoFrequency?.(ctx,ctx.destination,frequency,start,duration,volume); }
   function playDrumHit(ctx,start,accented=false,destination=ctx.destination){ window.MLH?.playMetronomeClick?.(ctx,destination,start,accented); }
   function playQuestionAudio(startOffsetSeconds=0, forcePlay=false){
     if(question.type==="ahInversionBar") return;
@@ -1737,7 +1737,6 @@ function App(){
         bar.intervals.forEach((interval,i)=>{
           const frequency=midiToFrequency(bar.rootMidi+interval);
           playOscillator(ctx,{frequency,start:barStart,duration:playableDuration,volume:.052,type:"triangle"});
-          playOscillator(ctx,{frequency:frequency*2,start:barStart,duration:playableDuration*.75,volume:.012,type:"sine"});
         });
       });
       stopTimerRef.current=setTimeout(()=>{setPlaying(false);setActiveNoteId(null);setActiveBarIndex(null);audioRef.current=null;try{ctx.close()}catch{}},Math.max(0,(activeDuration-startOffset)*1000)+150);

@@ -11,7 +11,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-mobile.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=20260703-metronome"></script>
+  <script src="./hub-audio.js?v=20260712-piano-playback"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -69,7 +69,7 @@ function getSystemTop(barIndex) { return barIndex < 4 ? SYSTEM_TOPS[0] : SYSTEM_
 function getBarStart(barIndex) { return MUSIC_START + (barIndex % 4) * barWidth(); }
 function medalSoundForStreak(streak) { if (streak >= 30) return "platinum"; if (streak >= 20) return "gold"; if (streak >= 15) return "silver"; if (streak >= 10) return "bronze"; return null; }
 function playFeedbackSound(correct, celebration = false, medal = null) { window.MLH?.playFeedbackSound?.(correct, celebration, medal); }
-function oscillator(ctx, gainNode, frequency, start, duration, volume = 0.035, type = "sine", release = 0.08) { const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = type; osc.frequency.setValueAtTime(frequency, start); gain.gain.setValueAtTime(0.0001, start); gain.gain.exponentialRampToValueAtTime(volume, start + 0.03); gain.gain.setValueAtTime(volume * 0.92, start + Math.max(0.04, duration)); gain.gain.exponentialRampToValueAtTime(0.0001, start + duration + release); osc.connect(gain); gain.connect(gainNode); osc.start(start); osc.stop(start + duration + release + 0.02); }
+function oscillator(ctx, gainNode, frequency, start, duration, volume = 0.035) { window.MLH?.playPianoFrequency?.(ctx, gainNode, frequency, start, duration, volume); }
 function playClick(ctx, gainNode, start, accented) { window.MLH?.playMetronomeClick?.(ctx, gainNode, start, accented); }
 function sharedActualSymbolKey(key) { if (key === "flatInScore" || key === "flatKeySignature") return "flat"; if (key === "naturalInScore") return "natural"; if (key === "sharpInScore" || key === "sharpKeySignature") return "sharp"; if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack"; if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot"; return key; }
 function sharedSettingsKey(key) { if (key === "flatKeySignature" || key === "sharpKeySignature") return SHARED_CONFIG.symbols?.keySignatureAccidentals ? "keySignatureAccidentals" : key; if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return SHARED_CONFIG.symbols?.scoreAccidentals ? "scoreAccidentals" : key; return key; }
@@ -319,7 +319,7 @@ function App(){
   function score(ok){ stopAudio(); const ns=ok?streak+1:0; playFeedbackSound(ok); setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){const medal=medalSoundForStreak(ns); if(medalEligible&&medal&&MEDAL_THRESHOLDS.includes(ns)){setConfetti(v=>v+1); setAutoShowMedals(true); timers.current.push(setTimeout(()=>setAutoShowMedals(false),2000)); timers.current.push(setTimeout(()=>playFeedbackSound(true,true,medal),180));} timers.current.push(setTimeout(()=>setFeedbackFading(true),1700)); timers.current.push(setTimeout(()=>newQuestion(),2000));}}
   function confirm(){ if(feedback)return; let ok=false; if(question.mode==="choice"){ if(!selected){setPrompt("Select one tempo first.");return;} ok=equivalent(selected,question.answerId); } else if(question.mode==="text"){ if(!typed.trim()){setPrompt("Type your answer first.");return;} ok=isCorrectText(typed,question.answerId); } else { if(!placement){setPrompt("Select a tempo and place it above the music.");return;} ok=placement.barIndex===0 && equivalent(placement.term.id,question.answerId); } score(ok); }
   function clearAnswer(){ setSelected(null); setTyped(""); setPlacement(null); setHover(null); setPrompt(""); }
-  function playMelodyNote(ctx, gainNode, frequency, start, duration) { oscillator(ctx, gainNode, frequency, start, duration, 0.078, "triangle", 0.1); oscillator(ctx, gainNode, frequency * 2, start, duration * 0.94, 0.012, "sine", 0.08); }
+  function playMelodyNote(ctx, gainNode, frequency, start, duration) { oscillator(ctx, gainNode, frequency, start, duration, 0.078); }
   function playAccompaniment(ctx, gainNode, bar, barStart, beat, startTime) {
     const chordLetters = question.key.chords[bar.chordSymbol] || [];
     if (!chordLetters.length) return;
