@@ -1699,6 +1699,17 @@ function App(){
     score(id===question.chordType.id);
   }
   function playOscillator(ctx,{frequency,start,duration,volume=.16}){ window.MLH?.playPianoFrequency?.(ctx,ctx.destination,frequency,start,duration,volume); }
+  function playSynthOscillator(ctx,{frequency,start,duration,volume=.052}){
+    const oscillator=ctx.createOscillator(), gain=ctx.createGain();
+    oscillator.type="triangle";
+    oscillator.frequency.setValueAtTime(frequency,start);
+    gain.gain.setValueAtTime(.0001,start);
+    gain.gain.exponentialRampToValueAtTime(volume,start+.015);
+    gain.gain.exponentialRampToValueAtTime(Math.max(.0002,volume*.55),start+Math.max(.05,duration*.82));
+    gain.gain.exponentialRampToValueAtTime(.0001,start+duration+.06);
+    oscillator.connect(gain); gain.connect(ctx.destination);
+    oscillator.start(start); oscillator.stop(start+duration+.1);
+  }
   function playDrumHit(ctx,start,accented=false,destination=ctx.destination){ window.MLH?.playMetronomeClick?.(ctx,destination,start,accented); }
   function playQuestionAudio(startOffsetSeconds=0, forcePlay=false){
     if(question.type==="ahInversionBar") return;
@@ -1760,18 +1771,25 @@ function App(){
         highlightTimersRef.current.push(setTimeout(()=>setActiveNoteId(note.id),startMs));
         highlightTimersRef.current.push(setTimeout(()=>setActiveNoteId(null),startMs+duration*1000));
         const pitch=effectivePitchForMelodyNote(question,bar,i);
-        playOscillator(ctx,{frequency:midiToFrequency(pitch+12),start:noteStart,duration:duration*.82,volume:.032,type:"sine"});
-        playOscillator(ctx,{frequency:midiToFrequency(pitch+24),start:noteStart,duration:duration*.5,volume:.008,type:"sine"});
+        const melodyPitch = pitch + 12;
+        if (activeLevel === "H") {
+          // Match the main accompaniment voice, while keeping the melody as a synth.
+          playSynthOscillator(ctx,{frequency:midiToFrequency(melodyPitch),start:noteStart,duration:duration*.82,volume:.052});
+        } else {
+          playOscillator(ctx,{frequency:midiToFrequency(melodyPitch),start:noteStart,duration:duration*.82,volume:.032,type:"sine"});
+        }
+        if (activeLevel !== "H") playOscillator(ctx,{frequency:midiToFrequency(pitch+24),start:noteStart,duration:duration*.5,volume:.008,type:"sine"});
       });
+      const accompanimentVolumeScale = 1;
       chord.notes.forEach((letter,i)=>{ const frequency=midiToFrequency(pitchForChordLetter(question.key,chord,letter,3+i)); if(bar.barIndex===BAR_COUNT-1){
-          playOscillator(ctx,{frequency,start:barStart,duration:(relativeBarEnd-Math.max(relativeBarStart,startOffset))*.95,volume:.07,type:"triangle"});
+          playOscillator(ctx,{frequency,start:barStart,duration:(relativeBarEnd-Math.max(relativeBarStart,startOffset))*.95,volume:.07*accompanimentVolumeScale,type:"triangle"});
         } else {
           for(let beat=0;beat<beatsPerBar;beat++){
             const beatStart=relativeBarStart+beat*beatSeconds;
-            if(beatStart>=startOffset) playOscillator(ctx,{frequency,start:audioStartTime+beatStart-startOffset,duration:beatSeconds*.9,volume:beat===0?.065:.052,type:"triangle"});
+            if(beatStart>=startOffset) playOscillator(ctx,{frequency,start:audioStartTime+beatStart-startOffset,duration:beatSeconds*.9,volume:(beat===0?.065:.052)*accompanimentVolumeScale,type:"triangle"});
           }
         }
-        playOscillator(ctx,{frequency:frequency*.5,start:barStart,duration:(relativeBarEnd-Math.max(relativeBarStart,startOffset))*.95,volume:.03,type:"sine"}); });
+        playOscillator(ctx,{frequency:frequency*.5,start:barStart,duration:(relativeBarEnd-Math.max(relativeBarStart,startOffset))*.95,volume:.03*accompanimentVolumeScale,type:"sine"}); });
     });
     stopTimerRef.current=setTimeout(()=>{setPlaying(false);setActiveNoteId(null);setActiveBarIndex(null);audioRef.current=null;try{ctx.close()}catch{}},Math.max(0,(activeDuration-startOffset)*1000)+150);
   }
