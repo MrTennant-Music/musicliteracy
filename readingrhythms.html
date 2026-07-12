@@ -37,8 +37,9 @@
 const { useEffect, useMemo, useRef, useState } = React;
 const CORE = window.READING_RHYTHMS_CORE;
 const SYMBOLS = window.BRAVURA_SYMBOLS || {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || {};
 const ACTIVITY_STATES = Object.freeze({ READY: "ready", COUNTING: "countingIn", PERFORMING: "performing", CALCULATING: "calculating", RESULTS: "results", REFERENCE: "playingReference" });
-const ASSET = { appIcon: "readingrhythm-icon.svg", levels: "levels.svg", customise: "customise.svg", next: "next.svg", bronze: "bronze.svg", silver: "silver.svg", gold: "gold.svg", diamond: "diamond.svg", tempo: "tempo.svg" };
+const ASSET = { appIcon: "readingrhythm-icon.svg", levels: "levels.svg", customise: "customise.svg", next: "next.svg", bronze: "bronze.svg", silver: "silver.svg", gold: "gold.svg", diamond: "diamond.svg", tempo: "tempo.svg", tap: "tap.svg", spacebar: "spacebar.svg", mouse: "mouse.svg" };
 const LEVELS = Object.fromEntries(Object.entries(CORE.LEVELS).map(([key, level]) => [key, { ...level, shortLabel: key, description: level === CORE.LEVELS.N3 ? "Crotchet • Minim • Dotted minim • Semibreve" : level === CORE.LEVELS.N4 ? "Paired quavers • Grouped semiquavers" : level === CORE.LEVELS.N5 ? "Dotted rhythms • Scotch snap" : key === "H" ? "Compound metre • Rests • Triplets" : "5/4 • Ties • Syncopation • Triplets" }]));
 const NEUTRAL_CLEF = "\uE069";
 const SCORE = { width: 920, height: 180, lineY: 88, musicLeft: 145, right: 880, barWidth: (880 - 145) / 2 };
@@ -50,19 +51,43 @@ function timeDigit(value) { return String(value).split("").map((digit) => glyph(
 function eventX(bar, event) { return SCORE.musicLeft + bar.barIndex * SCORE.barWidth + 22 + (event.startBeats / bar.durationBeats) * (SCORE.barWidth - 44); }
 function eventMap(rhythm) { const result = new Map(); rhythm.bars.forEach((bar) => bar.events.forEach((event) => result.set(event.id, { bar, event, x: eventX(bar, event) }))); return result; }
 
+function symbolConfig(key) {
+  const alias = key === "augmentationDotLine" || key === "augmentationDotSpace" ? "augmentationDot" : key;
+  return SHARED_CONFIG.symbols?.[key] || SHARED_CONFIG.symbols?.[alias] || {};
+}
+function CalibratedSymbol({ symbolKey, x, y, fontSize = 40, settingOverrides = {} }) {
+  const config = { ...symbolConfig(symbolKey), ...settingOverrides };
+  const alias = symbolKey === "augmentationDotLine" || symbolKey === "augmentationDotSpace" ? "augmentationDot" : symbolKey;
+  const adjustedX = x + Number(config.xOffsetScale || 0) * 10 + Number(config.opticalXOffset || 0);
+  const adjustedY = y + Number(config.yOffsetScale || 0) * 10 + Number(config.opticalYOffset || 0);
+  const size = config.fontSizeScale ? Number(config.fontSizeScale) * 10 : fontSize;
+  return <text className="music-symbol" x={adjustedX} y={adjustedY} fill="currentColor" fontSize={size} textAnchor="middle" transform={`translate(${adjustedX} ${adjustedY}) scale(${config.widthScale || 1} ${config.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`}>{glyph(alias)}</text>;
+}
+
 function RestGlyph({ event, x }) {
   const info = CORE.RHYTHMS[event.rhythm];
   const base = info.restBase;
-  const symbol = base === "minim" ? glyph("halfRest") : base === "quaver" ? glyph("eighthRest") : glyph("quarterRest");
-  return <g><text className="music-symbol" x={x} y={SCORE.lineY + 10} textAnchor="middle" fontSize="40" fill="currentColor">{symbol}</text>{info.dotted && <text className="music-symbol" x={x + 13} y={SCORE.lineY + 5} fontSize="25" fill="currentColor">{glyph("augmentationDot")}</text>}</g>;
+  const symbolKey = base === "minim" ? "halfRest" : base === "quaver" ? "eighthRest" : "quarterRest";
+  return <g><CalibratedSymbol symbolKey={symbolKey} x={x} y={SCORE.lineY} />{info.dotted && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + 13} y={SCORE.lineY - 2.5} fontSize={25} />}</g>;
 }
 
 function NoteGlyph({ event, x, beamed }) {
   const info = CORE.RHYTHMS[event.rhythm];
   if (event.type === "rest") return <RestGlyph event={event} x={x} />;
-  if (beamed) return <g><text className="music-symbol" x={x} y={SCORE.lineY + 6} textAnchor="middle" fontSize="34" fill="currentColor">{glyph("noteheadBlack")}</text><line x1={x + 5.5} x2={x + 5.5} y1={SCORE.lineY + 1} y2={SCORE.lineY - 34} stroke="currentColor" strokeWidth="1.7" />{info.dotted && <text className="music-symbol" x={x + 13} y={SCORE.lineY + 4} fontSize="24" fill="currentColor">{glyph("augmentationDot")}</text>}</g>;
+  if (beamed) return <g><CalibratedSymbol symbolKey="noteheadBlack" x={x} y={SCORE.lineY} fontSize={34} /><line x1={x + 5.5} x2={x + 5.5} y1={SCORE.lineY - .5} y2={SCORE.lineY - 34} stroke="currentColor" strokeWidth={Math.max(1, 10 * Number(SHARED_CONFIG.drawing?.stemThicknessScale || .12))} />{info.dotted && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + 13} y={SCORE.lineY - 2.5} fontSize={24} />}</g>;
   const symbolKey = event.rhythm === "semibreve" ? "wholeNote" : ["minim", "dotted-minim"].includes(event.rhythm) ? "halfNoteStemUp" : event.rhythm === "semiquaver" ? "sixteenthNoteStemUp" : ["quaver", "dotted-quaver", "triplet-quaver"].includes(event.rhythm) ? "eighthNoteStemUp" : "quarterNoteStemUp";
-  return <g><text className="music-symbol" x={x} y={SCORE.lineY + 6} textAnchor="middle" fontSize="40" fill="currentColor">{glyph(symbolKey)}</text>{info.dotted && <text className="music-symbol" x={x + 14} y={SCORE.lineY + 4} fontSize="24" fill="currentColor">{glyph("augmentationDot")}</text>}</g>;
+  return <g><CalibratedSymbol symbolKey={symbolKey} x={x} y={SCORE.lineY} />{info.dotted && <CalibratedSymbol symbolKey="augmentationDotLine" x={x + 14} y={SCORE.lineY - 2.5} fontSize={24} />}</g>;
+}
+
+function secondaryBeamSegments(events) {
+  const segments = []; let start = null;
+  events.forEach((event, index) => {
+    const hasSecondBeam = CORE.RHYTHMS[event.rhythm].beams === 2;
+    const nextHasSecondBeam = CORE.RHYTHMS[events[index + 1]?.rhythm]?.beams === 2;
+    if (hasSecondBeam && start === null) start = index;
+    if (start !== null && (!nextHasSecondBeam || index === events.length - 1)) { segments.push({ start, end: index, hook: start === index }); start = null; }
+  });
+  return segments;
 }
 
 function RhythmScore({ rhythm, results }) {
@@ -78,7 +103,7 @@ function RhythmScore({ rhythm, results }) {
     });
   });
   const beamedIds = new Set(groups.flatMap((group) => group.beamEvents.map((event) => event.id)));
-  return <div className="reading-score-scroll w-full overflow-x-auto rounded-xl border border-stone-200 bg-white" tabIndex="0" aria-label="Two-bar rhythm notation. Scroll horizontally if needed.">
+  return <div className="reading-score-scroll w-full overflow-x-auto" tabIndex="0" aria-label="Two-bar rhythm notation. Scroll horizontally if needed.">
     <svg viewBox={`0 0 ${SCORE.width} ${SCORE.height}`} className="reading-score-svg block h-auto w-full select-none" role="img" aria-label={`Two bars in ${rhythm.timeSignature.id}`}>
       <line x1="38" x2={SCORE.right} y1={SCORE.lineY} y2={SCORE.lineY} stroke="currentColor" strokeWidth="1.4" />
       <text className="music-symbol" x="68" y={SCORE.lineY + 13} textAnchor="middle" fontSize="44" fill="currentColor">{NEUTRAL_CLEF}</text>
@@ -86,16 +111,14 @@ function RhythmScore({ rhythm, results }) {
       <text className="music-symbol" x="108" y={SCORE.lineY + 20} textAnchor="middle" fontSize="34" fill="currentColor">{timeDigit(rhythm.timeSignature.denominator)}</text>
       {rhythm.bars.map((bar) => <React.Fragment key={bar.barIndex}>
         {bar.events.map((event) => <NoteGlyph key={event.id} event={event} x={positions.get(event.id).x} beamed={beamedIds.has(event.id)} />)}
-        {bar.events.map((event, index) => event.tiedToNext && bar.events[index + 1] ? <path key={`tie-${event.id}`} d={`M ${positions.get(event.id).x + 5} ${SCORE.lineY + 13} Q ${(positions.get(event.id).x + positions.get(bar.events[index + 1].id).x) / 2} ${SCORE.lineY + 31} ${positions.get(bar.events[index + 1].id).x - 5} ${SCORE.lineY + 13}`} fill="none" stroke="currentColor" strokeWidth="1.8" /> : null)}
+        {bar.events.map((event, index) => event.tiedToNext && bar.events[index + 1] ? <text key={`tie-${event.id}`} className="music-symbol" x="0" y="0" fontSize="58" textAnchor="middle" fill="currentColor" transform={`translate(${(positions.get(event.id).x + positions.get(bar.events[index + 1].id).x) / 2} ${SCORE.lineY + 5}) scale(${Math.max(1.4, Math.min(7.2, Math.abs(positions.get(bar.events[index + 1].id).x - positions.get(event.id).x) / 20))} 1)`}>{glyph("tie", "\uE1FD")}</text> : null)}
       </React.Fragment>)}
       {groups.map((group) => {
         const first = group.beamEvents[0], last = group.beamEvents[group.beamEvents.length - 1];
         const firstX = first ? positions.get(first.id).x + 5.5 : positions.get(group.events[0].id).x;
         const lastX = last ? positions.get(last.id).x + 5.5 : positions.get(group.events[group.events.length - 1].id).x;
-        const doubleBeamEvents = group.beamEvents.filter((event) => CORE.RHYTHMS[event.rhythm].beams === 2);
-        const secondBeamStart = doubleBeamEvents.length === group.beamEvents.length ? firstX : doubleBeamEvents.length ? Math.max(firstX, positions.get(doubleBeamEvents[0].id).x - 14) : null;
-        const secondBeamEnd = doubleBeamEvents.length === group.beamEvents.length ? lastX : doubleBeamEvents.length ? Math.min(lastX, positions.get(doubleBeamEvents[doubleBeamEvents.length - 1].id).x + 14) : null;
-        return <g key={group.id}>{first && <line x1={firstX} x2={lastX} y1={SCORE.lineY - 34} y2={SCORE.lineY - 34} stroke="currentColor" strokeWidth="5" />}{secondBeamStart !== null && <line x1={secondBeamStart} x2={secondBeamEnd} y1={SCORE.lineY - 27} y2={SCORE.lineY - 27} stroke="currentColor" strokeWidth="4" />}{group.triplet && <><path d={`M ${positions.get(group.events[0].id).x - 4} ${SCORE.lineY - 46} L ${positions.get(group.events[group.events.length - 1].id).x + 4} ${SCORE.lineY - 46}`} stroke="currentColor" strokeWidth="1.2" /><text x={(positions.get(group.events[0].id).x + positions.get(group.events[group.events.length - 1].id).x) / 2} y={SCORE.lineY - 49} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">3</text></>}</g>;
+        const segments = secondaryBeamSegments(group.beamEvents);
+        return <g key={group.id}>{first && <line x1={firstX} x2={lastX} y1={SCORE.lineY - 34} y2={SCORE.lineY - 34} stroke="currentColor" strokeWidth="5" />}{segments.map((segment, index) => { const x1 = positions.get(group.beamEvents[segment.start].id).x + 5.5; const x2 = segment.hook ? x1 + (segment.start > 0 ? -12 : 12) : positions.get(group.beamEvents[segment.end].id).x + 5.5; return <line key={index} x1={x1} x2={x2} y1={SCORE.lineY - 26} y2={SCORE.lineY - 26} stroke="currentColor" strokeWidth="4" />; })}{group.triplet && <><path d={`M ${positions.get(group.events[0].id).x - 4} ${SCORE.lineY - 46} L ${positions.get(group.events[group.events.length - 1].id).x + 4} ${SCORE.lineY - 46}`} stroke="currentColor" strokeWidth="1.2" /><text x={(positions.get(group.events[0].id).x + positions.get(group.events[group.events.length - 1].id).x) / 2} y={SCORE.lineY - 49} textAnchor="middle" fontSize="14" fontWeight="700" fill="currentColor">3</text></>}</g>;
       })}
       <line x1={SCORE.musicLeft + SCORE.barWidth} x2={SCORE.musicLeft + SCORE.barWidth} y1={SCORE.lineY - 22} y2={SCORE.lineY + 22} stroke="currentColor" strokeWidth="1.4" />
       <line x1={SCORE.right - 6} x2={SCORE.right - 6} y1={SCORE.lineY - 22} y2={SCORE.lineY + 22} stroke="currentColor" strokeWidth="1.4" />
@@ -177,15 +200,15 @@ function App() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) { setStatus("Audio playback is not supported in this browser."); return; }
     const ctx = new AudioContextClass(); audioRef.current = ctx; await ctx.resume?.(); setLevelOpen(false); setCustomiseOpen(false);
-    const pulseSeconds = 60 / tempo, countPulses = rhythm.timeSignature.pulsesPerBar, totalPulses = countPulses * 2;
+    const pulseSeconds = 60 / tempo, pulsesPerBar = rhythm.timeSignature.pulsesPerBar, countPulses = pulsesPerBar * 2, totalPulses = pulsesPerBar * 2;
     const countStart = ctx.currentTime + .14, performanceStart = countStart + countPulses * pulseSeconds;
-    performanceStartRef.current = performanceStart; transition(ACTIVITY_STATES.COUNTING); setStatus(`Count in. ${countPulses} pulses before you begin.`); tapAreaRef.current?.focus();
+    performanceStartRef.current = performanceStart; transition(ACTIVITY_STATES.COUNTING); setStatus("Two-bar count in before you begin."); tapAreaRef.current?.focus();
     for (let pulse = 0; pulse < countPulses; pulse += 1) {
       const clickTime = countStart + pulse * pulseSeconds;
-      window.MLH.playMetronomeClick?.(ctx, ctx.destination, clickTime, pulse === 0);
+      window.MLH.playMetronomeClick?.(ctx, ctx.destination, clickTime, pulse % pulsesPerBar === 0);
       timersRef.current.push(window.setTimeout(() => setCountInNumber(pulse + 1), Math.max(0, (clickTime - ctx.currentTime) * 1000)));
     }
-    for (let pulse = 0; pulse < totalPulses; pulse += 1) window.MLH.playMetronomeClick?.(ctx, ctx.destination, performanceStart + pulse * pulseSeconds, pulse % countPulses === 0);
+    for (let pulse = 0; pulse < totalPulses; pulse += 1) window.MLH.playMetronomeClick?.(ctx, ctx.destination, performanceStart + pulse * pulseSeconds, pulse % pulsesPerBar === 0);
     timersRef.current.push(window.setTimeout(() => { setCountInNumber(null); transition(ACTIVITY_STATES.PERFORMING); setStatus("Begin. Tap with each written note."); }, Math.max(0, (performanceStart - ctx.currentTime) * 1000)));
     const performanceDuration = totalPulses * pulseSeconds;
     const associationSeconds = CORE.timingThresholds(tempo).associationMs / 1000;
@@ -217,7 +240,7 @@ function App() {
     return () => { window.removeEventListener("keydown", onKeyDown); document.removeEventListener("visibilitychange", onVisibilityChange); cancelAudioAndTimers(); };
   }, [rhythm, tempo]);
 
-  const tempoSymbol = rhythm.timeSignature.compound ? "Dotted crotchet" : "Crotchet";
+  const countBoxes = rhythm.timeSignature.pulsesPerBar * 2;
   return <div className={window.MLH.shell.pageShellClass}>
     <window.MLH.AppHeader icon={ASSET.appIcon} title="Reading Rhythms" subtitle="Perform rhythms in time with the music by reading notation.">
       <window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} resetScore={resetScore} confettiKey={confettiKey} medalThresholdValues={[10,15,20,30]} />
@@ -225,17 +248,29 @@ function App() {
     <div className={window.MLH.shell.pageContentClass}>
       <main ref={tapAreaRef} tabIndex="0" role="region" aria-label="Reading Rhythms performance area" className={`${window.MLH.shell.mainShellClass} reading-tap-area flex min-h-[620px] flex-col gap-4 pb-5 md:min-h-[520px]`} onPointerDown={handlePointer}>
         <window.MLH.AppToolbar left={<div className={`flex items-center gap-2 ${activeAttempt ? "opacity-50" : ""}`}><div className="hub-menu-anchor relative" ref={levelRef}><window.MLH.LevelButton icon={<img src={ASSET.levels} alt="" className="h-[26px] w-[26px]" />} activeLevel={activeLevel} activeLabel={CORE.LEVELS[activeLevel].label} onClick={() => { if (activeAttempt) return; setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />{levelOpen && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS} /></window.MLH.MenuPanel>}</div><div className="hub-menu-anchor relative" ref={customiseRef}><window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" className="h-[26px] w-[26px]" />} onClick={() => { if (activeAttempt) return; setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />{customiseOpen && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}><TempoMenu tempo={tempo} setTempo={setTempo} disabled={activeAttempt} /></window.MLH.MenuPanel>}</div></div>} feedback={null} right={<window.MLH.SkipButton disabled={activeAttempt} resetStreak={() => setStreak(0)} onClick={() => makeNewRhythm()} icon={<img src={ASSET.next} alt="" className="h-[27px] w-[27px]" />} />} />
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-sm font-bold text-stone-700 sm:px-3"><span>{rhythm.timeSignature.id} time</span><span>{tempoSymbol} = {tempo} bpm</span></div>
-        <div className="relative flex min-h-[300px] flex-1 flex-col items-center justify-center gap-4 rounded-2xl border-2 border-stone-300 bg-stone-50 p-3 sm:p-5">
+        <div className="flex min-h-[62px] flex-col items-center gap-3 px-1 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:items-start sm:px-3">
+          <div className="flex flex-col gap-1 justify-self-start" aria-label="Two-bar count-in">
+            <span className="text-xs font-black uppercase tracking-wider text-stone-500">Count in</span>
+            <div className="grid grid-flow-col auto-cols-[26px] gap-1 sm:auto-cols-[30px]">{Array.from({ length: countBoxes }, (_, index) => { const reached = countInNumber !== null && index < countInNumber; const current = countInNumber === index + 1; return <span key={index} className={`flex h-[28px] items-center justify-center rounded border text-sm font-black sm:h-[30px] ${current ? "border-black bg-black text-white" : reached ? "border-stone-500 bg-stone-300 text-black" : "border-stone-300 bg-white text-stone-400"}`}>{reached ? index % rhythm.timeSignature.pulsesPerBar + 1 : ""}</span>; })}</div>
+          </div>
+          <div className="flex items-center justify-center gap-4 self-center" aria-label="Tap, press the spacebar, or click in time with the notes">
+            {[{ icon: ASSET.tap, label: "Tap" }, { icon: ASSET.spacebar, label: "Spacebar" }, { icon: ASSET.mouse, label: "Click" }].map((item) => <div key={item.label} className="flex flex-col items-center gap-1 text-xs font-bold"><img src={item.icon} alt="" className="h-7 w-7 object-contain" /><span>{item.label}</span></div>)}
+          </div>
+          <div />
+        </div>
+        <div className="flex items-center px-1 text-lg font-bold sm:px-3"><span className="music-symbol text-[32px] font-normal leading-none">{glyph("quarterNoteStemUp")}{rhythm.timeSignature.compound ? glyph("augmentationDot") : ""}</span><span className="ml-2">= {tempo}</span></div>
+        <div className="relative flex min-h-[220px] flex-1 items-center justify-center px-1 sm:px-3">
           <RhythmScore rhythm={rhythm} results={activityState === ACTIVITY_STATES.RESULTS || activityState === ACTIVITY_STATES.REFERENCE ? result : null} />
-          <p className="text-center text-base font-bold">Tap the screen or press the spacebar in time with each written note.</p>
-          {activityState === ACTIVITY_STATES.COUNTING && <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-white/80" aria-hidden="true"><div className="flex h-28 w-28 items-center justify-center rounded-full bg-black text-6xl font-black text-white shadow-xl">{countInNumber || "·"}</div></div>}
           {activityState === ACTIVITY_STATES.PERFORMING && <div className="pointer-events-none absolute right-5 top-5"><span key={tapPulse} className="reading-tap-pulse block h-5 w-5 rounded-full bg-blue-600"></span></div>}
         </div>
         <div aria-live="polite" className="sr-only">{status}</div>
-        {activityState === ACTIVITY_STATES.READY && <button type="button" onClick={startAttempt} className="mx-auto flex h-14 w-full max-w-[260px] items-center justify-center rounded-xl bg-black px-6 text-lg font-black text-white shadow-md">Start</button>}
-        {activityState === ACTIVITY_STATES.PERFORMING && <div className="text-center text-xl font-black" aria-hidden="true">Perform now</div>}
-        {(activityState === ACTIVITY_STATES.RESULTS || activityState === ACTIVITY_STATES.REFERENCE) && <><ResultsSummary result={result} /><div className="grid gap-2 sm:grid-cols-3"><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={playReference} className="h-12 rounded-xl border border-black bg-black px-4 font-black text-white disabled:opacity-50">Hear Correct Rhythm</button><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={() => { resetAttempt(); setStatus("Same rhythm ready to try again."); }} className="h-12 rounded-xl border border-stone-300 bg-white px-4 font-black disabled:opacity-50">Try Again</button><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={() => makeNewRhythm()} className="h-12 rounded-xl border border-stone-300 bg-white px-4 font-black disabled:opacity-50">New Rhythm</button></div></>}
+        <section className="mx-1 rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md sm:mx-3">
+          <p className="mb-4 text-center text-base font-bold">Tap, click, or press the spacebar in time with each written note.</p>
+          {activityState === ACTIVITY_STATES.READY && <button type="button" onClick={startAttempt} className="mx-auto flex h-14 w-full max-w-[260px] items-center justify-center rounded-xl bg-black px-6 text-lg font-black text-white shadow-md">Start</button>}
+          {activityState === ACTIVITY_STATES.COUNTING && <div className="text-center text-xl font-black" aria-hidden="true">Count in</div>}
+          {activityState === ACTIVITY_STATES.PERFORMING && <div className="text-center text-xl font-black" aria-hidden="true">Perform now</div>}
+          {(activityState === ACTIVITY_STATES.RESULTS || activityState === ACTIVITY_STATES.REFERENCE) && <><ResultsSummary result={result} /><div className="mt-3 grid gap-2 sm:grid-cols-3"><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={playReference} className="h-12 rounded-xl border border-black bg-black px-4 font-black text-white disabled:opacity-50">Hear Correct Rhythm</button><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={() => { resetAttempt(); setStatus("Same rhythm ready to try again."); }} className="h-12 rounded-xl border border-stone-300 bg-white px-4 font-black disabled:opacity-50">Try Again</button><button type="button" disabled={activityState === ACTIVITY_STATES.REFERENCE} onClick={() => makeNewRhythm()} className="h-12 rounded-xl border border-stone-300 bg-white px-4 font-black disabled:opacity-50">New Rhythm</button></div></>}
+        </section>
       </main>
     </div>
   </div>;
