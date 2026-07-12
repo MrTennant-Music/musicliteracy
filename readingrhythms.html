@@ -29,7 +29,6 @@
     .reading-tap-pulse { animation: readingTapPulse .28s ease-out forwards; }
     @media (prefers-reduced-motion: reduce) { .reading-tap-pulse { animation: none; opacity: .55; } }
   </style>
-  <script src="./dark-mode.js?v=20260712"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -40,7 +39,7 @@ const SYMBOLS = window.BRAVURA_SYMBOLS || {};
 const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || {};
 const ACTIVITY_STATES = Object.freeze({ READY: "ready", COUNTING: "countingIn", PERFORMING: "performing", CALCULATING: "calculating", RESULTS: "results", REFERENCE: "playingReference" });
 const ASSET = { appIcon: "readingrhythm-icon.svg", levels: "levels.svg", customise: "customise.svg", next: "next.svg", bronze: "bronze.svg", silver: "silver.svg", gold: "gold.svg", diamond: "diamond.svg", tempo: "tempo.svg", tap: "tap.svg", spacebar: "spacebar.svg", mouse: "mouse.svg" };
-const LEVELS = Object.fromEntries(Object.entries(CORE.LEVELS).map(([key, level]) => [key, { ...level, shortLabel: key, description: level === CORE.LEVELS.N3 ? "Crotchet • Minim • Dotted minim • Semibreve" : level === CORE.LEVELS.N4 ? "Paired quavers • Grouped semiquavers" : level === CORE.LEVELS.N5 ? "Dotted rhythms • Scotch snap" : key === "H" ? "Compound metre • Rests • Triplets" : "5/4 • Ties • Syncopation • Triplets" }]));
+const LEVELS = Object.fromEntries(Object.entries(CORE.LEVELS).map(([key, level]) => [key, { ...level, shortLabel: key, description: level === CORE.LEVELS.N3 ? "Crotchet • Minim • Dotted minim • Semibreve" : level === CORE.LEVELS.N4 ? "Paired quavers • Grouped semiquavers" : level === CORE.LEVELS.N5 ? "Dotted rhythms • Scotch snap" : key === "H" ? "Compound time • Rests • Triplets" : "5/4 • Ties • Syncopation" }]));
 const NEUTRAL_CLEF = "\uE069";
 const SCORE = { width: 920, height: 180, lineY: 88, musicLeft: 145, right: 880, barWidth: (880 - 145) / 2 };
 const RESULT_STYLE = { perfect: { colour: "#16a34a", label: "Perfect", mark: "✓" }, acceptable: { colour: "#16a34a", label: "Acceptable", mark: "✓" }, early: { colour: "#dc2626", label: "Early", mark: "E" }, late: { colour: "#dc2626", label: "Late", mark: "L" }, missed: { colour: "#dc2626", label: "Missed", mark: "×" } };
@@ -90,7 +89,7 @@ function secondaryBeamSegments(events) {
   return segments;
 }
 
-function RhythmScore({ rhythm, results }) {
+function RhythmScore({ rhythm, results, tempo }) {
   const positions = useMemo(() => eventMap(rhythm), [rhythm]);
   const groups = [];
   rhythm.bars.forEach((bar) => {
@@ -106,9 +105,12 @@ function RhythmScore({ rhythm, results }) {
   return <div className="reading-score-scroll w-full overflow-x-auto" tabIndex="0" aria-label="Two-bar rhythm notation. Scroll horizontally if needed.">
     <svg viewBox={`0 0 ${SCORE.width} ${SCORE.height}`} className="reading-score-svg block h-auto w-full select-none" role="img" aria-label={`Two bars in ${rhythm.timeSignature.id}`}>
       <line x1="38" x2={SCORE.right} y1={SCORE.lineY} y2={SCORE.lineY} stroke="currentColor" strokeWidth="1.4" />
-      <text className="music-symbol" x="68" y={SCORE.lineY + 13} textAnchor="middle" fontSize="44" fill="currentColor">{NEUTRAL_CLEF}</text>
-      <text className="music-symbol" x="108" y={SCORE.lineY - 3} textAnchor="middle" fontSize="34" fill="currentColor">{timeDigit(rhythm.timeSignature.numerator)}</text>
-      <text className="music-symbol" x="108" y={SCORE.lineY + 20} textAnchor="middle" fontSize="34" fill="currentColor">{timeDigit(rhythm.timeSignature.denominator)}</text>
+      <text className="music-symbol" x="68" y={SCORE.lineY} textAnchor="middle" fontSize="44" fill="currentColor">{NEUTRAL_CLEF}</text>
+      <text className="music-symbol" x="108" y={SCORE.lineY - 12} textAnchor="middle" fontSize="34" fill="currentColor">{timeDigit(rhythm.timeSignature.numerator)}</text>
+      <text className="music-symbol" x="108" y={SCORE.lineY + 11} textAnchor="middle" fontSize="34" fill="currentColor">{timeDigit(rhythm.timeSignature.denominator)}</text>
+      <CalibratedSymbol symbolKey="quarterNoteStemUp" x="150" y="42" />
+      {rhythm.timeSignature.compound && <CalibratedSymbol symbolKey="augmentationDot" x="163" y="39.5" fontSize={24} />}
+      <text x={rhythm.timeSignature.compound ? 174 : 164} y="32" fontSize="16" fontWeight="700" fill="currentColor">= {tempo}</text>
       {rhythm.bars.map((bar) => <React.Fragment key={bar.barIndex}>
         {bar.events.map((event) => <NoteGlyph key={event.id} event={event} x={positions.get(event.id).x} beamed={beamedIds.has(event.id)} />)}
         {bar.events.map((event, index) => event.tiedToNext && bar.events[index + 1] ? <text key={`tie-${event.id}`} className="music-symbol" x="0" y="0" fontSize="58" textAnchor="middle" fill="currentColor" transform={`translate(${(positions.get(event.id).x + positions.get(bar.events[index + 1].id).x) / 2} ${SCORE.lineY + 5}) scale(${Math.max(1.4, Math.min(7.2, Math.abs(positions.get(bar.events[index + 1].id).x - positions.get(event.id).x) / 20))} 1)`}>{glyph("tie", "\uE1FD")}</text> : null)}
@@ -258,9 +260,8 @@ function App() {
           </div>
           <div />
         </div>
-        <div className="flex items-center px-1 text-lg font-bold sm:px-3"><span className="music-symbol text-[32px] font-normal leading-none">{glyph("quarterNoteStemUp")}{rhythm.timeSignature.compound ? glyph("augmentationDot") : ""}</span><span className="ml-2">= {tempo}</span></div>
         <div className="relative flex min-h-[220px] flex-1 items-center justify-center px-1 sm:px-3">
-          <RhythmScore rhythm={rhythm} results={activityState === ACTIVITY_STATES.RESULTS || activityState === ACTIVITY_STATES.REFERENCE ? result : null} />
+          <RhythmScore rhythm={rhythm} tempo={tempo} results={activityState === ACTIVITY_STATES.RESULTS || activityState === ACTIVITY_STATES.REFERENCE ? result : null} />
           {activityState === ACTIVITY_STATES.PERFORMING && <div className="pointer-events-none absolute right-5 top-5"><span key={tapPulse} className="reading-tap-pulse block h-5 w-5 rounded-full bg-blue-600"></span></div>}
         </div>
         <div aria-live="polite" className="sr-only">{status}</div>
@@ -278,5 +279,6 @@ function App() {
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
+<script src="./footer.js?v=20260629"></script>
 </body>
 </html>

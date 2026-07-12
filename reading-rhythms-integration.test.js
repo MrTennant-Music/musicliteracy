@@ -8,9 +8,11 @@ const index = fs.readFileSync("index.html", "utf8");
   'READY: "ready"', 'COUNTING: "countingIn"', 'PERFORMING: "performing"', 'CALCULATING: "calculating"', 'RESULTS: "results"', 'REFERENCE: "playingReference"',
   'min="60" max="120" step="5"', 'useState(90)', 'event.repeat', 'event.button !== 0', 'performance.now()', 'visibilitychange',
   'playMetronomeClick', 'Hear Correct Rhythm', 'Try Again', 'New Rhythm', 'aria-live="polite"', 'role="region"', 'tabIndex="0"',
-  'reading-score-scroll', 'prefers-reduced-motion', 'dark-mode.js', 'reading-rhythms-core.js',
+  'reading-score-scroll', 'prefers-reduced-motion', 'reading-rhythms-core.js',
   'tap.svg', 'spacebar.svg', 'mouse.svg', 'pulsesPerBar * 2', 'SHARED_NOTATION_CONFIG',
   'quarterNoteStemUp', 'augmentationDot', 'secondaryBeamSegments', 'glyph("tie"',
+  'hub-mobile.js', 'hub-audio.js', 'hub-shell.js', 'hub-menu.js', 'footer.js',
+  'Compound time • Rests • Triplets', '5/4 • Ties • Syncopation',
 ].forEach((requiredText) => assert(page.includes(requiredText), `Missing integration safeguard: ${requiredText}`));
 
 assert(index.includes('href: "readingrhythms.html"'), "Reading Rhythms card is missing from index.html");
