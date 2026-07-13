@@ -368,6 +368,8 @@ function App() {
   const enabledModes = { ...DEFAULT_MODES, ...initialModes };
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [previewVisible, setPreviewVisible] = useState(true);
+  const refreshTimerRef = useRef(null);
   const [worksheet, setWorksheet] = useState(() => {
     const modes = initialLevel === "N5" ? { identify: true, create: false } : initialModes;
     return { sourceLevel: initialLevel, sourceModes: JSON.stringify(modes), ...initialQuestionSet };
@@ -399,9 +401,14 @@ function App() {
     if (!Number.isInteger(count) || count < 1 || count > 50) { setError("Choose a whole-number question count between 1 and 50."); return; }
     const modes = isN5 ? { identify: true, create: false } : enabledModes;
     if (!modes.identify && !modes.create) { setError("Select at least one Intervals question type."); return; }
-    const next = { ...previewWorksheet, sourceLevel: level, sourceModes: JSON.stringify(modes), ...createWorksheetQuestionSet(count, level, modes) };
-    setWorksheet(next); setError("");
+    if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current);
+    setPreviewVisible(false);
+    refreshTimerRef.current = window.setTimeout(() => {
+      const next = { ...previewWorksheet, sourceLevel: level, sourceModes: JSON.stringify(modes), ...createWorksheetQuestionSet(count, level, modes) };
+      setWorksheet(next); setError(""); setPreviewVisible(true); refreshTimerRef.current = null;
+    }, 260);
   }
+  useEffect(() => () => { if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current); }, []);
   async function downloadPdf() {
     if (downloading) return;
     if (!window.PDFLib || !window.fontkit) { setError("The PDF tools could not load. Check your internet connection and try again."); return; }
@@ -538,7 +545,7 @@ function App() {
   if (!imported) return <div className={SHELL.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Create a worksheet" subtitle="Worksheets begin from a supported activity." /><div className={SHELL.pageContentClass}><main className={`${SHELL.mainShellClass} flex items-center justify-center`}><p className="max-w-lg py-12 text-center text-stone-700">Open Intervals and choose <strong>Create worksheet</strong> beside the QR code to bring its current settings here.</p></main></div></div>;
   return (
     <div className={SHELL.pageShellClass}>
-      <window.MLH.AppHeader icon={ASSET.appIcon} title="Create a worksheet" subtitle="Generate a printable worksheet from Intervals." />
+      <window.MLH.AppHeader icon={ASSET.appIcon} title="Create a worksheet" subtitle={imported.subtitle || "Identify and create intervals."} />
       <div className={`${SHELL.pageContentClass} worksheet-page-content`}>
         <main className={`${SHELL.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}>
           <div className="no-print">
@@ -561,8 +568,10 @@ function App() {
           </div>
           <section id="worksheet-preview" className="print-area worksheet-preview-panel">
             <div className="no-print mb-4"><h2 className="flex items-center gap-2 text-xl font-bold"><img src="worksheet.svg" alt="" aria-hidden="true" className="h-6 w-6 object-contain" />Preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div>
-            <WorksheetPages worksheet={previewWorksheet} totalPages={totalPreviewPages} />
-            {previewWorksheet.includeAnswers && <div className="answer-sheet-start-new"><WorksheetPages worksheet={previewWorksheet} answerSheet pageOffset={worksheetPageCount} totalPages={totalPreviewPages} /></div>}
+            <div className={`transition-opacity duration-300 ${previewVisible ? "opacity-100" : "opacity-0"}`}>
+              <WorksheetPages worksheet={previewWorksheet} totalPages={totalPreviewPages} />
+              {previewWorksheet.includeAnswers && <div className="answer-sheet-start-new"><WorksheetPages worksheet={previewWorksheet} answerSheet pageOffset={worksheetPageCount} totalPages={totalPreviewPages} /></div>}
+            </div>
           </section>
         </main>
       </div>

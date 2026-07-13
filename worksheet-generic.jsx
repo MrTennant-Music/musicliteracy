@@ -1,25 +1,25 @@
-const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGenericState } = React;
+const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGenericRef, useState: useGenericState } = React;
 
 (() => {
   const CONFIG = (() => { try { return JSON.parse(sessionStorage.getItem("worksheetSourceConfig") || "null"); } catch { return null; } })();
   if (!CONFIG || CONFIG.version !== 1 || CONFIG.activityId === "intervals") return;
 
   const DEFINITIONS = {
-    enharmonics: { title: "Enharmonic Equivalents", icon: "enharmonic-icon.svg", instructions: "Write the enharmonic equivalent of each note.", response: "stave" },
-    keysig: { title: "Key Signatures", icon: "key-signatures-icon.svg", instructions: "Identify or create the key signatures shown below.", response: "mixed" },
-    notenaming: { title: "Note Identification", icon: "notenaming-icon.svg", instructions: "Name each note shown below.", response: "text" },
-    tonic: { title: "Scale Degrees", icon: "scale-degrees-icon.svg", instructions: "Circle the requested scale degree in each melody.", response: "mark" },
-    transposing: { title: "Transposing", icon: "transposing-icon.svg", instructions: "Rewrite each example at the requested pitch.", response: "stave" },
-    barlines: { title: "Barlines", icon: "barlines-icon.svg", instructions: "Insert the missing barlines in each example.", response: "mark", large: true },
-    rests: { title: "Rests", icon: "rests-icon.svg", instructions: "Write the missing rest in each outlined space.", response: "stave" },
-    rhythmsums: { title: "Rhythm Sums", icon: "rhythm-sums-icon.svg", instructions: "Calculate the total number of beats in each sum.", response: "text" },
-    timesig: { title: "Time Signatures", icon: "time-signatures-icon.svg", instructions: "Identify or insert the time signatures shown below.", response: "text", large: true },
-    triplets: { title: "Triplets", icon: "triplets-icon.svg", instructions: "Mark each group of three notes and identify the triplet type.", response: "text", large: true },
-    accidentals: { title: "Accidentals", icon: "accidentals-icon.svg", instructions: "Identify tones and semitones or write the requested note.", response: "mixed" },
-    chords: { title: "Chords", icon: "chords-icon.svg", instructions: "Name or complete the chords shown below.", response: "mixed" },
-    articulation: { title: "Articulation Markings", icon: "articulation-markings-icon.svg", instructions: "Explain or apply the articulation markings shown below.", response: "mixed" },
-    missingnotes: { title: "Melodic Dictation", icon: "insert-missing-notes-icon.svg", instructions: "Complete each musical pattern in the blank bar.", response: "stave", large: true },
-    practicequestions: { title: "Practice Questions", icon: "practice-app-icon.svg", instructions: "Complete the mixed music literacy questions below.", response: "mixed" },
+    enharmonics: { title: "Enharmonic Equivalents", subtitle: "Identify and rewrite enharmonic equivalent notes.", icon: "enharmonic-icon.svg", instructions: "Write the enharmonic equivalent of each note.", response: "stave" },
+    keysig: { title: "Key Signatures", subtitle: "Identify key signatures.", icon: "key-signatures-icon.svg", instructions: "Identify the key signatures shown below.", response: "mixed" },
+    notenaming: { title: "Note Identification", subtitle: "Identify note names in the treble and bass clef.", icon: "notenaming-icon.svg", instructions: "Name each note shown below.", response: "text" },
+    tonic: { title: "Scale Degrees", subtitle: "Identify tonic, subdominant and dominant notes.", icon: "scale-degrees-icon.svg", instructions: "Circle the requested scale degree in each melody.", response: "mark" },
+    transposing: { title: "Transposing", subtitle: "Transpose between the treble and bass clefs.", icon: "transposing-icon.svg", instructions: "Rewrite each example at the requested pitch.", response: "stave" },
+    barlines: { title: "Barlines", subtitle: "Insert barlines at the correct place in the music.", icon: "barlines-icon.svg", instructions: "Insert the missing barlines in each example.", response: "mark", large: true },
+    rests: { title: "Rests", subtitle: "Identify and apply rests.", icon: "rests-icon.svg", instructions: "Write the missing rest in each outlined space.", response: "stave" },
+    rhythmsums: { title: "Rhythm Sums", subtitle: "Calculate rhythm values.", icon: "rhythm-sums-icon.svg", instructions: "Calculate the total number of beats in each sum.", response: "text" },
+    timesig: { title: "Time Signatures", subtitle: "Identify time signatures.", icon: "time-signatures-icon.svg", instructions: "Identify or insert the time signatures shown below.", response: "text", large: true },
+    triplets: { title: "Triplets", subtitle: "Identify quaver triplets and crotchet triplets.", icon: "triplets-icon.svg", instructions: "Mark each group of three notes and identify the triplet type.", response: "text", large: true },
+    accidentals: { title: "Accidentals", subtitle: "Identify and apply flats, sharps and naturals.", icon: "accidentals-icon.svg", instructions: "Identify tones and semitones or write the requested note.", response: "mixed" },
+    chords: { title: "Chords", subtitle: "Identify, create and apply chords in music.", icon: "chords-icon.svg", instructions: "Name or complete the chords shown below.", response: "mixed" },
+    articulation: { title: "Articulation Markings", subtitle: "Identify and apply staccatos, slurs, accents and phrase markings.", icon: "articulation-markings-icon.svg", instructions: "Explain or apply the articulation markings shown below.", response: "mixed" },
+    missingnotes: { title: "Melodic Dictation", subtitle: "Identify and complete melodic patterns.", icon: "insert-missing-notes-icon.svg", instructions: "Complete each musical pattern in the blank bar.", response: "stave", large: true },
+    practicequestions: { title: "Practice Questions", subtitle: "Complete exam-style questions combining multiple music literacy concepts.", icon: "practice-app-icon.svg", instructions: "Complete the mixed music literacy questions below.", response: "mixed" },
   };
   const DEF = DEFINITIONS[CONFIG.activityId];
   if (!DEF) return;
@@ -29,6 +29,30 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
   const NOTES = [0,1,2,3,4,5,6,7,8];
   const NOTE_NAMES = ["E", "F", "G", "A", "B", "C", "D", "E", "F"];
   const KEYS = ["C major", "G major", "F major", "D major", "B♭ major", "A minor", "E minor", "D minor"];
+  const KEYSIG_WORKSHEET_KEYS={
+    "c-major":{id:"c-major",label:"C major",signature:[],tonicStep:-2},
+    "a-minor":{id:"a-minor",label:"A minor",signature:[],tonicStep:3,leadingStep:2},
+    "g-major":{id:"g-major",label:"G major",signature:[{type:"sharp",step:8}],tonicStep:2},
+    "f-major":{id:"f-major",label:"F major",signature:[{type:"flat",step:4}],tonicStep:1},
+    "d-major":{id:"d-major",label:"D major",signature:[{type:"sharp",step:8},{type:"sharp",step:5}],tonicStep:-1},
+    "bb-major":{id:"bb-major",label:"B flat major",signature:[{type:"flat",step:4},{type:"flat",step:7}],tonicStep:4},
+    "e-minor":{id:"e-minor",label:"E minor",signature:[{type:"sharp",step:8}],tonicStep:0,leadingStep:6},
+    "d-minor":{id:"d-minor",label:"D minor",signature:[{type:"flat",step:4}],tonicStep:-1,leadingStep:5},
+  };
+  const KEYSIG_LEVEL_KEYS={N5:["c-major","a-minor","g-major","f-major"],AH:["c-major","a-minor","g-major","f-major","d-major","bb-major","e-minor","d-minor"]};
+  const MISSING_NOTES_PATTERNS={
+    "2/4":[["crotchet","crotchet"],["minim"],["quaver","quaver","crotchet"]],
+    "3/4":[["crotchet","crotchet","crotchet"],["minim","crotchet"],["crotchet","minim"],["quaver","quaver","crotchet","crotchet"]],
+    "4/4":[["crotchet","crotchet","crotchet","crotchet"],["minim","crotchet","crotchet"],["crotchet","crotchet","minim"],["semibreve"],["quaver","quaver","crotchet","minim"]],
+  };
+  const MISSING_NOTES_RHYTHM_SPACING={semibreve:3.4,minim:2.15,crotchet:1.35,quaver:.95};
+  function missingNotesBarPositions(rhythms,start,end,{first=false,final=false}={}){
+    const scoreStart=start+(first?4:15), scoreEnd=end-(final?24:4);
+    const units=rhythms.reduce((sum,rhythm)=>sum+(MISSING_NOTES_RHYTHM_SPACING[rhythm]||1.35),0);
+    const unit=Math.max(1,scoreEnd-scoreStart)/Math.max(1,units);
+    let cursor=scoreStart+unit*.38;
+    return rhythms.map(rhythm=>{const x=cursor;cursor+=(MISSING_NOTES_RHYTHM_SPACING[rhythm]||1.35)*unit;return x;});
+  }
   const WORKSHEET_RHYTHMS = {
     semibreve:{symbolKey:"wholeNote",beats:4}, "dotted-minim":{symbolKey:"halfNoteStemUp",beats:3},
     minim:{symbolKey:"halfNoteStemUp",beats:2}, "dotted-crotchet":{symbolKey:"quarterNoteStemUp",beats:1.5},
@@ -71,11 +95,38 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
       ? AH_WORKSHEET_TYPES.length===1
         ? AH_WORKSHEET_TYPES[0]==="bass" ? "Draw in the bass note using the chord information provided." : "Write the chord and position."
         : "Write the chord and position or draw in the bass note for the given chord."
-      : DEF.instructions;
+      : CONFIG.activityId === "keysig"
+        ? "Identify the key signatures shown below."
+        : CONFIG.activityId === "missingnotes" && level === "N3"
+          ? "Copy each bar to create an exact repetition."
+        : CONFIG.activityId === "missingnotes" && level === "N4"
+          ? "Create musical sequences by writing notes onto the stave."
+        : DEF.instructions;
+  const defaultTitle=CONFIG.activityId==="missingnotes"&&level==="N3"?"Repetition • National 3":CONFIG.activityId==="missingnotes"&&level==="N4"?"Sequences • National 4":`${DEF.title} · ${LEVEL_NAMES[level]||level}`;
   const id = () => Math.random().toString(36).slice(2);
 
   const enabledKeys = (object, prefix="") => Object.entries(object||{}).filter(([key,on])=>on&&key.startsWith(prefix)).map(([key])=>key.slice(prefix.length));
   const accidentalText = (value) => value==="sharp"?"♯":value==="flat"?"♭":"";
+  const ENHARMONIC_LETTERS=["C","D","E","F","G","A","B"];
+  const ENHARMONIC_ORDINARY_PAIRS=[
+    [{letter:"C",accidental:"sharp"},{letter:"D",accidental:"flat"}],
+    [{letter:"D",accidental:"sharp"},{letter:"E",accidental:"flat"}],
+    [{letter:"F",accidental:"sharp"},{letter:"G",accidental:"flat"}],
+    [{letter:"G",accidental:"sharp"},{letter:"A",accidental:"flat"}],
+    [{letter:"A",accidental:"sharp"},{letter:"B",accidental:"flat"}],
+  ];
+  const ENHARMONIC_UNUSUAL_PAIRS={
+    eSharpFflat:[
+      {source:{letter:"E",accidental:"sharp"},target:{letter:"F",accidental:null}},
+      {source:{letter:"F",accidental:"flat"},target:{letter:"E",accidental:null}},
+    ],
+    bSharpCflat:[
+      {source:{letter:"B",accidental:"sharp"},target:{letter:"C",accidental:null},targetOctaveOffset:1},
+      {source:{letter:"C",accidental:"flat"},target:{letter:"B",accidental:null},targetOctaveOffset:-1},
+    ],
+  };
+  const enharmonicStep=(note,clef)=>note.octave*7+ENHARMONIC_LETTERS.indexOf(note.letter)-(clef==="bass"?2*7+ENHARMONIC_LETTERS.indexOf("G"):4*7+ENHARMONIC_LETTERS.indexOf("E"));
+  const enharmonicName=(note)=>`${note.letter}${accidentalText(note.accidental)}`;
   const noteNameForStep = (step, clef="treble") => {
     const names=clef==="bass"?["G","A","B","C","D","E","F"]:["E","F","G","A","B","C","D"];
     return names[((step%7)+7)%7];
@@ -87,6 +138,21 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
     if(options.bSharpCflat!==false)pairs.push(["B♯","C"],["C♭","B"]);
     return pairs;
   }
+  function makeEnharmonicQuestion(index,base){
+    const options=CONFIG.settings?.options||{};
+    const clefs=[options.treble!==false?"treble":null,options.bass!==false?"bass":null].filter(Boolean);
+    const unusual=[...(options.eSharpFflat!==false?ENHARMONIC_UNUSUAL_PAIRS.eSharpFflat:[]),...(options.bSharpCflat!==false?ENHARMONIC_UNUSUAL_PAIRS.bSharpCflat:[])];
+    const useUnusual=index>=0&&index%10===9&&unusual.length>0;
+    const directions=useUnusual?unusual:ENHARMONIC_ORDINARY_PAIRS.flatMap(([first,second])=>[{source:first,target:second},{source:second,target:first}]);
+    const candidates=[];
+    for(const clef of (clefs.length?clefs:["treble"]))for(const item of directions)for(let octave=2;octave<=6;octave+=1){
+      const source={...item.source,octave}, target={...item.target,octave:octave+(item.targetOctaveOffset||0)};
+      const sourceStep=enharmonicStep(source,clef), targetStep=enharmonicStep(target,clef);
+      if(sourceStep>=-4&&sourceStep<=12&&targetStep>=-4&&targetStep<=12)candidates.push({clef,source:{...source,step:sourceStep},target:{...target,step:targetStep}});
+    }
+    const chosen=random(candidates);
+    return {...base,...chosen,prompt:"Write the enharmonic equivalent of the note shown.",answer:enharmonicName(chosen.target),unusualSpelling:useUnusual,response:"stave"};
+  }
   function configuredRhythmPool(){
     const settings=CONFIG.settings||{};
     const ids=(settings.enabledItems||[]).concat(settings.includeBeamedGroups===false?[]:(settings.enabledBeamedItems||[]));
@@ -96,6 +162,18 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
   function configuredTimeSignatures(){
     const selected=enabledKeys(CONFIG.settings?.enabledRhythms,"time-");
     return selected.length?selected:(level==="H"||level==="AH"?["2/4","3/4","4/4","6/8","9/8","12/8"]:["2/4","3/4","4/4"]);
+  }
+  function makeKeySignatureQuestion(index,base){
+    const keys=(KEYSIG_LEVEL_KEYS[level]||KEYSIG_LEVEL_KEYS.N5).map(keyId=>KEYSIG_WORKSHEET_KEYS[keyId]);
+    const key=random(keys);
+    const rhythmPatterns=[["half","quarter","quarter"],["quarter","quarter","half"]];
+    const notes=[];
+    for(let barIndex=0;barIndex<4;barIndex+=1){
+      const pattern=rhythmPatterns[barIndex%rhythmPatterns.length];
+      pattern.forEach((rhythm,noteIndex)=>{const finalNote=barIndex===3&&noteIndex===pattern.length-1, firstNote=barIndex===0&&noteIndex===0;let step=firstNote||finalNote?key.tonicStep:Math.max(-2,Math.min(10,key.tonicStep+random([-2,-1,1,2,3,4])));const writtenAccidental=key.leadingStep===step&&barIndex>=2?"sharp":null;notes.push({barIndex,rhythm,step,writtenAccidental});});
+    }
+    if(Number.isInteger(key.leadingStep)){const leadingNote=notes.find(note=>note.barIndex===1&&note.rhythm==="quarter")||notes.find(note=>note.barIndex===1);if(leadingNote){leadingNote.step=key.leadingStep;leadingNote.writtenAccidental="sharp";}}
+    return {...base,key,build:false,notes,prompt:"",answer:key.label,response:"text"};
   }
 
   const ACCIDENTAL_VALUES = { flat: -1, natural: 0, sharp: 1 };
@@ -156,10 +234,9 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
     const base = { id: id(), step, step2, prompt: "", answer: "", response: DEF.response };
     switch (CONFIG.activityId) {
       case "enharmonics": {
-        const pair=random(configuredEnharmonicPairs()), options=CONFIG.settings?.options||{}, clefs=[options.treble!==false?"treble":null,options.bass?"bass":null].filter(Boolean);
-        return { ...base, clef:random(clefs.length?clefs:["treble"]), prompt:`Rewrite ${pair[0]} as its enharmonic equivalent.`, label:pair[0], answer:pair[1] };
+        return makeEnharmonicQuestion(index,base);
       }
-      case "keysig": { const key = random(KEYS); const modes=CONFIG.settings?.modes||{identify:true,build:false}; const build=modes.build&&(!modes.identify||index%2===1); return { ...base, prompt: build ? `Create the key signature of ${key}.` : "Name this key signature.", key, build, answer: key, response: build ? "stave" : "text" }; }
+      case "keysig": return makeKeySignatureQuestion(index,base);
       case "notenaming": { const settings=CONFIG.settings||{}, clefs=[settings.treble!==false?"treble":null,settings.bass?"bass":null].filter(Boolean), clef=random(clefs.length?clefs:["treble"]), range=settings.ledger===false?[0,1,2,3,4,5,6,7,8]:settings.advancedRange?[-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,11,12]:[-2,-1,0,1,2,3,4,5,6,7,8,9,10], noteStep=random(range), accidental=settings.accidentals?random([null,null,"sharp","flat"]):null; return {...base,step:noteStep,clef,prompt:"Name the note.",answer:`${noteNameForStep(noteStep,clef)}${accidentalText(accidental)}`,noteAccidental:accidental}; }
       case "tonic": { const enabled=Object.entries(CONFIG.settings?.questionTypes||{}).filter(([,on])=>on).map(([name])=>name); const degree=random(enabled.length?enabled:["tonic","subdominant","dominant"]); return { ...base, prompt: `Circle the ${degree} note.`, degree, melody: Array.from({length:8}, () => random(NOTES)), answer: degree }; }
       case "transposing": { const options=CONFIG.settings?.questionOptions||{}, choices=[options.octaveHigher!==false?{prompt:"Rewrite the note one octave higher.",delta:7}:null,options.octaveLower!==false?{prompt:"Rewrite the note one octave lower.",delta:-7}:null,options.samePitch!==false?{prompt:"Rewrite the note at the same pitch in the other clef.",delta:0,otherClef:true}:null,options.ottava?{prompt:random(["Rewrite the note shown by 8va.","Rewrite the note shown by 8vb."]),delta:random([7,-7])}:null].filter(Boolean), choice=random(choices.length?choices:[{prompt:"Rewrite the note at the same pitch in the other clef.",delta:0,otherClef:true}]); return {...base,prompt:choice.prompt,answerStep:Math.max(-4,Math.min(12,step+choice.delta)),clef:choice.otherClef&&index%2?"bass":"treble"}; }
@@ -171,7 +248,20 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
       case "accidentals": { const create=index%2===1; const useAccidental=index<0||index%3!==0; if(useAccidental){const accidentalQuestion=create?accidentalCreationQuestion(base):accidentalIdentificationQuestion(base);if(accidentalQuestion)return accidentalQuestion;} const distance=random(["tone","semitone"]), direction=random(["higher","lower"]); const pairs=distance==="tone"?[[1,2],[2,3],[3,4],[5,6],[6,7]]:[[0,1],[4,5],[7,8]]; const [low,high]=random(pairs); if(create){const startStep=direction==="higher"?low:high, answerStep=direction==="higher"?high:low; return { ...base, step:startStep, answerStep, firstAccidental:null, answerAccidental:null, prompt:`Write a note a ${distance} ${direction} than the note shown.`, answer:NOTE_NAMES[answerStep], response:"stave" };} return { ...base, step:low, step2:high, firstAccidental:null, secondAccidental:null, prompt:"Are the two notes a tone or a semitone apart?", answer:distance[0].toUpperCase()+distance.slice(1), response:"text" }; }
       case "chords": { if(level==="N5"){const chord=random(N5_WORKSHEET_CHORDS), rhythmPattern=random(N5_CHORD_RHYTHMS);return {...base,prompt:"",chordNotes:shuffled(chord.notes).map((chordNote,noteIndex)=>({...chordNote,rhythm:rhythmPattern[noteIndex]})),answer:chord.answer,response:"text"};} if(level==="AH"){const ahType=forcedAHType||AH_WORKSHEET_TYPES[Math.abs(index)%AH_WORKSHEET_TYPES.length], key=random(AH_WORKSHEET_KEYS), symbols=key.major?["I","II","IV","V","VI"]:["I","IV","V","VI"], choices=[];symbols.forEach(symbol=>{const chord=key.chords[symbol];(chord.inversions||[0,1,2]).forEach(inversion=>{const voicing=ahWorksheetVoicing(key,chord,inversion);if(ahType!=="bass"||voicing.bass.writtenAccidental===null)choices.push({symbol,chord,inversion,voicing});});});const first=random(choices), second=random(choices.filter(choice=>choice.symbol!==first.symbol));const ahItems=[first,second].map(item=>({symbol:item.symbol,chordName:item.chord.name,inversion:item.inversion,trebleTones:item.voicing.treble,bassTone:item.voicing.bass}));return {...base,prompt:ahType==="position"?"Identify the chord and its position. The first has been done for you.":"Insert the correct note in the bass line using the chord information provided.",ahType,key,ahItems,answer:ahType==="position"?`${second.symbol} – ${ahPositionName(second.inversion)}`:second.voicing.bass.letter,response:"mark"};} const bass=index%2===0; return bass ? {...base,clef:"bass",prompt:"Write the missing bass note using the chord information shown.",answer:random(NOTE_NAMES),response:"stave"} : {...base,clef:"bass",prompt:"Name the chord and its position.",stack:[step,Math.min(8,step+2),Math.min(8,step+4)],answer:random(["C major, root position","G major, first inversion","D minor, second inversion","Diminished 7th"]),response:"text"}; }
       case "articulation": { const all=[{id:"staccato",name:"staccato",meaning:"Short and detached"},{id:"slur",name:"slur",meaning:"Smoothly and connected"},{id:"accent",name:"accent",meaning:"With extra emphasis"},{id:"phrase",name:"phrase mark",meaning:"Shows the musical phrase"}], selected=CONFIG.settings?.enabledMarkings||[], markings=all.filter(mark=>!selected.length||selected.includes(mark.id)), types=CONFIG.settings?.enabledTypes||[], applyEnabled=!types.length||types.includes("apply"), identifyEnabled=!types.length||types.some(type=>type.startsWith("identify")), apply=applyEnabled&&(!identifyEnabled||index%2===1), marking=random(markings.length?markings:all); return {...base,prompt:apply?`Apply a ${marking.name} to the notes.`:`Write the meaning of the ${marking.name} marking shown.`,melody:Array.from({length:4},()=>random(NOTES)),marking:apply?null:marking.name,answer:apply?marking.name:marking.meaning,response:apply?"stave":"text"}; }
-      case "missingnotes": { const direction=level==="N4"?random(["higher","lower"]):null; const source=Array.from({length:4},()=>random([2,3,4,5,6])); return {...base,prompt:direction?`Write the sequence one step ${direction} in the blank bar.`:"Repeat the previous bar exactly in the blank bar.",sourceMelody:source,answerMelody:direction?source.map(n=>n+(direction==="higher"?1:-1)):source,answer:direction?`One step ${direction}`:"Exact repeat",response:"stave"}; }
+      case "missingnotes": {
+        const direction=level==="N4"?random(["higher","lower"]):null;
+        const delta=direction==="higher"?1:direction==="lower"?-1:0;
+        const timeSignature=random(Object.keys(MISSING_NOTES_PATTERNS));
+        const rhythms=random(MISSING_NOTES_PATTERNS[timeSignature]);
+        const first=random(direction==="higher"?[1,2,3,4,5]:direction==="lower"?[2,3,4,5,6]:[1,2,3,4,5,6]);
+        const sourceMelody=[first];
+        while(sourceMelody.length<rhythms.length){
+          const previous=sourceMelody[sourceMelody.length-1];
+          const possible=[previous-1,previous,previous+1].filter(note=>note>=1&&note<=6&&note+delta>=0&&note+delta<=8);
+          sourceMelody.push(random(possible));
+        }
+        return {...base,key:KEYSIG_WORKSHEET_KEYS["c-major"],timeSignature,rhythms,prompt:direction?`Write the sequence one step ${direction} in the blank bar.`:"",sourceMelody,answerMelody:sourceMelody.map(note=>note+delta),answer:direction?`One step ${direction}`:"Exact repeat",response:"stave"};
+      }
       case "practicequestions": return makePracticeQuestion(index, base);
       default: return base;
     }
@@ -199,9 +289,9 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
   }
 
   function worksheetSymbolKey(key) {
-    if (key === "flatInScore") return "flat";
+    if (key === "flatInScore" || key === "flatKeySignature") return "flat";
     if (key === "naturalInScore") return "natural";
-    if (key === "sharpInScore") return "sharp";
+    if (key === "sharpInScore" || key === "sharpKeySignature") return "sharp";
     return key;
   }
 
@@ -264,6 +354,45 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
       <WorksheetGlyph symbolKey="gClef" x={left + gap * 3.2} y={y(2)} gap={gap} colour={ink} />
       {drawNote(question.step, question.firstAccidental, 130, "first")}
       {showSecondNote && Number.isInteger(secondStep) ? drawNote(secondStep, question.response === "text" ? question.secondAccidental : question.answerAccidental, 218, "second") : null}
+    </svg>;
+  }
+
+  function EnharmonicsStaff({ question, completed=false, muted=false }) {
+    const ink=muted?"#78716c":"#000";
+    const left=24, right=304, top=54, gap=12, sourceX=142, answerX=232;
+    const y=(step)=>top+gap*4-step*(gap/2);
+    const gradientId=`enharmonics-staff-fade-${question.id}-${completed?"answer":"question"}`;
+    const drawLedger=(note,x,key)=>{const lines=[];if(note.step<=-2)lines.push(-2);if(note.step<=-4)lines.push(-4);if(note.step>=10)lines.push(10);if(note.step>=12)lines.push(12);return lines.map(step=><line key={`${key}-${step}`} x1={x-14} x2={x+14} y1={y(step)} y2={y(step)} stroke={ink} strokeWidth="1.2"/>);};
+    const drawNote=(note,x,key)=><g key={key}>{drawLedger(note,x,key)}{note.accidental?<WorksheetGlyph symbolKey={note.accidental==="sharp"?"sharpInScore":"flatInScore"} x={x-gap*2.1-(note.step<=-2||note.step>=10?5:0)} y={y(note.step)} gap={gap} colour={ink}/>:null}<WorksheetGlyph symbolKey={note.step>4?"quarterNoteStemDown":"quarterNoteStemUp"} x={x} y={y(note.step)} gap={gap} colour={ink}/></g>;
+    return <svg viewBox="0 0 320 132" className="h-full max-h-32 w-full" aria-label="Enharmonic equivalent notation">
+      <defs><linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={left} x2={right} y1="0" y2="0"><stop offset="0%" stopColor={ink} stopOpacity="1"/><stop offset="86%" stopColor={ink} stopOpacity="1"/><stop offset="100%" stopColor={ink} stopOpacity="0"/></linearGradient></defs>
+      {[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right} y1={top+line*gap} y2={top+line*gap} stroke={`url(#${gradientId})`} strokeWidth="1.2"/>)}
+      <WorksheetGlyph symbolKey={question.clef==="bass"?"fClef":"gClef"} x={left+gap*3.2} y={y(question.clef==="bass"?6:2)} gap={gap} colour={ink}/>
+      {drawNote(question.source,sourceX,"source")}
+      {completed?drawNote(question.target,answerX,"target"):null}
+    </svg>;
+  }
+
+  function KeySignatureStaff({ question, completed=false, muted=false }) {
+    const ink=muted?"#78716c":"#000";
+    const left=18, visibleRight=320, fullRight=510, top=48, gap=10, signatureX=68, timeX=101, musicStart=122, barWidth=(fullRight-musicStart)/4;
+    const y=(step)=>top+gap*4-step*(gap/2);
+    const fadeId=`keysig-mobile-fade-${question.id}`;
+    const noteSymbol=(note)=>note.rhythm==="half"?(note.step>4?"halfNoteStemDown":"halfNoteStemUp"):(note.step>4?"quarterNoteStemDown":"quarterNoteStemUp");
+    const drawLedger=(note,x,key)=>{const lines=[];for(let step=-2;step>=note.step;step-=2)lines.push(step);for(let step=10;step<=note.step;step+=2)lines.push(step);return lines.map(step=><line key={`${key}-${step}`} x1={x-11} x2={x+11} y1={y(step)} y2={y(step)} stroke={ink} strokeWidth="1"/>);};
+    const signatureVisible=!question.build||completed;
+    return <svg viewBox="0 0 320 122" className="h-full max-h-28 w-full" aria-label="Key signature excerpt">
+      <defs><linearGradient id={fadeId} x1={visibleRight-52} x2={visibleRight} y1="0" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor="white"/><stop offset="28%" stopColor="white"/><stop offset="100%" stopColor="black"/></linearGradient><mask id={`${fadeId}-mask`} maskUnits="userSpaceOnUse" x="0" y="0" width={visibleRight} height="122"><rect x="0" y="0" width={visibleRight} height="122" fill={`url(#${fadeId})`}/></mask></defs>
+      <g mask={`url(#${fadeId}-mask)`}>
+      {[0,1,2,3,4].map(line=><line key={line} x1={left} x2={fullRight} y1={top+line*gap} y2={top+line*gap} stroke={ink} strokeWidth="1.2"/>)}
+      <WorksheetGlyph symbolKey="gClef" x={left+gap*3.2} y={y(2)} gap={gap} colour={ink}/>
+      {signatureVisible?question.key.signature.map((item,index)=><WorksheetGlyph key={`${item.type}-${index}`} symbolKey={item.type==="sharp"?"sharpKeySignature":"flatKeySignature"} x={signatureX+index*14} y={y(item.step)} gap={gap} colour={ink}/>):null}
+      <WorksheetOutlineGlyph symbolKey="timeSig4" x={timeX} y={top+11} fontSize={35} colour={ink}/>
+      <WorksheetOutlineGlyph symbolKey="timeSig4" x={timeX} y={top+31} fontSize={35} colour={ink}/>
+      {[1,2,3].map(bar=><line key={bar} x1={musicStart+barWidth*bar} x2={musicStart+barWidth*bar} y1={top} y2={top+gap*4} stroke={ink} strokeWidth="1.2"/>)}
+      <WorksheetOutlineGlyph symbolKey="barlineFinal" x={fullRight} y={top+gap*4} fontSize={gap*4} colour={ink} anchor="end"/>
+      {question.notes.map((note,noteIndex)=>{const notesInBar=question.notes.filter(item=>item.barIndex===note.barIndex), localIndex=notesInBar.indexOf(note), x=musicStart+barWidth*note.barIndex+barWidth*(localIndex+1)/(notesInBar.length+1);return <g key={`key-note-${noteIndex}`}>{drawLedger(note,x,`key-ledger-${noteIndex}`)}{note.writtenAccidental?<WorksheetGlyph symbolKey="sharpInScore" x={x-gap*2.1} y={y(note.step)} gap={gap} colour={ink}/>:null}<WorksheetGlyph symbolKey={noteSymbol(note)} x={x} y={y(note.step)} gap={gap} colour={ink}/></g>;})}
+      </g>
     </svg>;
   }
 
@@ -334,10 +463,72 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
     </svg>;
   }
 
+  function WorksheetMelodyNotes({ steps, rhythms, xs, top, gap, ink, prefix }) {
+    const y=(step)=>top+gap*4-step*(gap/2);
+    const noteSymbol=(rhythm,step)=>rhythm==="semibreve"?"wholeNote":rhythm==="minim"?(step>4?"halfNoteStemDown":"halfNoteStemUp"):rhythm==="quaver"?(step>4?"eighthNoteStemDown":"eighthNoteStemUp"):(step>4?"quarterNoteStemDown":"quarterNoteStemUp");
+    const groups=[];
+    for(let index=0;index<rhythms.length;){
+      if(rhythms[index]!=="quaver"){index+=1;continue;}
+      let end=index;
+      while(end+1<rhythms.length&&rhythms[end+1]==="quaver"&&end-index<3)end+=1;
+      if(end>index)groups.push({start:index,end});
+      index=end+1;
+    }
+    const groupFor=(index)=>groups.find(group=>index>=group.start&&index<=group.end);
+    const stemXFor=(x,down)=>x+(down?-gap*.6+1:gap*.6-1);
+    const beamFor=(group)=>{
+      const groupSteps=steps.slice(group.start,group.end+1), down=groupSteps.filter(step=>step>4).length>groupSteps.length/2;
+      const settings=worksheetSymbolSettings("quaverBeam"), stemLength=gap*3.1*Number(settings.heightScale||1), yOffset=gap*Number(settings.yOffsetScale||0);
+      const firstX=stemXFor(xs[group.start],down), lastX=stemXFor(xs[group.end],down);
+      return {down,start:{x:firstX,y:y(steps[group.start])+yOffset+(down?stemLength:-stemLength)},end:{x:lastX,y:y(steps[group.end])+yOffset+(down?stemLength:-stemLength)}};
+    };
+    const beamY=(beam,x)=>beam.start.y+(x-beam.start.x)/((beam.end.x-beam.start.x)||1)*(beam.end.y-beam.start.y);
+    const ledger=(step,x,key)=>{const lines=[];for(let ledgerStep=-2;ledgerStep>=step;ledgerStep-=2)lines.push(ledgerStep);for(let ledgerStep=10;ledgerStep<=step;ledgerStep+=2)lines.push(ledgerStep);return lines.map(ledgerStep=><line key={`${key}-${ledgerStep}`} x1={x-gap*1.125} x2={x+gap*1.125} y1={y(ledgerStep)} y2={y(ledgerStep)} stroke={ink} strokeWidth={gap*.125}/>);};
+    return <g>
+      {steps.map((step,index)=>{const group=groupFor(index), x=xs[index];if(!group)return <g key={`${prefix}-note-${index}`}>{ledger(step,x,`${prefix}-ledger-${index}`)}<WorksheetGlyph symbolKey={noteSymbol(rhythms[index],step)} x={x} y={y(step)} gap={gap} colour={ink}/></g>;const beam=beamFor(group), stemX=stemXFor(x,beam.down);return <g key={`${prefix}-note-${index}`}>{ledger(step,x,`${prefix}-ledger-${index}`)}<WorksheetGlyph symbolKey="noteheadBlack" x={x} y={y(step)} gap={gap} colour={ink}/><line x1={stemX} x2={stemX} y1={y(step)} y2={beamY(beam,stemX)} stroke={ink} strokeWidth={gap*.125}/></g>;})}
+      {groups.map((group,index)=>{const beam=beamFor(group), half=gap*.21;return <polygon key={`${prefix}-beam-${index}`} points={`${beam.start.x},${beam.start.y-half} ${beam.end.x},${beam.end.y-half} ${beam.end.x},${beam.end.y+half} ${beam.start.x},${beam.start.y+half}`} fill={ink}/>;})}
+    </g>;
+  }
+
+  function MissingNotesStaff({ question, completed=false, muted=false }) {
+    const ink=muted?"#78716c":"#000";
+    if(level==="N3"||level==="N4"){
+      const left=30, right=290, gap=9.6, topBar=28, bottomBar=138, clefX=49, timeX=73, musicStart=96, staveZoom=1.15;
+      const y=(step,top)=>top+gap*4-step*(gap/2);
+      const noteXs=missingNotesBarPositions(question.rhythms,musicStart,right,{first:true,final:true});
+      const drawStave=(top,key)=><g key={key}>{[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right} y1={top+line*gap} y2={top+line*gap} stroke={ink} strokeWidth="1.32"/>)}<WorksheetGlyph symbolKey="gClef" x={clefX} y={y(2,top)} gap={gap} colour={ink}/><WorksheetOutlineGlyph symbolKey={`timeSig${question.timeSignature.split("/")[0]}`} x={timeX} y={top+gap*1.125} fontSize={gap*3.5} colour={ink}/><WorksheetOutlineGlyph symbolKey="timeSig4" x={timeX} y={top+gap*3.125} fontSize={gap*3.5} colour={ink}/><WorksheetOutlineGlyph symbolKey="barlineFinal" x={right} y={top+gap*4} fontSize={gap*4} colour={ink} anchor="end"/></g>;
+      const zoomTransform=(top)=>`translate(160 ${top+gap*2}) scale(${staveZoom}) translate(-160 ${-(top+gap*2)})`;
+      return <svg viewBox="0 0 320 200" className="h-full max-h-48 w-full" aria-label={level==="N3"?"Completed bar above an empty repetition bar":"Sequence source bar above an empty answer stave"}>
+        <g transform={zoomTransform(topBar)}>{drawStave(topBar,"source-stave")}<WorksheetMelodyNotes steps={question.sourceMelody} rhythms={question.rhythms} xs={noteXs} top={topBar} gap={gap} ink={ink} prefix="source"/></g>
+        <g transform={zoomTransform(bottomBar)}>{drawStave(bottomBar,"copy-stave")}{completed?<WorksheetMelodyNotes steps={question.answerMelody} rhythms={question.rhythms} xs={noteXs} top={bottomBar} gap={gap} ink={ink} prefix="answer"/>:null}{completed&&muted?<rect className="melodic-example-answer-box" x={left-5} y={bottomBar-13} width={right-left+10} height={gap*4+26} fill="none" stroke={ink} strokeWidth="1.5"/>:null}</g>
+      </svg>;
+    }
+    const left=18, right=320, top=55, gap=10, signatureX=65, timeX=88, musicStart=112, middle=214;
+    const y=(step)=>top+gap*4-step*(gap/2);
+    const fadeId=`missingnotes-staff-fade-${question.id}-${completed?"answer":"question"}`;
+    const sourceXs=missingNotesBarPositions(question.rhythms,musicStart,middle,{first:true}), answerXs=missingNotesBarPositions(question.rhythms,middle,right+2,{final:true});
+    return <svg viewBox="0 0 320 132" className="h-full max-h-32 w-full" aria-label="Two-bar melodic pattern with a missing second bar">
+      <defs><linearGradient id={fadeId} x1="304" x2={right} y1="0" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor="white"/><stop offset="35%" stopColor="white"/><stop offset="100%" stopColor="black"/></linearGradient><mask id={`${fadeId}-mask`} maskUnits="userSpaceOnUse" x="0" y="0" width={right} height="132"><rect x="0" y="0" width={right} height="132" fill={`url(#${fadeId})`}/></mask></defs>
+      <g mask={`url(#${fadeId}-mask)`}>
+        {[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right+34} y1={top+line*gap} y2={top+line*gap} stroke={ink} strokeWidth="1.2"/>)}
+        <WorksheetGlyph symbolKey="gClef" x={left+gap*3.2} y={y(2)} gap={gap} colour={ink}/>
+        <WorksheetOutlineGlyph symbolKey={`timeSig${question.timeSignature.split("/")[0]}`} x={timeX} y={top+11} fontSize={35} colour={ink}/>
+        <WorksheetOutlineGlyph symbolKey="timeSig4" x={timeX} y={top+31} fontSize={35} colour={ink}/>
+        <line x1={middle} x2={middle} y1={top} y2={top+gap*4} stroke={ink} strokeWidth="1.2"/>
+        <WorksheetOutlineGlyph symbolKey="barlineFinal" x={right} y={top+gap*4} fontSize={gap*4} colour={ink} anchor="end"/>
+        <WorksheetMelodyNotes steps={question.sourceMelody} rhythms={question.rhythms} xs={sourceXs} top={top} gap={gap} ink={ink} prefix="source"/>
+        {!completed?<WorksheetMelodyNotes steps={question.rhythms.map(()=>2)} rhythms={question.rhythms} xs={answerXs} top={0} gap={7} ink={ink} prefix="guide"/>:<WorksheetMelodyNotes steps={question.answerMelody} rhythms={question.rhythms} xs={answerXs} top={top} gap={gap} ink={ink} prefix="answer"/>}
+      </g>
+    </svg>;
+  }
+
   function Staff({ question, completed=false, muted=false, showNoteNames=false }) {
     if (CONFIG.activityId === "accidentals") return <AccidentalsStaff question={question} completed={completed} muted={muted} />;
+    if (CONFIG.activityId === "enharmonics") return <EnharmonicsStaff question={question} completed={completed} muted={muted} />;
+    if (CONFIG.activityId === "keysig") return <KeySignatureStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "chords" && level === "N5") return <N5ChordStaff question={question} muted={muted} showNoteNames={showNoteNames} />;
     if (CONFIG.activityId === "chords" && level === "AH") return <AHChordStaff question={question} completed={completed} muted={muted} />;
+    if (CONFIG.activityId === "missingnotes") return <MissingNotesStaff question={question} completed={completed} muted={muted} />;
     const ink = muted ? "#78716c" : "#000";
     const y = (step) => 72 - step * 6;
     const notes = question.sourceMelody || question.melody || [question.step];
@@ -372,9 +563,10 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
   function Question({ question, number, example=false, answers=false, numbers=true, marks=true }) {
     const completed = example || answers;
     const compactChord = CONFIG.activityId === "chords" && level === "N5";
+    const compactRepetition = CONFIG.activityId === "missingnotes" && level === "N3";
     const smallAHChordPrompt = CONFIG.activityId === "chords" && level === "AH";
-    const answerIsInAHNotation = CONFIG.activityId === "chords" && level === "AH";
-    return <section className={`generic-question ${example ? "bg-stone-100 text-stone-500" : ""}`}>{compactChord?<div className="min-h-6 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong></div>:<div className="flex min-h-9 items-start gap-1 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong><span className={smallAHChordPrompt?"text-xs":""}><EmphasisedPrompt>{question.prompt}</EmphasisedPrompt></span></div>}{CONFIG.activityId==="rhythmsums" ? <div className="flex flex-1 items-center justify-center gap-5 text-4xl"><WorksheetRhythmGlyph symbolKey={question.left.symbolKey}/><strong>{question.operator}</strong><WorksheetRhythmGlyph symbolKey={question.right.symbolKey}/></div> : <Staff question={question} completed={completed} muted={example} showNoteNames={example}/>}<div className="relative flex min-h-8 items-end justify-center">{question.response!=="mark" && question.response!=="stave" ? <div className="w-4/5 border-b border-black pb-1 text-center font-semibold">{completed ? question.answer : ""}</div> : completed && !answerIsInAHNotation ? <strong className="text-sm">{question.answer}</strong> : null}{marks && !example ? <strong className="absolute bottom-1 right-1 text-sm">1</strong> : null}</div></section>;
+    const answerIsInNotation = CONFIG.activityId === "enharmonics" || CONFIG.activityId === "missingnotes" || (CONFIG.activityId === "keysig" && question.build) || (CONFIG.activityId === "chords" && level === "AH");
+    return <section className={`generic-question ${example ? "bg-stone-100 text-stone-500" : ""}`}>{compactChord||compactRepetition?<div className="min-h-6 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong></div>:<div className="flex min-h-9 items-start gap-1 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong><span className={smallAHChordPrompt?"text-xs":""}><EmphasisedPrompt>{question.prompt}</EmphasisedPrompt></span></div>}{CONFIG.activityId==="rhythmsums" ? <div className="flex flex-1 items-center justify-center gap-5 text-4xl"><WorksheetRhythmGlyph symbolKey={question.left.symbolKey}/><strong>{question.operator}</strong><WorksheetRhythmGlyph symbolKey={question.right.symbolKey}/></div> : <Staff question={question} completed={completed} muted={example} showNoteNames={example}/>}<div className="relative flex min-h-8 items-end justify-center">{question.response!=="mark" && question.response!=="stave" ? <div className="w-4/5 border-b border-black pb-1 text-center font-semibold">{completed ? question.answer : ""}</div> : completed && !answerIsInNotation ? <strong className="text-sm">{question.answer}</strong> : null}{marks && !example ? <strong className="absolute bottom-1 right-1 text-sm">1</strong> : null}</div></section>;
   }
 
   function Pages({ data, answers=false, offset=0, total=1 }) {
@@ -388,14 +580,16 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
   function GenericApp() {
     const initialCount=10;
     const [count,setCount]=useGenericState(initialCount), [questions,setQuestions]=useGenericState(()=>Array.from({length:initialCount},(_,i)=>makeQuestion(i)));
-    const [title,setTitle]=useGenericState(`${DEF.title} · ${LEVEL_NAMES[level]||level}`), [instructions,setInstructions]=useGenericState(defaultInstructions);
+    const [title,setTitle]=useGenericState(defaultTitle), [instructions,setInstructions]=useGenericState(defaultInstructions);
     const [name,setName]=useGenericState(true), [classField,setClassField]=useGenericState(true), [date,setDate]=useGenericState(true), [numbers,setNumbers]=useGenericState(true), [marks,setMarks]=useGenericState(true), [gridlines,setGridlines]=useGenericState(true), [exampleOn,setExampleOn]=useGenericState(true), [answersOn,setAnswersOn]=useGenericState(false), [downloading,setDownloading]=useGenericState(false);
+    const [previewVisible,setPreviewVisible]=useGenericState(true), refreshTimer=useGenericRef(null);
     const examples=useGenericMemo(()=>CONFIG.activityId==="chords"&&level==="AH"?AH_WORKSHEET_TYPES.map((type,typeIndex)=>makeQuestion(-1-typeIndex,type)):[makeQuestion(-1)],[]);
     const activeExamples=exampleOn?examples:[];
     const data={questions,title,instructions,name,classField,date,numbers,marks,gridlines,examples:activeExamples,example:activeExamples[0]||null};
     const perPage=DEF.large||(CONFIG.activityId==="chords"&&level==="AH")?4:6, qPages=Math.ceil((questions.length+activeExamples.length)/perPage), aPages=answersOn?Math.ceil(questions.length/perPage):0, total=qPages+aPages;
     const changeCount=(value)=>{const n=Number(value);setCount(n);setQuestions(current=>current.length>=n?current.slice(0,n):[...current,...Array.from({length:n-current.length},(_,i)=>makeQuestion(current.length+i))]);};
-    const refresh=()=>setQuestions(Array.from({length:count},(_,i)=>makeQuestion(i)));
+    const refresh=()=>{if(refreshTimer.current)clearTimeout(refreshTimer.current);setPreviewVisible(false);refreshTimer.current=setTimeout(()=>{setQuestions(Array.from({length:count},(_,i)=>makeQuestion(i)));setPreviewVisible(true);refreshTimer.current=null;},260);};
+    useGenericEffect(()=>()=>{if(refreshTimer.current)clearTimeout(refreshTimer.current);},[]);
     const check=(label,value,setter)=><label className="flex items-center gap-2 whitespace-nowrap text-sm"><input className="worksheet-checkbox" type="checkbox" checked={value} onChange={e=>setter(e.target.checked)}/>{label}</label>;
     async function download(){
       setDownloading(true);
@@ -421,8 +615,8 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
         setDownloading(false);
       }
     }
-    window.MLH.worksheetHeaderMode={title:DEF.title,subtitle:CONFIG.subtitle||"",icon:DEF.icon,assets:{},onExit:()=>{const saved=sessionStorage.getItem("worksheetReturnUrl");if(saved&&history.length>1)history.back();else location.href=saved||CONFIG.sourceUrl||"index.html";}};
-    return <div className={window.MLH.shell.pageShellClass}><window.MLH.AppHeader icon={DEF.icon} title="Create a worksheet" subtitle={`Generate a printable worksheet from ${DEF.title}.`}/><div className={`${window.MLH.shell.pageContentClass} worksheet-page-content`}><main className={`${window.MLH.shell.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}><div className="no-print"><div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3"><h2 className="flex items-center gap-2 text-xl font-bold"><img src={DEF.icon} className="h-7 w-7 object-contain" alt=""/>{DEF.title} · {LEVEL_NAMES[level]||level}</h2><p className="mt-1 text-sm text-stone-600">Generate a printable worksheet using the current activity and settings.</p></div><div className="rounded-xl border border-stone-200 bg-white p-4"><h2 className="flex items-center gap-2 text-xl font-bold"><img src="customise.svg" className="h-6 w-6" alt=""/>Customise</h2><p className="text-sm text-stone-600">Adjust the worksheet content and layout.</p><div className="mt-4 space-y-4"><label className="block text-sm font-semibold">Title<input className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-normal" value={title} onChange={e=>setTitle(e.target.value)}/></label><label className="block text-sm font-semibold">Instructions<textarea ref={window.MLH.resizeWorksheetTextarea} rows="2" className="mt-1 min-h-16 w-full resize-none overflow-hidden rounded-lg border border-stone-300 px-3 py-2 font-normal" value={instructions} onChange={e=>{window.MLH.resizeWorksheetTextarea(e.currentTarget);setInstructions(e.target.value);}}/></label><div className="flex flex-wrap gap-7">{check("Name",name,setName)}{check("Class",classField,setClassField)}{check("Date",date,setDate)}</div><label className="flex items-center justify-between border-t border-stone-200 pt-4 text-sm font-semibold">Number of Questions<select className="w-32 rounded-lg border border-stone-300 px-3 py-2" value={count} onChange={e=>changeCount(e.target.value)}>{[10,15,20,25].map(n=><option key={n}>{n}</option>)}</select></label><div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] gap-x-3 gap-y-3">{check("Question Numbers",numbers,setNumbers)}{check("Marks",marks,setMarks)}{check("Gridlines",gridlines,setGridlines)}{check("Example Answer",exampleOn,setExampleOn)}{check("Print Answers",answersOn,setAnswersOn)}</div><div className="grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button onClick={refresh} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 font-semibold"><img src="restart.svg" className="h-5 w-5" alt=""/>Refresh</button><button onClick={download} disabled={downloading} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-black font-bold text-white"><img src="download.svg" className="h-5 w-5 invert" alt=""/>{downloading?"Preparing…":"Download"}</button><button onClick={()=>print()} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-black font-bold text-white"><img src="worksheet.svg" className="h-4 w-4 invert" alt=""/>Print</button></div></div></div></div><section className="print-area worksheet-preview-panel"><div className="no-print mb-4"><h2 className="flex items-center gap-2 text-xl font-bold"><img src="worksheet.svg" className="h-6 w-6" alt=""/>Preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div><Pages data={data} total={total}/>{answersOn?<div className="answer-sheet-start-new"><Pages data={{...data,example:null}} answers offset={qPages} total={total}/></div>:null}</section></main></div></div>;
+    window.MLH.worksheetHeaderMode={title:DEF.title,subtitle:CONFIG.subtitle||DEF.subtitle,icon:DEF.icon,assets:{},onExit:()=>{const saved=sessionStorage.getItem("worksheetReturnUrl");if(saved&&history.length>1)history.back();else location.href=saved||CONFIG.sourceUrl||"index.html";}};
+    return <div className={window.MLH.shell.pageShellClass}><window.MLH.AppHeader icon={DEF.icon} title="Create a worksheet" subtitle={CONFIG.subtitle||DEF.subtitle}/><div className={`${window.MLH.shell.pageContentClass} worksheet-page-content`}><main className={`${window.MLH.shell.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}><div className="no-print"><div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3"><h2 className="flex items-center gap-2 text-xl font-bold"><img src={DEF.icon} className="h-7 w-7 object-contain" alt=""/>{DEF.title} · {LEVEL_NAMES[level]||level}</h2><p className="mt-1 text-sm text-stone-600">Generate a printable worksheet using the current activity and settings.</p></div><div className="rounded-xl border border-stone-200 bg-white p-4"><h2 className="flex items-center gap-2 text-xl font-bold"><img src="customise.svg" className="h-6 w-6" alt=""/>Customise</h2><p className="text-sm text-stone-600">Adjust the worksheet content and layout.</p><div className="mt-4 space-y-4"><label className="block text-sm font-semibold">Title<input className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-normal" value={title} onChange={e=>setTitle(e.target.value)}/></label><label className="block text-sm font-semibold">Instructions<textarea ref={window.MLH.resizeWorksheetTextarea} rows="2" className="mt-1 min-h-16 w-full resize-none overflow-hidden rounded-lg border border-stone-300 px-3 py-2 font-normal" value={instructions} onChange={e=>{window.MLH.resizeWorksheetTextarea(e.currentTarget);setInstructions(e.target.value);}}/></label><div className="flex flex-wrap gap-7">{check("Name",name,setName)}{check("Class",classField,setClassField)}{check("Date",date,setDate)}</div><label className="flex items-center justify-between border-t border-stone-200 pt-4 text-sm font-semibold">Number of Questions<select className="w-32 rounded-lg border border-stone-300 px-3 py-2" value={count} onChange={e=>changeCount(e.target.value)}>{[10,15,20,25].map(n=><option key={n}>{n}</option>)}</select></label><div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] gap-x-3 gap-y-3">{check("Question Numbers",numbers,setNumbers)}{check("Marks",marks,setMarks)}{check("Gridlines",gridlines,setGridlines)}{check("Example Answer",exampleOn,setExampleOn)}{check("Print Answers",answersOn,setAnswersOn)}</div><div className="grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button onClick={refresh} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-300 font-semibold"><img src="restart.svg" className="h-5 w-5" alt=""/>Refresh</button><button onClick={download} disabled={downloading} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-black font-bold text-white"><img src="download.svg" className="h-5 w-5 invert" alt=""/>{downloading?"Preparing…":"Download"}</button><button onClick={()=>print()} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-black font-bold text-white"><img src="worksheet.svg" className="h-4 w-4 invert" alt=""/>Print</button></div></div></div></div><section className="print-area worksheet-preview-panel"><div className="no-print mb-4"><h2 className="flex items-center gap-2 text-xl font-bold"><img src="worksheet.svg" className="h-6 w-6" alt=""/>Preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div><div className={`transition-opacity duration-300 ${previewVisible?"opacity-100":"opacity-0"}`}><Pages data={data} total={total}/>{answersOn?<div className="answer-sheet-start-new"><Pages data={{...data,example:null}} answers offset={qPages} total={total}/></div>:null}</div></section></main></div></div>;
   }
   window.MLHGenericWorksheetApp=GenericApp;
   ReactDOM.createRoot(document.getElementById("root")).render(<GenericApp />);

@@ -204,8 +204,9 @@
       try {
         const config = worksheetConfig();
         if (!config || config.version !== 1 || typeof config.activityId !== "string" || !config.settings || typeof config.settings !== "object") return;
-        window.sessionStorage.setItem("worksheetSourceConfig", JSON.stringify(config));
-        window.sessionStorage.setItem("worksheetReturnConfig", JSON.stringify(config));
+        const worksheetSourceConfig = { ...config, subtitle: typeof subtitle === "string" ? subtitle : (config.subtitle || "") };
+        window.sessionStorage.setItem("worksheetSourceConfig", JSON.stringify(worksheetSourceConfig));
+        window.sessionStorage.setItem("worksheetReturnConfig", JSON.stringify(worksheetSourceConfig));
         window.sessionStorage.setItem("worksheetReturnUrl", window.location.href);
         window.location.href = "worksheet-generator.html";
       } catch {
