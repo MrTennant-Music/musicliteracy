@@ -214,7 +214,7 @@ function wrapPdfText(text, font, size, maxWidth) {
 }
 
 function fitPdfInstructions(text, font, maxWidth) {
-  for (let size = 10; size >= 6; size -= 0.25) {
+  for (let size = 12; size >= 6; size -= 0.25) {
     const lines = wrapPdfText(text, font, size, maxWidth);
     const widthsFit = lines.every((line) => font.widthOfTextAtSize(line, size) <= maxWidth);
     if (lines.length <= 2 && widthsFit) return { size, lines };
@@ -363,9 +363,9 @@ function App() {
         const showPupilFields = !answerSheet && pageIndex === 0 && (previewWorksheet.includeName || previewWorksheet.includeClass || previewWorksheet.includeDate);
         const headerBottom = hasSubtitle && showPupilFields ? 720 : 742, headerTop = 821;
         const headerPath = roundedRectangleSvgPath(511, headerTop - headerBottom, 8);
-        page.drawSvgPath(headerPath, { x: 44, y: headerBottom - 2, color: black, opacity: 0.1 });
-        page.drawSvgPath(headerPath, { x: 43, y: headerBottom - 1, color: black, opacity: 0.06 });
-        page.drawSvgPath(headerPath, { x: 42, y: headerBottom, color: headerFill, borderColor: black, borderWidth: 0.6 });
+        page.drawSvgPath(headerPath, { x: 44, y: headerTop - 2, color: black, opacity: 0.1 });
+        page.drawSvgPath(headerPath, { x: 43, y: headerTop - 1, color: black, opacity: 0.06 });
+        page.drawSvgPath(headerPath, { x: 42, y: headerTop, color: headerFill, borderColor: black, borderWidth: 0.6 });
         page.drawImage(worksheetIcon, { x: 54, y: 773, width: 40, height: 40 });
         page.drawText(heading, { x: 102, y: 795, size: 18, font: boldFont, color: black });
         if (hasSubtitle) {
@@ -379,8 +379,8 @@ function App() {
             let x = 54;
             fields.forEach((field) => {
               const width = available * field.ratio / totalRatio;
-              page.drawText(field.label, { x, y: fieldY, size: 9.5, font: regularFont, color: black });
-              const labelWidth = regularFont.widthOfTextAtSize(field.label, 9.5);
+              page.drawText(field.label, { x, y: fieldY, size: 10.5, font: regularFont, color: black });
+              const labelWidth = regularFont.widthOfTextAtSize(field.label, 10.5);
               page.drawLine({ start: { x: x + labelWidth + 5, y: fieldY - 1 }, end: { x: x + width, y: fieldY - 1 }, thickness: 0.7, color: black });
               x += width + gap;
             });
@@ -406,7 +406,14 @@ function App() {
           const createPrompt = question.type === "create" ? `Write a ${window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase()} ${question.direction} than the note given.` : "";
           const headingText = `${workedExample ? "Example Answer" : previewWorksheet.includeNumbers ? `${globalNumber}.` : ""}${createPrompt ? `${workedExample || previewWorksheet.includeNumbers ? " " : ""}${createPrompt}` : ""}`;
           const cellInk = workedExample ? exampleGrey : black;
-          if (headingText) wrapPdfText(headingText, boldFont, 8.5, columnWidth - 36).slice(0, 2).forEach((line, lineIndex) => page.drawText(line, { x: cellLeft + 10, y: cellTop - 17 - lineIndex * 10, size: 8.5, font: boldFont, color: cellInk }));
+          if (headingText) {
+            let headingSize = 12, headingLines = wrapPdfText(headingText, boldFont, headingSize, columnWidth - 36);
+            while (headingLines.length > 2 && headingSize > 8.5) {
+              headingSize -= 0.5;
+              headingLines = wrapPdfText(headingText, boldFont, headingSize, columnWidth - 36);
+            }
+            headingLines.slice(0, 2).forEach((line, lineIndex) => page.drawText(line, { x: cellLeft + 10, y: cellTop - 18 - lineIndex * headingSize * 1.15, size: headingSize, font: boldFont, color: cellInk }));
+          }
           const notationScale = Math.min(0.72, Math.max(0.45, (rowHeight - 58) / 90));
           const gap = 13.55 * notationScale;
           const notationTop = cellTop - (createPrompt ? 43 : 30), notationBottom = cellBottom + 36;
@@ -416,17 +423,17 @@ function App() {
           const showQuestionMark = previewWorksheet.includeMarks && !completed;
           const answerLineLeft = cellLeft + 12, answerLineRight = cellRight - (showQuestionMark ? 32 : 12);
           if (completed) {
-            const answerWidth = boldFont.widthOfTextAtSize(question.answerText, 9.5);
-            page.drawText(question.answerText, { x: answerLineLeft + (answerLineRight - answerLineLeft - answerWidth) / 2, y: cellBottom + 22, size: 9.5, font: boldFont, color: cellInk });
+            const answerWidth = boldFont.widthOfTextAtSize(question.answerText, 12);
+            page.drawText(question.answerText, { x: answerLineLeft + (answerLineRight - answerLineLeft - answerWidth) / 2, y: cellBottom + 22, size: 12, font: boldFont, color: cellInk });
           }
           page.drawLine({ start: { x: answerLineLeft, y: cellBottom + 17 }, end: { x: answerLineRight, y: cellBottom + 17 }, thickness: 0.65, color: cellInk });
-          if (showQuestionMark) page.drawText("1", { x: cellRight - 18, y: cellBottom + 20, size: 9, font: boldFont, color: black });
+          if (showQuestionMark) page.drawText("1", { x: cellRight - 18, y: cellBottom + 20, size: 10.5, font: boldFont, color: black });
         });
         if (showTotalMarks) {
-          page.drawText("Total marks", { x: 404, y: 53, size: 10, font: boldFont, color: black });
+          page.drawText("Total marks", { x: 404, y: 53, size: 10.5, font: boldFont, color: black });
           page.drawRectangle({ x: 474, y: 42, width: 79, height: 28, borderColor: black, borderWidth: 0.8 });
           const totalText = `/ ${previewWorksheet.questions.length}`;
-          page.drawText(totalText, { x: 545 - boldFont.widthOfTextAtSize(totalText, 10), y: 52, size: 10, font: boldFont, color: black });
+          page.drawText(totalText, { x: 545 - boldFont.widthOfTextAtSize(totalText, 10.5), y: 52, size: 10.5, font: boldFont, color: black });
         }
         const currentPageNumber = (answerSheet ? questionGroups.length : 0) + pageIndex + 1;
         const pageLabel = `Page ${currentPageNumber} of ${totalPdfPages}`;
@@ -459,7 +466,7 @@ function App() {
         <main className={`${SHELL.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}>
           <div className="no-print">
             <div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
-              <h2 className="text-xl font-bold">Intervals · {LEVELS[level]}</h2>
+              <h2 className="flex items-center gap-2 text-xl font-bold"><img src="intervals-icon.svg" alt="" aria-hidden="true" className="h-6 w-6 object-contain" />Intervals · {LEVELS[level]}</h2>
               <p className="mt-1 text-sm leading-relaxed text-stone-600">Generate a printable worksheet using the current activity and settings.</p>
             </div>
             <div className="rounded-xl border border-stone-200 bg-white p-4">
@@ -477,7 +484,7 @@ function App() {
             </div>
           </div>
           <section id="worksheet-preview" className="print-area worksheet-preview-panel">
-            <div className="no-print mb-4"><h2 className="text-xl font-bold">Preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div>
+            <div className="no-print mb-4"><h2 className="flex items-center gap-2 text-xl font-bold"><img src="worksheet.svg" alt="" aria-hidden="true" className="h-6 w-6 object-contain" />Preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div>
             <WorksheetPages worksheet={previewWorksheet} totalPages={totalPreviewPages} />
             {previewWorksheet.includeAnswers && <div className="answer-sheet-start-new"><WorksheetPages worksheet={previewWorksheet} answerSheet pageOffset={worksheetPageCount} totalPages={totalPreviewPages} /></div>}
           </section>
