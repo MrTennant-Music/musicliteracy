@@ -507,6 +507,13 @@ function ahPickerLabel(selection,field){
   const found=AH_POSITION_PICKER_OPTIONS.find(option=>option.value===normal.inversion);
   return found?.label || "Select";
 }
+function ahSymbolOrChordLabel(key,symbol,chord=null){
+  if(!symbol) return "Select";
+  const resolvedChord=chord || key.chords[symbol==="V7"?"V":symbol];
+  let chordName=getChordShortName(resolvedChord);
+  if(symbol==="V7" && chordName && !chordName.endsWith("7")) chordName+=7;
+  return chordName ? `${symbol} or ${chordName}` : symbol;
+}
 function cyclePickerValue(options,current,direction){
   const currentIndex=options.findIndex(option=>option===current);
   const start=currentIndex>=0?currentIndex:(direction>0?-1:0);
@@ -1197,7 +1204,7 @@ function AHInversionTable({question,answers,feedback,onCycle,isMobile=false,tabl
         <tbody>
           <tr>
             {visibleChords.map((item,index)=>{
-              const key=`ah-inv-${index}`, value=answers[key]||null, correct=isAHInversionSelectionCorrect(value,item), status=feedback&&index>0?(correct?"correct":"incorrect"):null, label=index===0?item.symbol:ahPickerLabel(value,"symbol"), muted=index>0&&!normalizeAHInversionSelection(value).symbol;
+              const key=`ah-inv-${index}`, value=answers[key]||null, correct=isAHInversionSelectionCorrect(value,item), status=feedback&&index>0?(correct?"correct":"incorrect"):null, selectedSymbol=normalizeAHInversionSelection(value).symbol, label=index===0?ahSymbolOrChordLabel(question.key,item.symbol,item.chord):ahSymbolOrChordLabel(question.key,selectedSymbol), muted=index>0&&!selectedSymbol;
               return index===0
                 ? <AHInversionCell key={`symbol-${index}`} large={isMobile}>{label}</AHInversionCell>
                 : <AHInversionCell key={`symbol-${index}`} status={status} muted={muted} withArrows disabled={Boolean(feedback)} onPrev={()=>onCycle(key,"symbol",-1)} onNext={()=>onCycle(key,"symbol",1)} large={isMobile}>{label}</AHInversionCell>;
@@ -1303,11 +1310,8 @@ function AHCompletedTable({question,isMobile=false,tableWidth=null,columnWidth=n
         {visibleChords.map(item=><col key={`col-${item.index}`} style={{width:`${resolvedColumnWidth}px`}} />)}
       </colgroup>
       <tbody>
-        <tr>{visibleChords.map(item=>{
-          const position=inversionLabel(item.inversion);
-          return <AHInversionCell key={`chord-${item.index}`} large={isMobile}>{`${getChordShortName(item.chord)}${position ? ` ${position}` : ""}`}</AHInversionCell>;
-        })}</tr>
-        <tr>{visibleChords.map(item=><AHInversionCell key={`symbol-${item.index}`} large={isMobile}>{romanInversionLabel(item.symbol,item.inversion)}</AHInversionCell>)}</tr>
+        <tr>{visibleChords.map(item=><AHInversionCell key={`chord-${item.index}`} large={isMobile}>{ahSymbolOrChordLabel(question.key,item.symbol,item.chord)}</AHInversionCell>)}</tr>
+        <tr>{visibleChords.map(item=><AHInversionCell key={`position-${item.index}`} large={isMobile}>{inversionLabel(item.inversion)||"Root"}</AHInversionCell>)}</tr>
       </tbody>
     </table>
   </div>;
@@ -1795,7 +1799,7 @@ function App(){
   }
 
   return <div className={SHELL.pageShellClass || "overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12"}>
-    <window.MLH.AppHeader icon={ASSET.appIcon} title="Chords" subtitle="Identify, create and apply chords in music." worksheetConfig={activeLevel==="N5"||activeLevel==="AH" ? () => ({ version: 1, activityId: "chords", sourceUrl: window.location.href, settings: { level: activeLevel, ahCustomise } }) : null}>
+    <window.MLH.AppHeader icon={ASSET.appIcon} title="Chords" subtitle="Identify, create and apply chords in music." worksheetConfig={activeLevel==="N5"||(activeLevel==="AH"&&(ahCustomise.insertPosition||ahCustomise.createBassLine)) ? () => ({ version: 1, activityId: "chords", sourceUrl: window.location.href, settings: { level: activeLevel, ahCustomise } }) : null}>
       <window.MLH.ScoreStreakPanel
         assets={ASSET}
         correct={correct}

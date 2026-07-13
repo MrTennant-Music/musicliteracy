@@ -29,8 +29,74 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
   const NOTES = [0,1,2,3,4,5,6,7,8];
   const NOTE_NAMES = ["E", "F", "G", "A", "B", "C", "D", "E", "F"];
   const KEYS = ["C major", "G major", "F major", "D major", "B♭ major", "A minor", "E minor", "D minor"];
-  const RHYTHMS = [{ symbolKey:"noteheadBlack", beats:4 },{ symbolKey:"wholeNote", beats:2 },{ symbolKey:"quarterNoteStemUp", beats:1 },{ symbolKey:"eighthNoteStemUp", beats:.5 }];
+  const WORKSHEET_RHYTHMS = {
+    semibreve:{symbolKey:"wholeNote",beats:4}, "dotted-minim":{symbolKey:"halfNoteStemUp",beats:3},
+    minim:{symbolKey:"halfNoteStemUp",beats:2}, "dotted-crotchet":{symbolKey:"quarterNoteStemUp",beats:1.5},
+    crotchet:{symbolKey:"quarterNoteStemUp",beats:1}, "dotted-quaver":{symbolKey:"eighthNoteStemUp",beats:.75},
+    quaver:{symbolKey:"eighthNoteStemUp",beats:.5}, semiquaver:{symbolKey:"eighthNoteStemUp",beats:.25},
+    "two-quavers":{symbolKey:"eighthNoteStemUp",beats:1}, "four-semiquavers":{symbolKey:"eighthNoteStemUp",beats:1},
+    "dotted-quaver-semiquaver":{symbolKey:"eighthNoteStemUp",beats:1}, "scotch-snap":{symbolKey:"eighthNoteStemUp",beats:1},
+    "triplet-quavers":{symbolKey:"eighthNoteStemUp",beats:1}, "triplet-crotchets":{symbolKey:"quarterNoteStemUp",beats:2},
+  };
+  const N5_WORKSHEET_CHORDS = [
+    { answer:"C major", notes:[{step:-2,letter:"C"},{step:0,letter:"E"},{step:2,letter:"G"}] },
+    { answer:"F major", notes:[{step:1,letter:"F"},{step:3,letter:"A"},{step:5,letter:"C"}] },
+    { answer:"G major", notes:[{step:2,letter:"G"},{step:4,letter:"B"},{step:6,letter:"D"}] },
+    { answer:"A minor", notes:[{step:3,letter:"A"},{step:5,letter:"C"},{step:7,letter:"E"}] },
+  ];
+  const N5_CHORD_RHYTHMS = [["quarter","quarter","half"],["half","quarter","quarter"]];
+  const shuffled = (items) => items.map(value=>({value,sort:Math.random()})).sort((a,b)=>a.sort-b.sort).map(({value})=>value);
+  const AH_LETTERS = ["C","D","E","F","G","A","B"];
+  const AH_WORKSHEET_KEYS = [
+    { name:"C major", accidentals:{}, major:true, chords:{I:{name:"C",tones:[["C",0],["E",0],["G",0]]},II:{name:"Dm",tones:[["D",0],["F",0],["A",0]],inversions:[0,1]},IV:{name:"F",tones:[["F",0],["A",0],["C",0]]},V:{name:"G",tones:[["G",0],["B",0],["D",0]]},VI:{name:"Am",tones:[["A",0],["C",0],["E",0]]}}},
+    { name:"G major", accidentals:{F:1}, major:true, chords:{I:{name:"G",tones:[["G",0],["B",0],["D",0]]},II:{name:"Am",tones:[["A",0],["C",0],["E",0]],inversions:[0,1]},IV:{name:"C",tones:[["C",0],["E",0],["G",0]]},V:{name:"D",tones:[["D",0],["F",1],["A",0]]},VI:{name:"Em",tones:[["E",0],["G",0],["B",0]]}}},
+    { name:"F major", accidentals:{B:-1}, major:true, chords:{I:{name:"F",tones:[["F",0],["A",0],["C",0]]},II:{name:"Gm",tones:[["G",0],["B",-1],["D",0]],inversions:[0,1]},IV:{name:"B♭",tones:[["B",-1],["D",0],["F",0]]},V:{name:"C",tones:[["C",0],["E",0],["G",0]]},VI:{name:"Dm",tones:[["D",0],["F",0],["A",0]]}}},
+    { name:"D major", accidentals:{F:1,C:1}, major:true, chords:{I:{name:"D",tones:[["D",0],["F",1],["A",0]]},II:{name:"Em",tones:[["E",0],["G",0],["B",0]],inversions:[0,1]},IV:{name:"G",tones:[["G",0],["B",0],["D",0]]},V:{name:"A",tones:[["A",0],["C",1],["E",0]]},VI:{name:"Bm",tones:[["B",0],["D",0],["F",1]]}}},
+    { name:"B♭ major", accidentals:{B:-1,E:-1}, major:true, chords:{I:{name:"B♭",tones:[["B",-1],["D",0],["F",0]]},II:{name:"Cm",tones:[["C",0],["E",-1],["G",0]],inversions:[0,1]},IV:{name:"E♭",tones:[["E",-1],["G",0],["B",-1]]},V:{name:"F",tones:[["F",0],["A",0],["C",0]]},VI:{name:"Gm",tones:[["G",0],["B",-1],["D",0]]}}},
+    { name:"A minor", accidentals:{}, major:false, chords:{I:{name:"Am",tones:[["A",0],["C",0],["E",0]]},IV:{name:"Dm",tones:[["D",0],["F",0],["A",0]]},V:{name:"E",tones:[["E",0],["G",1],["B",0]]},VI:{name:"F",tones:[["F",0],["A",0],["C",0]]}}},
+    { name:"E minor", accidentals:{F:1}, major:false, chords:{I:{name:"Em",tones:[["E",0],["G",0],["B",0]]},IV:{name:"Am",tones:[["A",0],["C",0],["E",0]]},V:{name:"B",tones:[["B",0],["D",1],["F",1]]},VI:{name:"C",tones:[["C",0],["E",0],["G",0]]}}},
+    { name:"D minor", accidentals:{B:-1}, major:false, chords:{I:{name:"Dm",tones:[["D",0],["F",0],["A",0]]},IV:{name:"Gm",tones:[["G",0],["B",-1],["D",0]]},V:{name:"A",tones:[["A",0],["C",1],["E",0]]},VI:{name:"B♭",tones:[["B",-1],["D",0],["F",0]]}}},
+  ];
+  const ahStep = (letter,octave,clef) => octave*7+AH_LETTERS.indexOf(letter)-(clef==="bass"?2*7+AH_LETTERS.indexOf("G"):4*7+AH_LETTERS.indexOf("E"));
+  const ahTone = (key,[letter,accidental],octave,clef) => ({letter,step:ahStep(letter,octave,clef),writtenAccidental:accidental===(key.accidentals[letter]||0)?null:accidental});
+  const ahPositionName = (inversion) => inversion===1?"1st inversion":inversion===2?"2nd inversion":"root position";
+  function ahWorksheetVoicing(key,chord,inversion){const bassTone=chord.tones[inversion]||chord.tones[0], remaining=chord.tones.filter((_,toneIndex)=>toneIndex!==inversion), bass=ahTone(key,bassTone,bassTone[0]==="B"?2:3,"bass"), treble=[remaining[0],remaining[1],bassTone].map(tone=>ahTone(key,tone,tone[0]==="C"||tone[0]==="D"?5:4,"treble")).sort((a,b)=>a.step-b.step);while(treble[treble.length-1].step-treble[0].step>7)treble[treble.length-1]={...treble[treble.length-1],step:treble[treble.length-1].step-7};return {bass,treble:treble.sort((a,b)=>a.step-b.step)};}
+  const configuredAHWorksheetTypes = CONFIG.settings?.ahCustomise
+    ? [CONFIG.settings.ahCustomise.insertPosition?"position":null,CONFIG.settings.ahCustomise.createBassLine?"bass":null].filter(Boolean)
+    : ["position","bass"];
+  const AH_WORKSHEET_TYPES = configuredAHWorksheetTypes.length ? configuredAHWorksheetTypes : ["position","bass"];
+  const defaultInstructions = CONFIG.activityId === "chords" && level === "N5"
+    ? "Name the outlined chord – your options are C major, F major, G major or A minor."
+    : CONFIG.activityId === "chords" && level === "AH"
+      ? AH_WORKSHEET_TYPES.length===1
+        ? AH_WORKSHEET_TYPES[0]==="bass" ? "Draw in the bass note using the chord information provided." : "Write the chord and position."
+        : "Write the chord and position or draw in the bass note for the given chord."
+      : DEF.instructions;
   const id = () => Math.random().toString(36).slice(2);
+
+  const enabledKeys = (object, prefix="") => Object.entries(object||{}).filter(([key,on])=>on&&key.startsWith(prefix)).map(([key])=>key.slice(prefix.length));
+  const accidentalText = (value) => value==="sharp"?"♯":value==="flat"?"♭":"";
+  const noteNameForStep = (step, clef="treble") => {
+    const names=clef==="bass"?["G","A","B","C","D","E","F"]:["E","F","G","A","B","C","D"];
+    return names[((step%7)+7)%7];
+  };
+  function configuredEnharmonicPairs(){
+    const options=CONFIG.settings?.options||{};
+    const pairs=[["F♯","G♭"],["C♯","D♭"],["A♯","B♭"],["D♯","E♭"],["G♯","A♭"]];
+    if(options.eSharpFflat!==false)pairs.push(["E♯","F"],["F♭","E"]);
+    if(options.bSharpCflat!==false)pairs.push(["B♯","C"],["C♭","B"]);
+    return pairs;
+  }
+  function configuredRhythmPool(){
+    const settings=CONFIG.settings||{};
+    const ids=(settings.enabledItems||[]).concat(settings.includeBeamedGroups===false?[]:(settings.enabledBeamedItems||[]));
+    const pool=ids.map(rhythmId=>WORKSHEET_RHYTHMS[rhythmId]).filter(Boolean);
+    return pool.length?pool:Object.values(WORKSHEET_RHYTHMS).slice(0,6);
+  }
+  function configuredTimeSignatures(){
+    const selected=enabledKeys(CONFIG.settings?.enabledRhythms,"time-");
+    return selected.length?selected:(level==="H"||level==="AH"?["2/4","3/4","4/4","6/8","9/8","12/8"]:["2/4","3/4","4/4"]);
+  }
 
   const ACCIDENTAL_VALUES = { flat: -1, natural: 0, sharp: 1 };
   const NOTE_PITCHES = [64,65,67,69,71,72,74,76,77];
@@ -85,26 +151,26 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
     return { ...base, ...question, prompt:`Write a note a ${question.distance} ${question.direction} than the note shown.`, answer:writtenNoteName(question.answerStep, question.answerAccidental), response:"stave" };
   }
 
-  function makeQuestion(index) {
+  function makeQuestion(index, forcedAHType=null) {
     const step = random(NOTES), step2 = Math.max(0, Math.min(8, step + random([-3,-2,-1,1,2,3])));
     const base = { id: id(), step, step2, prompt: "", answer: "", response: DEF.response };
     switch (CONFIG.activityId) {
       case "enharmonics": {
-        const pairs = [["F♯","G♭"],["C♯","D♭"],["A♯","B♭"],["D♯","E♭"],["G♯","A♭"],["B","C♭"],["E","F♭"]];
-        const pair = random(pairs); return { ...base, prompt: `Rewrite ${pair[0]} as its enharmonic equivalent.`, label: pair[0], answer: pair[1] };
+        const pair=random(configuredEnharmonicPairs()), options=CONFIG.settings?.options||{}, clefs=[options.treble!==false?"treble":null,options.bass?"bass":null].filter(Boolean);
+        return { ...base, clef:random(clefs.length?clefs:["treble"]), prompt:`Rewrite ${pair[0]} as its enharmonic equivalent.`, label:pair[0], answer:pair[1] };
       }
       case "keysig": { const key = random(KEYS); const modes=CONFIG.settings?.modes||{identify:true,build:false}; const build=modes.build&&(!modes.identify||index%2===1); return { ...base, prompt: build ? `Create the key signature of ${key}.` : "Name this key signature.", key, build, answer: key, response: build ? "stave" : "text" }; }
-      case "notenaming": return { ...base, prompt: "Name the note.", answer: NOTE_NAMES[step] };
+      case "notenaming": { const settings=CONFIG.settings||{}, clefs=[settings.treble!==false?"treble":null,settings.bass?"bass":null].filter(Boolean), clef=random(clefs.length?clefs:["treble"]), range=settings.ledger===false?[0,1,2,3,4,5,6,7,8]:settings.advancedRange?[-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,11,12]:[-2,-1,0,1,2,3,4,5,6,7,8,9,10], noteStep=random(range), accidental=settings.accidentals?random([null,null,"sharp","flat"]):null; return {...base,step:noteStep,clef,prompt:"Name the note.",answer:`${noteNameForStep(noteStep,clef)}${accidentalText(accidental)}`,noteAccidental:accidental}; }
       case "tonic": { const enabled=Object.entries(CONFIG.settings?.questionTypes||{}).filter(([,on])=>on).map(([name])=>name); const degree=random(enabled.length?enabled:["tonic","subdominant","dominant"]); return { ...base, prompt: `Circle the ${degree} note.`, degree, melody: Array.from({length:8}, () => random(NOTES)), answer: degree }; }
-      case "transposing": return { ...base, prompt: random(["Rewrite the note one octave higher.", "Rewrite the note one octave lower.", "Rewrite the note at the same pitch in the other clef."]), answerStep: step2 };
-      case "barlines": return { ...base, prompt: "Insert the missing barlines.", melody: Array.from({length:12}, () => random(NOTES)), answer: "Correct barlines shown" };
-      case "rests": { const rests = ["crotchet rest", "quaver rest", "minim rest", "semibreve rest"]; const answer = random(rests); return { ...base, prompt: "Write the missing rest.", answer }; }
-      case "rhythmsums": { const left=random(RHYTHMS), right=random(RHYTHMS), plus=Math.random()<.7; return { ...base, prompt:"Calculate the number of beats.", left, right, operator:plus?"+":"−", answer: plus ? left.beats+right.beats : Math.abs(left.beats-right.beats) }; }
-      case "timesig": { const answer=random(["2/4","3/4","4/4","6/8"]); return { ...base, prompt:"Identify the time signature.", melody:Array.from({length:12},()=>random(NOTES)), answer }; }
+      case "transposing": { const options=CONFIG.settings?.questionOptions||{}, choices=[options.octaveHigher!==false?{prompt:"Rewrite the note one octave higher.",delta:7}:null,options.octaveLower!==false?{prompt:"Rewrite the note one octave lower.",delta:-7}:null,options.samePitch!==false?{prompt:"Rewrite the note at the same pitch in the other clef.",delta:0,otherClef:true}:null,options.ottava?{prompt:random(["Rewrite the note shown by 8va.","Rewrite the note shown by 8vb."]),delta:random([7,-7])}:null].filter(Boolean), choice=random(choices.length?choices:[{prompt:"Rewrite the note at the same pitch in the other clef.",delta:0,otherClef:true}]); return {...base,prompt:choice.prompt,answerStep:Math.max(-4,Math.min(12,step+choice.delta)),clef:choice.otherClef&&index%2?"bass":"treble"}; }
+      case "barlines": { const timeSignature=random(configuredTimeSignatures()); return {...base,prompt:`Insert the missing barlines in ${timeSignature}.`,timeSignature,melody:Array.from({length:12},()=>random(NOTES)),answer:"Correct barlines shown"}; }
+      case "rests": { const selected=enabledKeys(CONFIG.settings?.enabledOptions,"rest-").map(name=>name.replaceAll("-"," ")), rests=selected.length?selected:["crotchet rest","quaver rest","minim rest","semibreve rest"], answer=random(rests); return {...base,prompt:"Write the missing rest.",answer}; }
+      case "rhythmsums": { const pool=configuredRhythmPool(), operators=(CONFIG.settings?.enabledOperators||["+","−"]).filter(operator=>["+","−","×","÷"].includes(operator)), left=random(pool), right=random(pool), operator=random(operators.length?operators:["+"]), raw=operator==="+"?left.beats+right.beats:operator==="−"?Math.abs(left.beats-right.beats):operator==="×"?left.beats*right.beats:left.beats/right.beats; return {...base,prompt:"Calculate the number of beats.",left,right,operator,answer:Math.round(raw*100)/100}; }
+      case "timesig": { const answer=random(configuredTimeSignatures()); return {...base,prompt:"Identify the time signature.",melody:Array.from({length:12},()=>random(NOTES)),answer}; }
       case "triplets": { const answer=random(["Quaver triplet","Crotchet triplet"]); return { ...base, prompt:"Mark the triplet and name its type.", melody:Array.from({length:12},()=>random(NOTES)), answer }; }
       case "accidentals": { const create=index%2===1; const useAccidental=index<0||index%3!==0; if(useAccidental){const accidentalQuestion=create?accidentalCreationQuestion(base):accidentalIdentificationQuestion(base);if(accidentalQuestion)return accidentalQuestion;} const distance=random(["tone","semitone"]), direction=random(["higher","lower"]); const pairs=distance==="tone"?[[1,2],[2,3],[3,4],[5,6],[6,7]]:[[0,1],[4,5],[7,8]]; const [low,high]=random(pairs); if(create){const startStep=direction==="higher"?low:high, answerStep=direction==="higher"?high:low; return { ...base, step:startStep, answerStep, firstAccidental:null, answerAccidental:null, prompt:`Write a note a ${distance} ${direction} than the note shown.`, answer:NOTE_NAMES[answerStep], response:"stave" };} return { ...base, step:low, step2:high, firstAccidental:null, secondAccidental:null, prompt:"Are the two notes a tone or a semitone apart?", answer:distance[0].toUpperCase()+distance.slice(1), response:"text" }; }
-      case "chords": { if(level==="N5"){const answer=random(["C major","G major","F major","A minor"]);return {...base,prompt:"Name the outlined chord.",stack:[step,Math.min(8,step+2),Math.min(8,step+4)],answer,response:"text"};} const bass=index%2===0; return bass ? {...base,clef:"bass",prompt:"Write the missing bass note using the chord information shown.",answer:random(NOTE_NAMES),response:"stave"} : {...base,clef:"bass",prompt:"Name the chord and its position.",stack:[step,Math.min(8,step+2),Math.min(8,step+4)],answer:random(["C major, root position","G major, first inversion","D minor, second inversion","Diminished 7th"]),response:"text"}; }
-      case "articulation": { const markings=[{name:"staccato",meaning:"Short and detached"},{name:"slur",meaning:"Smoothly and connected"},{name:"accent",meaning:"With extra emphasis"},{name:"phrase mark",meaning:"Shows the musical phrase"}]; const marking=random(markings), apply=index%2===1; return {...base,prompt:apply?`Apply a ${marking.name} to the notes.`:`Write the meaning of the ${marking.name} marking shown.`,melody:Array.from({length:4},()=>random(NOTES)),marking:apply?null:marking.name,answer:apply?marking.name:marking.meaning,response:apply?"stave":"text"}; }
+      case "chords": { if(level==="N5"){const chord=random(N5_WORKSHEET_CHORDS), rhythmPattern=random(N5_CHORD_RHYTHMS);return {...base,prompt:"",chordNotes:shuffled(chord.notes).map((chordNote,noteIndex)=>({...chordNote,rhythm:rhythmPattern[noteIndex]})),answer:chord.answer,response:"text"};} if(level==="AH"){const ahType=forcedAHType||AH_WORKSHEET_TYPES[Math.abs(index)%AH_WORKSHEET_TYPES.length], key=random(AH_WORKSHEET_KEYS), symbols=key.major?["I","II","IV","V","VI"]:["I","IV","V","VI"], choices=[];symbols.forEach(symbol=>{const chord=key.chords[symbol];(chord.inversions||[0,1,2]).forEach(inversion=>{const voicing=ahWorksheetVoicing(key,chord,inversion);if(ahType!=="bass"||voicing.bass.writtenAccidental===null)choices.push({symbol,chord,inversion,voicing});});});const first=random(choices), second=random(choices.filter(choice=>choice.symbol!==first.symbol));const ahItems=[first,second].map(item=>({symbol:item.symbol,chordName:item.chord.name,inversion:item.inversion,trebleTones:item.voicing.treble,bassTone:item.voicing.bass}));return {...base,prompt:ahType==="position"?"Identify the chord and its position. The first has been done for you.":"Insert the correct note in the bass line using the chord information provided.",ahType,key,ahItems,answer:ahType==="position"?`${second.symbol} – ${ahPositionName(second.inversion)}`:second.voicing.bass.letter,response:"mark"};} const bass=index%2===0; return bass ? {...base,clef:"bass",prompt:"Write the missing bass note using the chord information shown.",answer:random(NOTE_NAMES),response:"stave"} : {...base,clef:"bass",prompt:"Name the chord and its position.",stack:[step,Math.min(8,step+2),Math.min(8,step+4)],answer:random(["C major, root position","G major, first inversion","D minor, second inversion","Diminished 7th"]),response:"text"}; }
+      case "articulation": { const all=[{id:"staccato",name:"staccato",meaning:"Short and detached"},{id:"slur",name:"slur",meaning:"Smoothly and connected"},{id:"accent",name:"accent",meaning:"With extra emphasis"},{id:"phrase",name:"phrase mark",meaning:"Shows the musical phrase"}], selected=CONFIG.settings?.enabledMarkings||[], markings=all.filter(mark=>!selected.length||selected.includes(mark.id)), types=CONFIG.settings?.enabledTypes||[], applyEnabled=!types.length||types.includes("apply"), identifyEnabled=!types.length||types.some(type=>type.startsWith("identify")), apply=applyEnabled&&(!identifyEnabled||index%2===1), marking=random(markings.length?markings:all); return {...base,prompt:apply?`Apply a ${marking.name} to the notes.`:`Write the meaning of the ${marking.name} marking shown.`,melody:Array.from({length:4},()=>random(NOTES)),marking:apply?null:marking.name,answer:apply?marking.name:marking.meaning,response:apply?"stave":"text"}; }
       case "missingnotes": { const direction=level==="N4"?random(["higher","lower"]):null; const source=Array.from({length:4},()=>random([2,3,4,5,6])); return {...base,prompt:direction?`Write the sequence one step ${direction} in the blank bar.`:"Repeat the previous bar exactly in the blank bar.",sourceMelody:source,answerMelody:direction?source.map(n=>n+(direction==="higher"?1:-1)):source,answer:direction?`One step ${direction}`:"Exact repeat",response:"stave"}; }
       case "practicequestions": return makePracticeQuestion(index, base);
       default: return base;
@@ -112,20 +178,24 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
   }
 
   function makePracticeQuestion(index, base) {
-    const definitions=[
-      ["What does p mean?","Piano — quiet"],["What does f mean?","Forte — loud"],["What does crescendo mean?","Gradually getting louder"],["What does diminuendo mean?","Gradually getting quieter"],
-      ["What does Adagio mean?","Slow"],["What does Andante mean?","At a walking pace"],["What does Moderato mean?","At a moderate speed"],["What does Allegro mean?","Fast"],
-      ["What does a sharp do to a note?","Raises it by a semitone"],["What does a flat do to a note?","Lowers it by a semitone"],["What does a natural do?","Cancels a sharp or flat"],
-      ["What does staccato mean?","Short and detached"],["What does an accent mean?","Play the note with extra emphasis"],["What does a slur mean?","Play smoothly and connected"],["What does a phrase mark show?","The musical phrase"],
-      ["What does 4/4 mean?","Four crotchet beats in each bar"],["What does 3/4 mean?","Three crotchet beats in each bar"],["What do repeat signs mean?","Repeat the enclosed section of music"],
-    ];
-    const type=index%6;
-    if(type===0){const [prompt,answer]=random(definitions);return {...base,prompt,answer,response:"text"};}
-    if(type===1)return {...base,prompt:"Draw a start repeat sign at the beginning and an end repeat sign at the end of the stave.",answer:"Correct start and end repeat signs",repeatSigns:true,response:"stave"};
-    if((level==="N3"||level==="N4")&&type===2){const direction=level==="N4"?random(["higher","lower"]):null,source=Array.from({length:4},()=>random([2,3,4,5,6]));return {...base,prompt:direction?`Write this sequence one step ${direction}.`:"Repeat the previous bar exactly.",sourceMelody:source,answerMelody:direction?source.map(n=>n+(direction==="higher"?1:-1)):source,answer:direction?`One step ${direction}`:"Exact repeat",response:"stave"};}
-    if(type===3)return {...base,prompt:"Name the note.",answer:NOTE_NAMES[base.step],response:"text"};
-    if(type===4)return {...base,prompt:"Identify the time signature.",melody:Array.from({length:8},()=>random(NOTES)),answer:random(["2/4","3/4","4/4","6/8"]),response:"text"};
-    return {...base,prompt:"Insert the missing barline in the correct place.",melody:Array.from({length:8},()=>random(NOTES)),answer:"Correct barline",response:"stave"};
+    const enabled=CONFIG.settings?.enabledQuestionTypes||{};
+    const selected=Object.entries(enabled).filter(([,on])=>on).map(([type])=>type).filter(type=>!["rhythmIdentification","cadence","chord","dynamic","missing","rhythmicDictation","accidentals","articulation","tempoQuestion"].includes(type));
+    const types=selected.length?selected:["barlines","noteIdentification","repeatSigns","time"];
+    const type=types[Math.abs(index)%types.length];
+    if(type==="repeatSigns")return {...base,prompt:"Draw a start repeat sign at the beginning and an end repeat sign at the end of the stave.",answer:"Correct start and end repeat signs",repeatSigns:true,response:"stave"};
+    if(type==="noteIdentification")return {...base,prompt:"Name the note.",answer:NOTE_NAMES[base.step],response:"text"};
+    if(type==="time")return {...base,prompt:"Identify the time signature.",melody:Array.from({length:8},()=>random(NOTES)),answer:random(["2/4","3/4","4/4","6/8"]),response:"text"};
+    if(type==="barlines")return {...base,prompt:"Insert the missing barline in the correct place.",melody:Array.from({length:8},()=>random(NOTES)),answer:"Correct barline",response:"stave"};
+    if(type==="enharmonics"){const pair=random(configuredEnharmonicPairs());return {...base,prompt:`Write the enharmonic equivalent of ${pair[0]}.`,label:pair[0],answer:pair[1],response:"stave"};}
+    if(type==="triplets")return {...base,prompt:"Name the triplet type shown.",melody:Array.from({length:6},()=>random(NOTES)),answer:random(["Quaver triplet","Crotchet triplet"]),response:"text"};
+    if(type==="rests")return {...base,prompt:"Write the missing rest.",answer:random(["crotchet rest","quaver rest","minim rest","semibreve rest"]),response:"stave"};
+    if(type==="scaleDegrees")return {...base,prompt:"Circle the tonic note.",melody:Array.from({length:8},()=>random(NOTES)),answer:"Tonic",response:"mark"};
+    if(type==="interval")return {...base,prompt:"Name the interval between the two notes.",step2:Math.min(8,base.step+random([1,2,3,4])),answer:random(["2nd","3rd","4th","5th"]),response:"text"};
+    if(type==="key"){const key=random(KEYS);return {...base,prompt:"Name this key signature.",key,answer:key,response:"text"};}
+    if(type==="transposition")return {...base,prompt:"Rewrite the note one octave higher.",answerStep:Math.min(12,base.step+7),response:"stave"};
+    if(type==="ahChord")return {...base,prompt:"Identify the chord and its position.",stack:[base.step,Math.min(8,base.step+2),Math.min(8,base.step+4)],answer:"Chord and position",response:"text"};
+    if(type==="ahBassLine")return {...base,clef:"bass",prompt:"Insert the correct bass note using the chord information provided.",answerStep:base.step,answer:NOTE_NAMES[base.step],response:"stave"};
+    return {...base,prompt:"Complete the question.",answer:"Teacher answer",response:"text"};
   }
 
   function worksheetSymbolKey(key) {
@@ -197,12 +267,82 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
     </svg>;
   }
 
-  function Staff({ question, completed=false, muted=false }) {
+  function N5ChordStaff({ question, muted=false, showNoteNames=false }) {
+    const ink = muted ? "#78716c" : "#000";
+    const left = 28, right = 304, top = 48, gap = 12;
+    const noteXs = [112, 190, 268];
+    const y = (step) => top + gap * 4 - step * (gap / 2);
+    const gradientId = `n5-chord-staff-fade-${question.id}`;
+    const symbolKey = (note) => note.rhythm === "half"
+      ? (note.step > 4 ? "halfNoteStemDown" : "halfNoteStemUp")
+      : (note.step > 4 ? "quarterNoteStemDown" : "quarterNoteStemUp");
+    return <svg viewBox={`0 0 320 ${showNoteNames ? 132 : 120}`} className="h-full max-h-28 w-full" aria-label="Outlined chord notation">
+      <defs>
+        <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={left} x2={right} y1="0" y2="0">
+          <stop offset="0%" stopColor={ink} stopOpacity="1" />
+          <stop offset="72%" stopColor={ink} stopOpacity="1" />
+          <stop offset="100%" stopColor={ink} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <g>{[0,1,2,3,4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * gap} y2={top + line * gap} stroke={`url(#${gradientId})`} strokeWidth="1.2" />)}</g>
+      <WorksheetGlyph symbolKey="gClef" x={left + gap * 3.2} y={y(2)} gap={gap} colour={ink} />
+      {question.chordNotes.map((note,index)=><g key={`${question.id}-chord-note-${index}`}>
+        {note.step <= -2 ? <line x1={noteXs[index]-14} x2={noteXs[index]+14} y1={y(-2)} y2={y(-2)} stroke={ink} strokeWidth="1.2" /> : null}
+        <WorksheetGlyph symbolKey={symbolKey(note)} x={noteXs[index]} y={y(note.step)} gap={gap} colour={ink} />
+        {note.step % 2 === 0 ? <line x1={noteXs[index]-9} x2={noteXs[index]+9} y1={y(note.step)} y2={y(note.step)} stroke={ink} strokeWidth="1.2" /> : null}
+        {showNoteNames ? <text x={noteXs[index]} y="126" fill={ink} fontSize="13" fontWeight="700" textAnchor="middle">{note.letter}</text> : null}
+      </g>)}
+    </svg>;
+  }
+
+  function AHChordStaff({ question, completed=false, muted=false }) {
+    const ink = muted ? "#78716c" : "#000";
+    const left=22, right=304, trebleTop=54, bassTop=139, gap=8, chordXs=[122,220], keyX=58;
+    const y=(step,top)=>top+gap*4-step*(gap/2);
+    const gradientId=`ah-chord-staff-fade-${question.id}`;
+    const keySteps={treble:{sharp:{F:8,C:5},flat:{B:4,E:7}},bass:{sharp:{F:6,C:3},flat:{B:2,E:5}}};
+    const keyEntries=Object.entries(question.key.accidentals||{});
+    const drawLedger=(tone,x,top,key)=>{const lines=[];for(let ledgerStep=-2;ledgerStep>=tone.step;ledgerStep-=2)lines.push(ledgerStep);for(let ledgerStep=10;ledgerStep<=tone.step;ledgerStep+=2)lines.push(ledgerStep);return lines.map(step=><line key={`${key}-${step}`} x1={x-11} x2={x+11} y1={y(step,top)} y2={y(step,top)} stroke={ink} strokeWidth="1"/>);};
+    const drawTone=(tone,x,top,key)=><g key={key}>{drawLedger(tone,x,top,key)}{tone.writtenAccidental!==null?<WorksheetGlyph symbolKey={tone.writtenAccidental===1?"sharpInScore":tone.writtenAccidental===-1?"flatInScore":"naturalInScore"} x={x-gap*2.1} y={y(tone.step,top)} gap={gap} colour={ink}/>:null}<WorksheetGlyph symbolKey={tone.step>4?"quarterNoteStemDown":"quarterNoteStemUp"} x={x} y={y(tone.step,top)} gap={gap} colour={ink}/>{tone.step%2===0?<line x1={x-7} x2={x+7} y1={y(tone.step,top)} y2={y(tone.step,top)} stroke={ink} strokeWidth="1"/>:null}</g>;
+    const drawStack=(tones,x,top,key,down=false)=>{
+      const offsets=tones.map(()=>0);
+      for(let toneIndex=1;toneIndex<tones.length;toneIndex+=1){if(tones[toneIndex].step-tones[toneIndex-1].step===1){if(down)offsets[toneIndex-1]=-7;else offsets[toneIndex]=7;}}
+      const accidentalIndices=tones.map((tone,toneIndex)=>tone.writtenAccidental!==null?toneIndex:null).filter(toneIndex=>toneIndex!==null);
+      const accidentalOffset=(toneIndex)=>{if(accidentalIndices.length<=1)return 0;const accidentalIndex=accidentalIndices.indexOf(toneIndex);if(accidentalIndices.length===2)return accidentalIndex===0?gap:0;return accidentalIndex%2===1?gap:0;};
+      const ys=tones.map(tone=>y(tone.step,top)), stemX=x+(down?-4:4), stemStart=down?Math.min(...ys):Math.max(...ys), stemEnd=down?Math.max(...ys)+27:Math.min(...ys)-27;
+      return <g key={key}>{tones.map((tone,toneIndex)=>{const noteX=x+offsets[toneIndex];return <g key={`${key}-${toneIndex}`}>{drawLedger(tone,noteX,top,`${key}-ledger-${toneIndex}`)}{tone.writtenAccidental!==null?<WorksheetGlyph symbolKey={tone.writtenAccidental===1?"sharpInScore":tone.writtenAccidental===-1?"flatInScore":"naturalInScore"} x={x-gap*2.1-accidentalOffset(toneIndex)} y={y(tone.step,top)} gap={gap} colour={ink}/>:null}<WorksheetGlyph symbolKey="noteheadBlack" x={noteX} y={y(tone.step,top)} gap={gap} colour={ink}/>{tone.step%2===0?<line x1={noteX-7} x2={noteX+7} y1={y(tone.step,top)} y2={y(tone.step,top)} stroke={ink} strokeWidth="1"/>:null}</g>;})}<line x1={stemX} x2={stemX} y1={stemStart} y2={stemEnd} stroke={ink} strokeWidth="1.2"/></g>;
+    };
+    const drawKeySignature=(clef,top)=>keyEntries.map(([letter,value],index)=>{const kind=value===1?"sharp":"flat", step=keySteps[clef][kind][letter];return Number.isFinite(step)?<WorksheetGlyph key={`${clef}-${letter}`} symbolKey={value===1?"sharpInScore":"flatInScore"} x={keyX+index*gap*1.4} y={y(step,top)} gap={gap} colour={ink}/>:null;});
+    const shortPosition=(inversion)=>inversion===1?"1st inv.":inversion===2?"2nd inv.":"Root";
+    const tableX=20, tableY=199, columnWidth=140, rowHeight=43;
+    return <svg viewBox="0 0 320 315" className="h-full max-h-[315px] w-full" aria-label="Advanced Higher chord notation">
+      <defs><linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={left} x2={right} y1="0" y2="0"><stop offset="0%" stopColor={ink} stopOpacity="1"/><stop offset="84%" stopColor={ink} stopOpacity="1"/><stop offset="100%" stopColor={ink} stopOpacity="0"/></linearGradient></defs>
+      {[trebleTop,bassTop].map((top,staffIndex)=><g key={top}>{[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right} y1={top+line*gap} y2={top+line*gap} stroke={`url(#${gradientId})`} strokeWidth="1.1"/>)}<WorksheetGlyph symbolKey={staffIndex===0?"gClef":"fClef"} x={left+gap*3.2} y={y(staffIndex===0?2:6,top)} gap={gap} colour={ink}/>{drawKeySignature(staffIndex===0?"treble":"bass",top)}</g>)}
+      <line x1={left} x2={left} y1={trebleTop} y2={bassTop+gap*4} stroke={ink} strokeWidth="1.2"/>
+      <WorksheetOutlineGlyph symbolKey="brace" x={left-9} y={bassTop+gap*4} fontSize={bassTop+gap*4-trebleTop} colour={ink} widthScale="1.15" />
+      {question.ahItems.map((item,itemIndex)=><g key={`ah-item-${itemIndex}`}>
+        {drawStack(item.trebleTones,chordXs[itemIndex],trebleTop,`treble-${itemIndex}`,!item.trebleTones.some(tone=>tone.step<4))}
+        {question.ahType==="position"||itemIndex===0||completed?drawTone(item.bassTone,chordXs[itemIndex],bassTop,`bass-${itemIndex}`):<g opacity="0.25"><WorksheetGlyph symbolKey="quarterNoteStemUp" x={chordXs[itemIndex]} y={bassTop-18} gap={gap} colour={ink}/></g>}
+      </g>)}
+      {completed&&question.ahType==="bass"?<rect className="ah-answer-highlight" x={chordXs[1]-22} y={y(question.ahItems[1].bassTone.step,bassTop)+(question.ahItems[1].bassTone.step>4?-10:-34)} width="44" height="44" fill="none" stroke={ink} strokeWidth="2"/>:null}
+      <rect x={tableX} y={tableY} width={columnWidth*2} height={rowHeight*2} fill="white" stroke={ink} strokeWidth="1"/>
+      <line x1={tableX+columnWidth} x2={tableX+columnWidth} y1={tableY} y2={tableY+rowHeight*2} stroke={ink} strokeWidth="1"/>
+      <line x1={tableX} x2={tableX+columnWidth*2} y1={tableY+rowHeight} y2={tableY+rowHeight} stroke={ink} strokeWidth="1"/>
+      {question.ahItems.map((item,itemIndex)=>{const filled=question.ahType==="bass"||itemIndex===0||completed, topLabel=`${item.symbol} or ${item.chordName}`, bottomLabel=shortPosition(item.inversion);return filled?<g key={`table-${itemIndex}`} fill={ink} fontSize="16" fontWeight="700" textAnchor="middle"><text x={tableX+columnWidth*(itemIndex+.5)} y={tableY+28}>{topLabel}</text><text x={tableX+columnWidth*(itemIndex+.5)} y={tableY+rowHeight+28}>{bottomLabel}</text></g>:null;})}
+      {completed&&question.ahType==="position"?<rect className="ah-answer-highlight" x={tableX+columnWidth} y={tableY} width={columnWidth} height={rowHeight*2} fill="none" stroke={ink} strokeWidth="2"/>:null}
+      <text x="160" y="307" fill={ink} fontSize="14" textAnchor="middle">The key is <tspan fontWeight="700">{question.key.name}</tspan>.</text>
+    </svg>;
+  }
+
+  function Staff({ question, completed=false, muted=false, showNoteNames=false }) {
     if (CONFIG.activityId === "accidentals") return <AccidentalsStaff question={question} completed={completed} muted={muted} />;
+    if (CONFIG.activityId === "chords" && level === "N5") return <N5ChordStaff question={question} muted={muted} showNoteNames={showNoteNames} />;
+    if (CONFIG.activityId === "chords" && level === "AH") return <AHChordStaff question={question} completed={completed} muted={muted} />;
     const ink = muted ? "#78716c" : "#000";
     const y = (step) => 72 - step * 6;
     const notes = question.sourceMelody || question.melody || [question.step];
     const positions=question.sourceMelody?notes.map((_,i)=>90+i*28):notes.map((_,i)=>112+i*(174/Math.max(1,notes.length-1)));
+    const ledgerLines=(step,x,key)=>{const lines=[];for(let ledger=-2;ledger>=step;ledger-=2)lines.push(ledger);for(let ledger=10;ledger<=step;ledger+=2)lines.push(ledger);return lines.map(ledger=><line key={`${key}-${ledger}`} x1={x-12} x2={x+12} y1={y(ledger)} y2={y(ledger)} stroke={ink} strokeWidth="1"/>);};
     return <svg viewBox="0 0 320 120" className="h-full max-h-28 w-full" aria-label="Music notation">
       <g stroke={ink} strokeWidth="1">{[0,1,2,3,4].map(i=><line key={i} x1="28" x2="304" y1={48+i*12} y2={48+i*12}/>)}</g>
       <WorksheetOutlineGlyph symbolKey={question.clef==="bass" ? "fClef" : "gClef"} x={38} y={91} fontSize={58} colour={ink} anchor="start" />
@@ -210,7 +350,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
       {question.label && <text x="112" y="75" fill={ink} fontSize="20" fontWeight="700">{question.label}</text>}
       {question.stack
         ? question.stack.map((s,i)=><WorksheetOutlineGlyph key={i} symbolKey="quarterNoteStemUp" x={145} y={y(s)+7} fontSize={34} colour={ink} anchor="start" />)
-        : notes.map((s,i)=><WorksheetOutlineGlyph key={i} symbolKey="quarterNoteStemUp" x={positions[i]} y={y(s)+7} fontSize={34} colour={ink} anchor="start" />)}
+        : notes.map((s,i)=><g key={i}>{ledgerLines(s,positions[i],`ledger-${i}`)}{CONFIG.activityId==="notenaming"&&question.noteAccidental?<WorksheetGlyph symbolKey={question.noteAccidental==="sharp"?"sharpInScore":"flatInScore"} x={positions[i]-20} y={y(s)} gap={10} colour={ink}/>:null}<WorksheetOutlineGlyph symbolKey="quarterNoteStemUp" x={positions[i]} y={y(s)+7} fontSize={34} colour={ink} anchor="start" /></g>)}
       {completed&&Number.isInteger(question.answerStep)?<WorksheetOutlineGlyph symbolKey="quarterNoteStemUp" x={230} y={y(question.answerStep)+7} fontSize={34} colour={ink} anchor="start" />:null}
       {completed&&question.sourceMelody&&question.answerMelody?.map((s,i)=><WorksheetOutlineGlyph key={`a${i}`} symbolKey="quarterNoteStemUp" x={226+i*18} y={y(s)+7} fontSize={30} colour={ink} anchor="start" />)}
       {question.marking&&!completed?<text x="175" y="43" fill={ink} fontWeight="700">{question.marking}</text>:null}
@@ -231,24 +371,29 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
 
   function Question({ question, number, example=false, answers=false, numbers=true, marks=true }) {
     const completed = example || answers;
-    return <section className={`generic-question ${example ? "bg-stone-100 text-stone-500" : ""}`}><div className="flex min-h-9 items-start gap-1 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong><span><EmphasisedPrompt>{question.prompt}</EmphasisedPrompt></span></div>{CONFIG.activityId==="rhythmsums" ? <div className="flex flex-1 items-center justify-center gap-5 text-4xl"><WorksheetRhythmGlyph symbolKey={question.left.symbolKey}/><strong>{question.operator}</strong><WorksheetRhythmGlyph symbolKey={question.right.symbolKey}/></div> : <Staff question={question} completed={completed} muted={example}/>}<div className="relative flex min-h-8 items-end justify-center">{question.response!=="mark" && question.response!=="stave" ? <div className="w-4/5 border-b border-black pb-1 text-center font-semibold">{completed ? question.answer : ""}</div> : completed ? <strong className="text-sm">{question.answer}</strong> : null}{marks && !example ? <strong className="absolute bottom-1 right-1 text-sm">1</strong> : null}</div></section>;
+    const compactChord = CONFIG.activityId === "chords" && level === "N5";
+    const smallAHChordPrompt = CONFIG.activityId === "chords" && level === "AH";
+    const answerIsInAHNotation = CONFIG.activityId === "chords" && level === "AH";
+    return <section className={`generic-question ${example ? "bg-stone-100 text-stone-500" : ""}`}>{compactChord?<div className="min-h-6 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong></div>:<div className="flex min-h-9 items-start gap-1 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong><span className={smallAHChordPrompt?"text-xs":""}><EmphasisedPrompt>{question.prompt}</EmphasisedPrompt></span></div>}{CONFIG.activityId==="rhythmsums" ? <div className="flex flex-1 items-center justify-center gap-5 text-4xl"><WorksheetRhythmGlyph symbolKey={question.left.symbolKey}/><strong>{question.operator}</strong><WorksheetRhythmGlyph symbolKey={question.right.symbolKey}/></div> : <Staff question={question} completed={completed} muted={example} showNoteNames={example}/>}<div className="relative flex min-h-8 items-end justify-center">{question.response!=="mark" && question.response!=="stave" ? <div className="w-4/5 border-b border-black pb-1 text-center font-semibold">{completed ? question.answer : ""}</div> : completed && !answerIsInAHNotation ? <strong className="text-sm">{question.answer}</strong> : null}{marks && !example ? <strong className="absolute bottom-1 right-1 text-sm">1</strong> : null}</div></section>;
   }
 
   function Pages({ data, answers=false, offset=0, total=1 }) {
-    const perPage = DEF.large ? 4 : 6;
-    const items = answers ? data.questions : data.example ? [data.example, ...data.questions] : data.questions;
+    const perPage = DEF.large || (CONFIG.activityId === "chords" && level === "AH") ? 4 : 6;
+    const examples = answers ? [] : data.examples?.length ? data.examples : data.example ? [data.example] : [];
+    const items = answers ? data.questions : [...examples, ...data.questions];
     const pages=[]; for(let i=0;i<items.length;i+=perPage) pages.push(items.slice(i,i+perPage));
-    return pages.map((items,pageIndex)=><article className="worksheet-page generic-page" key={`${answers}-${pageIndex}`}><div className="worksheet-header-card mb-4 rounded-xl border border-black p-4"><div className="flex items-center gap-3"><img src={DEF.icon} className="h-12 w-12 object-contain" alt=""/><div className="min-w-0"><h1 className="text-xl font-bold leading-tight">{answers ? `${data.title} - Answers` : data.title}</h1>{!answers&&<p className="text-sm text-stone-700">{data.instructions}</p>}</div></div>{!answers&&pageIndex===0?<div className="mt-4 flex gap-5 text-sm">{data.name&&<span className="flex min-w-0 flex-[2] items-end gap-2"><span className="shrink-0">Name:</span><span className="mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.classField&&<span className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Class:</span><span className="mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.date&&<span className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Date:</span><span className="mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}</div>:null}</div><div className={`generic-grid grid flex-1 grid-cols-2 ${data.gridlines?"with-gridlines":""}`}>{items.map((q,i)=>{const example=!answers&&data.example&&pageIndex===0&&i===0; const n=answers?pageIndex*perPage+i+1:pageIndex*perPage+i+(data.example?0:1); return <Question key={q.id} question={q} number={n} example={example} answers={answers} numbers={data.numbers} marks={data.marks}/>})}</div>{!answers&&data.marks&&pageIndex===pages.length-1?<div className="mt-3 flex justify-end gap-3 text-sm font-bold"><span className="h-8 leading-8">Total marks</span><span className="total-marks-box relative h-8 w-24 border border-black"><span className="total-marks-value absolute left-2 right-2 text-right leading-none">/ {data.questions.length}</span></span></div>:null}<footer className="mt-2 flex justify-between text-[10px] text-stone-400"><span>The Music Literacy Hub</span><span>Page {offset+pageIndex+1} of {total}</span></footer></article>);
+    return pages.map((items,pageIndex)=><article className="worksheet-page generic-page" key={`${answers}-${pageIndex}`}><div className="worksheet-header-card mb-4 rounded-xl border border-black p-4"><div className="flex items-center gap-3"><img src={DEF.icon} className="h-12 w-12 object-contain" alt=""/><div className="min-w-0"><h1 className="text-xl font-bold leading-tight">{answers ? `${data.title} - Answers` : data.title}</h1>{!answers&&<p className="text-sm text-stone-700">{data.instructions}</p>}</div></div>{!answers&&pageIndex===0?<div className="mt-4 flex gap-5 text-sm">{data.name&&<span className="flex min-w-0 flex-[2] items-end gap-2"><span className="shrink-0">Name:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.classField&&<span className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Class:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.date&&<span className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Date:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}</div>:null}</div><div className={`generic-grid grid flex-1 grid-cols-2 ${data.gridlines?"with-gridlines":""}`}>{items.map((q,i)=>{const example=!answers&&pageIndex===0&&i<examples.length; const n=answers?pageIndex*perPage+i+1:pageIndex*perPage+i-examples.length+1; return <Question key={q.id} question={q} number={n} example={example} answers={answers} numbers={data.numbers} marks={data.marks}/>})}</div>{!answers&&data.marks&&pageIndex===pages.length-1?<div className="mt-3 flex justify-end gap-3 text-sm font-bold"><span className="h-8 leading-8">Total marks</span><span className="total-marks-box relative h-8 w-24 border border-black"><span className="total-marks-value absolute left-2 right-2 text-right leading-none">/ {data.questions.length}</span></span></div>:null}<footer className="mt-2 flex justify-between text-[10px] text-stone-400"><span>The Music Literacy Hub</span><span>Page {offset+pageIndex+1} of {total}</span></footer></article>);
   }
 
   function GenericApp() {
     const initialCount=10;
     const [count,setCount]=useGenericState(initialCount), [questions,setQuestions]=useGenericState(()=>Array.from({length:initialCount},(_,i)=>makeQuestion(i)));
-    const [title,setTitle]=useGenericState(`${DEF.title} · ${LEVEL_NAMES[level]||level}`), [instructions,setInstructions]=useGenericState(DEF.instructions);
+    const [title,setTitle]=useGenericState(`${DEF.title} · ${LEVEL_NAMES[level]||level}`), [instructions,setInstructions]=useGenericState(defaultInstructions);
     const [name,setName]=useGenericState(true), [classField,setClassField]=useGenericState(true), [date,setDate]=useGenericState(true), [numbers,setNumbers]=useGenericState(true), [marks,setMarks]=useGenericState(true), [gridlines,setGridlines]=useGenericState(true), [exampleOn,setExampleOn]=useGenericState(true), [answersOn,setAnswersOn]=useGenericState(false), [downloading,setDownloading]=useGenericState(false);
-    const example=useGenericMemo(()=>makeQuestion(-1),[]);
-    const data={questions,title,instructions,name,classField,date,numbers,marks,gridlines,example:exampleOn?example:null};
-    const perPage=DEF.large?4:6, qPages=Math.ceil((questions.length+(exampleOn?1:0))/perPage), aPages=answersOn?Math.ceil(questions.length/perPage):0, total=qPages+aPages;
+    const examples=useGenericMemo(()=>CONFIG.activityId==="chords"&&level==="AH"?AH_WORKSHEET_TYPES.map((type,typeIndex)=>makeQuestion(-1-typeIndex,type)):[makeQuestion(-1)],[]);
+    const activeExamples=exampleOn?examples:[];
+    const data={questions,title,instructions,name,classField,date,numbers,marks,gridlines,examples:activeExamples,example:activeExamples[0]||null};
+    const perPage=DEF.large||(CONFIG.activityId==="chords"&&level==="AH")?4:6, qPages=Math.ceil((questions.length+activeExamples.length)/perPage), aPages=answersOn?Math.ceil(questions.length/perPage):0, total=qPages+aPages;
     const changeCount=(value)=>{const n=Number(value);setCount(n);setQuestions(current=>current.length>=n?current.slice(0,n):[...current,...Array.from({length:n-current.length},(_,i)=>makeQuestion(current.length+i))]);};
     const refresh=()=>setQuestions(Array.from({length:count},(_,i)=>makeQuestion(i)));
     const check=(label,value,setter)=><label className="flex items-center gap-2 whitespace-nowrap text-sm"><input className="worksheet-checkbox" type="checkbox" checked={value} onChange={e=>setter(e.target.checked)}/>{label}</label>;
