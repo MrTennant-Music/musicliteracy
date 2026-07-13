@@ -117,11 +117,12 @@
     return true;
   }
 
-  function ProfileQrButton({ onClick }) {
+  function ProfileQrButton({ onClick, disabled = false }) {
     return React.createElement("button", {
       type: "button",
       onClick,
-      className: "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 shadow-sm transition hover:border-stone-500 hover:bg-stone-50",
+      disabled,
+      className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border shadow-sm transition ${disabled ? "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400 opacity-70" : "border-stone-300 bg-white text-stone-700 hover:border-stone-500 hover:bg-stone-50"}`,
       "aria-label": "Share this profile by QR code",
       title: "Share QR code",
     }, React.createElement("svg", { viewBox: "0 0 24 24", className: "h-5 w-5", "aria-hidden": "true", fill: "currentColor" },
@@ -129,15 +130,16 @@
     ));
   }
 
-  function WorksheetButton({ onClick, enabled }) {
+  function WorksheetButton({ onClick, enabled, selected = false }) {
     return React.createElement("button", {
       type: "button",
       onClick,
-      disabled: !enabled,
-      className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 shadow-sm transition ${enabled ? "hover:border-stone-500 hover:bg-stone-50" : "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400 opacity-70"}`,
+      disabled: !enabled || selected,
+      className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border shadow-sm transition ${selected ? "cursor-default border-black bg-black text-white" : enabled ? "border-stone-300 bg-white text-stone-700 hover:border-stone-500 hover:bg-stone-50" : "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400 opacity-70"}`,
       "aria-label": "Create worksheet from current settings",
+      "aria-pressed": selected,
       title: "Create worksheet",
-    }, React.createElement("img", { src: "worksheet.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain" }));
+    }, React.createElement("img", { src: "worksheet.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain", style: selected ? { filter: "invert(1)" } : undefined }));
   }
 
   function ProfileQrOverlay({ title, subtitle, shareUrl, onClose }) {
@@ -177,17 +179,26 @@
     return ({ N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher" })[level] || "Custom";
   }
 
-  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, worksheetConfig }) {
+  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, worksheetConfig, worksheetMode = false }) {
     const [qrOpen, setQrOpen] = React.useState(false);
     const [, setProfileRevision] = React.useState(0);
-    const activityTitle = profileTitle || (typeof title === "string" ? title : "Activity");
+    const worksheetHeader = MLH.worksheetHeaderMode;
+    const activeWorksheetMode = worksheetMode || Boolean(worksheetHeader);
+    const displayedTitle = activeWorksheetMode && worksheetHeader?.title ? worksheetHeader.title : title;
+    const displayedSubtitle = activeWorksheetMode && worksheetHeader?.subtitle ? worksheetHeader.subtitle : subtitle;
+    const displayedIcon = activeWorksheetMode && worksheetHeader?.icon ? worksheetHeader.icon : icon;
+    const activityTitle = profileTitle || (typeof displayedTitle === "string" ? displayedTitle : "Activity");
     const hasSharedSettings = MLH.profileSettings.hasCustomSettings();
     const shareLabel = hasSharedSettings ? "Custom" : (profileLabel || defaultProfileLabel());
     const shareUrlObject = new URL(profileShareUrl || defaultProfileShareUrl());
     if (hasSharedSettings) shareUrlObject.searchParams.set("settings", MLH.profileSettings.encoded());
     else shareUrlObject.searchParams.delete("settings");
     const shareUrl = shareUrlObject.toString();
-    const worksheetEnabled = typeof worksheetConfig === "function";
+    const worksheetEnabled = activeWorksheetMode || typeof worksheetConfig === "function";
+    const displayedChildren = activeWorksheetMode && !children && worksheetHeader?.assets
+      ? React.createElement("div", { className: "pointer-events-none opacity-40 grayscale", "aria-disabled": "true", inert: "" },
+          React.createElement(ScoreStreakPanel, { assets: worksheetHeader.assets, correct: 0, attempted: 0, accuracy: 0, streak: 0, bestStreak: 0, resetScore: () => {}, confettiKey: 0, medalEligible: false }))
+      : children;
     function createWorksheet() {
       if (!worksheetEnabled) return;
       try {
@@ -258,18 +269,18 @@
           React.createElement("div", { className: "mx-auto flex w-full max-w-6xl flex-col gap-3 overflow-visible px-3 sm:px-4 md:flex-row md:items-center md:justify-between md:px-8" },
             React.createElement("div", { className: "flex items-center gap-3 sm:gap-4" },
               React.createElement("div", { className: "flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50 text-black shadow-sm" },
-                React.createElement("img", { src: icon, alt: "", "aria-hidden": "true", className: "block h-full w-full object-contain" })
+                React.createElement("img", { src: displayedIcon, alt: "", "aria-hidden": "true", className: "block h-full w-full object-contain" })
               ),
               React.createElement("div", { className: "flex h-14 flex-col justify-center" },
                 React.createElement("h1", { className: "relative top-[1px] inline-flex items-center gap-2 text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl" },
-                  title,
-                  React.createElement(ProfileQrButton, { onClick: () => setQrOpen(true) }),
-                  React.createElement(WorksheetButton, { enabled: worksheetEnabled, onClick: createWorksheet })
+                  displayedTitle,
+                  React.createElement(ProfileQrButton, { disabled: activeWorksheetMode, onClick: () => setQrOpen(true) }),
+                  React.createElement(WorksheetButton, { enabled: worksheetEnabled, selected: activeWorksheetMode, onClick: createWorksheet })
                 ),
-                React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap" }, subtitle)
+                React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap" }, displayedSubtitle)
               )
             ),
-            React.createElement("div", { className: "relative z-50 flex flex-wrap items-center gap-2 overflow-visible md:ml-auto md:justify-end" }, children)
+            React.createElement("div", { className: "relative z-50 flex flex-wrap items-center gap-2 overflow-visible md:ml-auto md:justify-end" }, displayedChildren)
           )
         ),
         qrOpen && React.createElement(ProfileQrOverlay, { title: activityTitle, subtitle: shareLabel, shareUrl, onClose: () => setQrOpen(false) })
