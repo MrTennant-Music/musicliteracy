@@ -15,14 +15,21 @@
   <script src="./bravura-symbols.js"></script>
   <script src="./shared-notation-config.js"></script>
   <script src="./intervals-worksheet-core.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     .music-symbol { font-family: "Bravura", serif; }
     .worksheet-builder { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
-    .worksheet-preview-panel { position: sticky; top: 112px; max-height: calc(100vh - 136px); overflow-y: auto; border-radius: 16px; background: #f5f5f4; padding: 16px; }
-    .worksheet-page { width: min(100%, 210mm); min-height: 0; aspect-ratio: 210 / 297; margin: 0 auto 24px; overflow: hidden; background: white; box-shadow: 0 2px 16px rgba(0,0,0,.14); padding: clamp(20px, 5.4vw, 14mm); }
-    .worksheet-question { break-inside: avoid; page-break-inside: avoid; }
+    .worksheet-preview-panel { position: sticky; top: 112px; max-height: calc(100vh - 136px); overflow-y: auto; border: 1px solid #e7e5e4; border-radius: 16px; background: #fafaf9; padding: 12px 16px 16px; }
+    .worksheet-page { display: flex; flex-direction: column; width: min(100%, 210mm); min-height: 0; aspect-ratio: 210 / 297; margin: 0 auto 24px; overflow: hidden; background: white; box-shadow: 0 2px 16px rgba(0,0,0,.14); padding: clamp(20px, 5.4vw, 14mm); }
+    .worksheet-questions { display: grid; flex: 1; min-height: 0; }
+    .worksheet-question { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 8px 12px; break-inside: avoid; page-break-inside: avoid; }
+    .worksheet-score { min-height: 0; flex: 1; }
+    .worksheet-checkbox { appearance: none; display: inline-block; height: 16px; width: 16px; flex: 0 0 16px; border: 1px solid #a8a29e; border-radius: 4px; background-color: white; background-position: center; background-repeat: no-repeat; background-size: 11px 11px; }
+    .worksheet-checkbox:checked { border-color: black; background-color: black; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.3 6.6 11.4 12.7 4.8' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+    .worksheet-checkbox:focus-visible { outline: 2px solid black; outline-offset: 2px; }
     @media (max-width: 1023px) {
       .worksheet-builder { grid-template-columns: 1fr; }
       .worksheet-preview-panel { position: static; max-height: none; overflow: visible; }
@@ -34,7 +41,7 @@
       .print-area { display: block !important; }
       .worksheet-page-content { max-width: none !important; margin: 0 !important; padding: 0 !important; }
       .worksheet-builder { display: block; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 !important; }
-      .worksheet-preview-panel { position: static; max-height: none; overflow: visible; padding: 0; background: white; }
+      .worksheet-preview-panel { position: static; max-height: none; overflow: visible; border: 0; padding: 0; background: white; }
       .worksheet-page { width: 210mm; min-height: 297mm; aspect-ratio: auto; margin: 0; padding: 14mm; box-shadow: none; break-after: page; page-break-after: always; }
       .worksheet-page:last-child { break-after: auto; page-break-after: auto; }
       .answer-sheet-start-new { break-before: page; page-break-before: always; }
@@ -76,36 +83,72 @@ function importedConfig() {
 }
 
 function chunk(items, size) { return items.reduce((pages, item, index) => { const page = Math.floor(index / size); (pages[page] ||= []).push(item); return pages; }, []); }
-function shuffle(items) { return [...items].sort(() => Math.random() - 0.5); }
 
 function PrintableScore({ question, answer = false }) {
   const symbols = window.BRAVURA_SYMBOLS || {};
+  const symbolConfig = window.SHARED_NOTATION_CONFIG?.symbols || {};
+  const drawingConfig = window.SHARED_NOTATION_CONFIG?.drawing || {};
   const notes = window.MLHIntervalsWorksheet.notes;
   const start = notes[question.startIndex];
   const endIndex = question.type === "identify" || answer ? (question.endIndex ?? question.targetIndex) : null;
   const end = endIndex == null ? null : notes[endIndex];
-  const top = 39, gap = 12, yFor = (step) => top + gap * 4 - step * (gap / 2);
-  const noteGlyph = (note) => note.step > 4 ? symbols.quarterNoteStemDown : symbols.quarterNoteStemUp;
+  const left = 222, right = 684, top = 132, gap = 21, yFor = (step) => top + gap * 4 - step * (gap / 2);
+  const symbol = (symbolKey, x, y) => {
+    const actualKey = symbolKey === "sharpKeySignature" ? "sharp" : symbolKey === "flatKeySignature" ? "flat" : symbolKey;
+    const settings = symbolConfig[symbolKey] || {};
+    const fontSize = gap * (settings.fontSizeScale || 1);
+    const adjustedX = x + gap * (settings.xOffsetScale || 0) + (settings.opticalXOffset || 0);
+    const adjustedY = y + gap * (settings.yOffsetScale || 0) + (settings.opticalYOffset || 0);
+    return <text className="music-symbol" x={adjustedX} y={adjustedY} fontSize={fontSize} textAnchor="middle" transform={`translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale || 1} ${settings.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`}>{symbols[actualKey]}</text>;
+  };
   const ledger = (note, x) => {
     const lines = []; if (note.step <= -2) for (let step = -2; step >= note.step; step -= 2) lines.push(step); if (note.step >= 10) for (let step = 10; step <= note.step; step += 2) lines.push(step);
-    return lines.map((step) => <line key={step} x1={x - 13} x2={x + 13} y1={yFor(step)} y2={yFor(step)} stroke="black" strokeWidth="1.2" />);
+    const halfWidth = gap * (drawingConfig.ledgerLineWidthScale || 2.4) / 2;
+    const thickness = Math.max(1, gap * (drawingConfig.ledgerLineThicknessScale || 0.11));
+    return lines.map((step) => <line key={step} x1={x - halfWidth} x2={x + halfWidth} y1={yFor(step)} y2={yFor(step)} stroke="black" strokeWidth={thickness} />);
   };
-  const renderNote = (note, x, accidental) => <g key={`${note.name}-${x}`}><>{ledger(note, x)}</><text className="music-symbol" x={x} y={yFor(note.step)} fontSize="29" textAnchor="middle">{noteGlyph(note)}</text>{accidental && <text className="music-symbol" x={x - 20} y={yFor(note.step)} fontSize="21" textAnchor="middle">{accidental === "sharp" ? symbols.sharp : symbols.flat}</text>}</g>;
-  return <svg viewBox="0 0 420 130" className="h-auto w-full max-w-[420px]" role="img" aria-label="Musical notation for the question"><rect width="420" height="130" fill="white" />{[0,1,2,3,4].map((line) => <line key={line} x1="36" x2="384" y1={top + line * gap} y2={top + line * gap} stroke="black" strokeWidth="1" />)}<text className="music-symbol" x="61" y={yFor(2)} fontSize="49" textAnchor="middle">{symbols.gClef}</text>{(question.keySignature || []).map((item, index) => <text key={index} className="music-symbol" x={94 + index * 20} y={yFor(item.step)} fontSize="21" textAnchor="middle">{item.type === "sharp" ? symbols.sharp : symbols.flat}</text>)}{renderNote(start, 198)}{end ? renderNote(end, 292, question.targetAccidental) : <text x="292" y="80" fontSize="26" textAnchor="middle">?</text>}</svg>;
+  const renderNote = (note, x, accidental) => <g key={`${note.name}-${x}`}><>{ledger(note, x)}</>{symbol(note.step > 4 ? "quarterNoteStemDown" : "quarterNoteStemUp", x, yFor(note.step))}{accidental && symbol(accidental === "sharp" ? "sharpInScore" : "flatInScore", x - gap * 2.1, yFor(note.step))}</g>;
+  const gradientId = `worksheetStaffFade-${question.id}-${answer ? "answer" : "question"}`;
+  return <svg viewBox="190 70 526 210" preserveAspectRatio="xMidYMid meet" className="worksheet-score h-full w-full" role="img" aria-label="Musical notation for the question"><defs><linearGradient id={gradientId} x1={left} y1="0" x2={right} y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor="#000" stopOpacity="1" /><stop offset="86%" stopColor="#000" stopOpacity="1" /><stop offset="100%" stopColor="#000" stopOpacity="0" /></linearGradient></defs>{[0,1,2,3,4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * gap} y2={top + line * gap} stroke={`url(#${gradientId})`} strokeWidth="1.5" />)}{symbol("gClef", left + gap * 2.5, yFor(2))}{(question.keySignature || []).map((item, index) => <g key={index}>{symbol(item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature", left + 92 + index * 30, yFor(item.step))}</g>)}{renderNote(start, 392)}{end ? renderNote(end, 536, question.targetAccidental) : <text x="536" y={yFor(4)} fontSize="36" textAnchor="middle">?</text>}</svg>;
 }
 
-function QuestionCard({ question, number, showNumbers, showMarks, marks, answer = false }) {
-  const prompt = question.type === "create" ? `Write a ${window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase()} ${question.direction} than the note given.` : "Identify the interval.";
-  return <section className="worksheet-question border-b border-stone-300 py-3 last:border-b-0"><div className="flex items-start justify-between gap-3"><p className="font-semibold">{showNumbers ? `${number}. ` : ""}{prompt}</p>{showMarks && <span className="shrink-0 text-sm">[{marks} {marks === 1 ? "mark" : "marks"}]</span>}</div><PrintableScore question={question} answer={answer} />{!answer && <div className="mt-1 min-h-8 border-b border-dotted border-stone-400" />}{answer && <p className="mt-1 font-semibold">Answer: {question.answerText}</p>}</section>;
+function QuestionCard({ question, number, showNumbers, showMarks, marks, answer = false, dividerClass = "" }) {
+  const createPrompt = question.type === "create" ? `Write a ${window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase()} ${question.direction} than the note given.` : "";
+  return <section className={`worksheet-question ${dividerClass}`}><div className="flex min-h-5 shrink-0 items-start gap-3"><p className="font-semibold">{showNumbers ? `${number}.` : ""}{createPrompt && <span>{showNumbers ? " " : ""}{createPrompt}</span>}</p></div><PrintableScore question={question} answer={answer} /><div className="flex min-h-7 shrink-0 items-end gap-3">{answer ? <p className="min-w-0 flex-1 border-b border-stone-400 pb-1 text-center font-semibold">{question.answerText}</p> : <div className="min-w-0 flex-1 border-b border-stone-400" />}{showMarks && <strong className="w-4 shrink-0 pb-1 text-right text-sm">{marks}</strong>}</div></section>;
 }
 
 function WorksheetPages({ worksheet, answerSheet = false }) {
-  const perPage = worksheet.questionsPerPage === "auto" ? 6 : Number(worksheet.questionsPerPage);
+  const perPage = 6;
+  const rowsPerPage = Math.ceil(perPage / 2);
   const pages = chunk(worksheet.questions, perPage);
-  return pages.map((questions, pageIndex) => <article className="worksheet-page" key={`${answerSheet ? "answers" : "questions"}-${pageIndex}`}><div className="mb-4 border-b-2 border-black pb-3"><h2 className="text-2xl font-bold">{answerSheet ? `${worksheet.title} — Answers` : worksheet.title}</h2>{!answerSheet && worksheet.subtitle && <p className="mt-1 text-stone-700">{worksheet.subtitle}</p>}{!answerSheet && <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">{worksheet.includeName && <p>Name: <span className="inline-block w-40 border-b border-black" /></p>}{worksheet.includeClass && <p>Class: <span className="inline-block w-32 border-b border-black" /></p>}{worksheet.includeDate && <p>Date: <span className="inline-block w-28 border-b border-black" /></p>}</div>}</div>{questions.map((question, index) => <QuestionCard key={question.id} question={question} number={pageIndex * perPage + index + 1} showNumbers={worksheet.includeNumbers} showMarks={worksheet.includeMarks && !answerSheet} marks={worksheet.marksPerQuestion} answer={answerSheet} />)}</article>);
+  return pages.map((questions, pageIndex) => (
+    <article className="worksheet-page" key={`${answerSheet ? "answers" : "questions"}-${pageIndex}`}>
+      <div className="mb-4 border-b border-black pb-5">
+        <div className="flex items-center gap-3">
+          <img src="intervals-icon.svg" alt="" aria-hidden="true" className="h-[52px] w-[52px] shrink-0 object-contain" />
+          <div className="min-w-0"><h2 className="text-2xl font-bold leading-none">{answerSheet ? `${worksheet.title} — Answers` : worksheet.title}</h2>{!answerSheet && worksheet.subtitle && <p className="mt-0.5 leading-[1.05] text-stone-700">{worksheet.subtitle}</p>}</div>
+        </div>
+        {!answerSheet && (worksheet.includeName || worksheet.includeClass || worksheet.includeDate) && (
+          <div className="mt-4 flex items-end gap-5 text-sm">
+            {worksheet.includeName && <p className="flex min-w-0 flex-[2] items-end gap-2"><span className="shrink-0">Name:</span><span className="min-w-8 flex-1 border-b border-black" /></p>}
+            {worksheet.includeClass && <p className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Class:</span><span className="min-w-8 flex-1 border-b border-black" /></p>}
+            {worksheet.includeDate && <p className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Date:</span><span className="min-w-8 flex-1 border-b border-black" /></p>}
+          </div>
+        )}
+      </div>
+      <div className={`worksheet-questions ${worksheet.showGridlines ? "border border-stone-200" : "border border-transparent"}`} style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateRows: `repeat(${rowsPerPage}, minmax(0, 1fr))` }}>
+        {questions.map((question, index) => {
+          const row = Math.floor(index / 2);
+          const dividerClass = worksheet.showGridlines ? `${index % 2 === 0 ? "border-r border-stone-200" : ""} ${row < rowsPerPage - 1 ? "border-b border-stone-200" : ""}` : "";
+          return <QuestionCard key={question.id} question={question} number={pageIndex * perPage + index + 1} showNumbers={worksheet.includeNumbers} showMarks={worksheet.includeMarks && !answerSheet} marks={1} answer={answerSheet} dividerClass={dividerClass} />;
+        })}
+      </div>
+      {!answerSheet && pageIndex === pages.length - 1 && <div className="mt-3 flex shrink-0 items-center justify-end gap-2 text-sm font-bold"><span>Total marks</span><span className="flex h-9 min-w-24 items-center justify-end rounded-lg border border-black px-3">&nbsp; / {worksheet.questions.length}</span></div>}
+    </article>
+  ));
 }
 
-function createQuestionSet(count, level, enabledModes, order = "generated") {
+function createQuestionSet(count, level, enabledModes) {
   const questions = [], seen = new Set();
   for (let position = 0; position < count; position += 1) {
     let selected = null;
@@ -116,40 +159,114 @@ function createQuestionSet(count, level, enabledModes, order = "generated") {
     }
     questions.push(selected);
   }
-  return order === "random" ? shuffle(questions) : questions;
+  return questions;
+}
+
+function wrapPdfText(text, font, size, maxWidth) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  words.forEach((word) => {
+    const candidate = lines.length ? `${lines.at(-1)} ${word}` : word;
+    if (!lines.length || font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+      if (lines.length) lines[lines.length - 1] = candidate;
+      else lines.push(candidate);
+    } else lines.push(word);
+  });
+  return lines;
+}
+
+async function worksheetIconPngBytes() {
+  let response;
+  try { response = await fetch("intervals-icon.svg"); } catch {}
+  if (!response?.ok) response = await fetch("https://mrtennant-music.github.io/musicliteracy/intervals-icon.svg");
+  const svgText = await response.text();
+  const objectUrl = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }));
+  try {
+    const image = new Image();
+    await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = objectUrl; });
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext("2d");
+    context.drawImage(image, 0, 0, 256, 256);
+    const pngBlob = await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Icon conversion failed")), "image/png"));
+    return new Uint8Array(await pngBlob.arrayBuffer());
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function drawPdfNotation(page, question, staffBottom, bravuraFont, showAnswer, scale = 1, staffCentre = 293) {
+  const symbols = window.BRAVURA_SYMBOLS || {};
+  const symbolSettings = window.SHARED_NOTATION_CONFIG?.symbols || {};
+  const notes = window.MLHIntervalsWorksheet.notes;
+  const staffWidth = 298 * scale, staffLeft = staffCentre - staffWidth / 2, staffRight = staffCentre + staffWidth / 2, gap = 13.55 * scale;
+  const noteY = (note) => staffBottom + note.step * (gap / 2);
+  const drawGlyph = (key, centreX, y, overrideKey = null) => {
+    const settings = symbolSettings[key] || {};
+    const glyph = symbols[overrideKey || key] || "";
+    if (!glyph) return;
+    const size = gap * (settings.fontSizeScale || 1);
+    const x = centreX + gap * (settings.xOffsetScale || 0) - bravuraFont.widthOfTextAtSize(glyph, size) / 2;
+    page.drawText(glyph, { x, y: y + gap * (settings.yOffsetScale || 0), size, font: bravuraFont });
+  };
+  const solidRight = staffLeft + (staffRight - staffLeft) * 0.86;
+  [0,1,2,3,4].forEach((line) => {
+    const y = staffBottom + line * gap;
+    page.drawLine({ start: { x: staffLeft, y }, end: { x: solidRight, y }, thickness: 0.95 });
+    const fadeWidth = staffRight - solidRight;
+    for (let segment = 0; segment < 12; segment += 1) {
+      page.drawLine({ start: { x: solidRight + fadeWidth * segment / 12, y }, end: { x: solidRight + fadeWidth * (segment + 1) / 12, y }, thickness: 0.95, opacity: 1 - (segment + 0.5) / 12 });
+    }
+  });
+  drawGlyph("gClef", staffLeft + 34 * scale, staffBottom + gap, "gClef");
+  (question.keySignature || []).forEach((item, index) => drawGlyph(item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature", staffLeft + (59 + index * 19) * scale, staffBottom + item.step * (gap / 2), item.type === "sharp" ? "sharp" : "flat"));
+  const drawNote = (noteIndex, x, accidental) => {
+    const note = notes[noteIndex];
+    const halfWidth = gap * 1.2;
+    if (note.step <= -2) for (let step = -2; step >= note.step; step -= 2) page.drawLine({ start: { x: x - halfWidth, y: staffBottom + step * (gap / 2) }, end: { x: x + halfWidth, y: staffBottom + step * (gap / 2) }, thickness: 0.75 });
+    if (note.step >= 10) for (let step = 10; step <= note.step; step += 2) page.drawLine({ start: { x: x - halfWidth, y: staffBottom + step * (gap / 2) }, end: { x: x + halfWidth, y: staffBottom + step * (gap / 2) }, thickness: 0.75 });
+    drawGlyph(note.step > 4 ? "quarterNoteStemDown" : "quarterNoteStemUp", x, noteY(note), note.step > 4 ? "quarterNoteStemDown" : "quarterNoteStemUp");
+    if (accidental) drawGlyph(accidental === "sharp" ? "sharpInScore" : "flatInScore", x - 15 * scale, noteY(note), accidental === "sharp" ? "sharp" : "flat");
+  };
+  drawNote(question.startIndex, staffLeft + 110 * scale);
+  const secondIndex = question.type === "identify" || showAnswer ? (question.endIndex ?? question.targetIndex) : null;
+  if (secondIndex != null) drawNote(secondIndex, staffLeft + 203 * scale, question.targetAccidental);
 }
 
 function App() {
   const imported = useMemo(importedConfig, []);
   const initialLevel = imported?.settings.level || "N5";
   const initialModes = imported?.settings.enabledModes || DEFAULT_MODES;
-  const initialTitle = `${imported?.activityName || "Intervals"} Worksheet`;
+  const initialTitle = `${LEVELS[initialLevel]} ${imported?.activityName || "Intervals"}`;
   const [title, setTitle] = useState(initialTitle);
-  const [subtitle, setSubtitle] = useState("");
-  const [includeName, setIncludeName] = useState(true), [includeClass, setIncludeClass] = useState(false), [includeDate, setIncludeDate] = useState(false);
-  const [countChoice, setCountChoice] = useState("10"), [customCount, setCustomCount] = useState(""), [order, setOrder] = useState("generated"), [includeNumbers, setIncludeNumbers] = useState(true), [includeMarks, setIncludeMarks] = useState(false), [marksPerQuestion, setMarksPerQuestion] = useState(1);
-  const [questionsPerPage, setQuestionsPerPage] = useState("auto"), [includeAnswers, setIncludeAnswers] = useState(true), [newAnswerPage, setNewAnswerPage] = useState(true), [monochrome, setMonochrome] = useState(true);
-  const [level, setLevel] = useState(initialLevel), [enabledModes, setEnabledModes] = useState({ ...DEFAULT_MODES, ...initialModes });
+  const [subtitle, setSubtitle] = useState("Identify the interval between each pair of notes.");
+  const [includeName, setIncludeName] = useState(true), [includeClass, setIncludeClass] = useState(true), [includeDate, setIncludeDate] = useState(true);
+  const [countChoice, setCountChoice] = useState("10"), [includeNumbers, setIncludeNumbers] = useState(true), [includeMarks, setIncludeMarks] = useState(true);
+  const [includeAnswers, setIncludeAnswers] = useState(true), [showGridlines, setShowGridlines] = useState(false);
+  const level = initialLevel;
+  const enabledModes = { ...DEFAULT_MODES, ...initialModes };
   const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
   const [worksheet, setWorksheet] = useState(() => {
     const modes = initialLevel === "N5" ? { identify: true, create: false } : initialModes;
     return { sourceLevel: initialLevel, sourceModes: JSON.stringify(modes), questions: createQuestionSet(10, initialLevel, modes) };
   });
-  const customSettings = imported?.customised ? "Custom settings" : "Standard settings";
   const isN5 = level === "N5";
   const fieldClass = "mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm";
-  const check = (label, checked, onChange, disabled = false) => <label className={`flex items-center gap-2 text-sm ${disabled ? "text-stone-400" : ""}`}><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />{label}</label>;
-  const requestedCount = countChoice === "custom" ? Number(customCount) : Number(countChoice);
+  const compactSelectClass = "w-32 shrink-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm";
+  const check = (label, checked, onChange, disabled = false) => <label className={`flex items-center gap-2 text-sm ${disabled ? "text-stone-400" : ""}`}><input className="worksheet-checkbox" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />{label}</label>;
+  const requestedCount = Number(countChoice);
   const currentModes = isN5 ? { identify: true, create: false } : enabledModes;
-  const previewWorksheet = useMemo(() => ({ ...worksheet, title: title.trim() || "Intervals Worksheet", subtitle: subtitle.trim(), includeName, includeClass, includeDate, includeNumbers, includeMarks, marksPerQuestion: Math.max(1, Number(marksPerQuestion) || 1), questionsPerPage, includeAnswers, newAnswerPage, monochrome }), [worksheet, title, subtitle, includeName, includeClass, includeDate, includeNumbers, includeMarks, marksPerQuestion, questionsPerPage, includeAnswers, newAnswerPage, monochrome]);
+  const previewWorksheet = useMemo(() => ({ ...worksheet, title: title.trim() || initialTitle, subtitle: subtitle.trim(), includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, showGridlines }), [worksheet, title, subtitle, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, showGridlines, initialTitle]);
   useEffect(() => { try { window.sessionStorage.setItem("worksheetGeneratedData", JSON.stringify(previewWorksheet)); } catch {} }, [previewWorksheet]);
   function resizeQuestions(count, nextLevel = level, nextModes = currentModes) {
     if (!Number.isInteger(count) || count < 1 || count > 50) return;
     setWorksheet((current) => {
-      if (current.sourceLevel !== nextLevel || current.sourceModes !== JSON.stringify(nextModes)) return { ...current, sourceLevel: nextLevel, sourceModes: JSON.stringify(nextModes), questions: createQuestionSet(count, nextLevel, nextModes, order) };
+      if (current.sourceLevel !== nextLevel || current.sourceModes !== JSON.stringify(nextModes)) return { ...current, sourceLevel: nextLevel, sourceModes: JSON.stringify(nextModes), questions: createQuestionSet(count, nextLevel, nextModes) };
       if (current.questions.length === count) return current;
       if (current.questions.length > count) return { ...current, questions: current.questions.slice(0, count) };
-      const additional = createQuestionSet(count - current.questions.length, nextLevel, nextModes, order);
+      const additional = createQuestionSet(count - current.questions.length, nextLevel, nextModes);
       return { ...current, questions: [...current.questions, ...additional] };
     });
   }
@@ -158,11 +275,145 @@ function App() {
     if (!Number.isInteger(count) || count < 1 || count > 50) { setError("Choose a whole-number question count between 1 and 50."); return; }
     const modes = isN5 ? { identify: true, create: false } : enabledModes;
     if (!modes.identify && !modes.create) { setError("Select at least one Intervals question type."); return; }
-    const next = { ...previewWorksheet, sourceLevel: level, sourceModes: JSON.stringify(modes), questions: createQuestionSet(count, level, modes, order) };
+    const next = { ...previewWorksheet, sourceLevel: level, sourceModes: JSON.stringify(modes), questions: createQuestionSet(count, level, modes) };
     setWorksheet(next); setError("");
   }
+  async function downloadPdf() {
+    if (downloading) return;
+    if (!window.PDFLib || !window.fontkit) { setError("The PDF tools could not load. Check your internet connection and try again."); return; }
+    setDownloading(true);
+    setError("");
+    try {
+      const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.registerFontkit(window.fontkit);
+      let fontResponse;
+      try { fontResponse = await fetch("Bravura.otf"); } catch {}
+      if (!fontResponse?.ok) fontResponse = await fetch("https://mrtennant-music.github.io/musicliteracy/Bravura.otf");
+      const bravuraFont = await pdfDoc.embedFont(await fontResponse.arrayBuffer());
+      const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const worksheetIcon = await pdfDoc.embedPng(await worksheetIconPngBytes());
+      const perPage = 6;
+      const questionGroups = chunk(previewWorksheet.questions, perPage);
+      const drawPage = (questions, answerSheet, pageIndex) => {
+        const page = pdfDoc.addPage([595.28, 841.89]);
+        const black = rgb(0, 0, 0), grey = rgb(0.36, 0.34, 0.32);
+        const heading = answerSheet ? `${previewWorksheet.title} - Answers` : previewWorksheet.title;
+        page.drawImage(worksheetIcon, { x: 42, y: 773, width: 40, height: 40 });
+        page.drawText(heading, { x: 90, y: 795, size: 18, font: boldFont, color: black });
+        let dividerY = 742;
+        if (!answerSheet && previewWorksheet.subtitle) {
+          wrapPdfText(previewWorksheet.subtitle, regularFont, 10, 463).slice(0, 2).forEach((line, index) => page.drawText(line, { x: 90, y: 776 - index * 12, size: 10, font: regularFont, color: grey }));
+          dividerY = 720;
+        }
+        if (!answerSheet) {
+          const fields = [previewWorksheet.includeName && { label: "Name:", ratio: 2 }, previewWorksheet.includeClass && { label: "Class:", ratio: 1 }, previewWorksheet.includeDate && { label: "Date:", ratio: 1 }].filter(Boolean);
+          if (fields.length) {
+            const fieldY = dividerY + 25, gap = 16, available = 511 - gap * (fields.length - 1), totalRatio = fields.reduce((sum, field) => sum + field.ratio, 0);
+            let x = 42;
+            fields.forEach((field) => {
+              const width = available * field.ratio / totalRatio;
+              page.drawText(field.label, { x, y: fieldY, size: 9.5, font: regularFont, color: black });
+              const labelWidth = regularFont.widthOfTextAtSize(field.label, 9.5);
+              page.drawLine({ start: { x: x + labelWidth + 5, y: fieldY - 1 }, end: { x: x + width, y: fieldY - 1 }, thickness: 0.7, color: black });
+              x += width + gap;
+            });
+          }
+        }
+        page.drawLine({ start: { x: 42, y: dividerY }, end: { x: 553, y: dividerY }, thickness: 0.5, color: black });
+        const showTotalMarks = !answerSheet && pageIndex === questionGroups.length - 1;
+        const contentTop = dividerY - 22, contentBottom = showTotalMarks ? 82 : 42, tableLeft = 42, tableRight = 553, columnWidth = (tableRight - tableLeft) / 2;
+        const rowsPerPage = Math.ceil(perPage / 2), rowHeight = (contentTop - contentBottom) / rowsPerPage;
+        if (previewWorksheet.showGridlines) {
+          page.drawRectangle({ x: tableLeft, y: contentBottom, width: tableRight - tableLeft, height: contentTop - contentBottom, borderColor: grey, borderWidth: 0.5, borderOpacity: 0.3 });
+          page.drawLine({ start: { x: tableLeft + columnWidth, y: contentBottom }, end: { x: tableLeft + columnWidth, y: contentTop }, thickness: 0.5, color: grey, opacity: 0.3 });
+          for (let row = 1; row < rowsPerPage; row += 1) {
+            const y = contentTop - row * rowHeight;
+            page.drawLine({ start: { x: tableLeft, y }, end: { x: tableRight, y }, thickness: 0.5, color: grey, opacity: 0.3 });
+          }
+        }
+        questions.forEach((question, index) => {
+          const globalNumber = pageIndex * perPage + index + 1;
+          const row = Math.floor(index / 2), column = index % 2;
+          const cellLeft = tableLeft + column * columnWidth, cellRight = cellLeft + columnWidth;
+          const cellTop = contentTop - row * rowHeight, cellBottom = cellTop - rowHeight;
+          const createPrompt = question.type === "create" ? `Write a ${window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase()} ${question.direction} than the note given.` : "";
+          const headingText = `${previewWorksheet.includeNumbers ? `${globalNumber}.` : ""}${createPrompt ? `${previewWorksheet.includeNumbers ? " " : ""}${createPrompt}` : ""}`;
+          if (headingText) wrapPdfText(headingText, boldFont, 8.5, columnWidth - 36).slice(0, 2).forEach((line, lineIndex) => page.drawText(line, { x: cellLeft + 10, y: cellTop - 17 - lineIndex * 10, size: 8.5, font: boldFont, color: black }));
+          const notationScale = Math.min(0.72, Math.max(0.45, (rowHeight - 58) / 90));
+          const gap = 13.55 * notationScale;
+          const notationTop = cellTop - (createPrompt ? 43 : 30), notationBottom = cellBottom + 36;
+          const staffBottom = (notationTop + notationBottom) / 2 - 2 * gap;
+          drawPdfNotation(page, question, staffBottom, bravuraFont, answerSheet, notationScale, cellLeft + columnWidth / 2);
+          const showQuestionMark = previewWorksheet.includeMarks && !answerSheet;
+          const answerLineLeft = cellLeft + 12, answerLineRight = cellRight - (showQuestionMark ? 32 : 12);
+          if (answerSheet) {
+            const answerWidth = boldFont.widthOfTextAtSize(question.answerText, 9.5);
+            page.drawText(question.answerText, { x: answerLineLeft + (answerLineRight - answerLineLeft - answerWidth) / 2, y: cellBottom + 22, size: 9.5, font: boldFont, color: black });
+          }
+          page.drawLine({ start: { x: answerLineLeft, y: cellBottom + 17 }, end: { x: answerLineRight, y: cellBottom + 17 }, thickness: 0.65, color: black });
+          if (showQuestionMark) page.drawText("1", { x: cellRight - 18, y: cellBottom + 20, size: 9, font: boldFont, color: black });
+        });
+        if (showTotalMarks) {
+          page.drawText("Total marks", { x: 404, y: 53, size: 10, font: boldFont, color: black });
+          page.drawRectangle({ x: 474, y: 42, width: 79, height: 28, borderColor: black, borderWidth: 0.8 });
+          const totalText = `/ ${previewWorksheet.questions.length}`;
+          page.drawText(totalText, { x: 545 - boldFont.widthOfTextAtSize(totalText, 10), y: 52, size: 10, font: boldFont, color: black });
+        }
+      };
+      questionGroups.forEach((questions, pageIndex) => drawPage(questions, false, pageIndex));
+      if (previewWorksheet.includeAnswers) questionGroups.forEach((questions, pageIndex) => drawPage(questions, true, pageIndex));
+      const pdfBytes = await pdfDoc.save();
+      const url = URL.createObjectURL(new Blob([pdfBytes], { type: "application/pdf" }));
+      const link = document.createElement("a");
+      const safeTitle = (previewWorksheet.title || "Intervals Worksheet").replace(/[^a-z0-9 _-]/gi, "").trim() || "Intervals Worksheet";
+      link.href = url;
+      link.download = `${safeTitle}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setError("The PDF could not be created. Please try again or use Print instead.");
+    } finally {
+      setDownloading(false);
+    }
+  }
   if (!imported) return <div className={SHELL.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Create a worksheet" subtitle="Worksheets begin from a supported activity." /><div className={SHELL.pageContentClass}><main className={`${SHELL.mainShellClass} flex items-center justify-center`}><p className="max-w-lg py-12 text-center text-stone-700">Open Intervals and choose <strong>Create worksheet</strong> beside the QR code to bring its current settings here.</p></main></div></div>;
-  return <div className={SHELL.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Create a worksheet" subtitle="Generate a printable worksheet from Intervals." /><div className={`${SHELL.pageContentClass} worksheet-page-content`}><main className={`${SHELL.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}><div className="no-print"><p className="mb-4 text-stone-700">Generate a printable worksheet using the current activity and settings. Adjust the options below before creating the questions.</p><div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 font-semibold">{LEVELS[level]} · Intervals · {customSettings}</div><div className="space-y-6"><section><h2 className="text-lg font-bold">Worksheet details</h2><label className="mt-3 block text-sm font-semibold">Worksheet title<input className={fieldClass} value={title} onChange={(event) => setTitle(event.target.value)} /></label><label className="mt-3 block text-sm font-semibold">Subtitle or instructions (optional)<input className={fieldClass} value={subtitle} onChange={(event) => setSubtitle(event.target.value)} /></label><div className="mt-4 space-y-2">{check("Include student name field", includeName, setIncludeName)}{check("Include class field", includeClass, setIncludeClass)}{check("Include date field", includeDate, setIncludeDate)}</div></section><section><h2 className="text-lg font-bold">Question settings</h2><label className="mt-3 block text-sm font-semibold">Number of questions<select className={fieldClass} value={countChoice} onChange={(event) => { const value = event.target.value; setCountChoice(value); if (value !== "custom") { resizeQuestions(Number(value)); setError(""); } }}>{[5,10,15,20].map((value) => <option key={value} value={value}>{value}</option>)}<option value="custom">Custom</option></select></label>{countChoice === "custom" && <label className="mt-3 block text-sm font-semibold">Custom count (1–50)<input className={fieldClass} type="number" min="1" max="50" value={customCount} onChange={(event) => { const value = event.target.value; setCustomCount(value); const count = Number(value); if (Number.isInteger(count) && count >= 1 && count <= 50) { resizeQuestions(count); setError(""); } }} /></label>}<label className="mt-3 block text-sm font-semibold">Question order<select className={fieldClass} value={order} onChange={(event) => { const value = event.target.value; setOrder(value); if (value === "random") setWorksheet((current) => ({ ...current, questions: shuffle(current.questions) })); }}><option value="generated">Generated order</option><option value="random">Randomised</option></select></label><div className="mt-4 space-y-2">{check("Include question numbers", includeNumbers, setIncludeNumbers)}{check("Include marks", includeMarks, setIncludeMarks)}{includeMarks && <label className="block text-sm font-semibold">Marks per question<input className={fieldClass} type="number" min="1" value={marksPerQuestion} onChange={(event) => setMarksPerQuestion(event.target.value)} /></label>}</div></section><section><h2 className="text-lg font-bold">Layout settings</h2><label className="mt-3 block text-sm font-semibold">Questions per page<select className={fieldClass} value={questionsPerPage} onChange={(event) => setQuestionsPerPage(event.target.value)}><option value="auto">Automatic</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label><div className="mt-4 space-y-2">{check("Include answer sheet", includeAnswers, setIncludeAnswers)}{check("Start answer sheet on a new page", newAnswerPage, setNewAnswerPage, !includeAnswers)}{check("Print-friendly monochrome", monochrome, setMonochrome)}</div></section><section><h2 className="text-lg font-bold">Intervals settings</h2><label className="mt-3 block text-sm font-semibold">Level<select className={fieldClass} value={level} onChange={(event) => { const nextLevel = event.target.value; const nextModes = nextLevel === "N5" ? { identify: true, create: false } : enabledModes; setLevel(nextLevel); resizeQuestions(Number.isInteger(requestedCount) && requestedCount > 0 ? requestedCount : worksheet.questions.length, nextLevel, nextModes); }} >{Object.entries(LEVELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><div className="mt-4 space-y-2">{isN5 && check("Identify intervals", true, () => {}, true)}{!isN5 && check("Identify intervals", enabledModes.identify, (value) => { const next = { ...enabledModes, identify: value }; if (!next.identify && !next.create) { setError("Select at least one Intervals question type."); return; } setEnabledModes(next); resizeQuestions(Number.isInteger(requestedCount) && requestedCount > 0 ? requestedCount : worksheet.questions.length, level, next); setError(""); })}{!isN5 && check("Create intervals", enabledModes.create, (value) => { const next = { ...enabledModes, create: value }; if (!next.identify && !next.create) { setError("Select at least one Intervals question type."); return; } setEnabledModes(next); resizeQuestions(Number.isInteger(requestedCount) && requestedCount > 0 ? requestedCount : worksheet.questions.length, level, next); setError(""); })}</div></section></div>{error && <p className="mt-5 font-semibold text-red-700" role="alert">{error}</p>}<button type="button" onClick={generate} className="mt-6 w-full rounded-xl border border-black bg-black px-5 py-3 font-bold text-white transition hover:bg-stone-800">Generate worksheet</button></div><section id="worksheet-preview" className="print-area worksheet-preview-panel"><div className="no-print mb-4 flex items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Worksheet preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div><button type="button" onClick={() => window.print()} className="shrink-0 rounded-xl border border-black bg-black px-4 py-2.5 text-sm font-bold text-white">Print worksheet</button></div><WorksheetPages worksheet={previewWorksheet} />{previewWorksheet.includeAnswers && <div className={previewWorksheet.newAnswerPage ? "answer-sheet-start-new" : ""}><WorksheetPages worksheet={previewWorksheet} answerSheet /></div>}</section></main></div></div>;
+  return (
+    <div className={SHELL.pageShellClass}>
+      <window.MLH.AppHeader icon={ASSET.appIcon} title="Create a worksheet" subtitle="Generate a printable worksheet from Intervals." />
+      <div className={`${SHELL.pageContentClass} worksheet-page-content`}>
+        <main className={`${SHELL.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}>
+          <div className="no-print">
+            <div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
+              <h2 className="text-xl font-bold">Intervals · {LEVELS[level]}</h2>
+              <p className="mt-1 text-sm leading-relaxed text-stone-600">Generate a printable worksheet using the current activity and settings.</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-white p-4">
+              <div><h2 className="flex items-center gap-2 text-xl font-bold"><img src="customise.svg" alt="" aria-hidden="true" className="h-6 w-6 object-contain" />Customise</h2><p className="mt-1 text-sm text-stone-600">Adjust the worksheet content and layout.</p></div>
+              <div className="mt-4 space-y-4">
+                <label className="block text-sm font-semibold">Title<input className={fieldClass} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+                <label className="block text-sm font-semibold">Instructions<input className={fieldClass} value={subtitle} onChange={(event) => setSubtitle(event.target.value)} /></label>
+                <div className="flex flex-wrap items-center justify-start gap-x-7 gap-y-2">{check("Name", includeName, setIncludeName)}{check("Class", includeClass, setIncludeClass)}{check("Date", includeDate, setIncludeDate)}</div>
+                <label className="flex items-center justify-between gap-4 border-t border-stone-200 pt-4 text-sm font-semibold"><span>Number of Questions</span><select className={compactSelectClass} value={countChoice} onChange={(event) => { const value = event.target.value; setCountChoice(value); resizeQuestions(Number(value)); setError(""); }}>{[10,15,20,25].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+                <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-2">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}</div>
+                <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-2">{check("Answers", includeAnswers, setIncludeAnswers)}{check("Gridlines", showGridlines, setShowGridlines)}</div>
+              </div>
+              {error && <p className="mt-5 font-semibold text-red-700" role="alert">{error}</p>}
+              <div className="mt-6 grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button type="button" onClick={generate} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-semibold text-stone-800 transition hover:bg-stone-100"><span className="flex items-center justify-center gap-2"><img src="restart.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" /><span>Refresh</span></span></button><button type="button" onClick={downloadPdf} disabled={downloading} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="download.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>{downloading ? "Preparing…" : "Download"}</span></span></button><button type="button" onClick={() => window.print()} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white"><span className="flex items-center justify-center gap-2"><img src="print.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>Print</span></span></button></div>
+            </div>
+          </div>
+          <section id="worksheet-preview" className="print-area worksheet-preview-panel">
+            <div className="no-print mb-4"><h2 className="text-xl font-bold">Preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div>
+            <WorksheetPages worksheet={previewWorksheet} />
+            {previewWorksheet.includeAnswers && <div className="answer-sheet-start-new"><WorksheetPages worksheet={previewWorksheet} answerSheet /></div>}
+          </section>
+        </main>
+      </div>
+    </div>
+  );
 }
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>

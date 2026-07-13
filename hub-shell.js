@@ -197,7 +197,7 @@
     const worksheetEnabled = activeWorksheetMode || typeof worksheetConfig === "function";
     const displayedChildren = activeWorksheetMode && !children && worksheetHeader?.assets
       ? React.createElement("div", { className: "pointer-events-none opacity-40 grayscale", "aria-disabled": "true", inert: "" },
-          React.createElement(ScoreStreakPanel, { assets: worksheetHeader.assets, correct: 0, attempted: 0, accuracy: 0, streak: 0, bestStreak: 0, resetScore: () => {}, confettiKey: 0, medalEligible: false }))
+          React.createElement(ScoreStreakPanel, { assets: worksheetHeader.assets, correct: 0, attempted: 0, accuracy: 0, streak: 0, bestStreak: 0, resetScore: () => {}, confettiKey: 0, medalEligible: true }))
       : children;
     function createWorksheet() {
       if (!worksheetEnabled) return;
