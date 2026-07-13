@@ -17,12 +17,14 @@
   <script src="./intervals-worksheet-core.js"></script>
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
   <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+  <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     .music-symbol { font-family: "Bravura", serif; }
     .worksheet-builder { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
-    .worksheet-preview-panel { position: sticky; top: 112px; max-height: calc(100vh - 136px); overflow-y: auto; border: 1px solid #e7e5e4; border-radius: 16px; background: #fafaf9; padding: 12px 16px 16px; }
+    .worksheet-preview-panel { position: sticky; top: 112px; max-height: calc(100vh - 136px); overflow-y: auto; overscroll-behavior-y: contain; border: 1px solid #e7e5e4; border-radius: 16px; background: #fafaf9; padding: 12px 16px 16px; }
     .worksheet-page { display: flex; flex-direction: column; width: min(100%, 210mm); min-height: 0; aspect-ratio: 210 / 297; margin: 0 auto 24px; overflow: hidden; background: white; box-shadow: 0 2px 16px rgba(0,0,0,.14); padding: clamp(20px, 5.4vw, 14mm); }
     .worksheet-questions { display: grid; flex: 1; min-height: 0; }
     .worksheet-question { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 8px 12px; break-inside: avoid; page-break-inside: avoid; }
@@ -31,9 +33,13 @@
     .worksheet-checkbox { appearance: none; display: inline-block; height: 16px; width: 16px; flex: 0 0 16px; border: 1px solid #a8a29e; border-radius: 4px; background-color: white; background-position: center; background-repeat: no-repeat; background-size: 11px 11px; }
     .worksheet-checkbox:checked { border-color: black; background-color: black; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.3 6.6 11.4 12.7 4.8' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
     .worksheet-checkbox:focus-visible { outline: 2px solid black; outline-offset: 2px; }
+    .generic-grid { grid-auto-rows: 1fr; min-height: 0; }
+    .generic-grid.with-gridlines { border-left: 1px solid #d6d3d1; border-top: 1px solid #d6d3d1; }
+    .generic-grid.with-gridlines .generic-question { border-right: 1px solid #d6d3d1; border-bottom: 1px solid #d6d3d1; }
+    .generic-question { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 10px 12px; }
     @media (max-width: 1023px) {
       .worksheet-builder { grid-template-columns: 1fr; }
-      .worksheet-preview-panel { position: static; max-height: none; overflow: visible; }
+      .worksheet-preview-panel { position: static; max-height: none; overflow: visible; overscroll-behavior-y: auto; }
     }
     @media print {
       @page { size: A4 portrait; margin: 0; }
@@ -85,6 +91,19 @@ function importedConfig() {
 
 function chunk(items, size) { return items.reduce((pages, item, index) => { const page = Math.floor(index / size); (pages[page] ||= []).push(item); return pages; }, []); }
 
+function worksheetQuestionTypes(questions) {
+  const hasIdentify = questions.some((question) => question.type === "identify");
+  const hasCreate = questions.some((question) => question.type === "create");
+  return { hasIdentify, hasCreate, mixed: hasIdentify && hasCreate };
+}
+
+function defaultWorksheetInstructions(questions) {
+  const { hasCreate, mixed } = worksheetQuestionTypes(questions);
+  if (mixed) return "Identify or create the intervals shown below.";
+  if (hasCreate) return "Write the requested interval above or below each given note.";
+  return "Identify the interval between each pair of notes.";
+}
+
 function PrintableScore({ question, answer = false, muted = false }) {
   const symbols = window.BRAVURA_SYMBOLS || {};
   const symbolConfig = window.SHARED_NOTATION_CONFIG?.symbols || {};
@@ -111,13 +130,16 @@ function PrintableScore({ question, answer = false, muted = false }) {
   };
   const renderNote = (note, x, accidental) => <g key={`${note.name}-${x}`}><>{ledger(note, x)}</>{symbol(note.step > 4 ? "quarterNoteStemDown" : "quarterNoteStemUp", x, yFor(note.step))}{accidental && symbol(accidental === "sharp" ? "sharpInScore" : "flatInScore", x - gap * 2.1, yFor(note.step))}</g>;
   const gradientId = `worksheetStaffFade-${question.id}-${answer ? "answer" : "question"}`;
-  return <svg viewBox="190 70 526 210" preserveAspectRatio="xMidYMid meet" className="worksheet-score h-full w-full" role="img" aria-label="Musical notation for the question"><defs><linearGradient id={gradientId} x1={left} y1="0" x2={right} y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor={ink} stopOpacity="1" /><stop offset="86%" stopColor={ink} stopOpacity="1" /><stop offset="100%" stopColor={ink} stopOpacity="0" /></linearGradient></defs>{[0,1,2,3,4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * gap} y2={top + line * gap} stroke={`url(#${gradientId})`} strokeWidth="1.5" />)}{symbol("gClef", left + gap * 2.5, yFor(2))}{(question.keySignature || []).map((item, index) => <g key={index}>{symbol(item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature", left + 92 + index * 30, yFor(item.step))}</g>)}{renderNote(start, 392)}{end ? renderNote(end, 536, question.targetAccidental) : <text x="536" y={yFor(4)} fontSize="36" textAnchor="middle" fill={ink}>?</text>}</svg>;
+  return <svg viewBox="190 70 526 210" preserveAspectRatio="xMidYMid meet" className="worksheet-score h-full w-full" role="img" aria-label="Musical notation for the question"><defs><linearGradient id={gradientId} x1={left} y1="0" x2={right} y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor={ink} stopOpacity="1" /><stop offset="86%" stopColor={ink} stopOpacity="1" /><stop offset="100%" stopColor={ink} stopOpacity="0" /></linearGradient></defs>{[0,1,2,3,4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * gap} y2={top + line * gap} stroke={`url(#${gradientId})`} strokeWidth="1.5" />)}{symbol("gClef", left + gap * 2.5, yFor(2))}{(question.keySignature || []).map((item, index) => <g key={index}>{symbol(item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature", left + 92 + index * 30, yFor(item.step))}</g>)}{renderNote(start, 392)}{end && renderNote(end, 536, question.targetAccidental)}</svg>;
 }
 
-function QuestionCard({ question, number, showNumbers, showMarks, marks, answer = false, workedExample = false, dividerClass = "" }) {
-  const createPrompt = question.type === "create" ? `Write a ${window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase()} ${question.direction} than the note given.` : "";
+function QuestionCard({ question, number, showNumbers, showMarks, marks, showIdentifyPrompt = false, answer = false, workedExample = false, dividerClass = "" }) {
+  const intervalText = question.type === "create" ? window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase() : "";
+  const createPrompt = question.type === "create" ? <span>{intervalText === "tritone" ? "Write a note a " : "Write a "}<strong className="font-bold">{intervalText}</strong> <strong className="font-bold">{question.direction}</strong> than the note given.</span> : null;
+  const questionPrompt = createPrompt || (question.type === "identify" && showIdentifyPrompt ? <span>Identify the interval.</span> : null);
   const completed = answer || workedExample;
-  return <section className={`worksheet-question ${workedExample ? "bg-stone-100 text-stone-500" : ""} ${dividerClass}`}><div className="flex min-h-5 shrink-0 items-start gap-3"><p className="font-semibold">{workedExample ? "Example Answer" : showNumbers ? `${number}.` : ""}{createPrompt && <span>{workedExample || showNumbers ? " " : ""}{createPrompt}</span>}</p></div><PrintableScore question={question} answer={completed} muted={workedExample} /><div className="flex min-h-7 shrink-0 items-end gap-3">{completed ? <p className={`min-w-0 flex-1 border-b pb-1 text-center font-semibold ${workedExample ? "border-stone-400" : "border-black"}`}>{question.answerText}</p> : <div className="min-w-0 flex-1 border-b border-black" />}{showMarks && !workedExample && <strong className="w-4 shrink-0 pb-1 text-right text-sm">{marks}</strong>}</div></section>;
+  const usesTextAnswer = question.type !== "create";
+  return <section className={`worksheet-question ${workedExample ? "bg-stone-100 text-stone-500" : ""} ${dividerClass}`}><div className="min-h-5 shrink-0">{workedExample ? <><p className="font-semibold">Example Answer</p>{questionPrompt && <p className="mt-0.5 text-sm font-normal leading-snug">{questionPrompt}</p>}</> : <div className="flex items-baseline gap-1"><p className="shrink-0 font-semibold">{showNumbers ? `${number}.` : ""}</p>{questionPrompt && <p className="text-sm font-normal leading-snug">{questionPrompt}</p>}</div>}</div><PrintableScore question={question} answer={completed} muted={workedExample} /><div className="relative flex min-h-7 shrink-0 items-end justify-center">{usesTextAnswer && (completed ? <p className={`w-4/5 border-b pb-1 text-center font-semibold ${workedExample ? "border-stone-400" : "border-black"}`}>{question.answerText}</p> : <div className="w-4/5 border-b border-black" />)}{showMarks && !workedExample && <strong className="absolute bottom-1 right-0 w-4 text-right text-sm">{marks}</strong>}</div></section>;
 }
 
 function FittedInstructions({ text }) {
@@ -149,6 +171,7 @@ function FittedInstructions({ text }) {
 function WorksheetPages({ worksheet, answerSheet = false, pageOffset = 0, totalPages }) {
   const perPage = 6;
   const rowsPerPage = Math.ceil(perPage / 2);
+  const { mixed: mixedQuestionTypes } = worksheetQuestionTypes(worksheet.questions);
   const questionItems = worksheet.questions.map((question) => ({ question, workedExample: false }));
   const items = answerSheet ? questionItems : worksheet.includeExampleAnswer ? [{ question: worksheet.workedExample, workedExample: true }, ...questionItems] : questionItems;
   const pages = chunk(items, perPage);
@@ -172,7 +195,7 @@ function WorksheetPages({ worksheet, answerSheet = false, pageOffset = 0, totalP
           const row = Math.floor(index / 2);
           const dividerClass = worksheet.showGridlines ? `${index % 2 === 0 ? "border-r border-stone-200" : ""} ${row < rowsPerPage - 1 ? "border-b border-stone-200" : ""}` : "";
           const number = answerSheet || !worksheet.includeExampleAnswer ? pageIndex * perPage + index + 1 : pageIndex * perPage + index;
-          return <QuestionCard key={`${workedExample ? "example" : "question"}-${question.id}`} question={question} number={number} showNumbers={worksheet.includeNumbers} showMarks={worksheet.includeMarks && !answerSheet} marks={1} answer={answerSheet} workedExample={workedExample} dividerClass={dividerClass} />;
+          return <QuestionCard key={`${workedExample ? "example" : "question"}-${question.id}`} question={question} number={number} showNumbers={worksheet.includeNumbers} showMarks={worksheet.includeMarks && !answerSheet} marks={1} showIdentifyPrompt={mixedQuestionTypes} answer={answerSheet} workedExample={workedExample} dividerClass={dividerClass} />;
         })}
       </div>
       {!answerSheet && pageIndex === pages.length - 1 && <div className="mt-3 flex shrink-0 items-center justify-end gap-2 text-sm font-bold"><span>Total marks</span><span className="flex h-9 min-w-24 items-center justify-end rounded-lg border border-black px-3">&nbsp; / {worksheet.questions.length}</span></div>}
@@ -220,6 +243,24 @@ function fitPdfInstructions(text, font, maxWidth) {
     if (lines.length <= 2 && widthsFit) return { size, lines };
   }
   return { size: 6, lines: wrapPdfText(text, font, 6, maxWidth).slice(0, 2) };
+}
+
+function layoutPdfStyledText(runs, size, maxWidth, spaceFont) {
+  const words = runs.flatMap(({ text, font }) => text.trim().split(/\s+/).filter(Boolean).map((word) => ({ word, font })));
+  const lines = [[]];
+  let lineWidth = 0;
+  words.forEach(({ word, font }) => {
+    const spaceWidth = lines[lines.length - 1].length ? spaceFont.widthOfTextAtSize(" ", size) : 0;
+    const wordWidth = font.widthOfTextAtSize(word, size);
+    if (lines[lines.length - 1].length && lineWidth + spaceWidth + wordWidth > maxWidth) {
+      lines.push([]);
+      lineWidth = 0;
+    }
+    const x = lineWidth + (lines[lines.length - 1].length ? spaceWidth : 0);
+    lines[lines.length - 1].push({ word, font, x });
+    lineWidth = x + wordWidth;
+  });
+  return lines;
 }
 
 async function worksheetIconPngBytes() {
@@ -279,7 +320,7 @@ function drawPdfNotation(page, question, staffBottom, bravuraFont, showAnswer, s
     if (note.step <= -2) for (let step = -2; step >= note.step; step -= 2) page.drawLine({ start: { x: x - halfWidth, y: staffBottom + step * (gap / 2) }, end: { x: x + halfWidth, y: staffBottom + step * (gap / 2) }, thickness: 0.75, color: inkColor });
     if (note.step >= 10) for (let step = 10; step <= note.step; step += 2) page.drawLine({ start: { x: x - halfWidth, y: staffBottom + step * (gap / 2) }, end: { x: x + halfWidth, y: staffBottom + step * (gap / 2) }, thickness: 0.75, color: inkColor });
     drawGlyph(note.step > 4 ? "quarterNoteStemDown" : "quarterNoteStemUp", x, noteY(note), note.step > 4 ? "quarterNoteStemDown" : "quarterNoteStemUp");
-    if (accidental) drawGlyph(accidental === "sharp" ? "sharpInScore" : "flatInScore", x - 15 * scale, noteY(note), accidental === "sharp" ? "sharp" : "flat");
+    if (accidental) drawGlyph(accidental === "sharp" ? "sharpInScore" : "flatInScore", x - gap * 2.1, noteY(note), accidental === "sharp" ? "sharp" : "flat");
   };
   drawNote(question.startIndex, staffLeft + 110 * scale);
   const secondIndex = question.type === "identify" || showAnswer ? (question.endIndex ?? question.targetIndex) : null;
@@ -291,18 +332,23 @@ function App() {
   const initialLevel = imported?.settings.level || "N5";
   const initialModes = imported?.settings.enabledModes || DEFAULT_MODES;
   const initialTitle = `${imported?.activityName || "Intervals"} · ${LEVELS[initialLevel]}`;
+  const initialQuestionSet = useMemo(() => {
+    const modes = initialLevel === "N5" ? { identify: true, create: false } : initialModes;
+    return createWorksheetQuestionSet(10, initialLevel, modes);
+  }, []);
   const [title, setTitle] = useState(initialTitle);
-  const [subtitle, setSubtitle] = useState("Identify the interval between each pair of notes.");
+  const [subtitle, setSubtitle] = useState(() => defaultWorksheetInstructions(initialQuestionSet.questions));
+  const [subtitleCustomized, setSubtitleCustomized] = useState(false);
   const [includeName, setIncludeName] = useState(true), [includeClass, setIncludeClass] = useState(true), [includeDate, setIncludeDate] = useState(true);
   const [countChoice, setCountChoice] = useState("10"), [includeNumbers, setIncludeNumbers] = useState(true), [includeMarks, setIncludeMarks] = useState(true);
-  const [includeAnswers, setIncludeAnswers] = useState(true), [includeExampleAnswer, setIncludeExampleAnswer] = useState(true), [showGridlines, setShowGridlines] = useState(true);
+  const [includeAnswers, setIncludeAnswers] = useState(false), [includeExampleAnswer, setIncludeExampleAnswer] = useState(true), [showGridlines, setShowGridlines] = useState(true);
   const level = initialLevel;
   const enabledModes = { ...DEFAULT_MODES, ...initialModes };
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [worksheet, setWorksheet] = useState(() => {
     const modes = initialLevel === "N5" ? { identify: true, create: false } : initialModes;
-    return { sourceLevel: initialLevel, sourceModes: JSON.stringify(modes), ...createWorksheetQuestionSet(10, initialLevel, modes) };
+    return { sourceLevel: initialLevel, sourceModes: JSON.stringify(modes), ...initialQuestionSet };
   });
   const isN5 = level === "N5";
   const fieldClass = "mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm";
@@ -310,7 +356,8 @@ function App() {
   const check = (label, checked, onChange, disabled = false) => <label className={`flex items-center gap-2 text-sm ${disabled ? "text-stone-400" : ""}`}><input className="worksheet-checkbox" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />{label}</label>;
   const requestedCount = Number(countChoice);
   const currentModes = isN5 ? { identify: true, create: false } : enabledModes;
-  const previewWorksheet = useMemo(() => ({ ...worksheet, title: title.trim() || initialTitle, subtitle: subtitle.trim(), includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines }), [worksheet, title, subtitle, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines, initialTitle]);
+  const effectiveSubtitle = subtitleCustomized ? subtitle : defaultWorksheetInstructions(worksheet.questions);
+  const previewWorksheet = useMemo(() => ({ ...worksheet, title: title.trim() || initialTitle, subtitle: effectiveSubtitle.trim(), includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines }), [worksheet, title, effectiveSubtitle, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines, initialTitle]);
   const worksheetPageCount = Math.ceil((previewWorksheet.questions.length + (previewWorksheet.includeExampleAnswer ? 1 : 0)) / 6);
   const answerPageCount = previewWorksheet.includeAnswers ? Math.ceil(previewWorksheet.questions.length / 6) : 0;
   const totalPreviewPages = worksheetPageCount + answerPageCount;
@@ -353,6 +400,7 @@ function App() {
       const assessedItems = previewWorksheet.questions.map((question) => ({ question, workedExample: false }));
       const questionItems = previewWorksheet.includeExampleAnswer ? [{ question: previewWorksheet.workedExample, workedExample: true }, ...assessedItems] : assessedItems;
       const answerItems = previewWorksheet.questions.map((question) => ({ question, workedExample: false }));
+      const { mixed: mixedQuestionTypes } = worksheetQuestionTypes(previewWorksheet.questions);
       const questionGroups = chunk(questionItems, perPage), answerGroups = chunk(answerItems, perPage);
       const totalPdfPages = questionGroups.length + (previewWorksheet.includeAnswers ? answerGroups.length : 0);
       const drawPage = (pageItems, answerSheet, pageIndex) => {
@@ -403,30 +451,37 @@ function App() {
           const row = Math.floor(index / 2), column = index % 2;
           const cellLeft = tableLeft + column * columnWidth, cellRight = cellLeft + columnWidth;
           const cellTop = contentTop - row * rowHeight, cellBottom = cellTop - rowHeight;
-          const createPrompt = question.type === "create" ? `Write a ${window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase()} ${question.direction} than the note given.` : "";
-          const headingText = `${workedExample ? "Example Answer" : previewWorksheet.includeNumbers ? `${globalNumber}.` : ""}${createPrompt ? `${workedExample || previewWorksheet.includeNumbers ? " " : ""}${createPrompt}` : ""}`;
+          const intervalText = question.type === "create" ? window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase() : "";
+          const questionPromptRuns = question.type === "create" ? [{ text: intervalText === "tritone" ? "Write a note a" : "Write a", font: regularFont }, { text: intervalText, font: boldFont }, { text: question.direction, font: boldFont }, { text: "than the note given.", font: regularFont }] : mixedQuestionTypes ? [{ text: "Identify the interval.", font: regularFont }] : null;
+          const headingText = workedExample ? "Example Answer" : previewWorksheet.includeNumbers ? `${globalNumber}.` : "";
           const cellInk = workedExample ? exampleGrey : black;
-          if (headingText) {
-            let headingSize = 12, headingLines = wrapPdfText(headingText, boldFont, headingSize, columnWidth - 36);
-            while (headingLines.length > 2 && headingSize > 8.5) {
-              headingSize -= 0.5;
-              headingLines = wrapPdfText(headingText, boldFont, headingSize, columnWidth - 36);
+          if (headingText) page.drawText(headingText, { x: cellLeft + 10, y: cellTop - 18, size: 12, font: boldFont, color: cellInk });
+          if (questionPromptRuns) {
+            const promptX = cellLeft + 10 + (!workedExample && headingText ? boldFont.widthOfTextAtSize(headingText, 12) + 4 : 0);
+            const promptY = cellTop - (workedExample ? 34 : 18);
+            const promptWidth = columnWidth - 26 - (promptX - cellLeft);
+            let promptSize = 10.5, promptLines = layoutPdfStyledText(questionPromptRuns, promptSize, promptWidth, regularFont);
+            while (promptLines.length > 2 && promptSize > 8) {
+              promptSize -= 0.5;
+              promptLines = layoutPdfStyledText(questionPromptRuns, promptSize, promptWidth, regularFont);
             }
-            headingLines.slice(0, 2).forEach((line, lineIndex) => page.drawText(line, { x: cellLeft + 10, y: cellTop - 18 - lineIndex * headingSize * 1.15, size: headingSize, font: boldFont, color: cellInk }));
+            promptLines.slice(0, 2).forEach((line, lineIndex) => line.forEach(({ word, font, x }) => page.drawText(word, { x: promptX + x, y: promptY - lineIndex * promptSize * 1.15, size: promptSize, font, color: cellInk })));
           }
           const notationScale = Math.min(0.72, Math.max(0.45, (rowHeight - 58) / 90));
           const gap = 13.55 * notationScale;
-          const notationTop = cellTop - (createPrompt ? 43 : 30), notationBottom = cellBottom + 36;
+          const notationTop = cellTop - (questionPromptRuns ? (workedExample ? 58 : 43) : 30), notationBottom = cellBottom + 36;
           const staffBottom = (notationTop + notationBottom) / 2 - 2 * gap;
           const completed = answerSheet || workedExample;
           drawPdfNotation(page, question, staffBottom, bravuraFont, completed, notationScale, cellLeft + columnWidth / 2, cellInk);
           const showQuestionMark = previewWorksheet.includeMarks && !completed;
-          const answerLineLeft = cellLeft + 12, answerLineRight = cellRight - (showQuestionMark ? 32 : 12);
-          if (completed) {
+          const usesTextAnswer = question.type !== "create";
+          const answerLineWidth = columnWidth * 0.8;
+          const answerLineLeft = cellLeft + (columnWidth - answerLineWidth) / 2, answerLineRight = answerLineLeft + answerLineWidth;
+          if (usesTextAnswer && completed) {
             const answerWidth = boldFont.widthOfTextAtSize(question.answerText, 12);
             page.drawText(question.answerText, { x: answerLineLeft + (answerLineRight - answerLineLeft - answerWidth) / 2, y: cellBottom + 22, size: 12, font: boldFont, color: cellInk });
           }
-          page.drawLine({ start: { x: answerLineLeft, y: cellBottom + 17 }, end: { x: answerLineRight, y: cellBottom + 17 }, thickness: 0.65, color: cellInk });
+          if (usesTextAnswer) page.drawLine({ start: { x: answerLineLeft, y: cellBottom + 17 }, end: { x: answerLineRight, y: cellBottom + 17 }, thickness: 0.65, color: cellInk });
           if (showQuestionMark) page.drawText("1", { x: cellRight - 18, y: cellBottom + 20, size: 10.5, font: boldFont, color: black });
         });
         if (showTotalMarks) {
@@ -445,7 +500,7 @@ function App() {
       const pdfBytes = await pdfDoc.save();
       const url = URL.createObjectURL(new Blob([pdfBytes], { type: "application/pdf" }));
       const link = document.createElement("a");
-      const safeTitle = (previewWorksheet.title || "Intervals Worksheet").replace(/[^a-z0-9 _-]/gi, "").trim() || "Intervals Worksheet";
+      const safeTitle = (previewWorksheet.title || "Intervals Worksheet").replace(/[·•]/g, " - ").replace(/[^a-z0-9 _-]/gi, "").replace(/\s+/g, " ").trim() || "Intervals Worksheet";
       link.href = url;
       link.download = `${safeTitle}.pdf`;
       document.body.appendChild(link);
@@ -466,21 +521,21 @@ function App() {
         <main className={`${SHELL.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}>
           <div className="no-print">
             <div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
-              <h2 className="flex items-center gap-2 text-xl font-bold"><img src="intervals-icon.svg" alt="" aria-hidden="true" className="h-6 w-6 object-contain" />Intervals · {LEVELS[level]}</h2>
+              <h2 className="flex items-center gap-2 text-xl font-bold"><img src="intervals-icon.svg" alt="" aria-hidden="true" className="h-7 w-7 object-contain" />Intervals · {LEVELS[level]}</h2>
               <p className="mt-1 text-sm leading-relaxed text-stone-600">Generate a printable worksheet using the current activity and settings.</p>
             </div>
             <div className="rounded-xl border border-stone-200 bg-white p-4">
               <div><h2 className="flex items-center gap-2 text-xl font-bold"><img src="customise.svg" alt="" aria-hidden="true" className="h-6 w-6 object-contain" />Customise</h2><p className="mt-1 text-sm text-stone-600">Adjust the worksheet content and layout.</p></div>
               <div className="mt-4 space-y-4">
                 <label className="block text-sm font-semibold">Title<input className={fieldClass} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-                <label className="block text-sm font-semibold">Instructions<input className={fieldClass} value={subtitle} onChange={(event) => setSubtitle(event.target.value)} /></label>
+                <label className="block text-sm font-semibold">Instructions<input className={fieldClass} value={effectiveSubtitle} onChange={(event) => { setSubtitle(event.target.value); setSubtitleCustomized(true); }} /></label>
                 <div className="flex flex-wrap items-center justify-start gap-x-7 gap-y-2">{check("Name", includeName, setIncludeName)}{check("Class", includeClass, setIncludeClass)}{check("Date", includeDate, setIncludeDate)}</div>
                 <label className="flex items-center justify-between gap-4 border-t border-stone-200 pt-4 text-sm font-semibold"><span>Number of Questions</span><select className={compactSelectClass} value={countChoice} onChange={(event) => { const value = event.target.value; setCountChoice(value); resizeQuestions(Number(value)); setError(""); }}>{[10,15,20,25].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
                 <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-2">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}{check("Gridlines", showGridlines, setShowGridlines)}</div>
-                <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-2">{check("Answers", includeAnswers, setIncludeAnswers)}{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}</div>
+                <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-2">{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}{check("Print Answers", includeAnswers, setIncludeAnswers)}</div>
               </div>
               {error && <p className="mt-5 font-semibold text-red-700" role="alert">{error}</p>}
-              <div className="mt-6 grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button type="button" onClick={generate} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-semibold text-stone-800 transition hover:bg-stone-100"><span className="flex items-center justify-center gap-2"><img src="restart.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" /><span>Refresh</span></span></button><button type="button" onClick={downloadPdf} disabled={downloading} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="download.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>{downloading ? "Preparing…" : "Download"}</span></span></button><button type="button" onClick={() => window.print()} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white"><span className="flex items-center justify-center gap-2"><img src="worksheet.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>Print</span></span></button></div>
+              <div className="mt-6 grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button type="button" onClick={generate} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-semibold text-stone-800 transition hover:bg-stone-100"><span className="flex items-center justify-center gap-2"><img src="restart.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" /><span>Refresh</span></span></button><button type="button" onClick={downloadPdf} disabled={downloading} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="download.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>{downloading ? "Preparing…" : "Download"}</span></span></button><button type="button" onClick={() => window.print()} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white"><span className="flex items-center justify-center gap-2"><img src="worksheet.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain invert" /><span>Print</span></span></button></div>
             </div>
           </div>
           <section id="worksheet-preview" className="print-area worksheet-preview-panel">
@@ -493,8 +548,10 @@ function App() {
     </div>
   );
 }
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+const sourceActivityId = (() => { try { return JSON.parse(sessionStorage.getItem("worksheetSourceConfig") || "null")?.activityId; } catch { return null; } })();
+if (!sourceActivityId || sourceActivityId === "intervals") ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
+  <script type="text/babel" src="./worksheet-generic.jsx?v=20260713"></script>
   <script src="./footer.js?v=1.3"></script>
 </body>
 </html>

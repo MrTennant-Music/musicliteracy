@@ -15,6 +15,7 @@
   const KEY_SIGNATURES = { C: { label: "C major", accidentals: [] }, G: { label: "G major", accidentals: [{ type: "sharp", step: 8, letter: "F" }] }, F: { label: "F major", accidentals: [{ type: "flat", step: 4, letter: "B" }] }, D: { label: "D major", accidentals: [{ type: "sharp", step: 8, letter: "F" }, { type: "sharp", step: 5, letter: "C" }] }, Bb: { label: "B flat major", accidentals: [{ type: "flat", step: 4, letter: "B" }, { type: "flat", step: 7, letter: "E" }] } };
   const CHROMATIC_INTERVALS = [{ id: "tritone-f-b", startIndex: 5, endIndex: 8, key: "C" }, { id: "augmented-4th-c-fsharp", startIndex: 2, endIndex: 5, key: "C", targetAccidental: "sharp" }, { id: "augmented-4th-g-csharp", startIndex: 6, endIndex: 9, key: "D" }, { id: "diminished-5th-b-f", startIndex: 8, endIndex: 12, key: "C" }, { id: "diminished-5th-e-bflat", startIndex: 4, endIndex: 8, key: "F" }, { id: "diminished-5th-a-eflat", startIndex: 7, endIndex: 11, key: "Bb" }];
   const CHROMATIC_INTERVAL_WEIGHTS = CHROMATIC_INTERVALS.flatMap((interval) => interval.id.startsWith("tritone") ? [interval, interval, null] : [interval, interval]);
+  const CREATE_TRITONE_INTERVALS = CHROMATIC_INTERVALS.filter((interval) => !interval.targetAccidental);
   const NATURAL_SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 
   function randomItem(items, random) { return items[Math.floor(random() * items.length)]; }
@@ -24,7 +25,10 @@
   function keySignatureAccidental(note, keySignature) { return keySignature.find((item) => item.letter === note.letter)?.type || null; }
   function writtenPitch(note, keySignature, explicitAccidental) { return note.octave * 12 + NATURAL_SEMITONES[note.letter] + accidentalOffset(explicitAccidental || keySignatureAccidental(note, keySignature)); }
   function semitoneDistance(startIndex, endIndex, keySignature = [], targetAccidental = null) { return Math.abs(writtenPitch(noteByIndex(endIndex), keySignature, targetAccidental) - writtenPitch(noteByIndex(startIndex), keySignature)); }
-  function intervalLabel(size) { return INTERVALS.find((interval) => interval.size === size)?.label || `${size}th`; }
+  function intervalLabel(size) {
+    if (typeof size === "string") return ({ tritone: "Tritone", "augmented-4th": "Augmented 4th", "diminished-5th": "Diminished 5th" })[size.toLowerCase()] || size;
+    return INTERVALS.find((interval) => interval.size === size)?.label || `${size}th`;
+  }
   function intervalNameFromHalfSteps(startIndex, endIndex, keySignature, targetAccidental) {
     const diatonicSize = Math.abs(endIndex - startIndex) + 1;
     const halfSteps = semitoneDistance(startIndex, endIndex, keySignature, targetAccidental);
@@ -42,7 +46,9 @@
   function intervalsForLevel(level) { return (LEVEL_INTERVALS[level] || LEVEL_INTERVALS.N5).filter((item) => typeof item === "number").map((size) => INTERVALS.find((interval) => interval.size === size)); }
   function isPlainIntervalQuestion(startIndex, endIndex) { const label = intervalNameFromHalfSteps(startIndex, endIndex); return !label.startsWith("Augmented") && !label.startsWith("Diminished") && label !== "Tritone"; }
   function decorate(question) {
-    return { ...question, activityId: "intervals", prompt: question.type === "create" ? `Create an interval ${intervalLabel(question.intervalSize).toLowerCase()} ${question.direction} than the note given.` : "Identify the interval.", answerText: question.answer || intervalLabel(question.intervalSize), answerData: { interval: question.answer || intervalLabel(question.intervalSize), targetIndex: question.targetIndex ?? question.endIndex }, marks: 1, metadata: { level: question.level, mode: question.type } };
+    const createLabel = intervalLabel(question.intervalSize).toLowerCase();
+    const createPrompt = createLabel === "tritone" ? `Write a note a tritone ${question.direction} than the note given.` : `Create an interval ${createLabel} ${question.direction} than the note given.`;
+    return { ...question, activityId: "intervals", prompt: question.type === "create" ? createPrompt : "Identify the interval.", answerText: question.answer || intervalLabel(question.intervalSize), answerData: { interval: question.answer || intervalLabel(question.intervalSize), targetIndex: question.targetIndex ?? question.endIndex }, marks: 1, metadata: { level: question.level, mode: question.type } };
   }
   function makeIdentifyQuestion(level, random) {
     if (level === "AH" && random() < 0.4) {
@@ -63,6 +69,13 @@
     return decorate({ id: Math.random().toString(36).slice(2), level, type: "identify", typedMode: random() < 0.35, startIndex, endIndex, intervalSize: interval.size, direction, answer: interval.label });
   }
   function makeCreateQuestion(level, random) {
+    if (level === "AH" && random() < 0.2) {
+      const interval = randomItem(CREATE_TRITONE_INTERVALS, random);
+      const lower = random() < 0.5;
+      const startIndex = lower ? interval.endIndex : interval.startIndex;
+      const targetIndex = lower ? interval.startIndex : interval.endIndex;
+      return decorate({ id: Math.random().toString(36).slice(2), level, type: "create", chromatic: true, startIndex, targetIndex, intervalSize: "tritone", answer: "Tritone", direction: lower ? "lower" : "higher", targetAccidental: null, keySignature: KEY_SIGNATURES[interval.key].accidentals });
+    }
     const valid = [], allowed = new Set(noteIndexesForLevel(level));
     intervalsForLevel(level).forEach((interval) => allowed.forEach((startIndex) => { const distance = interval.size - 1; if (allowed.has(startIndex + distance)) valid.push({ startIndex, targetIndex: startIndex + distance, intervalSize: interval.size, direction: "higher" }); if (allowed.has(startIndex - distance)) valid.push({ startIndex, targetIndex: startIndex - distance, intervalSize: interval.size, direction: "lower" }); }));
     return decorate({ id: Math.random().toString(36).slice(2), level, type: "create", ...randomItem(valid, random) });
