@@ -75,7 +75,68 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useState: useGener
     return {...base,prompt:"Insert the missing barline in the correct place.",melody:Array.from({length:8},()=>random(NOTES)),answer:"Correct barline",response:"stave"};
   }
 
+  function worksheetSymbolKey(key) {
+    if (key === "flatInScore") return "flat";
+    if (key === "naturalInScore") return "natural";
+    if (key === "sharpInScore") return "sharp";
+    return key;
+  }
+
+  function worksheetSymbolSettings(key) {
+    const settingsKey = ["flatInScore", "naturalInScore", "sharpInScore"].includes(key) ? "flatInScore" : key;
+    const symbols = window.SHARED_NOTATION_CONFIG?.symbols || {};
+    return symbols[settingsKey] || symbols[worksheetSymbolKey(settingsKey)] || {
+      fontSizeScale: 3.4,
+      xOffsetScale: 0,
+      yOffsetScale: 0,
+      widthScale: 1,
+      heightScale: 1,
+    };
+  }
+
+  function WorksheetGlyph({ symbolKey, x, y, gap, colour }) {
+    const glyph = window.BRAVURA_SYMBOLS?.[worksheetSymbolKey(symbolKey)] || "";
+    const settings = worksheetSymbolSettings(symbolKey);
+    const adjustedX = x + gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+    const adjustedY = y + gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+    return <text
+      className="music-symbol"
+      x={adjustedX}
+      y={adjustedY}
+      fill={colour}
+      fontSize={gap * Number(settings.fontSizeScale || 3.4)}
+      textAnchor="middle"
+      transform={`translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale || 1} ${settings.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`}
+    >{glyph}</text>;
+  }
+
+  function AccidentalsStaff({ question, completed=false, muted=false }) {
+    const ink = muted ? "#78716c" : "#000";
+    const left = 28, right = 304, top = 48, gap = 12;
+    const y = (step) => top + gap * 4 - step * (gap / 2);
+    const gradientId = `accidentals-staff-fade-${question.id}-${completed ? "answer" : "question"}`;
+    const drawNote = (step, x, key) => <g key={key}>
+      <WorksheetGlyph symbolKey={step > 4 ? "quarterNoteStemDown" : "quarterNoteStemUp"} x={x} y={y(step)} gap={gap} colour={ink} />
+    </g>;
+    const showSecondNote = question.response === "text" || (completed && Number.isInteger(question.answerStep));
+    const secondStep = question.response === "text" ? question.step2 : question.answerStep;
+    return <svg viewBox="0 0 320 120" className="h-full max-h-28 w-full" aria-label="Accidentals notation">
+      <defs>
+        <linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={left} x2={right} y1="0" y2="0">
+          <stop offset="0%" stopColor={ink} stopOpacity="1" />
+          <stop offset="72%" stopColor={ink} stopOpacity="1" />
+          <stop offset="100%" stopColor={ink} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <g>{[0,1,2,3,4].map((line) => <line key={line} x1={left} x2={right} y1={top + line * gap} y2={top + line * gap} stroke={`url(#${gradientId})`} strokeWidth="1.2" />)}</g>
+      <WorksheetGlyph symbolKey="gClef" x={left + gap * 3.2} y={y(2)} gap={gap} colour={ink} />
+      {drawNote(question.step, 130, "first")}
+      {showSecondNote && Number.isInteger(secondStep) ? drawNote(secondStep, 218, "second") : null}
+    </svg>;
+  }
+
   function Staff({ question, completed=false, muted=false }) {
+    if (CONFIG.activityId === "accidentals") return <AccidentalsStaff question={question} completed={completed} muted={muted} />;
     const ink = muted ? "#78716c" : "#000";
     const y = (step) => 72 - step * 6;
     const notes = question.sourceMelody || question.melody || [question.step];

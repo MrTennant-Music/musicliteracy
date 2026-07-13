@@ -25,5 +25,8 @@ assert.match(fs.readFileSync("missingnotes.html", "utf8"), /activeLevel==="N3"\|
 assert.match(fs.readFileSync("practicequestions.html", "utf8"), /excludeRhythmIdentification: true/, "Mixed Practice Questions must exclude Rhythm Identification");
 assert.match(generic, /function EmphasisedPrompt/, "Generic worksheets must emphasise the musical variable in each question");
 assert.match(generic, /tone\|semitone/, "Accidental distance and direction must be included in worksheet emphasis");
+assert.match(generic, /function AccidentalsStaff/, "Accidentals worksheets must use their calibrated stave renderer");
+assert.match(generic, /accidentals-staff-fade/, "Accidentals worksheet staves must fade out on the right");
+assert.match(generic, /worksheetSymbolSettings/, "Accidentals worksheet symbols must use the shared notation calibration");
 assert.match(generic, /root position\|first inversion\|second inversion/, "Chord positions must be included in worksheet emphasis");
 console.log(`Worksheet rollout checks passed for ${eligible.length} activities.`);
