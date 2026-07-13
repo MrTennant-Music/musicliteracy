@@ -130,15 +130,15 @@
     ));
   }
 
-  function WorksheetButton({ onClick, enabled, selected = false }) {
+  function WorksheetButton({ onClick, enabled, selected = false, returnLabel = "activity" }) {
     return React.createElement("button", {
       type: "button",
       onClick,
-      disabled: !enabled || selected,
-      className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border shadow-sm transition ${selected ? "cursor-default border-black bg-black text-white" : enabled ? "border-stone-300 bg-white text-stone-700 hover:border-stone-500 hover:bg-stone-50" : "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400 opacity-70"}`,
-      "aria-label": "Create worksheet from current settings",
+      disabled: !enabled,
+      className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border shadow-sm transition ${selected ? "cursor-pointer border-black bg-black text-white hover:bg-stone-800" : enabled ? "border-stone-300 bg-white text-stone-700 hover:border-stone-500 hover:bg-stone-50" : "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400 opacity-70"}`,
+      "aria-label": selected ? `Return to ${returnLabel} activity` : "Create worksheet from current settings",
       "aria-pressed": selected,
-      title: "Create worksheet",
+      title: selected ? `Return to ${returnLabel}` : "Create worksheet",
     }, React.createElement("img", { src: "worksheet.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain", style: selected ? { filter: "invert(1)" } : undefined }));
   }
 
@@ -205,6 +205,8 @@
         const config = worksheetConfig();
         if (!config || config.version !== 1 || typeof config.activityId !== "string" || !config.settings || typeof config.settings !== "object") return;
         window.sessionStorage.setItem("worksheetSourceConfig", JSON.stringify(config));
+        window.sessionStorage.setItem("worksheetReturnConfig", JSON.stringify(config));
+        window.sessionStorage.setItem("worksheetReturnUrl", window.location.href);
         window.location.href = "worksheet-generator.html";
       } catch {
         // Leave the pupil on the current activity if their browser cannot save the settings.
@@ -275,7 +277,7 @@
                 React.createElement("h1", { className: "relative top-[1px] inline-flex items-center gap-2 text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl" },
                   displayedTitle,
                   React.createElement(ProfileQrButton, { disabled: activeWorksheetMode, onClick: () => setQrOpen(true) }),
-                  React.createElement(WorksheetButton, { enabled: worksheetEnabled, selected: activeWorksheetMode, onClick: createWorksheet })
+                  React.createElement(WorksheetButton, { enabled: worksheetEnabled, selected: activeWorksheetMode, returnLabel: typeof displayedTitle === "string" ? displayedTitle : "activity", onClick: activeWorksheetMode ? worksheetHeader?.onExit : createWorksheet })
                 ),
                 React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap" }, displayedSubtitle)
               )

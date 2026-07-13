@@ -725,14 +725,28 @@ function IntervalOptions({ selectedAnswer, disabled, onSelect, feedback, questio
   );
 }
 
+function consumeWorksheetReturnConfig() {
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem("worksheetReturnConfig") || "null");
+    if (!parsed || parsed.version !== 1 || parsed.activityId !== "intervals" || !parsed.settings || !LEVELS[parsed.settings.level]) return null;
+    window.sessionStorage.removeItem("worksheetReturnConfig");
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function App() {
+  const worksheetReturnConfig = useMemo(consumeWorksheetReturnConfig, []);
   const initialLevel = useMemo(() => {
+    if (worksheetReturnConfig?.settings?.level) return worksheetReturnConfig.settings.level;
     const requested = new URLSearchParams(window.location.search).get("level");
     return LEVELS[requested] ? requested : "N5";
-  }, []);
-  const initialQuestionMode = useMemo(() => initialLevel === "N5" ? "identify" : pickQuestionMode({ identify: true, create: true }), [initialLevel]);
+  }, [worksheetReturnConfig]);
+  const initialEnabledModes = worksheetReturnConfig?.settings?.enabledModes || { identify: true, create: true };
+  const initialQuestionMode = useMemo(() => initialLevel === "N5" ? "identify" : pickQuestionMode(initialEnabledModes), [initialLevel]);
   const [activeLevel, setActiveLevel] = useState(initialLevel);
-  const [enabledModes, setEnabledModes] = useState({ identify: true, create: true });
+  const [enabledModes, setEnabledModes] = useState(initialEnabledModes);
   const [mode, setMode] = useState(initialQuestionMode);
   const [question, setQuestion] = useState(() => createQuestion(initialQuestionMode, initialLevel));
   const [questionVisible, setQuestionVisible] = useState(true);
