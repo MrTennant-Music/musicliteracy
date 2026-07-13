@@ -69,6 +69,17 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     { answer:"A minor", notes:[{step:3,letter:"A"},{step:5,letter:"C"},{step:7,letter:"E"}] },
   ];
   const N5_CHORD_RHYTHMS = [["quarter","quarter","half"],["half","quarter","quarter"]];
+  const TONIC_WORKSHEET_KEYS = [
+    {id:"c-major",name:"C major",signature:[],tonicStep:5,targets:{tonic:"C",subdominant:"F",dominant:"G"}},
+    {id:"g-major",name:"G major",signature:[{type:"sharp",step:8}],tonicStep:2,targets:{tonic:"G",subdominant:"C",dominant:"D"}},
+    {id:"f-major",name:"F major",signature:[{type:"flat",step:4}],tonicStep:1,targets:{tonic:"F",subdominant:"B",dominant:"C"}},
+    {id:"a-minor",name:"A minor",signature:[],tonicStep:3,targets:{tonic:"A",subdominant:"D",dominant:"E"}},
+  ];
+  const TONIC_BAR_PATTERNS = [
+    ["minim","crotchet","crotchet"],["crotchet","crotchet","minim"],["minim","minim"],
+    ["crotchet","crotchet","crotchet","crotchet"],["dotted-crotchet","quaver","crotchet","crotchet"],
+    ["crotchet","quaver","quaver","crotchet","crotchet"],["quaver","quaver","quaver","quaver","minim"],
+  ];
   const shuffled = (items) => items.map(value=>({value,sort:Math.random()})).sort((a,b)=>a.sort-b.sort).map(({value})=>value);
   const AH_LETTERS = ["C","D","E","F","G","A","B"];
   const AH_WORKSHEET_KEYS = [
@@ -131,6 +142,35 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     const names=clef==="bass"?["G","A","B","C","D","E","F"]:["E","F","G","A","B","C","D"];
     return names[((step%7)+7)%7];
   };
+  function makeNoteNamingQuestion(base){
+    const settings=CONFIG.settings||{};
+    const clefs=[settings.treble!==false?"treble":null,settings.bass?"bass":null].filter(Boolean);
+    const range=settings.advancedRange?[-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,11,12]:settings.ledger===false?[0,1,2,3,4,5,6,7,8]:[-2,-1,0,1,2,3,4,5,6,7,8,9,10];
+    const clef=random(clefs.length?clefs:["treble"]), noteStep=random(range), letter=noteNameForStep(noteStep,clef);
+    const accidentalChoices=[null];
+    if(settings.accidentals&&!["B","E"].includes(letter))accidentalChoices.push("sharp");
+    if(settings.accidentals&&!["C","F"].includes(letter))accidentalChoices.push("flat");
+    const noteAccidental=random(accidentalChoices);
+    return {...base,step:noteStep,clef,noteAccidental,prompt:"",answer:`${letter}${accidentalText(noteAccidental)}`,response:"text"};
+  }
+  function makeTonicQuestion(base,index){
+    const enabled=Object.entries(CONFIG.settings?.questionTypes||{}).filter(([,on])=>on).map(([name])=>name);
+    const degreeChoices=enabled.length?enabled:["tonic","subdominant","dominant"], degree=degreeChoices[Math.abs(index)%degreeChoices.length], key=TONIC_WORKSHEET_KEYS[Math.abs(index)%TONIC_WORKSHEET_KEYS.length];
+    const patterns=[random(TONIC_BAR_PATTERNS),random(TONIC_BAR_PATTERNS)], noteCount=patterns[0].length+patterns[1].length, targetLetter=key.targets[degree];
+    let melody=[];
+    for(let attempt=0;attempt<60;attempt+=1){
+      const next=[key.tonicStep];
+      while(next.length<noteCount-1){const previous=next[next.length-1], options=[-2,-1,1,2].map(delta=>previous+delta).filter(step=>step>=-2&&step<=10&&Math.abs(step-key.tonicStep)<=4);next.push(random(options));}
+      next.push(key.tonicStep);
+      if(!next.some(step=>noteNameForStep(step)===targetLetter)){const place=1+Math.floor(Math.random()*Math.max(1,next.length-2)), targetSteps=[-2,-1,0,1,2,3,4,5,6,7,8,9,10].filter(step=>noteNameForStep(step)===targetLetter).sort((a,b)=>Math.max(Math.abs(a-next[place-1]),Math.abs(a-next[place+1]))-Math.max(Math.abs(b-next[place-1]),Math.abs(b-next[place+1])));next[place]=targetSteps[0];}
+      const intervals=next.slice(1).map((step,noteIndex)=>step-next[noteIndex]), range=Math.max(...next)-Math.min(...next);
+      if(range<=7&&intervals.every(interval=>Math.abs(interval)<=4)&&intervals.some(interval=>interval>0)&&intervals.some(interval=>interval<0)){melody=next;break;}
+    }
+    if(!melody.length)melody=Array.from({length:noteCount},(_,noteIndex)=>noteIndex===0||noteIndex===noteCount-1?key.tonicStep:key.tonicStep+[1,2,1,-1][(noteIndex-1)%4]);
+    const bars=[{rhythms:patterns[0],notes:melody.slice(0,patterns[0].length)},{rhythms:patterns[1],notes:melody.slice(patterns[0].length)}];
+    const writtenAccidental=(step)=>key.name==="A minor"&&noteNameForStep(step)==="G"?"sharp":null;
+    return {...base,prompt:`Circle the ${degree} note.`,degree,key,tonicBars:bars.map(bar=>({...bar,accidentals:bar.notes.map(writtenAccidental)})),targetLetter,answer:degree,response:"mark"};
+  }
   function configuredEnharmonicPairs(){
     const options=CONFIG.settings?.options||{};
     const pairs=[["F♯","G♭"],["C♯","D♭"],["A♯","B♭"],["D♯","E♭"],["G♯","A♭"]];
@@ -237,8 +277,8 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
         return makeEnharmonicQuestion(index,base);
       }
       case "keysig": return makeKeySignatureQuestion(index,base);
-      case "notenaming": { const settings=CONFIG.settings||{}, clefs=[settings.treble!==false?"treble":null,settings.bass?"bass":null].filter(Boolean), clef=random(clefs.length?clefs:["treble"]), range=settings.ledger===false?[0,1,2,3,4,5,6,7,8]:settings.advancedRange?[-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,11,12]:[-2,-1,0,1,2,3,4,5,6,7,8,9,10], noteStep=random(range), accidental=settings.accidentals?random([null,null,"sharp","flat"]):null; return {...base,step:noteStep,clef,prompt:"Name the note.",answer:`${noteNameForStep(noteStep,clef)}${accidentalText(accidental)}`,noteAccidental:accidental}; }
-      case "tonic": { const enabled=Object.entries(CONFIG.settings?.questionTypes||{}).filter(([,on])=>on).map(([name])=>name); const degree=random(enabled.length?enabled:["tonic","subdominant","dominant"]); return { ...base, prompt: `Circle the ${degree} note.`, degree, melody: Array.from({length:8}, () => random(NOTES)), answer: degree }; }
+      case "notenaming": return makeNoteNamingQuestion(base);
+      case "tonic": return makeTonicQuestion(base,index);
       case "transposing": { const options=CONFIG.settings?.questionOptions||{}, choices=[options.octaveHigher!==false?{prompt:"Rewrite the note one octave higher.",delta:7}:null,options.octaveLower!==false?{prompt:"Rewrite the note one octave lower.",delta:-7}:null,options.samePitch!==false?{prompt:"Rewrite the note at the same pitch in the other clef.",delta:0,otherClef:true}:null,options.ottava?{prompt:random(["Rewrite the note shown by 8va.","Rewrite the note shown by 8vb."]),delta:random([7,-7])}:null].filter(Boolean), choice=random(choices.length?choices:[{prompt:"Rewrite the note at the same pitch in the other clef.",delta:0,otherClef:true}]); return {...base,prompt:choice.prompt,answerStep:Math.max(-4,Math.min(12,step+choice.delta)),clef:choice.otherClef&&index%2?"bass":"treble"}; }
       case "barlines": { const timeSignature=random(configuredTimeSignatures()); return {...base,prompt:`Insert the missing barlines in ${timeSignature}.`,timeSignature,melody:Array.from({length:12},()=>random(NOTES)),answer:"Correct barlines shown"}; }
       case "rests": { const selected=enabledKeys(CONFIG.settings?.enabledOptions,"rest-").map(name=>name.replaceAll("-"," ")), rests=selected.length?selected:["crotchet rest","quaver rest","minim rest","semibreve rest"], answer=random(rests); return {...base,prompt:"Write the missing rest.",answer}; }
@@ -396,6 +436,31 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     </svg>;
   }
 
+  function NoteNamingStaff({ question, muted=false }) {
+    const ink=muted?"#78716c":"#000";
+    const left=20, right=304, top=51, gap=13, noteX=170;
+    const y=(step)=>top+gap*4-step*(gap/2);
+    const fadeId=`notenaming-staff-fade-${question.id}`;
+    const ledgerSteps=[];
+    if(question.step<=-2)ledgerSteps.push(-2);
+    if(question.step<=-4)ledgerSteps.push(-4);
+    if(question.step>=10)ledgerSteps.push(10);
+    if(question.step>=12)ledgerSteps.push(12);
+    const ledgerSettings=worksheetSymbolSettings("ledgerLines"), ledgerXOffset=gap*Number(ledgerSettings.xOffsetScale||0)+Number(ledgerSettings.opticalXOffset||0), ledgerYOffset=gap*Number(ledgerSettings.yOffsetScale||0)+Number(ledgerSettings.opticalYOffset||0);
+    const ledgerHalfWidth=gap*Number(window.SHARED_NOTATION_CONFIG?.drawing?.ledgerLineWidthScale||2.4)*Number(ledgerSettings.widthScale||1)/2;
+    const ledgerThickness=Math.max(1,gap*Number(window.SHARED_NOTATION_CONFIG?.drawing?.ledgerLineThicknessScale||.11)*Number(ledgerSettings.heightScale||1));
+    const isLedgerLineNote=question.step<=-2||question.step>=10, accidentalLedgerOffset=isLedgerLineNote?-gap*.48:0;
+    const accidentalX=question.noteAccidental==="sharp"?noteX-gap*2.33+accidentalLedgerOffset:noteX-gap*2.17+accidentalLedgerOffset;
+    return <svg viewBox="0 0 320 132" className="h-full max-h-32 w-full" aria-label={`${question.clef} clef note to identify`}>
+      <defs><linearGradient id={fadeId} x1={left} x2={right} y1="0" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor={ink} stopOpacity="1"/><stop offset="84%" stopColor={ink} stopOpacity="1"/><stop offset="100%" stopColor={ink} stopOpacity="0"/></linearGradient></defs>
+      {[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right} y1={top+line*gap} y2={top+line*gap} stroke={`url(#${fadeId})`} strokeWidth="1.5"/>)}
+      <WorksheetGlyph symbolKey={question.clef==="bass"?"fClef":"gClef"} x={left+52/18.9*gap} y={y(question.clef==="bass"?6:2)} gap={gap} colour={ink}/>
+      {ledgerSteps.map(step=><line key={step} x1={noteX-ledgerHalfWidth+ledgerXOffset} x2={noteX+ledgerHalfWidth+ledgerXOffset} y1={y(step)+ledgerYOffset} y2={y(step)+ledgerYOffset} stroke={ink} strokeWidth={ledgerThickness}/>)}
+      {question.noteAccidental?<WorksheetGlyph symbolKey={question.noteAccidental==="sharp"?"sharpInScore":"flatInScore"} x={accidentalX} y={y(question.step)} gap={gap} colour={ink}/>:null}
+      <WorksheetGlyph symbolKey={question.step>4?"quarterNoteStemDown":"quarterNoteStemUp"} x={noteX} y={y(question.step)} gap={gap} colour={ink}/>
+    </svg>;
+  }
+
   function N5ChordStaff({ question, muted=false, showNoteNames=false }) {
     const ink = muted ? "#78716c" : "#000";
     const left = 28, right = 304, top = 48, gap = 12;
@@ -463,7 +528,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     </svg>;
   }
 
-  function WorksheetMelodyNotes({ steps, rhythms, xs, top, gap, ink, prefix }) {
+  function WorksheetMelodyNotes({ steps, rhythms, xs, top, gap, ink, prefix, accidentals=[], circled=[] }) {
     const y=(step)=>top+gap*4-step*(gap/2);
     const noteSymbol=(rhythm,step)=>rhythm==="semibreve"?"wholeNote":rhythm==="minim"?(step>4?"halfNoteStemDown":"halfNoteStemUp"):rhythm==="quaver"?(step>4?"eighthNoteStemDown":"eighthNoteStemUp"):(step>4?"quarterNoteStemDown":"quarterNoteStemUp");
     const groups=[];
@@ -485,9 +550,27 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     const beamY=(beam,x)=>beam.start.y+(x-beam.start.x)/((beam.end.x-beam.start.x)||1)*(beam.end.y-beam.start.y);
     const ledger=(step,x,key)=>{const lines=[];for(let ledgerStep=-2;ledgerStep>=step;ledgerStep-=2)lines.push(ledgerStep);for(let ledgerStep=10;ledgerStep<=step;ledgerStep+=2)lines.push(ledgerStep);return lines.map(ledgerStep=><line key={`${key}-${ledgerStep}`} x1={x-gap*1.125} x2={x+gap*1.125} y1={y(ledgerStep)} y2={y(ledgerStep)} stroke={ink} strokeWidth={gap*.125}/>);};
     return <g>
-      {steps.map((step,index)=>{const group=groupFor(index), x=xs[index];if(!group)return <g key={`${prefix}-note-${index}`}>{ledger(step,x,`${prefix}-ledger-${index}`)}<WorksheetGlyph symbolKey={noteSymbol(rhythms[index],step)} x={x} y={y(step)} gap={gap} colour={ink}/></g>;const beam=beamFor(group), stemX=stemXFor(x,beam.down);return <g key={`${prefix}-note-${index}`}>{ledger(step,x,`${prefix}-ledger-${index}`)}<WorksheetGlyph symbolKey="noteheadBlack" x={x} y={y(step)} gap={gap} colour={ink}/><line x1={stemX} x2={stemX} y1={y(step)} y2={beamY(beam,stemX)} stroke={ink} strokeWidth={gap*.125}/></g>;})}
+      {steps.map((step,index)=>{const group=groupFor(index), x=xs[index], accidental=accidentals[index], dotted=rhythms[index]?.startsWith("dotted-"), dotY=y(step)-(Math.abs(step)%2?0:gap*.25), dotKey=Math.abs(step)%2?"augmentationDotSpace":"augmentationDotLine";if(!group)return <g key={`${prefix}-note-${index}`}>{ledger(step,x,`${prefix}-ledger-${index}`)}{accidental?<WorksheetGlyph symbolKey={accidental==="sharp"?"sharpInScore":"flatInScore"} x={x-gap*2.3} y={y(step)} gap={gap} colour={ink}/>:null}<WorksheetGlyph symbolKey={noteSymbol(rhythms[index],step)} x={x} y={y(step)} gap={gap} colour={ink}/>{dotted?<WorksheetGlyph symbolKey={dotKey} x={x+gap*1.3} y={dotY} gap={gap} colour={ink}/>:null}{circled[index]?<ellipse cx={x} cy={y(step)} rx={gap*1.45} ry={gap*1.05} fill="none" stroke={ink} strokeWidth="1.5"/>:null}</g>;const beam=beamFor(group), stemX=stemXFor(x,beam.down);return <g key={`${prefix}-note-${index}`}>{ledger(step,x,`${prefix}-ledger-${index}`)}{accidental?<WorksheetGlyph symbolKey={accidental==="sharp"?"sharpInScore":"flatInScore"} x={x-gap*2.3} y={y(step)} gap={gap} colour={ink}/>:null}<WorksheetGlyph symbolKey="noteheadBlack" x={x} y={y(step)} gap={gap} colour={ink}/><line x1={stemX} x2={stemX} y1={y(step)} y2={beamY(beam,stemX)} stroke={ink} strokeWidth={gap*.125}/>{circled[index]?<ellipse cx={x} cy={y(step)} rx={gap*1.45} ry={gap*1.05} fill="none" stroke={ink} strokeWidth="1.5"/>:null}</g>;})}
       {groups.map((group,index)=>{const beam=beamFor(group), half=gap*.21;return <polygon key={`${prefix}-beam-${index}`} points={`${beam.start.x},${beam.start.y-half} ${beam.end.x},${beam.end.y-half} ${beam.end.x},${beam.end.y+half} ${beam.start.x},${beam.start.y+half}`} fill={ink}/>;})}
     </g>;
+  }
+
+  function TonicStaff({ question, completed=false, muted=false }) {
+    const ink=muted?"#78716c":"#000", left=18, right=320, top=39, gap=10.925, clefX=48, keyX=72, timeX=91, musicStart=112, middle=216;
+    const y=(step)=>top+gap*4-step*(gap/2);
+    const units={semibreve:3.2,minim:2.2,"dotted-crotchet":1.8,crotchet:1.3,quaver:1};
+    const noteSymbol=(rhythm,down,beamed=false)=>rhythm==="semibreve"?"wholeNote":rhythm==="minim"?(down?"halfNoteStemDown":"halfNoteStemUp"):beamed?"noteheadBlack":rhythm==="quaver"?(down?"eighthNoteStemDown":"eighthNoteStemUp"):(down?"quarterNoteStemDown":"quarterNoteStemUp");
+    const barPositions=(bar,start,end,barIndex)=>{const scoreStart=start+(barIndex===0?4:15),scoreEnd=end-(barIndex===1?24:4),total=bar.rhythms.reduce((sum,rhythm)=>sum+units[rhythm],0),unit=Math.max(1,scoreEnd-scoreStart)/Math.max(1,total);let cursor=scoreStart+unit*.38;return bar.rhythms.map(rhythm=>{const current=cursor;cursor+=units[rhythm]*unit;return current;});};
+    const groupsFor=(rhythms)=>{const groups=[];for(let noteIndex=0;noteIndex<rhythms.length;noteIndex+=1){if(rhythms[noteIndex]!=="quaver")continue;const start=noteIndex;while(rhythms[noteIndex+1]==="quaver")noteIndex+=1;if(noteIndex>start)groups.push({start,end:noteIndex});}return groups;};
+    const ledgerLines=(step,x,key)=>{const settings=worksheetSymbolSettings("ledgerLines"),xOffset=gap*Number(settings.xOffsetScale||0)+Number(settings.opticalXOffset||0),yOffset=gap*Number(settings.yOffsetScale||0)+Number(settings.opticalYOffset||0),halfWidth=gap*Number(window.SHARED_NOTATION_CONFIG?.drawing?.ledgerLineWidthScale||2.4)*Number(settings.widthScale||1)/2,thickness=Math.max(1,gap*Number(window.SHARED_NOTATION_CONFIG?.drawing?.ledgerLineThicknessScale||.11)*Number(settings.heightScale||1)),steps=[];for(let ledger=-2;ledger>=step;ledger-=2)steps.push(ledger);for(let ledger=10;ledger<=step;ledger+=2)steps.push(ledger);return steps.map(ledger=><line key={`${key}-${ledger}`} x1={x-halfWidth+xOffset} x2={x+halfWidth+xOffset} y1={y(ledger)+yOffset} y2={y(ledger)+yOffset} stroke={ink} strokeWidth={thickness}/>);};
+    const renderBar=(bar,barIndex)=>{const start=barIndex?middle:musicStart,end=barIndex?right:middle,xs=barPositions(bar,start,end,barIndex),groups=groupsFor(bar.rhythms);return <g key={`bar-${barIndex}`}>{bar.notes.map((step,noteIndex)=>{const group=groups.find(item=>noteIndex>=item.start&&noteIndex<=item.end),down=group?bar.notes.slice(group.start,group.end+1).filter(value=>value>4).length>(group.end-group.start+1)/2:step>4,x=xs[noteIndex],stemX=x+(down?-gap*.6:gap*.6),settings=worksheetSymbolSettings("quaverBeam"),stemLength=gap*3.1*Number(settings.heightScale||1),yOffset=gap*Number(settings.yOffsetScale||0),startStemX=group?xs[group.start]+(down?-gap*.6:gap*.6):0,endStemX=group?xs[group.end]+(down?-gap*.6:gap*.6):0,beam=group?{start:{x:startStemX,y:y(bar.notes[group.start])+yOffset+(down?stemLength:-stemLength)},end:{x:endStemX,y:y(bar.notes[group.end])+yOffset+(down?stemLength:-stemLength)}}:null,beamY=beam?beam.start.y+(stemX-beam.start.x)/((beam.end.x-beam.start.x)||1)*(beam.end.y-beam.start.y):null,dotted=bar.rhythms[noteIndex]==="dotted-crotchet",dotKey=step%2===0?"augmentationDotLine":"augmentationDotSpace",dotY=step%2===0?y(step)-gap*.25:y(step),circled=completed&&noteNameForStep(step)===question.targetLetter;return <g key={`note-${noteIndex}`}>{ledgerLines(step,x,`${barIndex}-${noteIndex}`)}{bar.accidentals[noteIndex]?<WorksheetGlyph symbolKey="sharpInScore" x={x-gap*2.1} y={y(step)} gap={gap} colour={ink}/>:null}<WorksheetGlyph symbolKey={noteSymbol(bar.rhythms[noteIndex],down,Boolean(group))} x={x} y={y(step)} gap={gap} colour={ink}/>{group?<line x1={stemX} x2={stemX} y1={y(step)} y2={beamY} stroke={ink} strokeWidth={Math.max(1,gap*Number(window.SHARED_NOTATION_CONFIG?.drawing?.stemThicknessScale||.12))}/>:null}{dotted?<WorksheetGlyph symbolKey={dotKey} x={x+gap*1.3} y={dotY} gap={gap} colour={ink}/>:null}{circled?<ellipse cx={x} cy={y(step)} rx={gap*1.45} ry={gap*1.05} fill="none" stroke={ink} strokeWidth="1.5"/>:null}{group&&group.start===noteIndex?(()=>{const half=Math.max(1,gap*.2*Number(settings.fontSizeScale||1));return <polygon points={`${beam.start.x},${beam.start.y-half} ${beam.end.x},${beam.end.y-half} ${beam.end.x},${beam.end.y+half} ${beam.start.x},${beam.start.y+half}`} fill={ink}/>;})():null}</g>;})}</g>;};
+    return <svg viewBox="0 0 340 105" className="min-h-0 flex-1 w-full" aria-label={`Two-bar melody in ${question.key.name}`}>
+      {[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right} y1={top+line*gap} y2={top+line*gap} stroke={ink} strokeWidth="1.5"/>)}
+      <WorksheetGlyph symbolKey="gClef" x={clefX} y={y(2)} gap={gap} colour={ink}/>{question.key.signature.map((item,index)=><WorksheetGlyph key={`${item.type}-${index}`} symbolKey={item.type==="sharp"?"sharpKeySignature":"flatKeySignature"} x={keyX+index*gap*1.15} y={y(item.step)} gap={gap} colour={ink}/>) }
+      <WorksheetOutlineGlyph symbolKey="timeSig4" x={timeX} y={top+gap*1.1} fontSize={gap*3.45} colour={ink}/><WorksheetOutlineGlyph symbolKey="timeSig4" x={timeX} y={top+gap*3.12} fontSize={gap*3.45} colour={ink}/>
+      <line x1={middle} x2={middle} y1={top} y2={top+gap*4} stroke={ink} strokeWidth="1.5"/><WorksheetOutlineGlyph symbolKey="barlineFinal" x={right} y={top+gap*4} fontSize={gap*4} colour={ink} anchor="end"/>
+      {question.tonicBars.map(renderBar)}
+    </svg>;
   }
 
   function MissingNotesStaff({ question, completed=false, muted=false }) {
@@ -526,6 +609,8 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     if (CONFIG.activityId === "accidentals") return <AccidentalsStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "enharmonics") return <EnharmonicsStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "keysig") return <KeySignatureStaff question={question} completed={completed} muted={muted} />;
+    if (CONFIG.activityId === "notenaming") return <NoteNamingStaff question={question} muted={muted} />;
+    if (CONFIG.activityId === "tonic") return <div className="flex min-h-0 flex-1 flex-col"><TonicStaff question={question} completed={completed} muted={muted}/><p className="text-center text-sm">The key is <strong>{question.key.name}</strong>.</p></div>;
     if (CONFIG.activityId === "chords" && level === "N5") return <N5ChordStaff question={question} muted={muted} showNoteNames={showNoteNames} />;
     if (CONFIG.activityId === "chords" && level === "AH") return <AHChordStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "missingnotes") return <MissingNotesStaff question={question} completed={completed} muted={muted} />;
@@ -565,7 +650,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     const compactChord = CONFIG.activityId === "chords" && level === "N5";
     const compactRepetition = CONFIG.activityId === "missingnotes" && level === "N3";
     const smallAHChordPrompt = CONFIG.activityId === "chords" && level === "AH";
-    const answerIsInNotation = CONFIG.activityId === "enharmonics" || CONFIG.activityId === "missingnotes" || (CONFIG.activityId === "keysig" && question.build) || (CONFIG.activityId === "chords" && level === "AH");
+    const answerIsInNotation = CONFIG.activityId === "enharmonics" || CONFIG.activityId === "missingnotes" || CONFIG.activityId === "tonic" || (CONFIG.activityId === "keysig" && question.build) || (CONFIG.activityId === "chords" && level === "AH");
     return <section className={`generic-question ${example ? "bg-stone-100 text-stone-500" : ""}`}>{compactChord||compactRepetition?<div className="min-h-6 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong></div>:<div className="flex min-h-9 items-start gap-1 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong><span className={smallAHChordPrompt?"text-xs":""}><EmphasisedPrompt>{question.prompt}</EmphasisedPrompt></span></div>}{CONFIG.activityId==="rhythmsums" ? <div className="flex flex-1 items-center justify-center gap-5 text-4xl"><WorksheetRhythmGlyph symbolKey={question.left.symbolKey}/><strong>{question.operator}</strong><WorksheetRhythmGlyph symbolKey={question.right.symbolKey}/></div> : <Staff question={question} completed={completed} muted={example} showNoteNames={example}/>}<div className="relative flex min-h-8 items-end justify-center">{question.response!=="mark" && question.response!=="stave" ? <div className="w-4/5 border-b border-black pb-1 text-center font-semibold">{completed ? question.answer : ""}</div> : completed && !answerIsInNotation ? <strong className="text-sm">{question.answer}</strong> : null}{marks && !example ? <strong className="absolute bottom-1 right-1 text-sm">1</strong> : null}</div></section>;
   }
 
