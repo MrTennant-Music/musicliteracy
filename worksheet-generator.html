@@ -13,6 +13,7 @@
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
+  <script src="./bravura-worksheet-outlines.js"></script>
   <script src="./shared-notation-config.js"></script>
   <script src="./intervals-worksheet-core.js"></script>
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -37,6 +38,9 @@
     .generic-grid.with-gridlines { border-left: 1px solid #d6d3d1; border-top: 1px solid #d6d3d1; }
     .generic-grid.with-gridlines .generic-question { border-right: 1px solid #d6d3d1; border-bottom: 1px solid #d6d3d1; }
     .generic-question { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 10px 12px; }
+    .total-marks-value { top: 8px; }
+    .pdf-capture .total-marks-box { top: 3px; }
+    .pdf-capture .total-marks-value { top: 3px; }
     @media (max-width: 1023px) {
       .worksheet-builder { grid-template-columns: 1fr; }
       .worksheet-preview-panel { position: static; max-height: none; overflow: visible; overscroll-behavior-y: auto; }
@@ -80,6 +84,23 @@ window.MLH.worksheetHeaderMode = {
     else window.location.href = savedReturnUrl || "intervals.html";
   },
 };
+
+function safePdfTitle(title, fallback = "Worksheet") {
+  return String(title || fallback)
+    .replace(/\s*[·•]\s*/g, " - ")
+    .replace(/\s+-\s+/g, " - ")
+    .replace(/[^a-z0-9 _-]/gi, "")
+    .replace(/\s+/g, " ")
+    .trim() || fallback;
+}
+window.MLH.safePdfTitle = safePdfTitle;
+
+function resizeWorksheetTextarea(field) {
+  if (!field) return;
+  field.style.height = "auto";
+  field.style.height = `${field.scrollHeight}px`;
+}
+window.MLH.resizeWorksheetTextarea = resizeWorksheetTextarea;
 
 function importedConfig() {
   try {
@@ -198,7 +219,7 @@ function WorksheetPages({ worksheet, answerSheet = false, pageOffset = 0, totalP
           return <QuestionCard key={`${workedExample ? "example" : "question"}-${question.id}`} question={question} number={number} showNumbers={worksheet.includeNumbers} showMarks={worksheet.includeMarks && !answerSheet} marks={1} showIdentifyPrompt={mixedQuestionTypes} answer={answerSheet} workedExample={workedExample} dividerClass={dividerClass} />;
         })}
       </div>
-      {!answerSheet && pageIndex === pages.length - 1 && <div className="mt-3 flex shrink-0 items-center justify-end gap-2 text-sm font-bold"><span>Total marks</span><span className="flex h-9 min-w-24 items-center justify-end rounded-lg border border-black px-3">&nbsp; / {worksheet.questions.length}</span></div>}
+      {!answerSheet && worksheet.includeMarks && pageIndex === pages.length - 1 && <div className="mt-3 flex shrink-0 items-center justify-end gap-2 text-sm font-bold"><span>Total marks</span><span className="flex h-9 min-w-24 items-center justify-end rounded-lg border border-black px-3">&nbsp; / {worksheet.questions.length}</span></div>}
       <div className="mt-3 flex shrink-0 items-center justify-between text-[10px] text-stone-400"><span>The Music Literacy Hub</span><span>Page {pageOffset + pageIndex + 1} of {totalPages}</span></div>
     </article>
   ));
@@ -351,9 +372,9 @@ function App() {
     return { sourceLevel: initialLevel, sourceModes: JSON.stringify(modes), ...initialQuestionSet };
   });
   const isN5 = level === "N5";
-  const fieldClass = "mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm";
+  const fieldClass = "mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-normal";
   const compactSelectClass = "w-32 shrink-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm";
-  const check = (label, checked, onChange, disabled = false) => <label className={`flex items-center gap-2 text-sm ${disabled ? "text-stone-400" : ""}`}><input className="worksheet-checkbox" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />{label}</label>;
+  const check = (label, checked, onChange, disabled = false) => <label className={`flex items-center gap-2 whitespace-nowrap text-sm ${disabled ? "text-stone-400" : ""}`}><input className="worksheet-checkbox" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />{label}</label>;
   const requestedCount = Number(countChoice);
   const currentModes = isN5 ? { identify: true, create: false } : enabledModes;
   const effectiveSubtitle = subtitleCustomized ? subtitle : defaultWorksheetInstructions(worksheet.questions);
@@ -434,7 +455,7 @@ function App() {
             });
           }
         }
-        const showTotalMarks = !answerSheet && pageIndex === questionGroups.length - 1;
+        const showTotalMarks = previewWorksheet.includeMarks && !answerSheet && pageIndex === questionGroups.length - 1;
         const contentTop = headerBottom - 18, contentBottom = showTotalMarks ? 82 : 42, tableLeft = 42, tableRight = 553, columnWidth = (tableRight - tableLeft) / 2;
         const rowsPerPage = Math.ceil(perPage / 2), rowHeight = (contentTop - contentBottom) / rowsPerPage;
         if (!answerSheet && pageIndex === 0 && previewWorksheet.includeExampleAnswer) page.drawRectangle({ x: tableLeft + 0.5, y: contentTop - rowHeight + 0.5, width: columnWidth - 1, height: rowHeight - 1, color: exampleFill });
@@ -500,7 +521,7 @@ function App() {
       const pdfBytes = await pdfDoc.save();
       const url = URL.createObjectURL(new Blob([pdfBytes], { type: "application/pdf" }));
       const link = document.createElement("a");
-      const safeTitle = (previewWorksheet.title || "Intervals Worksheet").replace(/[·•]/g, " - ").replace(/[^a-z0-9 _-]/gi, "").replace(/\s+/g, " ").trim() || "Intervals Worksheet";
+      const safeTitle = safePdfTitle(previewWorksheet.title, "Intervals Worksheet");
       link.href = url;
       link.download = `${safeTitle}.pdf`;
       document.body.appendChild(link);
@@ -528,11 +549,10 @@ function App() {
               <div><h2 className="flex items-center gap-2 text-xl font-bold"><img src="customise.svg" alt="" aria-hidden="true" className="h-6 w-6 object-contain" />Customise</h2><p className="mt-1 text-sm text-stone-600">Adjust the worksheet content and layout.</p></div>
               <div className="mt-4 space-y-4">
                 <label className="block text-sm font-semibold">Title<input className={fieldClass} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-                <label className="block text-sm font-semibold">Instructions<input className={fieldClass} value={effectiveSubtitle} onChange={(event) => { setSubtitle(event.target.value); setSubtitleCustomized(true); }} /></label>
+                <label className="block text-sm font-semibold">Instructions<textarea ref={resizeWorksheetTextarea} rows="2" className={`${fieldClass} min-h-16 resize-none overflow-hidden`} value={effectiveSubtitle} onChange={(event) => { resizeWorksheetTextarea(event.currentTarget); setSubtitle(event.target.value); setSubtitleCustomized(true); }} /></label>
                 <div className="flex flex-wrap items-center justify-start gap-x-7 gap-y-2">{check("Name", includeName, setIncludeName)}{check("Class", includeClass, setIncludeClass)}{check("Date", includeDate, setIncludeDate)}</div>
                 <label className="flex items-center justify-between gap-4 border-t border-stone-200 pt-4 text-sm font-semibold"><span>Number of Questions</span><select className={compactSelectClass} value={countChoice} onChange={(event) => { const value = event.target.value; setCountChoice(value); resizeQuestions(Number(value)); setError(""); }}>{[10,15,20,25].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-                <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-2">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}{check("Gridlines", showGridlines, setShowGridlines)}</div>
-                <div className="flex flex-wrap items-center justify-start gap-x-8 gap-y-2">{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}{check("Print Answers", includeAnswers, setIncludeAnswers)}</div>
+                <div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] gap-x-3 gap-y-3">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}{check("Gridlines", showGridlines, setShowGridlines)}{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}{check("Print Answers", includeAnswers, setIncludeAnswers)}</div>
               </div>
               {error && <p className="mt-5 font-semibold text-red-700" role="alert">{error}</p>}
               <div className="mt-6 grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button type="button" onClick={generate} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-semibold text-stone-800 transition hover:bg-stone-100"><span className="flex items-center justify-center gap-2"><img src="restart.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" /><span>Refresh</span></span></button><button type="button" onClick={downloadPdf} disabled={downloading} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="download.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>{downloading ? "Preparing…" : "Download"}</span></span></button><button type="button" onClick={() => window.print()} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white"><span className="flex items-center justify-center gap-2"><img src="worksheet.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain invert" /><span>Print</span></span></button></div>
