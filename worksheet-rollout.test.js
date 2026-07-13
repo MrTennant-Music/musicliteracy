@@ -23,4 +23,7 @@ for (const { file } of eligible.filter(({ file }) => file !== "intervals.html"))
 assert.match(fs.readFileSync("chords.html", "utf8"), /activeLevel==="N5"\|\|activeLevel==="AH"/, "Chords worksheets must stay disabled at Higher");
 assert.match(fs.readFileSync("missingnotes.html", "utf8"), /activeLevel==="N3"\|\|activeLevel==="N4"/, "Melodic Dictation worksheets must stay limited to National 3 and National 4");
 assert.match(fs.readFileSync("practicequestions.html", "utf8"), /excludeRhythmIdentification: true/, "Mixed Practice Questions must exclude Rhythm Identification");
+assert.match(generic, /function EmphasisedPrompt/, "Generic worksheets must emphasise the musical variable in each question");
+assert.match(generic, /tone\|semitone/, "Accidental distance and direction must be included in worksheet emphasis");
+assert.match(generic, /root position\|first inversion\|second inversion/, "Chord positions must be included in worksheet emphasis");
 console.log(`Worksheet rollout checks passed for ${eligible.length} activities.`);
