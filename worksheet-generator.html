@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Worksheet Generator</title>
+  <link rel="icon" type="image/svg+xml" href="./intervals-icon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
+  <script src="./hub-mobile.js?v=1.3"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
+  <script src="./intervals-worksheet-core.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+    @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+    .music-symbol { font-family: "Bravura", serif; }
+    .worksheet-builder { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
+    .worksheet-preview-panel { position: sticky; top: 112px; max-height: calc(100vh - 136px); overflow-y: auto; border-radius: 16px; background: #f5f5f4; padding: 16px; }
+    .worksheet-page { width: min(100%, 210mm); min-height: 0; aspect-ratio: 210 / 297; margin: 0 auto 24px; overflow: hidden; background: white; box-shadow: 0 2px 16px rgba(0,0,0,.14); padding: clamp(20px, 5.4vw, 14mm); }
+    .worksheet-question { break-inside: avoid; page-break-inside: avoid; }
+    @media (max-width: 1023px) {
+      .worksheet-builder { grid-template-columns: 1fr; }
+      .worksheet-preview-panel { position: static; max-height: none; overflow: visible; }
+    }
+    @media print {
+      @page { size: A4 portrait; margin: 0; }
+      body { background: white !important; }
+      .no-print, header, footer { display: none !important; }
+      .print-area { display: block !important; }
+      .worksheet-page-content { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+      .worksheet-builder { display: block; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 !important; }
+      .worksheet-preview-panel { position: static; max-height: none; overflow: visible; padding: 0; background: white; }
+      .worksheet-page { width: 210mm; min-height: 297mm; aspect-ratio: auto; margin: 0; padding: 14mm; box-shadow: none; break-after: page; page-break-after: always; }
+      .worksheet-page:last-child { break-after: auto; page-break-after: auto; }
+      .answer-sheet-start-new { break-before: page; page-break-before: always; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useEffect, useMemo, useState } = React;
+const SHELL = window.MLH?.shell || {};
+const LEVELS = { N5: "National 5", H: "Higher", AH: "Advanced Higher" };
+const DEFAULT_MODES = { identify: true, create: true };
+const ASSET = { appIcon: "intervals-icon.svg" };
+
+function importedConfig() {
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem("worksheetSourceConfig") || "null");
+    if (!parsed || parsed.version !== 1 || parsed.activityId !== "intervals" || !parsed.settings || !["N5", "H", "AH"].includes(parsed.settings.level)) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+function chunk(items, size) { return items.reduce((pages, item, index) => { const page = Math.floor(index / size); (pages[page] ||= []).push(item); return pages; }, []); }
+function shuffle(items) { return [...items].sort(() => Math.random() - 0.5); }
+
+function PrintableScore({ question, answer = false }) {
+  const symbols = window.BRAVURA_SYMBOLS || {};
+  const notes = window.MLHIntervalsWorksheet.notes;
+  const start = notes[question.startIndex];
+  const endIndex = question.type === "identify" || answer ? (question.endIndex ?? question.targetIndex) : null;
+  const end = endIndex == null ? null : notes[endIndex];
+  const top = 39, gap = 12, yFor = (step) => top + gap * 4 - step * (gap / 2);
+  const noteGlyph = (note) => note.step > 4 ? symbols.quarterNoteStemDown : symbols.quarterNoteStemUp;
+  const ledger = (note, x) => {
+    const lines = []; if (note.step <= -2) for (let step = -2; step >= note.step; step -= 2) lines.push(step); if (note.step >= 10) for (let step = 10; step <= note.step; step += 2) lines.push(step);
+    return lines.map((step) => <line key={step} x1={x - 13} x2={x + 13} y1={yFor(step)} y2={yFor(step)} stroke="black" strokeWidth="1.2" />);
+  };
+  const renderNote = (note, x, accidental) => <g key={`${note.name}-${x}`}><>{ledger(note, x)}</><text className="music-symbol" x={x} y={yFor(note.step)} fontSize="29" textAnchor="middle">{noteGlyph(note)}</text>{accidental && <text className="music-symbol" x={x - 20} y={yFor(note.step)} fontSize="21" textAnchor="middle">{accidental === "sharp" ? symbols.sharp : symbols.flat}</text>}</g>;
+  return <svg viewBox="0 0 420 130" className="h-auto w-full max-w-[420px]" role="img" aria-label="Musical notation for the question"><rect width="420" height="130" fill="white" />{[0,1,2,3,4].map((line) => <line key={line} x1="36" x2="384" y1={top + line * gap} y2={top + line * gap} stroke="black" strokeWidth="1" />)}<text className="music-symbol" x="61" y={yFor(2)} fontSize="49" textAnchor="middle">{symbols.gClef}</text>{(question.keySignature || []).map((item, index) => <text key={index} className="music-symbol" x={94 + index * 20} y={yFor(item.step)} fontSize="21" textAnchor="middle">{item.type === "sharp" ? symbols.sharp : symbols.flat}</text>)}{renderNote(start, 198)}{end ? renderNote(end, 292, question.targetAccidental) : <text x="292" y="80" fontSize="26" textAnchor="middle">?</text>}</svg>;
+}
+
+function QuestionCard({ question, number, showNumbers, showMarks, marks, answer = false }) {
+  const prompt = question.type === "create" ? `Write a ${window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase()} ${question.direction} than the note given.` : "Identify the interval.";
+  return <section className="worksheet-question border-b border-stone-300 py-3 last:border-b-0"><div className="flex items-start justify-between gap-3"><p className="font-semibold">{showNumbers ? `${number}. ` : ""}{prompt}</p>{showMarks && <span className="shrink-0 text-sm">[{marks} {marks === 1 ? "mark" : "marks"}]</span>}</div><PrintableScore question={question} answer={answer} />{!answer && <div className="mt-1 min-h-8 border-b border-dotted border-stone-400" />}{answer && <p className="mt-1 font-semibold">Answer: {question.answerText}</p>}</section>;
+}
+
+function WorksheetPages({ worksheet, answerSheet = false }) {
+  const perPage = worksheet.questionsPerPage === "auto" ? 6 : Number(worksheet.questionsPerPage);
+  const pages = chunk(worksheet.questions, perPage);
+  return pages.map((questions, pageIndex) => <article className="worksheet-page" key={`${answerSheet ? "answers" : "questions"}-${pageIndex}`}><div className="mb-4 border-b-2 border-black pb-3"><h2 className="text-2xl font-bold">{answerSheet ? `${worksheet.title} — Answers` : worksheet.title}</h2>{!answerSheet && worksheet.subtitle && <p className="mt-1 text-stone-700">{worksheet.subtitle}</p>}{!answerSheet && <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">{worksheet.includeName && <p>Name: <span className="inline-block w-40 border-b border-black" /></p>}{worksheet.includeClass && <p>Class: <span className="inline-block w-32 border-b border-black" /></p>}{worksheet.includeDate && <p>Date: <span className="inline-block w-28 border-b border-black" /></p>}</div>}</div>{questions.map((question, index) => <QuestionCard key={question.id} question={question} number={pageIndex * perPage + index + 1} showNumbers={worksheet.includeNumbers} showMarks={worksheet.includeMarks && !answerSheet} marks={worksheet.marksPerQuestion} answer={answerSheet} />)}</article>);
+}
+
+function createQuestionSet(count, level, enabledModes, order = "generated") {
+  const questions = [], seen = new Set();
+  for (let position = 0; position < count; position += 1) {
+    let selected = null;
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const candidate = window.MLHIntervalsWorksheet.generateQuestion({ level, enabledModes });
+      const signature = window.MLHIntervalsWorksheet.questionSignature(candidate);
+      if (!seen.has(signature) || attempt === 24) { selected = candidate; seen.add(signature); break; }
+    }
+    questions.push(selected);
+  }
+  return order === "random" ? shuffle(questions) : questions;
+}
+
+function App() {
+  const imported = useMemo(importedConfig, []);
+  const initialLevel = imported?.settings.level || "N5";
+  const initialModes = imported?.settings.enabledModes || DEFAULT_MODES;
+  const initialTitle = `${imported?.activityName || "Intervals"} Worksheet`;
+  const [title, setTitle] = useState(initialTitle);
+  const [subtitle, setSubtitle] = useState("");
+  const [includeName, setIncludeName] = useState(true), [includeClass, setIncludeClass] = useState(false), [includeDate, setIncludeDate] = useState(false);
+  const [countChoice, setCountChoice] = useState("10"), [customCount, setCustomCount] = useState(""), [order, setOrder] = useState("generated"), [includeNumbers, setIncludeNumbers] = useState(true), [includeMarks, setIncludeMarks] = useState(false), [marksPerQuestion, setMarksPerQuestion] = useState(1);
+  const [questionsPerPage, setQuestionsPerPage] = useState("auto"), [includeAnswers, setIncludeAnswers] = useState(true), [newAnswerPage, setNewAnswerPage] = useState(true), [monochrome, setMonochrome] = useState(true);
+  const [level, setLevel] = useState(initialLevel), [enabledModes, setEnabledModes] = useState({ ...DEFAULT_MODES, ...initialModes });
+  const [error, setError] = useState("");
+  const [worksheet, setWorksheet] = useState(() => {
+    const modes = initialLevel === "N5" ? { identify: true, create: false } : initialModes;
+    return { sourceLevel: initialLevel, sourceModes: JSON.stringify(modes), questions: createQuestionSet(10, initialLevel, modes) };
+  });
+  const customSettings = imported?.customised ? "Custom settings" : "Standard settings";
+  const isN5 = level === "N5";
+  const fieldClass = "mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm";
+  const check = (label, checked, onChange, disabled = false) => <label className={`flex items-center gap-2 text-sm ${disabled ? "text-stone-400" : ""}`}><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />{label}</label>;
+  const requestedCount = countChoice === "custom" ? Number(customCount) : Number(countChoice);
+  const currentModes = isN5 ? { identify: true, create: false } : enabledModes;
+  const previewWorksheet = useMemo(() => ({ ...worksheet, title: title.trim() || "Intervals Worksheet", subtitle: subtitle.trim(), includeName, includeClass, includeDate, includeNumbers, includeMarks, marksPerQuestion: Math.max(1, Number(marksPerQuestion) || 1), questionsPerPage, includeAnswers, newAnswerPage, monochrome }), [worksheet, title, subtitle, includeName, includeClass, includeDate, includeNumbers, includeMarks, marksPerQuestion, questionsPerPage, includeAnswers, newAnswerPage, monochrome]);
+  useEffect(() => { try { window.sessionStorage.setItem("worksheetGeneratedData", JSON.stringify(previewWorksheet)); } catch {} }, [previewWorksheet]);
+  function resizeQuestions(count, nextLevel = level, nextModes = currentModes) {
+    if (!Number.isInteger(count) || count < 1 || count > 50) return;
+    setWorksheet((current) => {
+      if (current.sourceLevel !== nextLevel || current.sourceModes !== JSON.stringify(nextModes)) return { ...current, sourceLevel: nextLevel, sourceModes: JSON.stringify(nextModes), questions: createQuestionSet(count, nextLevel, nextModes, order) };
+      if (current.questions.length === count) return current;
+      if (current.questions.length > count) return { ...current, questions: current.questions.slice(0, count) };
+      const additional = createQuestionSet(count - current.questions.length, nextLevel, nextModes, order);
+      return { ...current, questions: [...current.questions, ...additional] };
+    });
+  }
+  function generate() {
+    const count = requestedCount;
+    if (!Number.isInteger(count) || count < 1 || count > 50) { setError("Choose a whole-number question count between 1 and 50."); return; }
+    const modes = isN5 ? { identify: true, create: false } : enabledModes;
+    if (!modes.identify && !modes.create) { setError("Select at least one Intervals question type."); return; }
+    const next = { ...previewWorksheet, sourceLevel: level, sourceModes: JSON.stringify(modes), questions: createQuestionSet(count, level, modes, order) };
+    setWorksheet(next); setError("");
+  }
+  if (!imported) return <div className={SHELL.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Create a worksheet" subtitle="Worksheets begin from a supported activity." /><div className={SHELL.pageContentClass}><main className={`${SHELL.mainShellClass} flex items-center justify-center`}><p className="max-w-lg py-12 text-center text-stone-700">Open Intervals and choose <strong>Create worksheet</strong> beside the QR code to bring its current settings here.</p></main></div></div>;
+  return <div className={SHELL.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Create a worksheet" subtitle="Generate a printable worksheet from Intervals." /><div className={`${SHELL.pageContentClass} worksheet-page-content`}><main className={`${SHELL.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}><div className="no-print"><p className="mb-4 text-stone-700">Generate a printable worksheet using the current activity and settings. Adjust the options below before creating the questions.</p><div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 font-semibold">{LEVELS[level]} · Intervals · {customSettings}</div><div className="space-y-6"><section><h2 className="text-lg font-bold">Worksheet details</h2><label className="mt-3 block text-sm font-semibold">Worksheet title<input className={fieldClass} value={title} onChange={(event) => setTitle(event.target.value)} /></label><label className="mt-3 block text-sm font-semibold">Subtitle or instructions (optional)<input className={fieldClass} value={subtitle} onChange={(event) => setSubtitle(event.target.value)} /></label><div className="mt-4 space-y-2">{check("Include student name field", includeName, setIncludeName)}{check("Include class field", includeClass, setIncludeClass)}{check("Include date field", includeDate, setIncludeDate)}</div></section><section><h2 className="text-lg font-bold">Question settings</h2><label className="mt-3 block text-sm font-semibold">Number of questions<select className={fieldClass} value={countChoice} onChange={(event) => { const value = event.target.value; setCountChoice(value); if (value !== "custom") { resizeQuestions(Number(value)); setError(""); } }}>{[5,10,15,20].map((value) => <option key={value} value={value}>{value}</option>)}<option value="custom">Custom</option></select></label>{countChoice === "custom" && <label className="mt-3 block text-sm font-semibold">Custom count (1–50)<input className={fieldClass} type="number" min="1" max="50" value={customCount} onChange={(event) => { const value = event.target.value; setCustomCount(value); const count = Number(value); if (Number.isInteger(count) && count >= 1 && count <= 50) { resizeQuestions(count); setError(""); } }} /></label>}<label className="mt-3 block text-sm font-semibold">Question order<select className={fieldClass} value={order} onChange={(event) => { const value = event.target.value; setOrder(value); if (value === "random") setWorksheet((current) => ({ ...current, questions: shuffle(current.questions) })); }}><option value="generated">Generated order</option><option value="random">Randomised</option></select></label><div className="mt-4 space-y-2">{check("Include question numbers", includeNumbers, setIncludeNumbers)}{check("Include marks", includeMarks, setIncludeMarks)}{includeMarks && <label className="block text-sm font-semibold">Marks per question<input className={fieldClass} type="number" min="1" value={marksPerQuestion} onChange={(event) => setMarksPerQuestion(event.target.value)} /></label>}</div></section><section><h2 className="text-lg font-bold">Layout settings</h2><label className="mt-3 block text-sm font-semibold">Questions per page<select className={fieldClass} value={questionsPerPage} onChange={(event) => setQuestionsPerPage(event.target.value)}><option value="auto">Automatic</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label><div className="mt-4 space-y-2">{check("Include answer sheet", includeAnswers, setIncludeAnswers)}{check("Start answer sheet on a new page", newAnswerPage, setNewAnswerPage, !includeAnswers)}{check("Print-friendly monochrome", monochrome, setMonochrome)}</div></section><section><h2 className="text-lg font-bold">Intervals settings</h2><label className="mt-3 block text-sm font-semibold">Level<select className={fieldClass} value={level} onChange={(event) => { const nextLevel = event.target.value; const nextModes = nextLevel === "N5" ? { identify: true, create: false } : enabledModes; setLevel(nextLevel); resizeQuestions(Number.isInteger(requestedCount) && requestedCount > 0 ? requestedCount : worksheet.questions.length, nextLevel, nextModes); }} >{Object.entries(LEVELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><div className="mt-4 space-y-2">{isN5 && check("Identify intervals", true, () => {}, true)}{!isN5 && check("Identify intervals", enabledModes.identify, (value) => { const next = { ...enabledModes, identify: value }; if (!next.identify && !next.create) { setError("Select at least one Intervals question type."); return; } setEnabledModes(next); resizeQuestions(Number.isInteger(requestedCount) && requestedCount > 0 ? requestedCount : worksheet.questions.length, level, next); setError(""); })}{!isN5 && check("Create intervals", enabledModes.create, (value) => { const next = { ...enabledModes, create: value }; if (!next.identify && !next.create) { setError("Select at least one Intervals question type."); return; } setEnabledModes(next); resizeQuestions(Number.isInteger(requestedCount) && requestedCount > 0 ? requestedCount : worksheet.questions.length, level, next); setError(""); })}</div></section></div>{error && <p className="mt-5 font-semibold text-red-700" role="alert">{error}</p>}<button type="button" onClick={generate} className="mt-6 w-full rounded-xl border border-black bg-black px-5 py-3 font-bold text-white transition hover:bg-stone-800">Generate worksheet</button></div><section id="worksheet-preview" className="print-area worksheet-preview-panel"><div className="no-print mb-4 flex items-center justify-between gap-3"><div><h2 className="text-xl font-bold">Worksheet preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div><button type="button" onClick={() => window.print()} className="shrink-0 rounded-xl border border-black bg-black px-4 py-2.5 text-sm font-bold text-white">Print worksheet</button></div><WorksheetPages worksheet={previewWorksheet} />{previewWorksheet.includeAnswers && <div className={previewWorksheet.newAnswerPage ? "answer-sheet-start-new" : ""}><WorksheetPages worksheet={previewWorksheet} answerSheet /></div>}</section></main></div></div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+  <script src="./footer.js?v=1.3"></script>
+</body>
+</html>

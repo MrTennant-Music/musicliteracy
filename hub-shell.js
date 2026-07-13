@@ -129,6 +129,17 @@
     ));
   }
 
+  function WorksheetButton({ onClick, enabled }) {
+    return React.createElement("button", {
+      type: "button",
+      onClick,
+      disabled: !enabled,
+      className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 shadow-sm transition ${enabled ? "hover:border-stone-500 hover:bg-stone-50" : "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400 opacity-70"}`,
+      "aria-label": "Create worksheet from current settings",
+      title: "Create worksheet",
+    }, React.createElement("img", { src: "worksheet.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain" }));
+  }
+
   function ProfileQrOverlay({ title, subtitle, shareUrl, onClose }) {
     const [copied, setCopied] = React.useState(false);
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=560x560&data=${encodeURIComponent(shareUrl)}`;
@@ -166,7 +177,7 @@
     return ({ N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher" })[level] || "Custom";
   }
 
-  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl }) {
+  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, worksheetConfig }) {
     const [qrOpen, setQrOpen] = React.useState(false);
     const [, setProfileRevision] = React.useState(0);
     const activityTitle = profileTitle || (typeof title === "string" ? title : "Activity");
@@ -176,6 +187,18 @@
     if (hasSharedSettings) shareUrlObject.searchParams.set("settings", MLH.profileSettings.encoded());
     else shareUrlObject.searchParams.delete("settings");
     const shareUrl = shareUrlObject.toString();
+    const worksheetEnabled = typeof worksheetConfig === "function";
+    function createWorksheet() {
+      if (!worksheetEnabled) return;
+      try {
+        const config = worksheetConfig();
+        if (!config || config.version !== 1 || typeof config.activityId !== "string" || !config.settings || typeof config.settings !== "object") return;
+        window.sessionStorage.setItem("worksheetSourceConfig", JSON.stringify(config));
+        window.location.href = "worksheet-generator.html";
+      } catch {
+        // Leave the pupil on the current activity if their browser cannot save the settings.
+      }
+    }
     React.useEffect(() => {
       const refresh = () => setProfileRevision((value) => value + 1);
       window.addEventListener("mlh-profile-settings-change", refresh);
@@ -240,7 +263,8 @@
               React.createElement("div", { className: "flex h-14 flex-col justify-center" },
                 React.createElement("h1", { className: "relative top-[1px] inline-flex items-center gap-2 text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl" },
                   title,
-                  React.createElement(ProfileQrButton, { onClick: () => setQrOpen(true) })
+                  React.createElement(ProfileQrButton, { onClick: () => setQrOpen(true) }),
+                  React.createElement(WorksheetButton, { enabled: worksheetEnabled, onClick: createWorksheet })
                 ),
                 React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap" }, subtitle)
               )
@@ -429,6 +453,7 @@
 
   MLH.AppHeader = AppHeader;
   MLH.ProfileQrButton = ProfileQrButton;
+  MLH.WorksheetButton = WorksheetButton;
   MLH.ProfileQrOverlay = ProfileQrOverlay;
   MLH.FeedbackBadge = FeedbackBadge;
   MLH.ScoreStreakPanel = ScoreStreakPanel;

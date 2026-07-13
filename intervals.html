@@ -17,6 +17,7 @@
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
   <script src="./shared-notation-config.js"></script>
+  <script src="./intervals-worksheet-core.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     .music-symbol { font-family: "Bravura", serif; font-weight: 400; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
@@ -337,77 +338,8 @@ function stemDown(step) {
   return step > 4;
 }
 
-function isPlainIntervalQuestion(startIndex, endIndex) {
-  const label = intervalNameFromHalfSteps(startIndex, endIndex);
-  return !label.startsWith("Augmented") && !label.startsWith("Diminished") && label !== "Tritone";
-}
-
-function makeIdentifyQuestion(level = "N5") {
-  if (level === "AH" && Math.random() < 0.4) {
-    const weightedInterval = randomItem(CHROMATIC_INTERVAL_WEIGHTS);
-    const interval = weightedInterval || CHROMATIC_INTERVALS.find((item) => item.id.startsWith("tritone"));
-    const keySignature = KEY_SIGNATURES[interval.key].accidentals;
-    const answer = chromaticQuestionAnswer(interval, keySignature);
-
-    return {
-      id: Math.random().toString(36).slice(2),
-      type: "identify",
-      chromatic: true,
-      typedMode: true,
-      startIndex: interval.startIndex,
-      endIndex: interval.endIndex,
-      intervalSize: answer,
-      answer,
-      direction: "higher",
-      targetAccidental: interval.targetAccidental || null,
-      keySignature,
-    };
-  }
-
-  const interval = randomItem(intervalsForLevel(level));
-  const distance = interval.size - 1;
-  const direction = Math.random() < 0.5 ? "higher" : "lower";
-  const allowedIndexes = new Set(noteIndexesForLevel(level));
-  const possibleStarts = [...allowedIndexes].filter((index) => {
-    const endIndex = direction === "higher" ? index + distance : index - distance;
-    return allowedIndexes.has(endIndex) && isPlainIntervalQuestion(index, endIndex);
-  });
-  const startIndex = randomItem(possibleStarts);
-  const endIndex = direction === "higher" ? startIndex + distance : startIndex - distance;
-
-  return {
-    id: Math.random().toString(36).slice(2),
-    type: "identify",
-    typedMode: Math.random() < 0.35,
-    startIndex,
-    endIndex,
-    intervalSize: interval.size,
-    direction,
-    answer: interval.label,
-  };
-}
-
-function makeCreateQuestion(level = "N5") {
-  const validQuestions = [];
-  const allowedIndexes = new Set(noteIndexesForLevel(level));
-
-  intervalsForLevel(level).forEach((interval) => {
-    const distance = interval.size - 1;
-    allowedIndexes.forEach((startIndex) => {
-      if (allowedIndexes.has(startIndex + distance)) {
-        validQuestions.push({ type: "create", startIndex, targetIndex: startIndex + distance, intervalSize: interval.size, direction: "higher" });
-      }
-      if (allowedIndexes.has(startIndex - distance)) {
-        validQuestions.push({ type: "create", startIndex, targetIndex: startIndex - distance, intervalSize: interval.size, direction: "lower" });
-      }
-    });
-  });
-
-  return { id: Math.random().toString(36).slice(2), ...randomItem(validQuestions) };
-}
-
 function createQuestion(mode = "identify", level = "N5") {
-  return mode === "create" ? makeCreateQuestion(level) : makeIdentifyQuestion(level);
+  return window.MLHIntervalsWorksheet.generateQuestion({ mode, level });
 }
 
 function pickQuestionMode(enabledModes) {
@@ -1094,7 +1026,21 @@ function App() {
 
   return (
     <div className={SHELL.pageShellClass}>
-      <window.MLH.AppHeader icon={ASSET.appIcon} title="Intervals" subtitle="Identify and create intervals.">
+      <window.MLH.AppHeader
+        icon={ASSET.appIcon}
+        title="Intervals"
+        subtitle="Identify and create intervals."
+        worksheetConfig={() => ({
+          version: 1,
+          source: "activity",
+          activityId: "intervals",
+          activityName: "Intervals",
+          level: LEVELS[activeLevel].label,
+          profile: displayedLevelLabel,
+          customised: !taskMatchesLevel(enabledModes),
+          settings: { level: activeLevel, enabledModes: { ...enabledModes } },
+        })}
+      >
         <ScorePanel correct={correct} attempted={attempted} accuracy={accuracy} streak={streak} bestStreak={bestStreak} confettiKey={confettiKey} resetScore={resetScore} medalEligible={medalEligible} />
       </window.MLH.AppHeader>
 
