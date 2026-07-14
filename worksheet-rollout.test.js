@@ -426,6 +426,7 @@ assert.doesNotMatch(intervalWorksheet, /\.answer-sheet-start-new \{ break-before
 assert.match(intervalWorksheet, /\.pdf-capture \.worksheet-header-title \{ transform: translateY\(-7px\); \}/, "Downloaded worksheet titles must align vertically with their app icons");
 assert.match(intervalWorksheet, /\.pdf-capture \.worksheet-header-instructions \{ transform: translateY\(-7px\); \}/, "Downloaded worksheet instructions must use the matching raised position");
 assert.match(intervalWorksheet, /\.pdf-capture\.generic-page:not\(:first-of-type\) \.worksheet-header-title/, "Generic continuation-page PDF headers must restore centred text alignment");
+assert.match(intervalWorksheet, /\.pdf-capture\.generic-page:nth-of-type\(2\) \.worksheet-header-title,[\s\S]*?translateY\(-10px\)/, "Every second generic worksheet PDF header must move up ten pixels");
 assert.match(generic, /worksheet-header-title text-xl font-bold leading-tight/, "Generic worksheet headers must expose the PDF-only title alignment correction");
 assert.match(generic, /worksheet-header-title text-lg font-bold leading-tight/, "Practice paper headers must expose the PDF-only title alignment correction");
 assert.match(generic, /worksheet-header-instructions text-sm text-stone-700/, "Generic worksheet instructions must expose the PDF-only alignment correction");
@@ -452,10 +453,14 @@ assert.equal(filenameContext.result, "Sequences - National 4", "The National 4 S
 assert.match(intervalWorksheet, /const safeTitle = safePdfTitle\(previewWorksheet\.title/, "Intervals PDFs must use the shared filename cleaner");
 assert.match(generic, /window\.MLH\.safePdfTitle\(title,fallbackTitle\)/, "Generic worksheet PDFs must use the shared filename cleaner");
 assert.match(intervalWorksheet, /outputPdf\("print"\)/, "Intervals Print must use the generated PDF instead of browser HTML printing");
+assert.match(intervalWorksheet, /preparingMode === "download" \? "Preparing…" : "Download"/, "Intervals Download alone must show its preparing label");
+assert.match(intervalWorksheet, /preparingMode === "print" \? "Preparing…" : "Print"/, "Intervals Print alone must show its preparing label");
 assert.match(generic, /outputCapturedWorksheetPdf\(\{pages:\[\.\.\.document\.querySelectorAll\("\.generic-page"\)\]/, "Generic Print and Download must share one PDF builder");
 assert.match(generic, /openPdfBlobForPrint\(pdf\.output\("blob"\),printWindow\)/, "Generic Print must open the generated PDF for printing");
 assert.doesNotMatch(intervalWorksheet, /onClick=\{\(\) => window\.print\(\)\}/, "Intervals Print must not use Safari's HTML print layout");
 assert.doesNotMatch(generic, /onClick=\{\(\)=>print\(\)\}/, "Generic Print must not use browser HTML printing");
+assert.match(generic, /preparingMode==="download"\?"Preparing…":"Download"/, "Generic Download alone must show its preparing label");
+assert.match(generic, /preparingMode==="print"\?"Preparing…":"Print"/, "Generic Print alone must show its preparing label");
 assert.match(generic, /grid-cols-\[minmax\(0,1fr\)_max-content_max-content\]/, "Generic worksheet options must use aligned content-sized checkbox columns");
 assert.match(intervalWorksheet, /grid-cols-\[minmax\(0,1fr\)_max-content_max-content\]/, "Intervals worksheet options must use aligned content-sized checkbox columns");
 assert.match(generic, /whitespace-nowrap text-sm/, "Generic worksheet checkbox labels must stay on one line");
