@@ -53,6 +53,8 @@
     .pdf-capture .practice-paper-total-marks-box { top: 7px; }
     .pdf-capture .total-marks-value { top: 3px; }
     .pdf-capture .pupil-detail-line { transform: translateY(10px); }
+    .pdf-capture .worksheet-header-title { transform: translateY(-7px); }
+    .pdf-capture .worksheet-header-instructions { transform: translateY(-7px); }
     .practice-paper-page { padding: clamp(18px, 4vw, 10mm); }
     .practice-paper-page-sixteen { padding-top: 18px; }
     .practice-paper-page .worksheet-header-card { position: relative; z-index: 2; background: #fff; }
@@ -87,9 +89,7 @@
       .worksheet-page-content { max-width: none !important; margin: 0 !important; padding: 0 !important; }
       .worksheet-builder { display: block; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 !important; }
       .worksheet-preview-panel { position: static; max-height: none; overflow: visible; border: 0; padding: 0; background: white; }
-      .worksheet-page { width: 210mm; min-height: 297mm; aspect-ratio: auto; margin: 0; padding: 14mm; box-shadow: none; break-after: page; page-break-after: always; }
-      .worksheet-page:last-child { break-after: auto; page-break-after: auto; }
-      .answer-sheet-start-new { break-before: page; page-break-before: always; }
+      .worksheet-page { box-sizing: border-box; width: 210mm; height: 297mm; min-height: 297mm; max-height: 297mm; aspect-ratio: auto; margin: 0; padding: 14mm; box-shadow: none; }
     }
   </style>
 </head>
@@ -128,6 +128,27 @@ function safePdfTitle(title, fallback = "Worksheet") {
     .trim() || fallback;
 }
 window.MLH.safePdfTitle = safePdfTitle;
+
+function createPdfPrintWindow() {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) throw new Error("Allow pop-ups for The Music Literacy Hub, then try Print again.");
+  printWindow.document.title = "Preparing worksheet…";
+  printWindow.document.body.innerHTML = '<p style="font: 16px system-ui; padding: 24px;">Preparing worksheet for printing…</p>';
+  return printWindow;
+}
+
+function openPdfBlobForPrint(blob, printWindow) {
+  const url = URL.createObjectURL(blob);
+  printWindow.addEventListener("load", () => {
+    window.setTimeout(() => {
+      try { printWindow.focus(); printWindow.print(); } catch {}
+    }, 500);
+  }, { once: true });
+  printWindow.location.replace(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 300000);
+}
+window.MLH.createPdfPrintWindow = createPdfPrintWindow;
+window.MLH.openPdfBlobForPrint = openPdfBlobForPrint;
 
 function resizeWorksheetTextarea(field) {
   if (!field) return;
@@ -466,9 +487,14 @@ function App() {
     }, 260);
   }
   useEffect(() => () => { if (refreshTimerRef.current) window.clearTimeout(refreshTimerRef.current); }, []);
-  async function downloadPdf() {
+  async function outputPdf(mode = "download") {
     if (downloading) return;
     if (!window.PDFLib || !window.fontkit) { setError("The PDF tools could not load. Check your internet connection and try again."); return; }
+    let printWindow = null;
+    if (mode === "print") {
+      try { printWindow = createPdfPrintWindow(); }
+      catch (error) { setError(error.message); return; }
+    }
     setDownloading(true);
     setError("");
     try {
@@ -501,10 +527,10 @@ function App() {
         page.drawSvgPath(headerPath, { x: 43, y: headerTop - 1, color: black, opacity: 0.06 });
         page.drawSvgPath(headerPath, { x: 42, y: headerTop, color: headerFill, borderColor: black, borderWidth: 0.6 });
         page.drawImage(worksheetIcon, { x: 54, y: 773, width: 40, height: 40 });
-        page.drawText(heading, { x: 102, y: 795, size: 18, font: boldFont, color: black });
+        page.drawText(heading, { x: 102, y: 802, size: 18, font: boldFont, color: black });
         if (hasSubtitle) {
           const fittedInstructions = fitPdfInstructions(previewWorksheet.subtitle, regularFont, 439);
-          fittedInstructions.lines.forEach((line, index) => page.drawText(line, { x: 102, y: 776 - index * fittedInstructions.size * 1.2, size: fittedInstructions.size, font: regularFont, color: grey }));
+          fittedInstructions.lines.forEach((line, index) => page.drawText(line, { x: 102, y: 783 - index * fittedInstructions.size * 1.2, size: fittedInstructions.size, font: regularFont, color: grey }));
         }
         if (showPupilFields) {
           const fields = [previewWorksheet.includeName && { label: "Name:", ratio: 2 }, previewWorksheet.includeClass && { label: "Class:", ratio: 1 }, previewWorksheet.includeDate && { label: "Date:", ratio: 1 }].filter(Boolean);
@@ -584,17 +610,23 @@ function App() {
       questionGroups.forEach((items, pageIndex) => drawPage(items, false, pageIndex));
       if (previewWorksheet.includeAnswers) answerGroups.forEach((items, pageIndex) => drawPage(items, true, pageIndex));
       const pdfBytes = await pdfDoc.save();
-      const url = URL.createObjectURL(new Blob([pdfBytes], { type: "application/pdf" }));
-      const link = document.createElement("a");
-      const safeTitle = safePdfTitle(previewWorksheet.title, "Intervals Worksheet");
-      link.href = url;
-      link.download = `${safeTitle}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      if (printWindow) {
+        openPdfBlobForPrint(blob, printWindow);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const safeTitle = safePdfTitle(previewWorksheet.title, "Intervals Worksheet");
+        link.href = url;
+        link.download = `${safeTitle}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
     } catch {
-      setError("The PDF could not be created. Please try again or use Print instead.");
+      try { printWindow?.close(); } catch {}
+      setError("The PDF could not be created. Please try again.");
     } finally {
       setDownloading(false);
     }
@@ -620,7 +652,7 @@ function App() {
                 <div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] gap-x-3 gap-y-3">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}{check("Gridlines", showGridlines, setShowGridlines)}{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}{check("Include Answers", includeAnswers, setIncludeAnswers)}</div>
               </div>
               {error && <p className="mt-5 font-semibold text-red-700" role="alert">{error}</p>}
-              <div className="mt-6 grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button type="button" onClick={generate} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-semibold text-stone-800 transition hover:bg-stone-100"><span className="flex items-center justify-center gap-2"><img src="restart.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" /><span>Refresh</span></span></button><button type="button" onClick={downloadPdf} disabled={downloading} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="download.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>{downloading ? "Preparing…" : "Download"}</span></span></button><button type="button" onClick={() => window.print()} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white"><span className="flex items-center justify-center gap-2"><img src="worksheet.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain invert" /><span>Print</span></span></button></div>
+              <div className="mt-6 grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button type="button" onClick={generate} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-semibold text-stone-800 transition hover:bg-stone-100"><span className="flex items-center justify-center gap-2"><img src="restart.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" /><span>Refresh</span></span></button><button type="button" onClick={() => outputPdf("download")} disabled={downloading} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="download.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>{downloading ? "Preparing…" : "Download"}</span></span></button><button type="button" onClick={() => outputPdf("print")} disabled={downloading} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="worksheet.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain invert" /><span>{downloading ? "Preparing…" : "Print"}</span></span></button></div>
             </div>
           </div>
           <section id="worksheet-preview" className="print-area worksheet-preview-panel">
