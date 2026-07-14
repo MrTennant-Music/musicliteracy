@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 const index = fs.readFileSync("index.html", "utf8");
+assert.doesNotMatch(index, />Generate Worksheets<\/a>/, "The index dropdown should not show a standalone worksheet-generator link");
 const activities = [...index.matchAll(/href: "([^"]+\.html)"[^\n]+audio: (true|false)/g)]
   .map((match) => ({ file: match[1], audio: match[2] === "true" }));
 const intentionallyExcluded = new Set(["rhythmmatch.html"]);
@@ -93,6 +94,7 @@ const practiceSource = fs.readFileSync("practicequestions.html", "utf8");
 const hubShellSource = fs.readFileSync("hub-shell.js", "utf8");
 assert.doesNotMatch(hubShellSource, /worksheetControlsMode|mlh-worksheet-controls-height|mlh-worksheet-source-config/, "Activities should not expose embedded Level or Customise controls in worksheet mode");
 assert.doesNotMatch(fs.readFileSync("worksheet-generator.html", "utf8"), /WorksheetSourceControls|worksheet-source-controls/, "The worksheet generator should use its original layout without embedded activity controls");
+assert.match(fs.readFileSync("worksheet-generator.html", "utf8"), /worksheet-generic\.jsx\?v=20260714-controls-removed/, "Browsers must fetch the worksheet renderer version that matches the controls-free generator");
 assert.match(practiceSource, /PRACTICE_WORKSHEET_PAPER_COUNT = 20/, "Mixed Practice Questions should prepare twenty complete paper choices");
 assert.match(practiceSource, /new Set\(\["missing", "rhythmicDictation", "tempoQuestion", "cadence", "repeatSigns", "chord", "accidentals"\]\)/, "Mixed Practice Questions should exclude listening-dependent cadence, repeat-sign, chord and accidental questions");
 assert.match(practiceSource, /enabledQuestionTypes\.worksheetWrittenOnly[\s\S]*randomItem\(\["dynamicName", "hairpinName"\]\)/, "Printed Practice Questions should use only dynamics that can be answered from the score");
