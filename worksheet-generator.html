@@ -60,8 +60,8 @@
     .pdf-capture.generic-page:not(:first-of-type) .worksheet-header-instructions,
     .answer-sheet-start-new .pdf-capture.generic-page .worksheet-header-title,
     .answer-sheet-start-new .pdf-capture.generic-page .worksheet-header-instructions { transform: none; }
-    .pdf-capture.generic-page:nth-of-type(2) .worksheet-header-title,
-    .pdf-capture.generic-page:nth-of-type(2) .worksheet-header-instructions { transform: translateY(-10px); }
+    .pdf-capture.generic-page:not(:first-of-type) .worksheet-header-title,
+    .pdf-capture.generic-page:not(:first-of-type) .worksheet-header-instructions { transform: translateY(-10px); }
     .practice-paper-page { padding: clamp(18px, 4vw, 10mm); }
     .practice-paper-page-sixteen { padding-top: 18px; }
     .practice-paper-page .worksheet-header-card { position: relative; z-index: 2; background: #fff; }
@@ -278,7 +278,7 @@ function WorksheetPages({ worksheet, answerSheet = false, pageOffset = 0, totalP
   const pages = chunk(items, perPage);
   return pages.map((pageItems, pageIndex) => (
     <article className="worksheet-page" key={`${answerSheet ? "answers" : "questions"}-${pageIndex}`}>
-      <div className="worksheet-header-card mb-4 rounded-xl border border-black p-4">
+      {worksheet.includeHeader && <div className="worksheet-header-card mb-4 rounded-xl border border-black p-4">
         <div className="flex items-center gap-3">
           <img src="intervals-icon.svg" alt="" aria-hidden="true" className="h-[52px] w-[52px] shrink-0 object-contain" />
           <div className="min-w-0 flex-1"><h2 className="text-2xl font-bold leading-none">{answerSheet ? `${worksheet.title} — Answers` : worksheet.title}</h2>{!answerSheet && worksheet.subtitle && <FittedInstructions text={worksheet.subtitle} />}</div>
@@ -290,7 +290,7 @@ function WorksheetPages({ worksheet, answerSheet = false, pageOffset = 0, totalP
             {worksheet.includeDate && <p className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Date:</span><span className="min-w-8 flex-1 border-b border-black" /></p>}
           </div>
         )}
-      </div>
+      </div>}
       <div className={`worksheet-questions ${worksheet.showGridlines ? "border border-black" : "border border-transparent"}`} style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateRows: `repeat(${rowsPerPage}, minmax(0, 1fr))` }}>
         {pageItems.map(({ question, workedExample }, index) => {
           const row = Math.floor(index / 2);
@@ -443,9 +443,9 @@ function App() {
   const [title, setTitle] = useState(editorState?.fingerprint === configFingerprint ? editorState.title || initialTitle : initialTitle);
   const [subtitle, setSubtitle] = useState(() => editorState?.subtitle || defaultWorksheetInstructions(initialQuestionSet.questions));
   const [subtitleCustomized, setSubtitleCustomized] = useState(Boolean(editorState?.subtitleCustomized));
-  const [includeName, setIncludeName] = useState(editorState?.name ?? true), [includeClass, setIncludeClass] = useState(editorState?.classField ?? false), [includeDate, setIncludeDate] = useState(editorState?.date ?? false);
+  const [includeHeader, setIncludeHeader] = useState(editorState?.header ?? true), [includeName, setIncludeName] = useState(editorState?.name ?? true), [includeClass, setIncludeClass] = useState(editorState?.classField ?? false), [includeDate, setIncludeDate] = useState(editorState?.date ?? false);
   const [countChoice, setCountChoice] = useState(String(initialCount)), [includeNumbers, setIncludeNumbers] = useState(editorState?.numbers ?? true), [includeMarks, setIncludeMarks] = useState(editorState?.marks ?? true);
-  const [includeAnswers, setIncludeAnswers] = useState(editorState?.answers ?? false), [includeExampleAnswer, setIncludeExampleAnswer] = useState(editorState?.example ?? true), [showGridlines, setShowGridlines] = useState(editorState?.gridlines ?? false);
+  const [includeAnswers, setIncludeAnswers] = useState(editorState?.answers ?? false), [includeExampleAnswer, setIncludeExampleAnswer] = useState(editorState?.example ?? true), [showGridlines, setShowGridlines] = useState(editorState?.gridlines ?? true);
   const level = initialLevel;
   const enabledModes = { ...DEFAULT_MODES, ...initialModes };
   const [error, setError] = useState("");
@@ -459,18 +459,19 @@ function App() {
   const isN5 = level === "N5";
   const fieldClass = "mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-normal";
   const compactSelectClass = "w-32 shrink-0 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm";
-  const check = (label, checked, onChange, disabled = false) => <label className={`flex items-center gap-2 whitespace-nowrap text-sm ${disabled ? "text-stone-400" : ""}`}><input className="worksheet-checkbox" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />{label}</label>;
+  const check = (label, checked, onChange, disabled = false) => <label className={`flex items-center gap-2 whitespace-nowrap text-sm ${disabled ? "text-stone-400 opacity-60" : ""}`}><input className="worksheet-checkbox" type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />{label}</label>;
+  const changeHeader = (enabled) => { setIncludeHeader(enabled); if (!enabled) { setIncludeName(false); setIncludeClass(false); setIncludeDate(false); } };
   const requestedCount = Number(countChoice);
   const currentModes = isN5 ? { identify: true, create: false } : enabledModes;
   const effectiveSubtitle = subtitleCustomized ? subtitle : defaultWorksheetInstructions(worksheet.questions);
-  const previewWorksheet = useMemo(() => ({ ...worksheet, title: title.trim() || initialTitle, subtitle: effectiveSubtitle.trim(), includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines }), [worksheet, title, effectiveSubtitle, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines, initialTitle]);
+  const previewWorksheet = useMemo(() => ({ ...worksheet, title: title.trim() || initialTitle, subtitle: effectiveSubtitle.trim(), includeHeader, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines }), [worksheet, title, effectiveSubtitle, includeHeader, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines, initialTitle]);
   const worksheetPageCount = Math.ceil((previewWorksheet.questions.length + (previewWorksheet.includeExampleAnswer ? 1 : 0)) / 6);
   const answerPageCount = previewWorksheet.includeAnswers ? Math.ceil(previewWorksheet.questions.length / 6) : 0;
   const totalPreviewPages = worksheetPageCount + answerPageCount;
   useEffect(() => { try { window.sessionStorage.setItem("worksheetGeneratedData", JSON.stringify(previewWorksheet)); } catch {} }, [previewWorksheet]);
   useEffect(() => {
-    sessionStorage.setItem("worksheetEditorState", JSON.stringify({ activityId: "intervals", fingerprint: configFingerprint, title, subtitle, subtitleCustomized, name: includeName, classField: includeClass, date: includeDate, count: Number(countChoice), numbers: includeNumbers, marks: includeMarks, answers: includeAnswers, example: includeExampleAnswer, gridlines: showGridlines }));
-  }, [configFingerprint, title, subtitle, subtitleCustomized, includeName, includeClass, includeDate, countChoice, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines]);
+    sessionStorage.setItem("worksheetEditorState", JSON.stringify({ activityId: "intervals", fingerprint: configFingerprint, title, subtitle, subtitleCustomized, header: includeHeader, name: includeName, classField: includeClass, date: includeDate, count: Number(countChoice), numbers: includeNumbers, marks: includeMarks, answers: includeAnswers, example: includeExampleAnswer, gridlines: showGridlines }));
+  }, [configFingerprint, title, subtitle, subtitleCustomized, includeHeader, includeName, includeClass, includeDate, countChoice, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines]);
   function resizeQuestions(count, nextLevel = level, nextModes = currentModes) {
     if (!Number.isInteger(count) || count < 1 || count > 50) return;
     setWorksheet((current) => {
@@ -525,17 +526,20 @@ function App() {
       const drawPage = (pageItems, answerSheet, pageIndex) => {
         const page = pdfDoc.addPage([595.28, 841.89]);
         const black = rgb(0, 0, 0), grey = rgb(0.36, 0.34, 0.32), exampleGrey = rgb(0.47, 0.44, 0.42), headerFill = rgb(0.98, 0.98, 0.975), exampleFill = headerFill;
+        const hasHeader = previewWorksheet.includeHeader;
         const heading = answerSheet ? `${previewWorksheet.title} - Answers` : previewWorksheet.title;
-        const hasSubtitle = !answerSheet && Boolean(previewWorksheet.subtitle);
-        const showPupilFields = !answerSheet && pageIndex === 0 && (previewWorksheet.includeName || previewWorksheet.includeClass || previewWorksheet.includeDate);
+        const hasSubtitle = hasHeader && !answerSheet && Boolean(previewWorksheet.subtitle);
+        const showPupilFields = hasHeader && !answerSheet && pageIndex === 0 && (previewWorksheet.includeName || previewWorksheet.includeClass || previewWorksheet.includeDate);
         const continuationHeaderOffset = answerSheet || pageIndex > 0 ? -11.5 : 0;
-        const headerBottom = hasSubtitle && showPupilFields ? 720 : 742, headerTop = 821;
-        const headerPath = roundedRectangleSvgPath(511, headerTop - headerBottom, 8);
-        page.drawSvgPath(headerPath, { x: 44, y: headerTop - 2, color: black, opacity: 0.1 });
-        page.drawSvgPath(headerPath, { x: 43, y: headerTop - 1, color: black, opacity: 0.06 });
-        page.drawSvgPath(headerPath, { x: 42, y: headerTop, color: headerFill, borderColor: black, borderWidth: 0.6 });
-        page.drawImage(worksheetIcon, { x: 54, y: 773 + continuationHeaderOffset, width: 40, height: 40 });
-        page.drawText(heading, { x: 102, y: 795 + continuationHeaderOffset, size: 18, font: boldFont, color: black });
+        const headerBottom = hasHeader ? (hasSubtitle && showPupilFields ? 720 : 742) : 800, headerTop = 821;
+        if (hasHeader) {
+          const headerPath = roundedRectangleSvgPath(511, headerTop - headerBottom, 8);
+          page.drawSvgPath(headerPath, { x: 44, y: headerTop - 2, color: black, opacity: 0.1 });
+          page.drawSvgPath(headerPath, { x: 43, y: headerTop - 1, color: black, opacity: 0.06 });
+          page.drawSvgPath(headerPath, { x: 42, y: headerTop, color: headerFill, borderColor: black, borderWidth: 0.6 });
+          page.drawImage(worksheetIcon, { x: 54, y: 773 + continuationHeaderOffset, width: 40, height: 40 });
+          page.drawText(heading, { x: 102, y: 795 + continuationHeaderOffset, size: 18, font: boldFont, color: black });
+        }
         if (hasSubtitle) {
           const fittedInstructions = fitPdfInstructions(previewWorksheet.subtitle, regularFont, 439);
           fittedInstructions.lines.forEach((line, index) => page.drawText(line, { x: 102, y: 776 + continuationHeaderOffset - index * fittedInstructions.size * 1.2, size: fittedInstructions.size, font: regularFont, color: grey }));
@@ -655,7 +659,7 @@ function App() {
               <div className="mt-4 space-y-4">
                 <label className="block text-sm font-semibold">Title<input className={fieldClass} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
                 <label className="block text-sm font-semibold">Instructions<textarea ref={resizeWorksheetTextarea} rows="2" className={`${fieldClass} min-h-16 resize-none overflow-hidden`} value={effectiveSubtitle} onChange={(event) => { resizeWorksheetTextarea(event.currentTarget); setSubtitle(event.target.value); setSubtitleCustomized(true); }} /></label>
-                <div className="flex flex-wrap items-center justify-start gap-x-7 gap-y-2">{check("Name", includeName, setIncludeName)}{check("Class", includeClass, setIncludeClass)}{check("Date", includeDate, setIncludeDate)}</div>
+                <div className="flex flex-wrap items-center justify-start gap-x-7 gap-y-2">{check("Header", includeHeader, changeHeader)}{check("Name", includeName, setIncludeName, !includeHeader)}{check("Class", includeClass, setIncludeClass, !includeHeader)}{check("Date", includeDate, setIncludeDate, !includeHeader)}</div>
                 <label className="flex items-center justify-between gap-4 border-t border-stone-200 pt-4 text-sm font-semibold"><span>Number of Questions</span><select className={compactSelectClass} value={countChoice} onChange={(event) => { const value = event.target.value; setCountChoice(value); resizeQuestions(Number(value)); setError(""); }}>{[10,15,20,25].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
                 <div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] gap-x-3 gap-y-3">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}{check("Gridlines", showGridlines, setShowGridlines)}{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}{check("Include Answers", includeAnswers, setIncludeAnswers)}</div>
               </div>
