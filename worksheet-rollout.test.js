@@ -22,7 +22,7 @@ const hubShell = fs.readFileSync("hub-shell.js", "utf8");
 const outlineContext = { window: {} };
 vm.runInNewContext(fs.readFileSync("bravura-worksheet-outlines.js", "utf8"), outlineContext);
 const worksheetOutlines = outlineContext.window.BRAVURA_WORKSHEET_OUTLINES?.symbols || {};
-for (const symbol of ["brace", "gClef", "fClef", "noteheadBlack", "wholeNote", "halfNoteStemUp", "halfNoteStemDown", "quarterNoteStemUp", "quarterNoteStemDown", "eighthNoteStemUp", "eighthNoteStemDown", "sharp", "flat", "natural", "timeSig2", "timeSig3", "timeSig4", "barlineFinal", "repeatLeft", "repeatRight"]) {
+for (const symbol of ["brace", "gClef", "fClef", "noteheadBlack", "augmentationDot", "wholeNote", "halfNoteStemUp", "halfNoteStemDown", "quarterNoteStemUp", "quarterNoteStemDown", "eighthNoteStemUp", "eighthNoteStemDown", "sharp", "flat", "natural", "timeSig2", "timeSig3", "timeSig4", "barlineFinal", "repeatLeft", "repeatRight"]) {
   assert.ok(worksheetOutlines[symbol]?.path, `Worksheet PDFs need a vector outline for ${symbol}`);
 }
 for (const { file } of eligible.filter(({ file }) => file !== "intervals.html")) {
@@ -43,6 +43,11 @@ assert.match(fs.readFileSync("missingnotes.html", "utf8"), /activeLevel==="N3"\|
 assert.doesNotMatch(fs.readFileSync("missingnotes.html", "utf8"), /window\.MLH\.useClickAway\(menuRef/, "Melodic Dictation must not treat its portalled customise panel as an outside click");
 assert.match(fs.readFileSync("missingnotes.html", "utf8"), /closest\?\.\("\[data-menu-panel\],\[data-menu-trigger\]"\)/, "Melodic Dictation customise toggles must keep their portalled menu open");
 assert.match(fs.readFileSync("tonic.html", "utf8"), /x=\{x \+ STAFF\.gap \* 1\.3\}/, "Scale Degrees augmentation dots must use the shared stave-gap placement");
+assert.match(fs.readFileSync("tonic.html", "utf8"), /signature: \[\{ type: "sharp", step: 8 \}\]/, "Scale Degrees must use the Key Signatures data model for G major");
+assert.match(fs.readFileSync("tonic.html", "utf8"), /signature: \[\{ type: "flat", step: 4 \}\]/, "Scale Degrees must use the Key Signatures data model for F major");
+assert.match(fs.readFileSync("tonic.html", "utf8"), /remainingActivityKeys = \[\.\.\.KEYS\]\.sort/, "Scale Degrees must cycle through all four keys before repeating one");
+assert.match(fs.readFileSync("tonic.html", "utf8"), /const stemX = x \+ \(stemDown \? -STAFF\.gap \* 0\.6 : STAFF\.gap \* 0\.6\)/, "Scale Degrees note stems must use the Key Signatures anchors");
+assert.match(fs.readFileSync("tonic.html", "utf8"), /const RHYTHM_UNITS = \{ semibreve: 3\.2, minim: 2\.2/, "Scale Degrees melodies must use Key Signatures rhythm spacing");
 assert.match(generic, /function MissingNotesStaff/, "Melodic Dictation worksheets must use their activity-matched two-bar renderer");
 assert.match(generic, /missingnotes-staff-fade-/, "Melodic Dictation worksheet staves must fade out on the right");
 assert.match(generic, /symbolKey="gClef"/, "Melodic Dictation worksheets must use the calibrated Bravura treble clef");
@@ -87,6 +92,28 @@ assert.match(generic, /function EmphasisedPrompt/, "Generic worksheets must emph
 assert.match(generic, /\\b\(\?:tone\|semitone\)\\b/, "Standalone tone and semitone words must be emphasised in worksheet questions");
 assert.match(generic, /function WorksheetOutlineGlyph/, "Generic worksheet music symbols must render as vector outlines");
 assert.doesNotMatch(generic, /className="music-symbol"/, "Generic worksheet notation must not rely on font glyphs during PDF capture");
+assert.match(generic, /N4:\{rhythms:\["crotchet","minim","dotted-minim","semibreve","quaver","semiquaver"\]/, "National 4 Barlines worksheets must include quavers and semiquavers");
+assert.match(generic, /semiquaver-group-4/, "Barlines worksheets must carry over the activity's grouped-semiquaver patterns");
+assert.match(generic, /H:\{rhythms:[\s\S]*times:\["2\/4","3\/4","4\/4","6\/8","9\/8","12\/8"\]/, "Higher Barlines worksheets must include all prescribed compound time signatures");
+assert.match(generic, /AH:\{rhythms:[\s\S]*times:\["2\/4","3\/4","4\/4","5\/4","6\/8","9\/8","12\/8"\]/, "Advanced Higher Barlines worksheets must include 5\/4 and the compound time signatures");
+assert.match(generic, /barCount=\["5\/4","9\/8","12\/8"\]\.includes\(timeSignature\)\?3:4/, "5\/4, 9\/8 and 12\/8 Barlines questions must use three bars so the notation remains legible");
+assert.match(generic, /if\(item\.tieToNext&&tiedNote&&!item\.isRest&&!tiedNote\.isRest\)tiedNote\.step=item\.step/, "Every Barlines tie must connect notes on the same staff position");
+assert.match(generic, /firstPage\?"bottom-\[30px\]":"bottom-\[22px\]"/, "Page 1 Barlines marks must align vertically with marks on later pages");
+assert.match(generic, /function BarlinesMelodyItems/, "Barlines worksheets must use their dedicated rhythm renderer");
+assert.match(generic, /function RestsStaff/, "Rests worksheets must use their activity-matched one-bar renderer");
+assert.match(generic, /const RESTS_TIME_SIGNATURES=\{[\s\S]*"2\/4"[\s\S]*"3\/4"[\s\S]*"4\/4"[\s\S]*"6\/8"[\s\S]*"9\/8"[\s\S]*"12\/8"/, "Rests worksheets must carry over every Higher time signature");
+assert.match(generic, /const RESTS_OPTIONS=\["semibreve-rest","minim-rest","dotted-crotchet-rest","crotchet-rest","quaver-rest"\]/, "Rests worksheets must carry over every rest available in the activity profile");
+assert.match(generic, /CONFIG\.settings\?\.enabledOptions/, "Rests worksheets must respect the source activity's customised time signatures and rests");
+assert.match(generic, /useWholeBar=enabled\.rests\.includes\("semibreve-rest"\)[\s\S]*index%15===14/, "Whole-bar rest questions must remain occasional, matching the activity");
+assert.match(generic, /if \(CONFIG\.activityId === "rests"\) return <RestsStaff/, "Rests questions must not fall back to the generic empty stave");
+assert.match(generic, /symbolKey=\{symbolKey\}[\s\S]*augmentationDotSpace/, "Rests worksheets must render PDF-safe Bravura rest symbols and augmentation dots");
+assert.match(generic, /CONFIG\.activityId==="barlines"\|\|CONFIG\.activityId==="rests"\?"grid-cols-1"/, "Rests questions must use a full row so compound-time bars remain legible");
+assert.match(generic, /Write the missing rest in each outlined space\. Be sure to check the time signature\./, "Rests worksheets must remind pupils to check the time signature");
+assert.match(generic, /left=92, right=588, top=24, gap=12/, "Rests worksheet notation must retain its confirmed raised position");
+assert.match(generic, /CONFIG\.activityId==="rests"\?"bottom-\[29px\]"/, "Rests marks must use the same raised position on every page");
+for (const symbol of ["timeSig1", "timeSig5", "timeSig6", "timeSig8", "timeSig9", "sixteenthNoteStemUp", "sixteenthNoteStemDown", "wholeRest", "halfRest", "quarterRest", "eighthRest"]) {
+  assert.ok(worksheetOutlines[symbol]?.path, `Worksheet vector outlines must include ${symbol}`);
+}
 assert.match(generic, /function AccidentalsStaff/, "Accidentals worksheets must use their calibrated stave renderer");
 assert.match(generic, /accidentals-staff-fade/, "Accidentals worksheet staves must fade out on the right");
 assert.match(generic, /worksheetSymbolSettings/, "Accidentals worksheet symbols must use the shared notation calibration");
@@ -106,6 +133,10 @@ assert.match(generic, /completed\?drawNote\(question\.target,answerX,"target"\):
 assert.match(generic, /function KeySignatureStaff/, "Key Signature worksheets must use their activity-matched four-bar renderer");
 assert.match(generic, /function NoteNamingStaff/, "Note Identification worksheets must use their activity-matched Bravura renderer");
 assert.match(generic, /function TonicStaff/, "Scale Degrees worksheets must use their mobile-style Bravura renderer");
+const tonicStaffSource = generic.slice(generic.indexOf("function TonicStaff"), generic.indexOf("function MissingNotesStaff"));
+assert.doesNotMatch(tonicStaffSource, /timeSig4/, "Scale Degrees worksheets must omit the time signature to give the melody more room");
+assert.match(generic, /gap=10\.925\*1\.15/, "Scale Degrees worksheet notation must retain the requested additional 15 percent zoom");
+assert.match(generic, /worksheet-activity-tonic/, "Scale Degrees worksheets must identify their activity-specific full-width example layout");
 assert.match(generic, /tonicBars:bars\.map/, "Scale Degrees worksheet questions must contain two generated melody bars");
 assert.match(generic, /<p className="text-center text-sm">The key is <strong>\{question\.key\.name\}<\/strong>\.<\/p>/, "Scale Degrees worksheets must state the key beneath each melody at the question-text size");
 assert.match(generic, /completed&&noteNameForStep\(step\)===question\.targetLetter/, "Scale Degrees worked examples must circle the correct notes");
@@ -188,7 +219,7 @@ const carriedWorksheetSettings = {
   transposing: ["questionOptions"],
   barlines: ["enabledRhythms"],
   rests: ["enabledOptions"],
-  rhythmsums: ["enabledItems", "enabledBeamedItems", "enabledOperators", "includeBeamedGroups"],
+  rhythmsums: ["enabledItems", "enabledBeamedItems", "enabledOperators", "includeBeamedGroups", "includeRests"],
   timesig: ["enabledRhythms"],
   accidentals: ["enabledAccidentals"],
   articulation: ["enabledMarkings", "enabledTypes"],
@@ -204,8 +235,37 @@ assert.match(generic, /const types=selected\.length\?selected/, "Practice Questi
 assert.match(generic, /types\[Math\.abs\(index\)%types\.length\]/, "Practice Question worksheets must not reintroduce disabled written question types");
 assert.match(generic, /selected=CONFIG\.settings\?\.enabledMarkings\|\|\[\]/, "Articulation worksheets must use only selected markings");
 assert.match(generic, /types=CONFIG\.settings\?\.enabledTypes\|\|\[\]/, "Articulation worksheets must use only selected written question types");
-assert.match(generic, /selected=enabledKeys\(CONFIG\.settings\?\.enabledOptions,"rest-"\)/, "Rests worksheets must use only selected rest values");
+assert.match(generic, /const options=CONFIG\.settings\?\.enabledOptions\|\|\{\}/, "Rests worksheets must use only selected time signatures and rest values");
 assert.match(generic, /const pool=configuredRhythmPool\(\)/, "Rhythm Sums worksheets must use the selected rhythm pool");
+assert.match(generic, /N3:\{rhythmIds:\["crotchet","minim","dotted-minim","semibreve"\],beamedIds:\[\],includeRests:false\}/, "National 3 Rhythm Sums must use its prescribed rhythms");
+assert.match(generic, /N4:\{rhythmIds:[\s\S]*beamedIds:\["two-quavers","four-semiquavers"\],includeRests:false\}/, "National 4 Rhythm Sums must include paired quavers and grouped semiquavers");
+assert.match(generic, /N5:\{rhythmIds:[\s\S]*"dotted-crotchet","dotted-quaver"[\s\S]*"dotted-quaver-semiquaver","scotch-snap"\],includeRests:false\}/, "National 5 Rhythm Sums must include dotted rhythms and Scotch snaps");
+assert.match(generic, /H:\{rhythmIds:[\s\S]*"triplet-quavers","triplet-crotchets"\],includeRests:true\}/, "Higher Rhythm Sums must include both triplet types and rests");
+assert.match(generic, /function WorksheetRhythmSumItem/, "Rhythm Sums worksheets must render their complete Bravura rhythm items");
+assert.match(generic, /function WorksheetRhythmSumRest/, "Rhythm Sums rests must retain the activity's dedicated Bravura presentation");
+assert.match(generic, /visualScale=1/, "Rhythm Sums rests must use the same Bravura scale as the notes");
+assert.match(generic, /dotOffset=rhythm==="dotted-quaver-rest"\?2\.3:1\.3/, "Dotted quaver rests must move their dot another 5px right");
+assert.match(generic, /rhythm==="semibreve-rest"\?39:[\s\S]*\?57:/, "Semibreve and minim rests must retain their distinct activity positions");
+assert.match(generic, /blockRest\?<line x1=\{x-10\} x2=\{x\+10\} y1=\{adjustedY\}/, "Semibreve and minim rests must use a short supporting line that distinguishes hanging and sitting rests");
+assert.match(generic, /dottedQuaverDotOffset=\{1\.8\}/, "Rhythm Sums dotted quaver dots must sit 5px farther right at every level");
+assert.match(generic, /if\(rhythm==="semibreve-rest"\)return "wholeRest"/, "Semibreve rests must use the correct Bravura whole-rest symbol");
+assert.match(generic, /if\(rhythm==="minim-rest"\|\|rhythm==="dotted-minim-rest"\)return "halfRest"/, "Minim rests must use the correct Bravura half-rest symbol");
+assert.match(generic, /vectorGlyph\(worksheetRestSymbolKey\(item\.rhythm\)/, "Worksheet rest renderers must use the shared Bravura rest-symbol mapping");
+assert.match(generic, /className="h-16 w-20 overflow-visible"/, "Rhythm Sums notation must retain its compact confirmed size");
+assert.match(generic, /justify-center gap-1 text-\[1\.625rem\]/, "Rhythm Sums notation and its central operation must remain compact and close together");
+assert.match(generic, /item\.kind==="triplet"/, "Rhythm Sums worksheets must visibly mark triplet groups");
+assert.match(generic, /item\.kind==="triplet"\?\(crotchetTriplet\?<g[\s\S]*:<text x="60" y="14"/, "Beamed quaver triplets must show only the number 3 without a bracket");
+assert.match(generic, /const RHYTHM_SUM_RESTS=/, "Higher Rhythm Sums worksheets must convert eligible notes to their matching rests");
+assert.match(generic, /case "rhythmsums":[\s\S]*prompt:""/, "Rhythm Sums boxes must not repeat the worksheet instruction");
+assert.match(generic, /const compactRhythmSums = CONFIG\.activityId === "rhythmsums"/, "Rhythm Sums boxes must retain numbering without individual question text");
+assert.match(generic, /rhythm-sums-example col-span-2/, "The Rhythm Sums worked example must span the full first row");
+assert.match(generic, /const perPage = rhythmSums \? 8/, "Rhythm Sums worksheets must place eight numbered questions on each page");
+assert.match(generic, /pages\.push\(\[\.\.\.examples,\.\.\.data\.questions\.slice\(0,perPage\)\]\)/, "The full-width Rhythm Sums example must sit above eight questions on page 1");
+assert.match(generic, /perPage=rhythmSums\?8/, "Rhythm Sums page totals must use the same eight-question pagination rule");
+assert.match(generic, /const initialCount=CONFIG\.activityId==="rhythmsums"\?15:10/, "Rhythm Sums worksheets must default to 15 questions at every level");
+assert.match(generic, /relative -top-\[10px\] flex flex-1 items-center justify-center/, "Rhythm Sums notation must retain its confirmed vertical position");
+assert.match(generic, /CONFIG\.activityId==="rhythmsums"\?\(continuationPage\?"-top-\[25px\]":"-top-\[35px\]"\)/, "Rhythm Sums answer lines and marks must sit 10px lower on every continuation page");
+assert.match(generic, /continuationPage=\{pageIndex>0\}/, "Every worksheet page after page 1 must be identified as a continuation page");
 assert.doesNotMatch(generic, /prepareBravuraForPdf/, "Vector worksheet PDFs must not depend on custom-font loading workarounds");
 assert.match(generic, /!answers&&data\.marks&&pageIndex===pages\.length-1/, "Generic worksheets must hide total marks when Marks is disabled");
 assert.match(generic, /total-marks-box relative h-8 w-24/, "Generic preview total box must align vertically with its label");

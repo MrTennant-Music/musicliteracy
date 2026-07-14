@@ -9,9 +9,9 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     keysig: { title: "Key Signatures", subtitle: "Identify key signatures.", icon: "key-signatures-icon.svg", instructions: "Identify the key signatures shown below.", response: "mixed" },
     notenaming: { title: "Note Identification", subtitle: "Identify note names in the treble and bass clef.", icon: "notenaming-icon.svg", instructions: "Name each note shown below.", response: "text" },
     tonic: { title: "Scale Degrees", subtitle: "Identify tonic, subdominant and dominant notes.", icon: "scale-degrees-icon.svg", instructions: "Circle the requested scale degree in each melody.", response: "mark" },
-    transposing: { title: "Transposing", subtitle: "Transpose between the treble and bass clefs.", icon: "transposing-icon.svg", instructions: "Rewrite each example at the requested pitch.", response: "stave" },
-    barlines: { title: "Barlines", subtitle: "Insert barlines at the correct place in the music.", icon: "barlines-icon.svg", instructions: "Insert the missing barlines in each example.", response: "mark", large: true },
-    rests: { title: "Rests", subtitle: "Identify and apply rests.", icon: "rests-icon.svg", instructions: "Write the missing rest in each outlined space.", response: "stave" },
+    transposing: { title: "Transposing", subtitle: "Transpose between the treble and bass clefs.", icon: "transposing-icon.svg", instructions: "Transpose the following notes one octave lower into the bass clef.", response: "stave" },
+    barlines: { title: "Barlines", subtitle: "Insert barlines at the correct place in the music.", icon: "barlines-icon.svg", instructions: "Insert the missing barlines in each example and finish with a double barline.", response: "mark", large: true },
+    rests: { title: "Rests", subtitle: "Identify and apply rests.", icon: "rests-icon.svg", instructions: "Write the missing rest in each outlined space. Be sure to check the time signature.", response: "stave", large: true },
     rhythmsums: { title: "Rhythm Sums", subtitle: "Calculate rhythm values.", icon: "rhythm-sums-icon.svg", instructions: "Calculate the total number of beats in each sum.", response: "text" },
     timesig: { title: "Time Signatures", subtitle: "Identify time signatures.", icon: "time-signatures-icon.svg", instructions: "Identify or insert the time signatures shown below.", response: "text", large: true },
     triplets: { title: "Triplets", subtitle: "Identify quaver triplets and crotchet triplets.", icon: "triplets-icon.svg", instructions: "Mark each group of three notes and identify the triplet type.", response: "text", large: true },
@@ -23,6 +23,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
   };
   const DEF = DEFINITIONS[CONFIG.activityId];
   if (!DEF) return;
+  document.body.classList.toggle("worksheet-activity-tonic", CONFIG.activityId === "tonic");
   const LEVEL_NAMES = { N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher", Custom: "Custom" };
   const level = CONFIG.settings?.level || "Custom";
   const random = (items) => items[Math.floor(Math.random() * items.length)];
@@ -46,6 +47,123 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     "4/4":[["crotchet","crotchet","crotchet","crotchet"],["minim","crotchet","crotchet"],["crotchet","crotchet","minim"],["semibreve"],["quaver","quaver","crotchet","minim"]],
   };
   const MISSING_NOTES_RHYTHM_SPACING={semibreve:3.4,minim:2.15,crotchet:1.35,quaver:.95};
+  const BARLINES_LEVEL_RULES={
+    N3:{rhythms:["crotchet","minim","dotted-minim","semibreve"],times:["2/4","3/4","4/4"],range:[0,8]},
+    N4:{rhythms:["crotchet","minim","dotted-minim","semibreve","quaver","semiquaver"],times:["2/4","3/4","4/4"],range:[-2,10]},
+    N5:{rhythms:["crotchet","minim","dotted-minim","semibreve","quaver","semiquaver","dotted-crotchet","dotted-quaver"],times:["2/4","3/4","4/4"],range:[-2,10]},
+    H:{rhythms:["crotchet","minim","dotted-minim","semibreve","quaver","semiquaver","dotted-crotchet","dotted-quaver","rests"],times:["2/4","3/4","4/4","6/8","9/8","12/8"],range:[-2,10]},
+    AH:{rhythms:["crotchet","minim","dotted-minim","semibreve","quaver","semiquaver","dotted-crotchet","dotted-quaver","rests","ties","syncopation"],times:["2/4","3/4","4/4","5/4","6/8","9/8","12/8"],range:[-4,12]},
+  };
+  const BARLINES_SIMPLE_PATTERNS={
+    "2/4":[["minim"],["crotchet","crotchet"],["quaver-group-2","crotchet"],["crotchet","quaver-group-2"],["quaver-group-2","quaver-group-2"],["semiquaver-group-4","semiquaver-group-4"],["semiquaver-group-4","crotchet"],["crotchet","semiquaver-group-4"],["quaver-2semiquavers","crotchet"],["2semiquavers-quaver","crotchet"],["dotted-quaver-semiquaver","crotchet"],["dotted-crotchet","quaver"],["quaver","dotted-crotchet"],["crotchet-rest","crotchet"],["crotchet","crotchet-rest"],["quaver-rest","quaver","crotchet"]],
+    "3/4":[["dotted-minim"],["minim","crotchet"],["crotchet","minim"],["crotchet","crotchet","crotchet"],["quaver-group-2","crotchet","crotchet"],["crotchet","quaver-group-2","crotchet"],["crotchet","crotchet","quaver-group-2"],["semiquaver-group-4","semiquaver-group-4","semiquaver-group-4"],["semiquaver-group-4","crotchet","crotchet"],["crotchet","semiquaver-group-4","crotchet"],["dotted-crotchet","quaver","crotchet"],["crotchet","dotted-crotchet","quaver"],["crotchet-rest","crotchet","crotchet"],["crotchet","crotchet-rest","crotchet"],["crotchet","crotchet","crotchet-rest"]],
+    "4/4":[["semibreve"],["minim","minim"],["minim","crotchet","crotchet"],["crotchet","crotchet","minim"],["crotchet","crotchet","crotchet","crotchet"],["quaver-group-2","crotchet","crotchet","crotchet"],["crotchet","quaver-group-2","crotchet","crotchet"],["crotchet","crotchet","quaver-group-2","crotchet"],["quaver-group-2","quaver-group-2","minim"],["semiquaver-group-4","semiquaver-group-4","semiquaver-group-4","semiquaver-group-4"],["semiquaver-group-4","crotchet","crotchet","crotchet"],["crotchet","quaver-2semiquavers","crotchet","crotchet"],["crotchet","crotchet","2semiquavers-quaver","crotchet"],["dotted-crotchet","quaver","minim"],["minim","dotted-crotchet","quaver"],["semibreve-rest"],["minim-rest","minim"],["crotchet","crotchet-rest","minim"]],
+    "5/4":[["semibreve","crotchet"],["crotchet","semibreve"],["minim","minim","crotchet"],["crotchet","minim","minim"],["crotchet","crotchet","crotchet","crotchet","crotchet"],["syncopated-crotchets","minim","crotchet"],["minim","syncopated-crotchets","crotchet"],["dotted-crotchet","quaver","minim","crotchet"],["crotchet","dotted-crotchet","quaver","minim"],["quaver-group-2","crotchet","crotchet","minim"],["semiquaver-group-4","crotchet","crotchet","minim"]],
+  };
+  const BARLINES_COMPOUND_BEATS=[["dotted-crotchet"],["crotchet","quaver"],["quaver","crotchet"],["quaver-group-3"],["dotted-crotchet-rest"]];
+  const BARLINES_RHYTHM_SPACING={semibreve:8,"dotted-minim":6,minim:4,"dotted-crotchet":3,crotchet:2.2,quaver:1.15,"dotted-quaver":1.5,semiquaver:.72,"semibreve-rest":8,"minim-rest":4,"dotted-crotchet-rest":3,"crotchet-rest":2.2,"quaver-rest":1.15};
+  const barlinesExpandToken=(token)=>token==="syncopated-crotchets"?["quaver","tie","crotchet","quaver"]:token==="quaver-group-2"?["quaver","quaver"]:token==="quaver-group-3"?["quaver","quaver","quaver"]:token==="semiquaver-group-4"?["semiquaver","semiquaver","semiquaver","semiquaver"]:token==="quaver-2semiquavers"?["quaver","semiquaver","semiquaver"]:token==="2semiquavers-quaver"?["semiquaver","semiquaver","quaver"]:token==="dotted-quaver-semiquaver"?["dotted-quaver","semiquaver"]:[token];
+  const barlinesExplicitBeam=(token)=>["quaver-group-2","quaver-group-3","semiquaver-group-4","quaver-2semiquavers","2semiquavers-quaver","dotted-quaver-semiquaver"].includes(token);
+  function barlinesEnabledRhythms(){
+    const rules=BARLINES_LEVEL_RULES[level]||BARLINES_LEVEL_RULES.N3, configured=CONFIG.settings?.enabledRhythms||{};
+    if(Object.keys(configured).length)return configured;
+    return Object.fromEntries([...rules.rhythms.map(rhythm=>[rhythm,true]),...rules.times.map(signature=>[`time-${signature}`,true])]);
+  }
+  function barlinesRhythmAllowed(rhythm,enabled,restsEnabled){
+    if(rhythm==="tie")return !!enabled.ties;
+    if(rhythm.endsWith("-rest")){
+      if(!restsEnabled||!enabled.rests)return false;
+      if(rhythm==="semibreve-rest")return !!enabled.semibreve;
+      if(rhythm==="minim-rest")return !!enabled.minim;
+      if(rhythm==="dotted-crotchet-rest")return !!enabled["dotted-crotchet"];
+      if(rhythm==="quaver-rest")return !!enabled.quaver;
+      return !!enabled.crotchet;
+    }
+    return !!enabled[rhythm];
+  }
+  function barlinesTokenAllowed(token,enabled,restsEnabled){
+    if(token==="syncopated-crotchets")return !!enabled.syncopation&&!!enabled.ties&&!!enabled.quaver&&!!enabled.crotchet;
+    return barlinesExpandToken(token).every(rhythm=>barlinesRhythmAllowed(rhythm,enabled,restsEnabled));
+  }
+  const barlinesPatternAllowed=(pattern,enabled,restsEnabled)=>pattern.reduce((count,token)=>count+barlinesExpandToken(token).filter(rhythm=>rhythm==="semiquaver").length,0)<=8&&pattern.every(token=>barlinesTokenAllowed(token,enabled,restsEnabled));
+  function makeBarlinesQuestion(base,index){
+    const rules=BARLINES_LEVEL_RULES[level]||BARLINES_LEVEL_RULES.N3, enabled=barlinesEnabledRhythms(), restsEnabled=CONFIG.settings?.restsEnabled!==false;
+    const supported=(configuredTimeSignatures().filter(signature=>rules.times.includes(signature))).filter(signature=>signature.includes("/8")?BARLINES_COMPOUND_BEATS.some(pattern=>barlinesPatternAllowed(pattern,enabled,restsEnabled)):(BARLINES_SIMPLE_PATTERNS[signature]||[]).some(pattern=>barlinesPatternAllowed(pattern,enabled,restsEnabled)));
+    const timeSignature=(supported.length?supported:rules.times)[Math.abs(index)%Math.max(1,(supported.length?supported:rules.times).length)];
+    const preferredByLevel={N4:["semiquaver","quaver",null],N5:["dotted-quaver","dotted-crotchet","semiquaver","quaver",null],H:["rest","dotted-quaver","semiquaver",null],AH:["semiquaver","dotted-quaver","rest","syncopated",null]};
+    const preferred=(preferredByLevel[level]||[])[Math.abs(index)%(preferredByLevel[level]||[null]).length];
+    const containsPreferred=(pattern)=>!preferred||(preferred==="rest"?pattern.some(token=>token.includes("rest")):preferred==="syncopated"?pattern.includes("syncopated-crotchets"):pattern.some(token=>barlinesExpandToken(token).includes(preferred)));
+    const barCount=["5/4","9/8","12/8"].includes(timeSignature)?3:4, tokenBars=[];
+    for(let barIndex=0;barIndex<barCount;barIndex+=1){
+      if(timeSignature.includes("/8")){
+        const groupCount=Number(timeSignature.split("/")[0])/3, allowed=BARLINES_COMPOUND_BEATS.filter(pattern=>barlinesPatternAllowed(pattern,enabled,restsEnabled));
+        tokenBars.push(Array.from({length:groupCount},(_,groupIndex)=>{const preferredGroups=allowed.filter(containsPreferred), pool=barIndex===0&&groupIndex===0&&preferredGroups.length?preferredGroups:allowed;return pool[(Math.abs(index)+barIndex+groupIndex)%pool.length];}).flat());
+      }else{
+        const allowed=(BARLINES_SIMPLE_PATTERNS[timeSignature]||BARLINES_SIMPLE_PATTERNS["4/4"]).filter(pattern=>barlinesPatternAllowed(pattern,enabled,restsEnabled));
+        const preferredPatterns=allowed.filter(containsPreferred), pool=barIndex===0&&preferredPatterns.length?preferredPatterns:allowed;
+        tokenBars.push(pool[(Math.abs(index)+barIndex)%pool.length]);
+      }
+    }
+    const items=[], bars=[], [minStep,maxStep]=rules.range;let previous=Math.max(minStep,Math.min(maxStep,random([1,2,3,4,5,6]))), pendingTie=false;
+    tokenBars.forEach((tokens,barIndex)=>{const barItems=[];tokens.forEach((token,tokenIndex)=>{const expanded=barlinesExpandToken(token), beamGroupId=barlinesExplicitBeam(token)?`bar-${barIndex}-group-${tokenIndex}`:null;expanded.forEach(rhythm=>{if(rhythm==="tie"){if(items.length)items[items.length-1].tieToNext=true;pendingTie=true;return;}const isRest=rhythm.endsWith("-rest");if(!isRest){if(!pendingTie){const choices=[previous-2,previous-1,previous,previous+1,previous+2].filter(step=>step>=minStep&&step<=maxStep);previous=random(choices);}pendingTie=false;}const item={rhythm,step:previous,isRest,beamGroupId,tieToNext:false,barIndex};items.push(item);barItems.push(item);});});bars.push(barItems);});
+    if(level==="AH"&&enabled.ties&&items.length>3&&Math.abs(index)%3===0){const boundary=bars[1].length?items.indexOf(bars[1][bars[1].length-1]):-1,next=boundary+1;if(boundary>=0&&items[next]&&!items[boundary].isRest&&!items[next].isRest){items[boundary].tieToNext=true;items[next].step=items[boundary].step;}}
+    items.forEach((item,itemIndex)=>{const tiedNote=items[itemIndex+1];if(item.tieToNext&&tiedNote&&!item.isRest&&!tiedNote.isRest)tiedNote.step=item.step;});
+    return {...base,prompt:"",timeSignature,bars,barlineItems:items,answer:"Correct barlines shown",response:"mark"};
+  }
+  const RESTS_TIME_SIGNATURES={
+    "2/4":{type:"simple",units:8},"3/4":{type:"simple",units:12},"4/4":{type:"simple",units:16},
+    "6/8":{type:"compound",units:12,groups:2},"9/8":{type:"compound",units:18,groups:3},"12/8":{type:"compound",units:24,groups:4},
+  };
+  const RESTS_OPTIONS=["semibreve-rest","minim-rest","dotted-crotchet-rest","crotchet-rest","quaver-rest"];
+  const RESTS_UNITS={"semibreve-rest":999,"minim-rest":8,"dotted-crotchet-rest":6,"crotchet-rest":4,"quaver-rest":2};
+  const RESTS_LABELS={"semibreve-rest":"Semibreve rest","minim-rest":"Minim rest","dotted-crotchet-rest":"Dotted crotchet rest","crotchet-rest":"Crotchet rest","quaver-rest":"Quaver rest"};
+  function restsEnabledOptions(){
+    const options=CONFIG.settings?.enabledOptions||{};
+    const times=Object.keys(RESTS_TIME_SIGNATURES).filter(signature=>options[`time-${signature}`]!==false&&(!Object.keys(options).some(key=>key.startsWith("time-"))||options[`time-${signature}`]));
+    const rests=RESTS_OPTIONS.filter(rest=>options[`rest-${rest}`]!==false&&(!Object.keys(options).some(key=>key.startsWith("rest-"))||options[`rest-${rest}`]));
+    return {times:times.length?times:Object.keys(RESTS_TIME_SIGNATURES),rests:rests.length?rests:RESTS_OPTIONS};
+  }
+  function restsCompatibleTimes(rest,times){
+    const compatible=times.filter(signature=>rest==="dotted-crotchet-rest"?RESTS_TIME_SIGNATURES[signature].type==="compound":rest==="minim-rest"?signature==="4/4":true);
+    if(compatible.length)return compatible;
+    return Object.keys(RESTS_TIME_SIGNATURES).filter(signature=>rest==="dotted-crotchet-rest"?RESTS_TIME_SIGNATURES[signature].type==="compound":rest==="minim-rest"?signature==="4/4":true);
+  }
+  function restsTemplate(timeSignature,answer,index){
+    const info=RESTS_TIME_SIGNATURES[timeSignature], fullBar=answer==="semibreve-rest";
+    if(fullBar)return {answers:[answer],before:[],after:[],isFullBar:true};
+    if(info.type==="compound"){
+      const targetGroup=Math.abs(index)%info.groups, before=Array.from({length:targetGroup},()=>["dotted-crotchet"]).flat(), after=Array.from({length:info.groups-targetGroup-1},()=>["dotted-crotchet"]).flat();
+      if(answer==="dotted-crotchet-rest")return {answers:[answer],before,after};
+      if(answer==="crotchet-rest")return Math.abs(index)%2?{answers:[answer],before:[...before,"quaver"],after}:{answers:[answer],before,after:["quaver",...after]};
+      return Math.abs(index)%2?{answers:[answer],before:[...before,"quaver-group-2"],after}:{answers:[answer],before,after:["quaver-group-2",...after]};
+    }
+    const beats=Number(timeSignature.split("/")[0]);
+    if(answer==="minim-rest")return Math.abs(index)%2?{answers:[answer],before:["minim"],after:[]}:{answers:[answer],before:[],after:["minim"]};
+    if(answer==="crotchet-rest"){
+      const beforeCount=Math.abs(index)%beats;
+      return {answers:[answer],before:Array.from({length:beforeCount},()=>"crotchet"),after:Array.from({length:beats-beforeCount-1},()=>"crotchet")};
+    }
+    const beforeCount=Math.abs(index)%beats;
+    return Math.abs(index)%2
+      ? {answers:[answer],before:[...Array.from({length:beforeCount},()=>"crotchet"),"quaver"],after:Array.from({length:beats-beforeCount-1},()=>"crotchet")}
+      : {answers:[answer],before:Array.from({length:beforeCount},()=>"crotchet"),after:["quaver",...Array.from({length:beats-beforeCount-1},()=>"crotchet")]};
+  }
+  function restsNotesFromTokens(tokens,startStep,prefix){
+    let step=startStep;
+    const items=[];
+    tokens.forEach((token,tokenIndex)=>{
+      const expanded=barlinesExpandToken(token),beamGroupId=barlinesExplicitBeam(token)?`${prefix}-${tokenIndex}`:null;
+      expanded.forEach(rhythm=>{const choices=[step-1,step,step+1].filter(value=>value>=0&&value<=8);step=random(choices);items.push({rhythm,step,isRest:false,beamGroupId,tieToNext:false});});
+    });
+    return {items,nextStep:step};
+  }
+  function makeRestsQuestion(base,index){
+    const enabled=restsEnabledOptions(), regularRests=enabled.rests.filter(rest=>rest!=="semibreve-rest"), useWholeBar=enabled.rests.includes("semibreve-rest")&&(regularRests.length===0||(index>=0&&index%15===14)), answer=useWholeBar?"semibreve-rest":regularRests[Math.abs(index)%regularRests.length], compatibleTimes=restsCompatibleTimes(answer,enabled.times), timeSignature=compatibleTimes[Math.abs(index)%compatibleTimes.length], template=restsTemplate(timeSignature,answer,index);
+    const before=restsNotesFromTokens(template.before,random([1,2,3,4,5,6]),`rests-before-${base.id}`), after=restsNotesFromTokens(template.after,before.nextStep,`rests-after-${base.id}`);
+    const missingBoxes=template.answers.map((rest,boxIndex)=>({id:`${base.id}-missing-${boxIndex}`,answer:rest,units:template.isFullBar?RESTS_TIME_SIGNATURES[timeSignature].units:RESTS_UNITS[rest],isFullBar:Boolean(template.isFullBar)}));
+    const missingItems=missingBoxes.map(box=>({rhythm:"missing",missingBoxId:box.id,units:box.units,isFullBar:box.isFullBar}));
+    return {...base,prompt:"",timeSignature,restItems:[...before.items,...missingItems,...after.items],missingBoxes,answer:template.answers.map(rest=>RESTS_LABELS[rest]).join(" and "),response:"stave"};
+  }
   function missingNotesBarPositions(rhythms,start,end,{first=false,final=false}={}){
     const scoreStart=start+(first?4:15), scoreEnd=end-(final?24:4);
     const units=rhythms.reduce((sum,rhythm)=>sum+(MISSING_NOTES_RHYTHM_SPACING[rhythm]||1.35),0);
@@ -53,15 +171,40 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     let cursor=scoreStart+unit*.38;
     return rhythms.map(rhythm=>{const x=cursor;cursor+=(MISSING_NOTES_RHYTHM_SPACING[rhythm]||1.35)*unit;return x;});
   }
-  const WORKSHEET_RHYTHMS = {
-    semibreve:{symbolKey:"wholeNote",beats:4}, "dotted-minim":{symbolKey:"halfNoteStemUp",beats:3},
-    minim:{symbolKey:"halfNoteStemUp",beats:2}, "dotted-crotchet":{symbolKey:"quarterNoteStemUp",beats:1.5},
-    crotchet:{symbolKey:"quarterNoteStemUp",beats:1}, "dotted-quaver":{symbolKey:"eighthNoteStemUp",beats:.75},
-    quaver:{symbolKey:"eighthNoteStemUp",beats:.5}, semiquaver:{symbolKey:"eighthNoteStemUp",beats:.25},
-    "two-quavers":{symbolKey:"eighthNoteStemUp",beats:1}, "four-semiquavers":{symbolKey:"eighthNoteStemUp",beats:1},
-    "dotted-quaver-semiquaver":{symbolKey:"eighthNoteStemUp",beats:1}, "scotch-snap":{symbolKey:"eighthNoteStemUp",beats:1},
-    "triplet-quavers":{symbolKey:"eighthNoteStemUp",beats:1}, "triplet-crotchets":{symbolKey:"quarterNoteStemUp",beats:2},
+  const RHYTHM_SUMS_LEVELS={
+    N3:{rhythmIds:["crotchet","minim","dotted-minim","semibreve"],beamedIds:[],includeRests:false},
+    N4:{rhythmIds:["crotchet","minim","dotted-minim","semibreve","quaver","semiquaver"],beamedIds:["two-quavers","four-semiquavers"],includeRests:false},
+    N5:{rhythmIds:["crotchet","minim","dotted-minim","semibreve","quaver","semiquaver","dotted-crotchet","dotted-quaver"],beamedIds:["two-quavers","four-semiquavers","dotted-quaver-semiquaver","scotch-snap"],includeRests:false},
+    H:{rhythmIds:["crotchet","minim","dotted-minim","semibreve","quaver","semiquaver","dotted-crotchet","dotted-quaver"],beamedIds:["two-quavers","four-semiquavers","dotted-quaver-semiquaver","scotch-snap","triplet-quavers","triplet-crotchets"],includeRests:true},
   };
+  const WORKSHEET_RHYTHMS = {
+    semibreve:{id:"semibreve",kind:"single",rhythm:"semibreve",beats:4}, "dotted-minim":{id:"dotted-minim",kind:"single",rhythm:"dotted-minim",beats:3},
+    minim:{id:"minim",kind:"single",rhythm:"minim",beats:2}, "dotted-crotchet":{id:"dotted-crotchet",kind:"single",rhythm:"dotted-crotchet",beats:1.5},
+    crotchet:{id:"crotchet",kind:"single",rhythm:"crotchet",beats:1}, "dotted-quaver":{id:"dotted-quaver",kind:"single",rhythm:"dotted-quaver",beats:.75},
+    quaver:{id:"quaver",kind:"single",rhythm:"quaver",beats:.5}, semiquaver:{id:"semiquaver",kind:"single",rhythm:"semiquaver",beats:.25},
+    "two-quavers":{id:"two-quavers",kind:"beamed",rhythms:["quaver","quaver"],beats:1}, "four-semiquavers":{id:"four-semiquavers",kind:"beamed",rhythms:["semiquaver","semiquaver","semiquaver","semiquaver"],beats:1},
+    "dotted-quaver-semiquaver":{id:"dotted-quaver-semiquaver",kind:"beamed",rhythms:["dotted-quaver","semiquaver"],beats:1}, "scotch-snap":{id:"scotch-snap",kind:"beamed",rhythms:["semiquaver","dotted-quaver"],beats:1},
+    "triplet-quavers":{id:"triplet-quavers",kind:"triplet",rhythms:["quaver","quaver","quaver"],beats:1}, "triplet-crotchets":{id:"triplet-crotchets",kind:"triplet",rhythms:["crotchet","crotchet","crotchet"],beats:2},
+  };
+  const RHYTHM_SUM_RESTS={semibreve:"semibreve-rest","dotted-minim":"dotted-minim-rest",minim:"minim-rest","dotted-crotchet":"dotted-crotchet-rest",crotchet:"crotchet-rest","dotted-quaver":"dotted-quaver-rest",quaver:"quaver-rest"};
+  const TRANSPOSING_BAR_PATTERNS = [
+    {rhythms:["minim","crotchet","crotchet"]},
+    {rhythms:["dotted-crotchet","quaver","crotchet","crotchet"]},
+    {rhythms:["crotchet","crotchet","dotted-crotchet","quaver"]},
+    {rhythms:["crotchet","crotchet","crotchet","crotchet"]},
+    {rhythms:["dotted-crotchet","quaver","dotted-crotchet","quaver"]},
+    {rhythms:["crotchet","crotchet","minim"]},
+    {rhythms:["minim","minim"]},
+    {rhythms:["dotted-crotchet","quaver","minim"]},
+    {rhythms:["crotchet","quaver","quaver","crotchet","crotchet"],stepwise:true},
+    {rhythms:["quaver","quaver","quaver","quaver","minim"],stepwise:true},
+    {rhythms:["crotchet","quaver","quaver","quaver","quaver","crotchet"],stepwise:true},
+    {rhythms:["minim","quaver","quaver","quaver","quaver"],stepwise:true},
+    {rhythms:["crotchet","quaver","quaver","minim"],tieStart:2},
+    {rhythms:["crotchet","quaver","quaver","crotchet","crotchet"],tieStart:2},
+    {rhythms:["dotted-crotchet","quaver","quaver","quaver","crotchet"],tieStart:1},
+  ];
+  const TRANSPOSING_RHYTHM_SPACING={minim:3.4,"dotted-crotchet":2.45,crotchet:1.65,quaver:.95};
   const N5_WORKSHEET_CHORDS = [
     { answer:"C major", notes:[{step:-2,letter:"C"},{step:0,letter:"E"},{step:2,letter:"G"}] },
     { answer:"F major", notes:[{step:1,letter:"F"},{step:3,letter:"A"},{step:5,letter:"C"}] },
@@ -78,7 +221,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
   const TONIC_BAR_PATTERNS = [
     ["minim","crotchet","crotchet"],["crotchet","crotchet","minim"],["minim","minim"],
     ["crotchet","crotchet","crotchet","crotchet"],["dotted-crotchet","quaver","crotchet","crotchet"],
-    ["crotchet","quaver","quaver","crotchet","crotchet"],["quaver","quaver","quaver","quaver","minim"],
+    ["crotchet","quaver","quaver","crotchet","crotchet"],
   ];
   const shuffled = (items) => items.map(value=>({value,sort:Math.random()})).sort((a,b)=>a.sort-b.sort).map(({value})=>value);
   const AH_LETTERS = ["C","D","E","F","G","A","B"];
@@ -108,6 +251,8 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
         : "Write the chord and position or draw in the bass note for the given chord."
       : CONFIG.activityId === "keysig"
         ? "Identify the key signatures shown below."
+        : CONFIG.activityId === "transposing" && level === "AH"
+          ? "Transpose the following notes as instructed."
         : CONFIG.activityId === "missingnotes" && level === "N3"
           ? "Copy each bar to create an exact repetition."
         : CONFIG.activityId === "missingnotes" && level === "N4"
@@ -169,7 +314,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     if(!melody.length)melody=Array.from({length:noteCount},(_,noteIndex)=>noteIndex===0||noteIndex===noteCount-1?key.tonicStep:key.tonicStep+[1,2,1,-1][(noteIndex-1)%4]);
     const bars=[{rhythms:patterns[0],notes:melody.slice(0,patterns[0].length)},{rhythms:patterns[1],notes:melody.slice(patterns[0].length)}];
     const writtenAccidental=(step)=>key.name==="A minor"&&noteNameForStep(step)==="G"?"sharp":null;
-    return {...base,prompt:`Circle the ${degree} note.`,degree,key,tonicBars:bars.map(bar=>({...bar,accidentals:bar.notes.map(writtenAccidental)})),targetLetter,answer:degree,response:"mark"};
+    return {...base,prompt:`Circle an example of the ${degree} note.`,degree,key,tonicBars:bars.map(bar=>({...bar,accidentals:bar.notes.map(writtenAccidental)})),targetLetter,answer:degree,response:"mark"};
   }
   function configuredEnharmonicPairs(){
     const options=CONFIG.settings?.options||{};
@@ -194,10 +339,16 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     return {...base,...chosen,prompt:"Write the enharmonic equivalent of the note shown.",answer:enharmonicName(chosen.target),unusualSpelling:useUnusual,response:"stave"};
   }
   function configuredRhythmPool(){
-    const settings=CONFIG.settings||{};
-    const ids=(settings.enabledItems||[]).concat(settings.includeBeamedGroups===false?[]:(settings.enabledBeamedItems||[]));
-    const pool=ids.map(rhythmId=>WORKSHEET_RHYTHMS[rhythmId]).filter(Boolean);
-    return pool.length?pool:Object.values(WORKSHEET_RHYTHMS).slice(0,6);
+    const settings=CONFIG.settings||{},profile=RHYTHM_SUMS_LEVELS[level]||RHYTHM_SUMS_LEVELS.N3;
+    const baseIds=Array.isArray(settings.enabledItems)&&settings.enabledItems.length?settings.enabledItems:profile.rhythmIds;
+    const beamedIds=settings.includeBeamedGroups===false?[]:Array.isArray(settings.enabledBeamedItems)&&settings.enabledBeamedItems.length?settings.enabledBeamedItems:profile.beamedIds;
+    const pool=[...baseIds,...beamedIds].map(rhythmId=>WORKSHEET_RHYTHMS[rhythmId]).filter(Boolean);
+    return pool.length?pool:profile.rhythmIds.map(rhythmId=>WORKSHEET_RHYTHMS[rhythmId]);
+  }
+  function rhythmSumDisplayItem(item){
+    const profile=RHYTHM_SUMS_LEVELS[level]||RHYTHM_SUMS_LEVELS.N3,includeRests=(CONFIG.settings?.includeRests??profile.includeRests)&&item.kind==="single";
+    const rest=includeRests&&RHYTHM_SUM_RESTS[item.id]&&Math.random()<.5?RHYTHM_SUM_RESTS[item.id]:null;
+    return rest?{...item,kind:"rest",rhythm:rest}:item;
   }
   function configuredTimeSignatures(){
     const selected=enabledKeys(CONFIG.settings?.enabledRhythms,"time-");
@@ -279,10 +430,27 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
       case "keysig": return makeKeySignatureQuestion(index,base);
       case "notenaming": return makeNoteNamingQuestion(base);
       case "tonic": return makeTonicQuestion(base,index);
-      case "transposing": { const options=CONFIG.settings?.questionOptions||{}, choices=[options.octaveHigher!==false?{prompt:"Rewrite the note one octave higher.",delta:7}:null,options.octaveLower!==false?{prompt:"Rewrite the note one octave lower.",delta:-7}:null,options.samePitch!==false?{prompt:"Rewrite the note at the same pitch in the other clef.",delta:0,otherClef:true}:null,options.ottava?{prompt:random(["Rewrite the note shown by 8va.","Rewrite the note shown by 8vb."]),delta:random([7,-7])}:null].filter(Boolean), choice=random(choices.length?choices:[{prompt:"Rewrite the note at the same pitch in the other clef.",delta:0,otherClef:true}]); return {...base,prompt:choice.prompt,answerStep:Math.max(-4,Math.min(12,step+choice.delta)),clef:choice.otherClef&&index%2?"bass":"treble"}; }
-      case "barlines": { const timeSignature=random(configuredTimeSignatures()); return {...base,prompt:`Insert the missing barlines in ${timeSignature}.`,timeSignature,melody:Array.from({length:12},()=>random(NOTES)),answer:"Correct barlines shown"}; }
-      case "rests": { const selected=enabledKeys(CONFIG.settings?.enabledOptions,"rest-").map(name=>name.replaceAll("-"," ")), rests=selected.length?selected:["crotchet rest","quaver rest","minim rest","semibreve rest"], answer=random(rests); return {...base,prompt:"Write the missing rest.",answer}; }
-      case "rhythmsums": { const pool=configuredRhythmPool(), operators=(CONFIG.settings?.enabledOperators||["+","−"]).filter(operator=>["+","−","×","÷"].includes(operator)), left=random(pool), right=random(pool), operator=random(operators.length?operators:["+"]), raw=operator==="+"?left.beats+right.beats:operator==="−"?Math.abs(left.beats-right.beats):operator==="×"?left.beats*right.beats:left.beats/right.beats; return {...base,prompt:"Calculate the number of beats.",left,right,operator,answer:Math.round(raw*100)/100}; }
+      case "transposing": {
+        const questionOptions=CONFIG.settings?.questionOptions||{};
+        const transforms=level==="AH"?[
+          questionOptions.octaveLower!==false?{id:"octave-lower",sourceClef:"treble",answerClef:"bass",range:[-2,5],delta:5,prompt:"Transpose the notes one octave lower into the bass clef."}:null,
+          questionOptions.octaveHigher!==false?{id:"octave-higher",sourceClef:"bass",answerClef:"treble",range:[3,10],delta:-5,prompt:"Transpose the notes one octave higher into the treble clef."}:null,
+          questionOptions.samePitch!==false?{id:"same-pitch",samePitch:true,prompt:"Rewrite the notes at the same pitch in the other clef."}:null,
+          questionOptions.ottava?{id:"8va",sourceClef:"treble",answerClef:"treble",range:[-2,3],delta:7,marking:"8va",prompt:"Rewrite the notes as they would sound."}:null,
+          questionOptions.ottava?{id:"8vb",sourceClef:"bass",answerClef:"bass",range:[3,10],delta:-7,marking:"8vb",prompt:"Rewrite the notes as they would sound."}:null,
+        ].filter(Boolean):[{id:"octave-lower",sourceClef:"treble",answerClef:"bass",range:[-2,5],delta:5,prompt:""}];
+        const transform={...(transforms.length?transforms[Math.abs(index)%transforms.length]:{id:"octave-lower",sourceClef:"treble",answerClef:"bass",range:[-2,5],delta:5,prompt:"Transpose the notes one octave lower into the bass clef."})};
+        if(transform.samePitch){transform.sourceClef=Math.random()<.5?"treble":"bass";transform.answerClef=transform.sourceClef==="treble"?"bass":"treble";transform.range=transform.sourceClef==="treble"?[-4,0]:[8,12];transform.delta=transform.sourceClef==="treble"?12:-12;}
+        const pattern=random(TRANSPOSING_BAR_PATTERNS), rhythms=pattern.rhythms, sourceMelody=[];
+        const sourceRange=Array.from({length:transform.range[1]-transform.range[0]+1},(_,rangeIndex)=>transform.range[0]+rangeIndex);
+        if(pattern.stepwise){sourceMelody.push(random(sourceRange));while(sourceMelody.length<rhythms.length){const previous=sourceMelody[sourceMelody.length-1],choices=[previous-1,previous+1].filter(value=>value>=transform.range[0]&&value<=transform.range[1]);sourceMelody.push(random(choices));}}else{rhythms.forEach(()=>sourceMelody.push(random(sourceRange)));}
+        if(Number.isInteger(pattern.tieStart)&&sourceMelody[pattern.tieStart+1]!==undefined)sourceMelody[pattern.tieStart+1]=sourceMelody[pattern.tieStart];
+        const ties=rhythms.map((_,rhythmIndex)=>rhythmIndex===pattern.tieStart);
+        return {...base,transposingType:transform.id,step:sourceMelody[0],answerStep:sourceMelody[0]+transform.delta,sourceMelody,answerMelody:sourceMelody.map(value=>value+transform.delta),rhythms,ties,clef:transform.sourceClef,sourceClef:transform.sourceClef,answerClef:transform.answerClef,marking:transform.marking||null,prompt:level==="AH"?transform.prompt:"",answer:"Transposed passage",response:"stave"};
+      }
+      case "barlines": return makeBarlinesQuestion(base,index);
+      case "rests": return makeRestsQuestion(base,index);
+      case "rhythmsums": { const pool=configuredRhythmPool(), operators=(CONFIG.settings?.enabledOperators||["+","−"]).filter(operator=>["+","−","×","÷"].includes(operator)), left=rhythmSumDisplayItem(random(pool)), right=rhythmSumDisplayItem(random(pool)), operator=random(operators.length?operators:["+"]), raw=operator==="+"?left.beats+right.beats:operator==="−"?Math.abs(left.beats-right.beats):operator==="×"?left.beats*right.beats:left.beats/right.beats; return {...base,prompt:"",left,right,operator,answer:Math.round(raw*100)/100}; }
       case "timesig": { const answer=random(configuredTimeSignatures()); return {...base,prompt:"Identify the time signature.",melody:Array.from({length:12},()=>random(NOTES)),answer}; }
       case "triplets": { const answer=random(["Quaver triplet","Crotchet triplet"]); return { ...base, prompt:"Mark the triplet and name its type.", melody:Array.from({length:12},()=>random(NOTES)), answer }; }
       case "accidentals": { const create=index%2===1; const useAccidental=index<0||index%3!==0; if(useAccidental){const accidentalQuestion=create?accidentalCreationQuestion(base):accidentalIdentificationQuestion(base);if(accidentalQuestion)return accidentalQuestion;} const distance=random(["tone","semitone"]), direction=random(["higher","lower"]); const pairs=distance==="tone"?[[1,2],[2,3],[3,4],[5,6],[6,7]]:[[0,1],[4,5],[7,8]]; const [low,high]=random(pairs); if(create){const startStep=direction==="higher"?low:high, answerStep=direction==="higher"?high:low; return { ...base, step:startStep, answerStep, firstAccidental:null, answerAccidental:null, prompt:`Write a note a ${distance} ${direction} than the note shown.`, answer:NOTE_NAMES[answerStep], response:"stave" };} return { ...base, step:low, step2:high, firstAccidental:null, secondAccidental:null, prompt:"Are the two notes a tone or a semitone apart?", answer:distance[0].toUpperCase()+distance.slice(1), response:"text" }; }
@@ -332,6 +500,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     if (key === "flatInScore" || key === "flatKeySignature") return "flat";
     if (key === "naturalInScore") return "natural";
     if (key === "sharpInScore" || key === "sharpKeySignature") return "sharp";
+    if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
     return key;
   }
 
@@ -367,8 +536,38 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     return <WorksheetOutlineGlyph symbolKey={symbolKey} x={adjustedX} y={adjustedY} fontSize={gap * Number(settings.fontSizeScale || 3.4)} colour={colour} widthScale={settings.widthScale || 1} heightScale={settings.heightScale || 1} />;
   }
 
+  function worksheetRestSymbolKey(rhythm) {
+    if(rhythm==="semibreve-rest")return "wholeRest";
+    if(rhythm==="minim-rest"||rhythm==="dotted-minim-rest")return "halfRest";
+    if(rhythm==="quaver-rest"||rhythm==="dotted-quaver-rest")return "eighthRest";
+    return "quarterRest";
+  }
+
   function WorksheetRhythmGlyph({ symbolKey }) {
     return <svg viewBox="0 0 64 64" className="h-12 w-12 overflow-visible" aria-hidden="true"><WorksheetOutlineGlyph symbolKey={symbolKey} x={32} y={48} fontSize={52} colour="currentColor" /></svg>;
+  }
+
+  function WorksheetRhythmSumRest({ rhythm }) {
+    const gap=10, x=60, visualScale=1, symbolKey=worksheetRestSymbolKey(rhythm), blockRest=rhythm==="semibreve-rest"||rhythm==="minim-rest"||rhythm==="dotted-minim-rest";
+    const settings=worksheetSymbolSettings(symbolKey), baseY=rhythm==="semibreve-rest"?39:(rhythm==="minim-rest"||rhythm==="dotted-minim-rest")?57:(rhythm==="crotchet-rest"||rhythm==="dotted-crotchet-rest")?49:54;
+    const adjustedX=x+gap*Number(settings.xOffsetScale||0)+Number(settings.opticalXOffset||0), adjustedY=baseY+(blockRest?0:gap*Number(settings.yOffsetScale||0)+Number(settings.opticalYOffset||0));
+    const dotted=rhythm.startsWith("dotted-"), dotSettings=worksheetSymbolSettings("augmentationDotSpace"), dotOffset=rhythm==="dotted-quaver-rest"?2.3:1.3, dotX=x+gap*dotOffset, dotY=baseY-gap*.35;
+    return <svg viewBox="0 0 120 86" className="h-16 w-20 overflow-visible" aria-label={rhythm.replaceAll("-"," ")}>
+      {blockRest?<line x1={x-10} x2={x+10} y1={adjustedY} y2={adjustedY} stroke="currentColor" strokeWidth="1.5"/>:null}
+      <WorksheetOutlineGlyph symbolKey={symbolKey} x={adjustedX} y={adjustedY} fontSize={gap*Number(settings.fontSizeScale||3.4)*visualScale} colour="currentColor" widthScale={settings.widthScale||1} heightScale={settings.heightScale||1}/>
+      {dotted?<WorksheetOutlineGlyph symbolKey="augmentationDotSpace" x={dotX} y={dotY} fontSize={gap*Number(dotSettings.fontSizeScale||3.4)*visualScale} colour="currentColor" widthScale={dotSettings.widthScale||1} heightScale={dotSettings.heightScale||1}/>:null}
+    </svg>;
+  }
+
+  function WorksheetRhythmSumItem({ item }) {
+    const rhythms=item.rhythms||[item.rhythm],count=rhythms.length,xs=count===1?[60]:count===2?[37,83]:count===3?[27,60,93]:[18,46,74,102],top=34,gap=10;
+    if(item.kind==="rest")return <WorksheetRhythmSumRest rhythm={rhythms[0]}/>;
+    const crotchetTriplet=item.kind==="triplet"&&rhythms.every(rhythm=>rhythm==="crotchet"),beamGroupId=!crotchetTriplet&&item.kind!=="single"&&item.kind!=="rest"?`rhythm-sum-${item.id}`:null;
+    const items=rhythms.map(rhythm=>({rhythm,step:4,isRest:item.kind==="rest",beamGroupId,tieToNext:false}));
+    return <svg viewBox="0 0 120 86" className="h-16 w-20 overflow-visible" aria-label={item.id.replaceAll("-"," ")}>
+      <BarlinesMelodyItems items={items} xs={xs} top={top} gap={gap} ink="currentColor" dottedQuaverDotOffset={1.8}/>
+      {item.kind==="triplet"?(crotchetTriplet?<g fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M 20 15 L 20 9 L 50 9"/><path d="M 70 9 L 100 9 L 100 15"/><text x="60" y="14" fill="currentColor" stroke="none" textAnchor="middle" fontFamily="serif" fontSize="17" fontWeight="700">3</text></g>:<text x="60" y="14" fill="currentColor" textAnchor="middle" fontFamily="serif" fontSize="17" fontWeight="700">3</text>):null}
+    </svg>;
   }
 
   function AccidentalsStaff({ question, completed=false, muted=false }) {
@@ -528,14 +727,14 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     </svg>;
   }
 
-  function WorksheetMelodyNotes({ steps, rhythms, xs, top, gap, ink, prefix, accidentals=[], circled=[] }) {
+  function WorksheetMelodyNotes({ steps, rhythms, xs, top, gap, ink, prefix, accidentals=[], circled=[], ties=[] }) {
     const y=(step)=>top+gap*4-step*(gap/2);
-    const noteSymbol=(rhythm,step)=>rhythm==="semibreve"?"wholeNote":rhythm==="minim"?(step>4?"halfNoteStemDown":"halfNoteStemUp"):rhythm==="quaver"?(step>4?"eighthNoteStemDown":"eighthNoteStemUp"):(step>4?"quarterNoteStemDown":"quarterNoteStemUp");
+    const noteSymbol=(rhythm,step)=>rhythm==="semibreve"?"wholeNote":rhythm==="minim"||rhythm==="dotted-minim"?(step>4?"halfNoteStemDown":"halfNoteStemUp"):rhythm==="quaver"?(step>4?"eighthNoteStemDown":"eighthNoteStemUp"):(step>4?"quarterNoteStemDown":"quarterNoteStemUp");
     const groups=[];
     for(let index=0;index<rhythms.length;){
       if(rhythms[index]!=="quaver"){index+=1;continue;}
       let end=index;
-      while(end+1<rhythms.length&&rhythms[end+1]==="quaver"&&end-index<3)end+=1;
+      while(end+1<rhythms.length&&rhythms[end+1]==="quaver"&&!ties[end]&&end-index<3)end+=1;
       if(end>index)groups.push({start:index,end});
       index=end+1;
     }
@@ -555,19 +754,88 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     </g>;
   }
 
+  function BarlinesMelodyItems({ items, xs, top, gap, ink, dottedQuaverDotOffset=1.3 }) {
+    const y=(step)=>top+gap*4-step*(gap/2), stemX=(x,down)=>x+(down?-gap*.6+1:gap*.6-1);
+    const ledger=(step,x,key)=>{const lines=[];for(let ledgerStep=-2;ledgerStep>=step;ledgerStep-=2)lines.push(ledgerStep);for(let ledgerStep=10;ledgerStep<=step;ledgerStep+=2)lines.push(ledgerStep);return lines.map(ledgerStep=><line key={`${key}-${ledgerStep}`} x1={x-gap*1.125} x2={x+gap*1.125} y1={y(ledgerStep)} y2={y(ledgerStep)} stroke={ink} strokeWidth={gap*.125}/>);};
+    const vectorGlyph=(symbolKey,x,yPosition,key)=><WorksheetGlyph key={key} symbolKey={symbolKey} x={x} y={yPosition} gap={gap} colour={ink}/>;
+    const groupIds=[...new Set(items.map(item=>item.beamGroupId).filter(Boolean))];
+    const groups=groupIds.map(id=>{const indices=items.map((item,index)=>item.beamGroupId===id&&!item.isRest?index:null).filter(index=>index!==null);return {id,indices};}).filter(group=>group.indices.length>1);
+    const groupFor=(index)=>groups.find(group=>group.indices.includes(index));
+    const beamData=(group)=>{const average=group.indices.reduce((sum,index)=>sum+items[index].step,0)/group.indices.length, down=average>4, first=group.indices[0], last=group.indices[group.indices.length-1], length=gap*3.1;return {down,start:{x:stemX(xs[first],down),y:y(items[first].step)+(down?length:-length)},end:{x:stemX(xs[last],down),y:y(items[last].step)+(down?length:-length)}};};
+    const beamY=(beam,x)=>beam.start.y+(x-beam.start.x)/((beam.end.x-beam.start.x)||1)*(beam.end.y-beam.start.y);
+    const beamPolygon=(x1,y1,x2,y2,thickness)=>`${x1},${y1-thickness/2} ${x2},${y2-thickness/2} ${x2},${y2+thickness/2} ${x1},${y1+thickness/2}`;
+    const standaloneSymbol=(item)=>item.rhythm==="semibreve"?"wholeNote":item.rhythm==="minim"||item.rhythm==="dotted-minim"?(item.step>4?"halfNoteStemDown":"halfNoteStemUp"):item.rhythm==="quaver"||item.rhythm==="dotted-quaver"?(item.step>4?"eighthNoteStemDown":"eighthNoteStemUp"):item.rhythm==="semiquaver"?(item.step>4?"sixteenthNoteStemDown":"sixteenthNoteStemUp"):(item.step>4?"quarterNoteStemDown":"quarterNoteStemUp");
+    return <g>
+      {items.map((item,index)=>{const x=xs[index];if(item.isRest)return <g key={`rest-${index}`}>{vectorGlyph(worksheetRestSymbolKey(item.rhythm),x,y(4),`rest-glyph-${index}`)}{item.rhythm.startsWith("dotted-")?<WorksheetGlyph symbolKey="augmentationDotSpace" x={x+gap*1.1} y={y(4)-gap*.4} gap={gap} colour={ink}/>:null}</g>;const group=groupFor(index), dotted=item.rhythm.startsWith("dotted-"), dotY=y(item.step)-(Math.abs(item.step)%2?0:gap*.25), dotKey=Math.abs(item.step)%2?"augmentationDotSpace":"augmentationDotLine", dotOffset=item.rhythm==="dotted-quaver"?dottedQuaverDotOffset:1.3;return <g key={`note-${index}`}>{ledger(item.step,x,`ledger-${index}`)}{group?(()=>{const beam=beamData(group), sx=stemX(x,beam.down);return <><WorksheetGlyph symbolKey="noteheadBlack" x={x} y={y(item.step)} gap={gap} colour={ink}/><line x1={sx} x2={sx} y1={y(item.step)} y2={beamY(beam,sx)} stroke={ink} strokeWidth={gap*.125}/></>;})():<WorksheetGlyph symbolKey={standaloneSymbol(item)} x={x} y={y(item.step)} gap={gap} colour={ink}/>} {dotted?<WorksheetGlyph symbolKey={dotKey} x={x+gap*dotOffset} y={dotY} gap={gap} colour={ink}/>:null}</g>;})}
+      {groups.map(group=>{const beam=beamData(group), thickness=gap*.42, secondaryOffset=(beam.down?-1:1)*gap*.72, semis=group.indices.filter(index=>items[index].rhythm==="semiquaver"), secondary=[];for(let position=0;position<semis.length;){let end=position;while(end+1<semis.length&&semis[end+1]===semis[end]+1)end+=1;const firstIndex=semis[position],lastIndex=semis[end],single=firstIndex===lastIndex,x1=stemX(xs[firstIndex],beam.down),x2=single?x1+(group.indices.indexOf(firstIndex)>0?-gap*1.15:gap*1.15):stemX(xs[lastIndex],beam.down);secondary.push(<polygon key={`${group.id}-secondary-${position}`} points={beamPolygon(x1,beamY(beam,x1)+secondaryOffset,x2,beamY(beam,x2)+secondaryOffset,thickness)} fill={ink}/>);position=end+1;}return <g key={group.id}><polygon points={beamPolygon(beam.start.x,beam.start.y,beam.end.x,beam.end.y,thickness)} fill={ink}/>{secondary}</g>;})}
+      {items.map((item,index)=>{if(!item.tieToNext||!items[index+1]||item.isRest||items[index+1].isRest)return null;const next=items[index+1],left=xs[index],right=xs[index+1],above=(item.step+next.step)/2>4,base=(y(item.step)+y(next.step))/2+(above?-gap*.8:gap*.8),arch=above?-gap:gap;return <path key={`tie-${index}`} d={`M ${left} ${base} Q ${(left+right)/2} ${base+arch} ${right} ${base} Q ${(left+right)/2} ${base+arch*.72} ${left} ${base} Z`} fill={ink}/>;})}
+    </g>;
+  }
+
+  function BarlinesStaff({ question, completed=false, muted=false }) {
+    const ink=muted?"#78716c":"#000", left=12, right=668, top=32, gap=12, clefX=40, timeX=82, musicStart=108;
+    const noteXs=[], boundaryXs=[], items=question.barlineItems;
+    const totalSpacing=items.reduce((sum,item)=>sum+(BARLINES_RHYTHM_SPACING[item.rhythm]||2.2),0);
+    const spacingUnit=Math.max(1,right-10-musicStart)/Math.max(1,totalSpacing);
+    let cursor=musicStart+spacingUnit*.4;
+    question.bars.forEach((bar,barIndex)=>{
+      bar.forEach((item,barNoteIndex)=>{
+        const spacing=BARLINES_RHYTHM_SPACING[item.rhythm]||2.2;
+        const x=cursor;
+        noteXs.push(x);
+        cursor+=spacing*spacingUnit;
+        if(barNoteIndex===bar.length-1&&barIndex<question.bars.length-1)boundaryXs.push(x+spacing*spacingUnit*.55);
+      });
+    });
+    const [topNumber,bottomNumber]=question.timeSignature.split("/");
+    const timeNumber=(number,y,key)=>{const digits=number.split("");return <g key={key}>{digits.map((digit,digitIndex)=><WorksheetOutlineGlyph key={`${key}-${digitIndex}`} symbolKey={`timeSig${digit}`} x={timeX+(digitIndex-(digits.length-1)/2)*gap*1.45} y={y} fontSize={gap*3.5} colour={ink}/>)}</g>;};
+    return <svg viewBox="0 0 680 125" className="h-full max-h-32 w-full overflow-visible" aria-label={`${question.bars.length} bars in ${question.timeSignature}`}>
+      {[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right} y1={top+line*gap} y2={top+line*gap} stroke={ink} strokeWidth="1.2"/>)}
+      <WorksheetGlyph symbolKey="gClef" x={clefX} y={top+gap*3} gap={gap} colour={ink}/>
+      {timeNumber(topNumber,top+gap*1.12-1,"time-top")}
+      {timeNumber(bottomNumber,top+gap*3.12-1,"time-bottom")}
+      <BarlinesMelodyItems items={items} xs={noteXs} top={top} gap={gap} ink={ink}/>
+      {completed?boundaryXs.map((x,boundaryIndex)=><line key={boundaryIndex} x1={x} x2={x} y1={top} y2={top+gap*4} stroke={ink} strokeWidth="1.6"/>):null}
+      {completed&&muted?boundaryXs.map((x,boundaryIndex)=><g key={`arrow-${boundaryIndex}`} fill={ink} stroke={ink} strokeLinecap="round" strokeLinejoin="round"><line x1={x} x2={x} y1="-2" y2="19" strokeWidth="2"/><path d={`M ${x-5} 14 L ${x} 21 L ${x+5} 14`} fill="none" strokeWidth="2"/></g>):null}
+      {level==="N3"&&completed?<WorksheetOutlineGlyph symbolKey="barlineFinal" x={right} y={top+gap*4} fontSize={gap*4} colour={ink} anchor="end"/>:<line x1={right} x2={right} y1={top} y2={top+gap*4} stroke={ink} strokeWidth="1.6"/>}
+    </svg>;
+  }
+
+  function RestsStaff({ question, completed=false, muted=false }) {
+    const ink=muted?"#78716c":"#000", left=92, right=588, top=24, gap=12, clefX=120, timeX=163, musicStart=196;
+    const y=(step)=>top+gap*4-step*(gap/2), items=question.restItems||[], positions=[];
+    const spacingFor=(item)=>item.rhythm==="missing"?Math.max(1.15,item.units/2):(BARLINES_RHYTHM_SPACING[item.rhythm]||2.2);
+    const totalSpacing=items.reduce((sum,item)=>sum+spacingFor(item),0),spacingUnit=Math.max(1,right-musicStart-12)/Math.max(1,totalSpacing);
+    let cursor=musicStart+spacingUnit*.35;
+    items.forEach(item=>{positions.push(item.isFullBar?(musicStart+right)/2:cursor);cursor+=spacingFor(item)*spacingUnit;});
+    const visibleItems=[],visibleXs=[];
+    items.forEach((item,itemIndex)=>{if(item.rhythm!=="missing"){visibleItems.push(item);visibleXs.push(positions[itemIndex]);}});
+    const [topNumber,bottomNumber]=question.timeSignature.split("/");
+    const timeNumber=(number,yPosition,key)=>number.split("").map((digit,digitIndex)=><WorksheetOutlineGlyph key={`${key}-${digitIndex}`} symbolKey={`timeSig${digit}`} x={timeX+(digitIndex-(number.length-1)/2)*gap*1.45} y={yPosition} fontSize={gap*3.5} colour={ink}/>);
+    const answerGlyph=(box,x,key)=><g key={key}><WorksheetGlyph symbolKey={worksheetRestSymbolKey(box.answer)} x={x} y={y(4)} gap={gap} colour={ink}/>{box.answer.startsWith("dotted-")?<WorksheetGlyph symbolKey="augmentationDotSpace" x={x+gap*1.1} y={y(4)-gap*.4} gap={gap} colour={ink}/>:null}</g>;
+    return <svg viewBox="0 0 680 128" className="h-full max-h-32 w-full overflow-visible" aria-label={`One bar in ${question.timeSignature} with missing rests`}>
+      {[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right} y1={top+line*gap} y2={top+line*gap} stroke={ink} strokeWidth="1.2"/>)}
+      <WorksheetGlyph symbolKey="gClef" x={clefX} y={y(2)} gap={gap} colour={ink}/>
+      {timeNumber(topNumber,top+gap*1.12-1,"rests-time-top")}{timeNumber(bottomNumber,top+gap*3.12-1,"rests-time-bottom")}
+      <BarlinesMelodyItems items={visibleItems} xs={visibleXs} top={top} gap={gap} ink={ink}/>
+      {items.map((item,itemIndex)=>{if(item.rhythm!=="missing")return null;const box=question.missingBoxes.find(entry=>entry.id===item.missingBoxId),x=positions[itemIndex],width=box?.isFullBar?78:Math.max(42,Math.min(58,spacingFor(item)*spacingUnit*.78));return <g key={item.missingBoxId}><rect x={x-width/2} y={top-9} width={width} height={gap*4+17} rx="7" fill="none" stroke={ink} strokeWidth="1.6"/>{completed&&box?answerGlyph(box,x,`rests-answer-${itemIndex}`):null}</g>;})}
+      <WorksheetOutlineGlyph symbolKey="barlineFinal" x={right} y={top+gap*4} fontSize={gap*4} colour={ink} anchor="end"/>
+    </svg>;
+  }
+
   function TonicStaff({ question, completed=false, muted=false }) {
-    const ink=muted?"#78716c":"#000", left=18, right=320, top=39, gap=10.925, clefX=48, keyX=72, timeX=91, musicStart=112, middle=216;
+    const ink=muted?"#78716c":"#000", left=2, right=338, top=35, gap=10.925*1.15, clefX=35, keyX=62, musicStart=85, middle=211.5;
     const y=(step)=>top+gap*4-step*(gap/2);
     const units={semibreve:3.2,minim:2.2,"dotted-crotchet":1.8,crotchet:1.3,quaver:1};
     const noteSymbol=(rhythm,down,beamed=false)=>rhythm==="semibreve"?"wholeNote":rhythm==="minim"?(down?"halfNoteStemDown":"halfNoteStemUp"):beamed?"noteheadBlack":rhythm==="quaver"?(down?"eighthNoteStemDown":"eighthNoteStemUp"):(down?"quarterNoteStemDown":"quarterNoteStemUp");
     const barPositions=(bar,start,end,barIndex)=>{const scoreStart=start+(barIndex===0?4:15),scoreEnd=end-(barIndex===1?24:4),total=bar.rhythms.reduce((sum,rhythm)=>sum+units[rhythm],0),unit=Math.max(1,scoreEnd-scoreStart)/Math.max(1,total);let cursor=scoreStart+unit*.38;return bar.rhythms.map(rhythm=>{const current=cursor;cursor+=units[rhythm]*unit;return current;});};
     const groupsFor=(rhythms)=>{const groups=[];for(let noteIndex=0;noteIndex<rhythms.length;noteIndex+=1){if(rhythms[noteIndex]!=="quaver")continue;const start=noteIndex;while(rhythms[noteIndex+1]==="quaver")noteIndex+=1;if(noteIndex>start)groups.push({start,end:noteIndex});}return groups;};
     const ledgerLines=(step,x,key)=>{const settings=worksheetSymbolSettings("ledgerLines"),xOffset=gap*Number(settings.xOffsetScale||0)+Number(settings.opticalXOffset||0),yOffset=gap*Number(settings.yOffsetScale||0)+Number(settings.opticalYOffset||0),halfWidth=gap*Number(window.SHARED_NOTATION_CONFIG?.drawing?.ledgerLineWidthScale||2.4)*Number(settings.widthScale||1)/2,thickness=Math.max(1,gap*Number(window.SHARED_NOTATION_CONFIG?.drawing?.ledgerLineThicknessScale||.11)*Number(settings.heightScale||1)),steps=[];for(let ledger=-2;ledger>=step;ledger-=2)steps.push(ledger);for(let ledger=10;ledger<=step;ledger+=2)steps.push(ledger);return steps.map(ledger=><line key={`${key}-${ledger}`} x1={x-halfWidth+xOffset} x2={x+halfWidth+xOffset} y1={y(ledger)+yOffset} y2={y(ledger)+yOffset} stroke={ink} strokeWidth={thickness}/>);};
-    const renderBar=(bar,barIndex)=>{const start=barIndex?middle:musicStart,end=barIndex?right:middle,xs=barPositions(bar,start,end,barIndex),groups=groupsFor(bar.rhythms);return <g key={`bar-${barIndex}`}>{bar.notes.map((step,noteIndex)=>{const group=groups.find(item=>noteIndex>=item.start&&noteIndex<=item.end),down=group?bar.notes.slice(group.start,group.end+1).filter(value=>value>4).length>(group.end-group.start+1)/2:step>4,x=xs[noteIndex],stemX=x+(down?-gap*.6:gap*.6),settings=worksheetSymbolSettings("quaverBeam"),stemLength=gap*3.1*Number(settings.heightScale||1),yOffset=gap*Number(settings.yOffsetScale||0),startStemX=group?xs[group.start]+(down?-gap*.6:gap*.6):0,endStemX=group?xs[group.end]+(down?-gap*.6:gap*.6):0,beam=group?{start:{x:startStemX,y:y(bar.notes[group.start])+yOffset+(down?stemLength:-stemLength)},end:{x:endStemX,y:y(bar.notes[group.end])+yOffset+(down?stemLength:-stemLength)}}:null,beamY=beam?beam.start.y+(stemX-beam.start.x)/((beam.end.x-beam.start.x)||1)*(beam.end.y-beam.start.y):null,dotted=bar.rhythms[noteIndex]==="dotted-crotchet",dotKey=step%2===0?"augmentationDotLine":"augmentationDotSpace",dotY=step%2===0?y(step)-gap*.25:y(step),circled=completed&&noteNameForStep(step)===question.targetLetter;return <g key={`note-${noteIndex}`}>{ledgerLines(step,x,`${barIndex}-${noteIndex}`)}{bar.accidentals[noteIndex]?<WorksheetGlyph symbolKey="sharpInScore" x={x-gap*2.1} y={y(step)} gap={gap} colour={ink}/>:null}<WorksheetGlyph symbolKey={noteSymbol(bar.rhythms[noteIndex],down,Boolean(group))} x={x} y={y(step)} gap={gap} colour={ink}/>{group?<line x1={stemX} x2={stemX} y1={y(step)} y2={beamY} stroke={ink} strokeWidth={Math.max(1,gap*Number(window.SHARED_NOTATION_CONFIG?.drawing?.stemThicknessScale||.12))}/>:null}{dotted?<WorksheetGlyph symbolKey={dotKey} x={x+gap*1.3} y={dotY} gap={gap} colour={ink}/>:null}{circled?<ellipse cx={x} cy={y(step)} rx={gap*1.45} ry={gap*1.05} fill="none" stroke={ink} strokeWidth="1.5"/>:null}{group&&group.start===noteIndex?(()=>{const half=Math.max(1,gap*.2*Number(settings.fontSizeScale||1));return <polygon points={`${beam.start.x},${beam.start.y-half} ${beam.end.x},${beam.end.y-half} ${beam.end.x},${beam.end.y+half} ${beam.start.x},${beam.start.y+half}`} fill={ink}/>;})():null}</g>;})}</g>;};
-    return <svg viewBox="0 0 340 105" className="min-h-0 flex-1 w-full" aria-label={`Two-bar melody in ${question.key.name}`}>
+    const noteheadSettings=worksheetSymbolSettings("noteheadBlack"),noteheadOutline=window.BRAVURA_WORKSHEET_OUTLINES?.symbols?.noteheadBlack,noteheadCentreOffset=gap*Number(noteheadSettings.xOffsetScale||0)+Number(noteheadSettings.opticalXOffset||0),noteheadHalfWidth=gap*Number(noteheadSettings.fontSizeScale||3.75)*(Number(noteheadOutline?.advance||295)/Number(window.BRAVURA_WORKSHEET_OUTLINES?.unitsPerEm||1000))*Number(noteheadSettings.widthScale||1)/2,tonicStemX=(x,down)=>x+noteheadCentreOffset+(down?-noteheadHalfWidth:noteheadHalfWidth);
+    const renderBar=(bar,barIndex)=>{const start=barIndex?middle:musicStart,end=barIndex?right:middle,xs=barPositions(bar,start,end,barIndex),groups=groupsFor(bar.rhythms);return <g key={`bar-${barIndex}`}>{bar.notes.map((step,noteIndex)=>{const group=groups.find(item=>noteIndex>=item.start&&noteIndex<=item.end),down=group?bar.notes.slice(group.start,group.end+1).filter(value=>value>4).length>(group.end-group.start+1)/2:step>4,x=xs[noteIndex],stemX=tonicStemX(x,down),settings=worksheetSymbolSettings("quaverBeam"),stemLength=gap*3.1*Number(settings.heightScale||1),yOffset=gap*Number(settings.yOffsetScale||0),startStemX=group?tonicStemX(xs[group.start],down):0,endStemX=group?tonicStemX(xs[group.end],down):0,beam=group?{start:{x:startStemX,y:y(bar.notes[group.start])+yOffset+(down?stemLength:-stemLength)},end:{x:endStemX,y:y(bar.notes[group.end])+yOffset+(down?stemLength:-stemLength)}}:null,beamY=beam?beam.start.y+(stemX-beam.start.x)/((beam.end.x-beam.start.x)||1)*(beam.end.y-beam.start.y):null,dotted=bar.rhythms[noteIndex]==="dotted-crotchet",dotKey=step%2===0?"augmentationDotLine":"augmentationDotSpace",dotY=step%2===0?y(step)-gap*.25:y(step),circled=completed&&noteNameForStep(step)===question.targetLetter;return <g key={`note-${noteIndex}`}>{ledgerLines(step,x,`${barIndex}-${noteIndex}`)}{bar.accidentals[noteIndex]?<WorksheetGlyph symbolKey="sharpInScore" x={x-gap*2.1} y={y(step)} gap={gap} colour={ink}/>:null}<WorksheetGlyph symbolKey={noteSymbol(bar.rhythms[noteIndex],down,Boolean(group))} x={x} y={y(step)} gap={gap} colour={ink}/>{group?<line x1={stemX} x2={stemX} y1={y(step)} y2={beamY} stroke={ink} strokeWidth={Math.max(1,gap*Number(window.SHARED_NOTATION_CONFIG?.drawing?.stemThicknessScale||.12))}/>:null}{dotted?<WorksheetGlyph symbolKey={dotKey} x={x+gap*1.3} y={dotY} gap={gap} colour={ink}/>:null}{circled?<ellipse cx={x} cy={y(step)} rx={gap*1.45} ry={gap*1.05} fill="none" stroke={ink} strokeWidth="1.5"/>:null}{group&&group.start===noteIndex?(()=>{const half=Math.max(1,gap*.2*Number(settings.fontSizeScale||1));return <polygon points={`${beam.start.x},${beam.start.y-half} ${beam.end.x},${beam.end.y-half} ${beam.end.x},${beam.end.y+half} ${beam.start.x},${beam.start.y+half}`} fill={ink}/>;})():null}</g>;})}</g>;};
+    return <svg viewBox="0 0 340 125" className="block h-auto w-full shrink-0 overflow-visible" aria-label={`Two-bar melody in ${question.key.name}`}>
       {[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right} y1={top+line*gap} y2={top+line*gap} stroke={ink} strokeWidth="1.5"/>)}
       <WorksheetGlyph symbolKey="gClef" x={clefX} y={y(2)} gap={gap} colour={ink}/>{question.key.signature.map((item,index)=><WorksheetGlyph key={`${item.type}-${index}`} symbolKey={item.type==="sharp"?"sharpKeySignature":"flatKeySignature"} x={keyX+index*gap*1.15} y={y(item.step)} gap={gap} colour={ink}/>) }
-      <WorksheetOutlineGlyph symbolKey="timeSig4" x={timeX} y={top+gap*1.1} fontSize={gap*3.45} colour={ink}/><WorksheetOutlineGlyph symbolKey="timeSig4" x={timeX} y={top+gap*3.12} fontSize={gap*3.45} colour={ink}/>
       <line x1={middle} x2={middle} y1={top} y2={top+gap*4} stroke={ink} strokeWidth="1.5"/><WorksheetOutlineGlyph symbolKey="barlineFinal" x={right} y={top+gap*4} fontSize={gap*4} colour={ink} anchor="end"/>
       {question.tonicBars.map(renderBar)}
     </svg>;
@@ -605,12 +873,42 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     </svg>;
   }
 
+  function TransposingStaff({ question, completed=false, muted=false }) {
+    const ink=muted?"#78716c":"#000";
+    const left=18, right=318, gap=10, ahOffset=level==="AH"?10:0, exampleOffset=completed&&muted?10:0, upperTop=13+ahOffset+exampleOffset, lowerTop=92+ahOffset+exampleOffset, musicStart=82, systemsSwapped=question.sourceClef==="bass"&&question.answerClef==="treble", sourceTop=(systemsSwapped?lowerTop:upperTop)+(level==="AH"&&question.sourceClef==="bass"?5:0), answerTop=(systemsSwapped?upperTop:lowerTop)+(level==="AH"&&question.answerClef==="bass"?5:0), svgHeight=completed&&muted?174:154;
+    const sourceY=(step)=>sourceTop+gap*4-step*(gap/2);
+    const answerY=(step)=>answerTop+gap*4-step*(gap/2);
+    const fadeId=`transposing-staff-fade-${question.id}-${completed?"answer":"question"}`;
+    const noteGap=.34, totalUnits=question.rhythms.reduce((sum,rhythm)=>sum+(TRANSPOSING_RHYTHM_SPACING[rhythm]||1.3),0)+Math.max(0,question.rhythms.length-1)*noteGap, unit=(right-musicStart-18)/Math.max(1,totalUnits);
+    let cursor=musicStart;
+    const noteXs=question.rhythms.map((rhythm,index)=>{const width=(TRANSPOSING_RHYTHM_SPACING[rhythm]||1.3)*unit,x=index===0?musicStart+7:cursor+width/2;cursor+=width+(index<question.rhythms.length-1?noteGap*unit:0);return x;});
+    const tieLayer=(steps,top,prefix)=><g>{question.ties.map((tied,index)=>{if(!tied||steps[index+1]===undefined)return null;const y1=top+gap*4-steps[index]*(gap/2),y2=top+gap*4-steps[index+1]*(gap/2),stemsUp=steps[index]<=4&&steps[index+1]<=4,baseY=stemsUp?Math.max(y1,y2)+gap*.72:Math.min(y1,y2)-gap*.72,direction=stemsUp?1:-1,x1=noteXs[index]-gap*.15,x2=noteXs[index+1]+gap*.15,curve=gap*.68;return <path key={`${prefix}-tie-${index}`} d={`M ${x1} ${baseY} C ${x1+(x2-x1)*.25} ${baseY+direction*curve}, ${x1+(x2-x1)*.75} ${baseY+direction*curve}, ${x2} ${baseY} C ${x1+(x2-x1)*.75} ${baseY+direction*curve*.58}, ${x1+(x2-x1)*.25} ${baseY+direction*curve*.58}, ${x1} ${baseY} Z`} fill={ink}/>;})}</g>;
+    const stave=(top,clef,key,yForStep)=><g key={key}>
+      {[0,1,2,3,4].map(line=><line key={line} x1={left} x2={right} y1={top+line*gap} y2={top+line*gap} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
+      <WorksheetGlyph symbolKey={clef==="bass"?"fClef":"gClef"} x={left+gap*3.2} y={yForStep(clef==="bass"?6:2)} gap={gap} colour={ink}/>
+    </g>;
+    const ottavaMark=question.marking?(()=>{const above=question.marking==="8va",labelY=above?sourceTop-14:sourceTop+gap*4+17,lineY=above?sourceTop-20:sourceTop+gap*4+14;return <g fill={ink} stroke={ink}><text x={musicStart-15} y={labelY} fontSize="13" fontFamily="Georgia, serif" fontStyle="italic" fontWeight="400" stroke="none" textAnchor="start">{question.marking}</text><line x1={musicStart+18} x2={right-28} y1={lineY} y2={lineY} strokeWidth="1" strokeDasharray="3 3"/><line x1={right-28} x2={right-28} y1={lineY} y2={lineY+(above?7:-7)} strokeWidth="1"/></g>;})():null;
+    return <svg viewBox={`0 0 320 ${svgHeight}`} className="h-full max-h-36 w-full overflow-visible" aria-label="Treble-clef bar above an empty bass-clef answer stave">
+      <defs><linearGradient id={fadeId} gradientUnits="userSpaceOnUse" x1={left} x2={right} y1="0" y2="0"><stop offset="0%" stopColor={ink} stopOpacity="1"/><stop offset="84%" stopColor={ink} stopOpacity="1"/><stop offset="100%" stopColor={ink} stopOpacity="0"/></linearGradient></defs>
+      {stave(sourceTop,question.sourceClef,"source-stave",sourceY)}
+      {stave(answerTop,question.answerClef,"answer-stave",answerY)}
+      {ottavaMark}
+      {tieLayer(question.sourceMelody,sourceTop,"source")}
+      <WorksheetMelodyNotes steps={question.sourceMelody} rhythms={question.rhythms} xs={noteXs} top={sourceTop} gap={gap} ink={ink} prefix="transposing-source" ties={question.ties}/>
+      {completed?<>{tieLayer(question.answerMelody,answerTop,"answer")}<WorksheetMelodyNotes steps={question.answerMelody} rhythms={question.rhythms} xs={noteXs} top={answerTop} gap={gap} ink={ink} prefix="transposing-answer" ties={question.ties}/></>:null}
+      {completed&&muted?<rect className="transposing-example-answer-box" x={left-4} y={answerTop-13} width={right-left+8} height={gap*4+26} fill="none" stroke={ink} strokeWidth="1.5"/>:null}
+    </svg>;
+  }
+
   function Staff({ question, completed=false, muted=false, showNoteNames=false }) {
+    if (CONFIG.activityId === "barlines") return <BarlinesStaff question={question} completed={completed} muted={muted} />;
+    if (CONFIG.activityId === "rests") return <RestsStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "accidentals") return <AccidentalsStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "enharmonics") return <EnharmonicsStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "keysig") return <KeySignatureStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "notenaming") return <NoteNamingStaff question={question} muted={muted} />;
-    if (CONFIG.activityId === "tonic") return <div className="flex min-h-0 flex-1 flex-col"><TonicStaff question={question} completed={completed} muted={muted}/><p className="text-center text-sm">The key is <strong>{question.key.name}</strong>.</p></div>;
+    if (CONFIG.activityId === "tonic") return <div className="tonic-staff-wrap flex min-h-0 flex-1 flex-col"><TonicStaff question={question} completed={completed} muted={muted}/><p className="text-center text-sm">The key is <strong>{question.key.name}</strong>.</p></div>;
+    if (CONFIG.activityId === "transposing") return <TransposingStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "chords" && level === "N5") return <N5ChordStaff question={question} muted={muted} showNoteNames={showNoteNames} />;
     if (CONFIG.activityId === "chords" && level === "AH") return <AHChordStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "missingnotes") return <MissingNotesStaff question={question} completed={completed} muted={muted} />;
@@ -637,7 +935,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     </svg>;
   }
 
-  const QUESTION_VARIABLE_PATTERN = /(one octave (?:higher|lower)|at the same pitch|one step (?:higher|lower)|(?:tone|semitone) (?:higher|lower)|\b(?:tone|semitone)\b|(?:root position|first inversion|second inversion|1st inversion|2nd inversion)|(?:tonic|subdominant|dominant)|(?:staccato|slur|accent|phrase mark)|(?:quaver triplet|crotchet triplet)|(?:crescendo|diminuendo|Adagio|Andante|Moderato|Allegro)|(?:sharp|flat|natural)|\b(?:p|f)\b|[A-G](?:♯|♭|#|b)|(?:C|G|F|D|B♭|A|E) (?:major|minor)|(?:2|3|4|5|6|7|9|12)\/(?:2|4|8|16)|bars? \d+(?:\s*(?:and|to|-|–)\s*\d+)?)/gi;
+  const QUESTION_VARIABLE_PATTERN = /(one octave (?:higher|lower)|at the same pitch|one step (?:higher|lower)|(?:tone|semitone) (?:higher|lower)|\b(?:tone|semitone)\b|(?:root position|first inversion|second inversion|1st inversion|2nd inversion)|(?:tonic|subdominant|dominant)|(?:staccato|slur|accent|phrase mark)|(?:quaver triplet|crotchet triplet)|(?:crescendo|diminuendo|Adagio|Andante|Moderato|Allegro)|(?:sharp|flat|natural)|\b(?:p|f)\b|(?:\b[A-G](?:#|b)\b|\b[A-G][♯♭])|(?:C|G|F|D|B♭|A|E) (?:major|minor)|(?:2|3|4|5|6|7|9|12)\/(?:2|4|8|16)|bars? \d+(?:\s*(?:and|to|-|–)\s*\d+)?)/gi;
   const QUESTION_VARIABLE_ONLY_PATTERN = /^(?:one octave (?:higher|lower)|at the same pitch|one step (?:higher|lower)|(?:tone|semitone) (?:higher|lower)|(?:tone|semitone)|(?:root position|first inversion|second inversion|1st inversion|2nd inversion)|(?:tonic|subdominant|dominant)|(?:staccato|slur|accent|phrase mark)|(?:quaver triplet|crotchet triplet)|(?:crescendo|diminuendo|Adagio|Andante|Moderato|Allegro)|(?:sharp|flat|natural)|(?:p|f)|[A-G](?:♯|♭|#|b)|(?:C|G|F|D|B♭|A|E) (?:major|minor)|(?:2|3|4|5|6|7|9|12)\/(?:2|4|8|16)|bars? \d+(?:\s*(?:and|to|-|–)\s*\d+)?)$/i;
 
   function EmphasisedPrompt({ children }) {
@@ -645,25 +943,33 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     return <>{children.split(QUESTION_VARIABLE_PATTERN).map((part,index)=><React.Fragment key={`${index}-${part}`}>{QUESTION_VARIABLE_ONLY_PATTERN.test(part)?<strong>{part}</strong>:part}</React.Fragment>)}</>;
   }
 
-  function Question({ question, number, example=false, answers=false, numbers=true, marks=true }) {
+  function Question({ question, number, example=false, answers=false, numbers=true, marks=true, firstPage=false, continuationPage=false }) {
     const completed = example || answers;
     const compactChord = CONFIG.activityId === "chords" && level === "N5";
     const compactRepetition = CONFIG.activityId === "missingnotes" && level === "N3";
+    const compactBarlines = CONFIG.activityId === "barlines";
+    const compactRests = CONFIG.activityId === "rests";
+    const compactRhythmSums = CONFIG.activityId === "rhythmsums";
     const smallAHChordPrompt = CONFIG.activityId === "chords" && level === "AH";
-    const answerIsInNotation = CONFIG.activityId === "enharmonics" || CONFIG.activityId === "missingnotes" || CONFIG.activityId === "tonic" || (CONFIG.activityId === "keysig" && question.build) || (CONFIG.activityId === "chords" && level === "AH");
-    return <section className={`generic-question ${example ? "bg-stone-100 text-stone-500" : ""}`}>{compactChord||compactRepetition?<div className="min-h-6 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong></div>:<div className="flex min-h-9 items-start gap-1 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong><span className={smallAHChordPrompt?"text-xs":""}><EmphasisedPrompt>{question.prompt}</EmphasisedPrompt></span></div>}{CONFIG.activityId==="rhythmsums" ? <div className="flex flex-1 items-center justify-center gap-5 text-4xl"><WorksheetRhythmGlyph symbolKey={question.left.symbolKey}/><strong>{question.operator}</strong><WorksheetRhythmGlyph symbolKey={question.right.symbolKey}/></div> : <Staff question={question} completed={completed} muted={example} showNoteNames={example}/>}<div className="relative flex min-h-8 items-end justify-center">{question.response!=="mark" && question.response!=="stave" ? <div className="w-4/5 border-b border-black pb-1 text-center font-semibold">{completed ? question.answer : ""}</div> : completed && !answerIsInNotation ? <strong className="text-sm">{question.answer}</strong> : null}{marks && !example ? <strong className="absolute bottom-1 right-1 text-sm">1</strong> : null}</div></section>;
+    const smallAHTransposingPrompt = CONFIG.activityId === "transposing" && level === "AH";
+    const smallAHChordPromptClass=smallAHChordPrompt?"text-xs":"";
+    const answerIsInNotation = CONFIG.activityId === "barlines" || CONFIG.activityId === "rests" || CONFIG.activityId === "enharmonics" || CONFIG.activityId === "missingnotes" || CONFIG.activityId === "tonic" || CONFIG.activityId === "transposing" || (CONFIG.activityId === "keysig" && question.build) || (CONFIG.activityId === "chords" && level === "AH");
+    return <section className={`generic-question ${example ? "bg-stone-100 text-stone-500" : ""} ${example&&CONFIG.activityId==="rhythmsums"?"rhythm-sums-example col-span-2":""}`}>{compactChord||compactRepetition||compactBarlines||compactRests||compactRhythmSums?<div className="min-h-6 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong></div>:<div className="flex min-h-9 items-start gap-1 text-sm"><strong>{example ? "Example Answer" : numbers ? `${number}.` : ""}</strong><span className={`${smallAHChordPromptClass} ${smallAHTransposingPrompt?"text-xs leading-tight":""}`}><EmphasisedPrompt>{question.prompt}</EmphasisedPrompt></span></div>}{CONFIG.activityId==="rhythmsums" ? <div className="relative -top-[10px] flex flex-1 items-center justify-center gap-1 text-[1.625rem]"><WorksheetRhythmSumItem item={question.left}/><strong>{question.operator}</strong><WorksheetRhythmSumItem item={question.right}/></div> : <Staff question={question} completed={completed} muted={example} showNoteNames={example}/>}<div className={`relative flex min-h-8 items-end justify-center ${CONFIG.activityId==="rhythmsums"?(continuationPage?"-top-[25px]":"-top-[35px]"):""}`}>{question.response!=="mark" && question.response!=="stave" ? <div className="w-4/5 border-b border-black pb-1 text-center font-semibold">{completed ? question.answer : ""}</div> : completed && !answerIsInNotation ? <strong className="text-sm">{question.answer}</strong> : null}{marks && !example ? <strong className={`absolute right-1 text-sm ${CONFIG.activityId==="transposing"?(level==="AH"?"bottom-2":"bottom-4"):CONFIG.activityId==="barlines"?(firstPage?"bottom-[30px]":"bottom-[22px]"):CONFIG.activityId==="rests"?"bottom-[29px]":"bottom-1"}`}>1</strong> : null}</div></section>;
   }
 
   function Pages({ data, answers=false, offset=0, total=1 }) {
-    const perPage = DEF.large || (CONFIG.activityId === "chords" && level === "AH") ? 4 : 6;
+    const rhythmSums=CONFIG.activityId==="rhythmsums";
+    const perPage = rhythmSums ? 8 : DEF.large || (CONFIG.activityId === "chords" && level === "AH") ? 4 : 6;
     const examples = answers ? [] : data.examples?.length ? data.examples : data.example ? [data.example] : [];
     const items = answers ? data.questions : [...examples, ...data.questions];
-    const pages=[]; for(let i=0;i<items.length;i+=perPage) pages.push(items.slice(i,i+perPage));
-    return pages.map((items,pageIndex)=><article className="worksheet-page generic-page" key={`${answers}-${pageIndex}`}><div className="worksheet-header-card mb-4 rounded-xl border border-black p-4"><div className="flex items-center gap-3"><img src={DEF.icon} className="h-12 w-12 object-contain" alt=""/><div className="min-w-0"><h1 className="text-xl font-bold leading-tight">{answers ? `${data.title} - Answers` : data.title}</h1>{!answers&&<p className="text-sm text-stone-700">{data.instructions}</p>}</div></div>{!answers&&pageIndex===0?<div className="mt-4 flex gap-5 text-sm">{data.name&&<span className="flex min-w-0 flex-[2] items-end gap-2"><span className="shrink-0">Name:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.classField&&<span className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Class:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.date&&<span className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Date:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}</div>:null}</div><div className={`generic-grid grid flex-1 grid-cols-2 ${data.gridlines?"with-gridlines":""}`}>{items.map((q,i)=>{const example=!answers&&pageIndex===0&&i<examples.length; const n=answers?pageIndex*perPage+i+1:pageIndex*perPage+i-examples.length+1; return <Question key={q.id} question={q} number={n} example={example} answers={answers} numbers={data.numbers} marks={data.marks}/>})}</div>{!answers&&data.marks&&pageIndex===pages.length-1?<div className="mt-3 flex justify-end gap-3 text-sm font-bold"><span className="h-8 leading-8">Total marks</span><span className="total-marks-box relative h-8 w-24 border border-black"><span className="total-marks-value absolute left-2 right-2 text-right leading-none">/ {data.questions.length}</span></span></div>:null}<footer className="mt-2 flex justify-between text-[10px] text-stone-400"><span>The Music Literacy Hub</span><span>Page {offset+pageIndex+1} of {total}</span></footer></article>);
+    const pages=[];
+    if(rhythmSums&&!answers){pages.push([...examples,...data.questions.slice(0,perPage)]);for(let questionIndex=perPage;questionIndex<data.questions.length;questionIndex+=perPage)pages.push(data.questions.slice(questionIndex,questionIndex+perPage));}
+    else for(let itemIndex=0;itemIndex<items.length;itemIndex+=perPage)pages.push(items.slice(itemIndex,itemIndex+perPage));
+    return pages.map((items,pageIndex)=><article className="worksheet-page generic-page" key={`${answers}-${pageIndex}`}><div className="worksheet-header-card mb-4 rounded-xl border border-black p-4"><div className="flex items-center gap-3"><img src={DEF.icon} className="h-12 w-12 object-contain" alt=""/><div className="min-w-0"><h1 className="text-xl font-bold leading-tight">{answers ? `${data.title} - Answers` : data.title}</h1>{!answers&&<p className="text-sm text-stone-700">{data.instructions}</p>}</div></div>{!answers&&pageIndex===0?<div className="mt-4 flex gap-5 text-sm">{data.name&&<span className="flex min-w-0 flex-[2] items-end gap-2"><span className="shrink-0">Name:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.classField&&<span className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Class:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.date&&<span className="flex min-w-0 flex-1 items-end gap-2"><span className="shrink-0">Date:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}</div>:null}</div><div className={`generic-grid grid flex-1 ${CONFIG.activityId==="barlines"||CONFIG.activityId==="rests"?"grid-cols-1":"grid-cols-2"} ${data.gridlines?"with-gridlines":""}`}>{items.map((q,i)=>{const example=!answers&&pageIndex===0&&i<examples.length; const n=answers?pageIndex*perPage+i+1:rhythmSums?(pageIndex===0?i-examples.length+1:perPage+(pageIndex-1)*perPage+i+1):pageIndex*perPage+i-examples.length+1; return <Question key={q.id} question={q} number={n} example={example} answers={answers} numbers={data.numbers} marks={data.marks} firstPage={!answers&&pageIndex===0} continuationPage={pageIndex>0}/>})}</div>{!answers&&data.marks&&pageIndex===pages.length-1?<div className="mt-3 flex justify-end gap-3 text-sm font-bold"><span className="h-8 leading-8">Total marks</span><span className="total-marks-box relative h-8 w-24 border border-black"><span className="total-marks-value absolute left-2 right-2 text-right leading-none">/ {data.questions.length}</span></span></div>:null}<footer className="mt-2 flex justify-between text-[10px] text-stone-400"><span>The Music Literacy Hub</span><span>Page {offset+pageIndex+1} of {total}</span></footer></article>);
   }
 
   function GenericApp() {
-    const initialCount=10;
+    const initialCount=CONFIG.activityId==="rhythmsums"?15:10;
     const [count,setCount]=useGenericState(initialCount), [questions,setQuestions]=useGenericState(()=>Array.from({length:initialCount},(_,i)=>makeQuestion(i)));
     const [title,setTitle]=useGenericState(defaultTitle), [instructions,setInstructions]=useGenericState(defaultInstructions);
     const [name,setName]=useGenericState(true), [classField,setClassField]=useGenericState(true), [date,setDate]=useGenericState(true), [numbers,setNumbers]=useGenericState(true), [marks,setMarks]=useGenericState(true), [gridlines,setGridlines]=useGenericState(true), [exampleOn,setExampleOn]=useGenericState(true), [answersOn,setAnswersOn]=useGenericState(false), [downloading,setDownloading]=useGenericState(false);
@@ -671,7 +977,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     const examples=useGenericMemo(()=>CONFIG.activityId==="chords"&&level==="AH"?AH_WORKSHEET_TYPES.map((type,typeIndex)=>makeQuestion(-1-typeIndex,type)):[makeQuestion(-1)],[]);
     const activeExamples=exampleOn?examples:[];
     const data={questions,title,instructions,name,classField,date,numbers,marks,gridlines,examples:activeExamples,example:activeExamples[0]||null};
-    const perPage=DEF.large||(CONFIG.activityId==="chords"&&level==="AH")?4:6, qPages=Math.ceil((questions.length+activeExamples.length)/perPage), aPages=answersOn?Math.ceil(questions.length/perPage):0, total=qPages+aPages;
+    const rhythmSums=CONFIG.activityId==="rhythmsums",perPage=rhythmSums?8:DEF.large||(CONFIG.activityId==="chords"&&level==="AH")?4:6, qPages=rhythmSums?Math.ceil(questions.length/perPage):Math.ceil((questions.length+activeExamples.length)/perPage), aPages=answersOn?Math.ceil(questions.length/perPage):0, total=qPages+aPages;
     const changeCount=(value)=>{const n=Number(value);setCount(n);setQuestions(current=>current.length>=n?current.slice(0,n):[...current,...Array.from({length:n-current.length},(_,i)=>makeQuestion(current.length+i))]);};
     const refresh=()=>{if(refreshTimer.current)clearTimeout(refreshTimer.current);setPreviewVisible(false);refreshTimer.current=setTimeout(()=>{setQuestions(Array.from({length:count},(_,i)=>makeQuestion(i)));setPreviewVisible(true);refreshTimer.current=null;},260);};
     useGenericEffect(()=>()=>{if(refreshTimer.current)clearTimeout(refreshTimer.current);},[]);

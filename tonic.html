@@ -69,10 +69,10 @@ const STAFF = {
 };
 
 const BAR_COUNT = 4;
-const CLEF_X = STAFF.left + 16;
-const KEY_SIG_X = STAFF.left + 63;
-const TIME_SIG_X = STAFF.left + 90;
-const MUSIC_START_X = STAFF.left + 112;
+const CLEF_X = STAFF.left + STAFF.gap * 3.2;
+const KEY_SIG_X = STAFF.left + STAFF.gap * 5.4;
+const TIME_SIG_X = STAFF.left + STAFF.gap * 9.3;
+const MUSIC_START_X = STAFF.left + STAFF.gap * 11.8;
 
 const NOTE = {
   rx: 8.2,
@@ -105,7 +105,12 @@ function sharedActualSymbolKey(key) {
 }
 
 function sharedSettingsKey(key) {
-  if (key === "flatInScore" || key === "sharpInScore") return key;
+  if (key === "flatKeySignature" || key === "sharpKeySignature") {
+    return SHARED_CONFIG.symbols?.keySignatureAccidentals ? "keySignatureAccidentals" : key;
+  }
+  if (key === "flatInScore" || key === "sharpInScore") {
+    return SHARED_CONFIG.symbols?.scoreAccidentals ? "scoreAccidentals" : key;
+  }
   return key;
 }
 
@@ -173,7 +178,7 @@ const KEYS = [
   {
     id: "c-major",
     label: "C major",
-    signature: "none",
+    signature: [],
     scale: ["C", "D", "E", "F", "G", "A", "B"],
     tonic: "C",
     subdominant: "F",
@@ -184,7 +189,7 @@ const KEYS = [
   {
     id: "g-major",
     label: "G major",
-    signature: "sharp",
+    signature: [{ type: "sharp", step: 8 }],
     scale: ["G", "A", "B", "C", "D", "E", "F#"],
     tonic: "G",
     subdominant: "C",
@@ -195,7 +200,7 @@ const KEYS = [
   {
     id: "f-major",
     label: "F major",
-    signature: "flat",
+    signature: [{ type: "flat", step: 4 }],
     scale: ["F", "G", "A", "Bb", "C", "D", "E"],
     tonic: "F",
     subdominant: "Bb",
@@ -206,7 +211,7 @@ const KEYS = [
   {
     id: "a-minor",
     label: "A minor",
-    signature: "none",
+    signature: [],
     scale: ["A", "B", "C", "D", "E", "F", "G#"],
     tonic: "A",
     subdominant: "D",
@@ -243,6 +248,7 @@ const RHYTHMS = {
   crotchet: { beats: 1, spacing: 2.25, open: false, stem: true, dots: 0, flag: false },
   quaver: { beats: 0.5, spacing: 1.45, open: false, stem: true, dots: 0, flag: true },
 };
+const RHYTHM_UNITS = { semibreve: 3.2, minim: 2.2, "dotted-crotchet": 1.8, crotchet: 1.3, quaver: 1 };
 
 const BAR_PATTERNS = [
   ["minim", "crotchet", "crotchet"],
@@ -479,8 +485,14 @@ function forceTargetIntoQuestion(bars, target, key) {
   };
 }
 
-function makeQuestion(enabledQuestionTypeIds = QUESTION_TYPES.map((type) => type.id), attempt = 0) {
-  const key = randomItem(KEYS);
+let remainingActivityKeys = [];
+function nextActivityKey() {
+  if (!remainingActivityKeys.length) remainingActivityKeys = [...KEYS].sort(() => Math.random() - 0.5);
+  return remainingActivityKeys.pop();
+}
+
+function makeQuestion(enabledQuestionTypeIds = QUESTION_TYPES.map((type) => type.id), attempt = 0, selectedKey = null) {
+  const key = selectedKey || nextActivityKey();
   const availableQuestionTypes = QUESTION_TYPES.filter((type) => enabledQuestionTypeIds.includes(type.id));
   const questionType = randomItem(availableQuestionTypes.length > 0 ? availableQuestionTypes : QUESTION_TYPES);
   const bars = [];
@@ -508,7 +520,7 @@ function makeQuestion(enabledQuestionTypeIds = QUESTION_TYPES.map((type) => type
   };
 
   if (!melodyPassesQualityRules(finalQuestion) && attempt < 80) {
-    return makeQuestion(enabledQuestionTypeIds, attempt + 1);
+    return makeQuestion(enabledQuestionTypeIds, attempt + 1, key);
   }
 
   return finalQuestion;
@@ -538,23 +550,15 @@ function shouldShowAccidental(key, pitch, accidentalState) {
   return true;
 }
 
-function calculateBarPositions(bar, startX, endX) {
-  const totalSpacing = bar.reduce((sum, note, index) => {
-    const isGroupedQuaver = note.rhythm === "quaver" && (bar[index - 1]?.rhythm === "quaver" || bar[index + 1]?.rhythm === "quaver");
-    const boost = isGroupedQuaver ? 1.15 : 1;
-    const accidentalSpace = note.pitch.includes("#") || note.pitch.includes("b") ? 0.45 : 0;
-    return sum + rhythmInfo(note.rhythm).spacing * boost + accidentalSpace;
-  }, 0);
-
-  const unit = Math.max(1, endX - startX - 18) / Math.max(1, totalSpacing);
-  let cursor = startX + 12;
-
-  return bar.map((note, index) => {
-    if (note.pitch.includes("#") || note.pitch.includes("b")) cursor += unit * 0.45;
+function calculateBarPositions(bar, startX, endX, barIndex) {
+  const scoreStart = startX + (barIndex === 0 ? 4 : 15);
+  const scoreEnd = endX - (barIndex === BAR_COUNT - 1 ? 24 : 4);
+  const totalSpacing = bar.reduce((sum, note) => sum + RHYTHM_UNITS[note.rhythm], 0);
+  const unit = Math.max(1, scoreEnd - scoreStart) / Math.max(1, totalSpacing);
+  let cursor = scoreStart + unit * 0.38;
+  return bar.map((note) => {
     const x = cursor;
-    const isGroupedQuaver = note.rhythm === "quaver" && (bar[index - 1]?.rhythm === "quaver" || bar[index + 1]?.rhythm === "quaver");
-    const boost = isGroupedQuaver ? 1.15 : 1;
-    cursor += rhythmInfo(note.rhythm).spacing * unit * boost;
+    cursor += RHYTHM_UNITS[note.rhythm] * unit;
     return x;
   });
 }
@@ -564,9 +568,9 @@ function getLayout(question) {
   const positions = {};
 
   question.bars.forEach((bar, barIndex) => {
-    const startX = MUSIC_START_X + barIndex * barWidth + 10;
-    const endX = MUSIC_START_X + (barIndex + 1) * barWidth - 7;
-    const xs = calculateBarPositions(bar, startX, endX);
+    const startX = MUSIC_START_X + barIndex * barWidth;
+    const endX = MUSIC_START_X + (barIndex + 1) * barWidth;
+    const xs = calculateBarPositions(bar, startX, endX, barIndex);
 
     bar.forEach((note, noteIndex) => {
       const step = staffStep(note.pitch);
@@ -633,7 +637,7 @@ function StaffLines() {
           y1={STAFF.top + line * STAFF.gap}
           y2={STAFF.top + line * STAFF.gap}
           stroke="currentColor"
-          strokeWidth="1.2"
+          strokeWidth="1.5"
         />
       ))}
     </g>
@@ -641,19 +645,22 @@ function StaffLines() {
 }
 
 function TrebleClef() {
-  return <CalibratedSymbol symbolKey="gClef" x={STAFF.left + 32} y={yForStep(2)} />;
+  return <CalibratedSymbol symbolKey="gClef" x={CLEF_X} y={yForStep(2)} />;
 }
 
-function KeySignature({ signature }) {
-  if (signature === "sharp") {
-    return <CalibratedSymbol symbolKey="sharpKeySignature" x={KEY_SIG_X} y={yForStep(8)} />;
-  }
-
-  if (signature === "flat") {
-    return <CalibratedSymbol symbolKey="flatKeySignature" x={KEY_SIG_X - 6} y={yForStep(4)} />;
-  }
-
-  return null;
+function KeySignature({ signature = [] }) {
+  return (
+    <g pointerEvents="none">
+      {signature.map((item, index) => (
+        <CalibratedSymbol
+          key={`${item.type}-${item.step}-${index}`}
+          symbolKey={item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature"}
+          x={KEY_SIG_X + index * STAFF.gap * 1.4}
+          y={yForStep(item.step)}
+        />
+      ))}
+    </g>
+  );
 }
 
 function TimeSignature() {
@@ -682,43 +689,27 @@ function LedgerLines({ x, step, colour = "currentColor" }) {
 function stemData(note, x, y, stemDownOverride = null, forcedStemEndY = null) {
   const step = staffStep(note.pitch);
   const stemDown = stemDownOverride ?? stemGoesDown(step);
-  const isDownQuaver = stemDown && note.rhythm === "quaver";
-  const hasForcedStemEnd = forcedStemEndY !== null;
-  let stemX = stemDown ? x - NOTE.rx + 2 : x + NOTE.rx;
-
-  if (stemDown) {
-    stemX += 1.25;
-    if (note.rhythm === "minim") stemX -= 1;
-    else if (note.rhythm === "quaver") stemX -= 2;
-    else if (note.rhythm === "crotchet" || note.rhythm === "dotted-crotchet") stemX -= 1;
-  } else {
-    stemX -= 1.65;
-  }
-
-  const naturalStemEndY = stemDown ? y + NOTE.stemLength : y - NOTE.stemLength;
-  const adjustedStemEndY = forcedStemEndY ?? naturalStemEndY;
+  const stemX = x + (stemDown ? -STAFF.gap * 0.6 : STAFF.gap * 0.6);
+  const naturalStemEndY = y + (stemDown ? STAFF.gap * 3.1 : -STAFF.gap * 3.1);
   return {
     step,
     stemDown,
-    stemX: isDownQuaver ? stemX + 1 : stemX,
-    stemEndY: hasForcedStemEnd ? adjustedStemEndY : stemDown ? adjustedStemEndY + (isDownQuaver ? 8 : 6) : adjustedStemEndY - 4,
+    stemX,
+    stemEndY: forcedStemEndY ?? naturalStemEndY,
   };
 }
 
 function NoteGlyph({ note, x, y, selected, hovered, correct, incorrect, showAccidental, forcedStemEndY = null, stemDownOverride = null, showFlag = true, onHover, onLeave, onClick }) {
   const info = rhythmInfo(note.rhythm);
-  const headY = y - 1;
-  const stem = stemData(note, x, headY, stemDownOverride, forcedStemEndY);
+  const stem = stemData(note, x, y, stemDownOverride, forcedStemEndY);
   const highlighted = selected || hovered;
   const colour = incorrect ? COLOUR.red : correct ? COLOUR.green : "currentColor";
   const accidental = note.pitch.includes("#") ? "sharpInScore" : note.pitch.includes("b") ? "flatInScore" : null;
-  const isGSharpAccidental = pitchName(note.pitch) === "G#";
   const dotKey = Math.abs(stem.step % 2) === 1 ? "augmentationDotSpace" : "augmentationDotLine";
-  const dotY = Math.abs(stem.step % 2) === 1 ? headY : headY - STAFF.gap * 0.25;
+  const dotY = Math.abs(stem.step % 2) === 1 ? y : y - STAFF.gap * 0.25;
   const symbolKey = noteSymbolKey(note.rhythm, stem.stemDown, !showFlag && note.rhythm === "quaver");
   const stemThickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12));
-  const accidentalX = accidental === "sharpInScore" ? x - 31 : x - 28;
-  const accidentalY = headY + (isGSharpAccidental ? 2 : 2);
+  const accidentalX = x - STAFF.gap * 2.1;
 
   return (
     <g filter={highlighted && !incorrect ? "url(#noteGlowPulse)" : undefined} onMouseEnter={onHover} onMouseLeave={onLeave} onPointerDown={onClick} style={{ cursor: "pointer" }}>
@@ -727,13 +718,13 @@ function NoteGlyph({ note, x, y, selected, hovered, correct, incorrect, showAcci
         <CalibratedSymbol
           symbolKey={accidental}
           x={accidentalX}
-          y={accidentalY}
+          y={y}
           colour={colour}
         />
       )}
       <LedgerLines x={x} step={stem.step} colour={colour} />
-      <CalibratedSymbol symbolKey={symbolKey} x={x} y={headY + 1} colour={colour} />
-      {info.stem && forcedStemEndY !== null && <line x1={stem.stemX} x2={stem.stemX} y1={headY} y2={stem.stemEndY} stroke={colour} strokeWidth={stemThickness} />}
+      <CalibratedSymbol symbolKey={symbolKey} x={x} y={y} colour={colour} />
+      {info.stem && forcedStemEndY !== null && <line x1={stem.stemX} x2={stem.stemX} y1={y} y2={stem.stemEndY} stroke={colour} strokeWidth={stemThickness} />}
       {info.dots === 1 && <CalibratedSymbol symbolKey={dotKey} x={x + STAFF.gap * 1.3} y={dotY} colour={colour} />}
     </g>
   );
@@ -769,8 +760,8 @@ function getBeamData(bar, group, positions, layout) {
   const beamSettings = sharedSymbolConfig("quaverBeam");
   const xOffset = STAFF.gap * Number(beamSettings.xOffsetScale || 0);
   const yOffset = STAFF.gap * Number(beamSettings.yOffsetScale || 0);
-  const stemLength = NOTE.stemLength * Number(beamSettings.heightScale || 1);
-  const beamWidthAdjust = 6 * (Number(beamSettings.widthScale || 1) - 1);
+  const stemLength = STAFF.gap * 3.1 * Number(beamSettings.heightScale || 1);
+  const beamWidthAdjust = STAFF.gap * 0.6 * (Number(beamSettings.widthScale || 1) - 1);
   const startStep = staffStep(notes[0].pitch);
   const endStep = staffStep(notes[notes.length - 1].pitch);
   const startStemX = firstStem.stemX + xOffset;
@@ -796,7 +787,7 @@ function beamPolygonPoints(x1, y1, x2, y2, thickness) {
 
 function BeamShape({ beam, colour = "currentColor" }) {
   const beamSettings = sharedSymbolConfig("quaverBeam");
-  const beamThickness = Math.max(1, 4 * Number(beamSettings.fontSizeScale || 1));
+  const beamThickness = Math.max(1, STAFF.gap * 0.4 * Number(beamSettings.fontSizeScale || 1));
   return <polygon points={beamPolygonPoints(beam.start.x, beam.start.y, beam.end.x, beam.end.y, beamThickness)} fill={colour} />;
 }
 
