@@ -10,7 +10,7 @@
   <script src="./hub-mobile.js?v=1.3"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-shell.js?v=20260714-worksheet-controls"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
   <script src="./bravura-worksheet-outlines.js"></script>
@@ -37,6 +37,8 @@
     .worksheet-builder .grid.grid-cols-3.border-t > button img { display: none; }
     .worksheet-builder .grid.grid-cols-3.border-t > button:nth-child(2) { order: 3; }
     .worksheet-builder .grid.grid-cols-3.border-t > button:nth-child(3) { order: 2; }
+    .worksheet-source-controls { position: relative; z-index: 40; overflow: visible; }
+    .worksheet-source-controls iframe { display: block; width: 100%; border: 0; background: transparent; }
     .worksheet-activity-tonic .generic-grid > .generic-question.bg-stone-100:first-child > div:first-child { display: block; }
     .worksheet-activity-tonic .generic-grid > .generic-question.bg-stone-100:first-child > div:first-child > strong,
     .worksheet-activity-tonic .generic-grid > .generic-question.bg-stone-100:first-child > div:first-child > span { display: block; }
@@ -46,9 +48,35 @@
     .generic-grid.with-gridlines .generic-question { border-right: 1px solid #d6d3d1; border-bottom: 1px solid #d6d3d1; }
     .generic-question { display: flex; min-height: 0; flex-direction: column; overflow: hidden; padding: 10px 12px; }
     .total-marks-value { top: 8px; }
+    .practice-paper-total-marks-label,
+    .practice-paper-total-marks-box { transform: translateY(4px); }
+    .practice-paper-total-marks-value { transform: translateY(-4px); }
     .pdf-capture .total-marks-box { top: 3px; }
+    .pdf-capture .practice-paper-total-marks-box { top: 7px; }
     .pdf-capture .total-marks-value { top: 3px; }
     .pdf-capture .pupil-detail-line { transform: translateY(10px); }
+    .practice-paper-page { padding: clamp(18px, 4vw, 10mm); }
+    .practice-paper-page-sixteen { padding-top: 18px; }
+    .practice-paper-page .worksheet-header-card { position: relative; z-index: 2; background: #fff; }
+    .practice-paper-page-sixteen .worksheet-header-card { margin-bottom: 4px; }
+    .practice-paper-score { position: relative; z-index: 1; min-height: 0; width: 100%; }
+    .practice-paper-score-sixteen { transform: translateY(-3px); }
+    .practice-paper-score-only-page .practice-paper-score { top: 10px; }
+    .practice-paper-score > div { width: 100% !important; max-width: none !important; }
+    .practice-paper-score input { pointer-events: none; color: transparent; caret-color: transparent; }
+    .practice-paper-score-answer input { color: #000 !important; -webkit-text-fill-color: #000 !important; opacity: 1 !important; }
+    .practice-paper-score [class*="cursor-"] { cursor: default !important; }
+    .practice-paper-score svg { display: block; height: auto; width: 100%; overflow: visible; }
+    .practice-paper-score [data-score-question-source] > rect { stroke: #000 !important; opacity: 1 !important; }
+    .practice-paper-questions { position: relative; z-index: 2; display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; justify-content: space-evenly; background: #fff; }
+    .practice-paper-page-sixteen .practice-paper-questions { flex: 1 1 auto; justify-content: space-between; gap: 3px; }
+    .practice-paper-questions-only-page .practice-paper-questions { flex: 0 0 auto; justify-content: flex-start; gap: 16px; }
+    .practice-paper-questions-only-page .practice-paper-questions { position: relative; top: 10px; }
+    .practice-paper-questions-only-page .practice-paper-total-marks { position: relative; top: 25px; }
+    .practice-paper-page-sixteen .practice-paper-questions > div { padding-top: 2px; padding-bottom: 2px; }
+    .practice-paper-questions.with-gridlines { border-top: 1px solid #d6d3d1; }
+    .practice-paper-questions.with-gridlines > div { border-bottom: 1px solid #d6d3d1; }
+    .practice-paper-answer-line { border-bottom: 1px solid #78716c; transform: translateY(3px); }
     @media (max-width: 1023px) {
       .worksheet-builder { grid-template-columns: 1fr; }
       .worksheet-preview-panel { position: static; max-height: none; overflow: visible; overscroll-behavior-y: auto; }
@@ -109,6 +137,59 @@ function resizeWorksheetTextarea(field) {
   field.style.height = `${field.scrollHeight}px`;
 }
 window.MLH.resizeWorksheetTextarea = resizeWorksheetTextarea;
+
+function worksheetSettingsProfile(settings = {}) {
+  const { practicePapers, ...profile } = settings || {};
+  return profile;
+}
+
+function worksheetSettingsFingerprint(config) {
+  return JSON.stringify({ activityId: config?.activityId || "", settings: worksheetSettingsProfile(config?.settings) });
+}
+window.MLH.worksheetSettingsFingerprint = worksheetSettingsFingerprint;
+
+function readWorksheetEditorState(activityId) {
+  try {
+    const state = JSON.parse(sessionStorage.getItem("worksheetEditorState") || "null");
+    return state?.activityId === activityId ? state : null;
+  } catch { return null; }
+}
+window.MLH.readWorksheetEditorState = readWorksheetEditorState;
+
+function worksheetControlsUrl(config) {
+  const fallback = `${config?.activityId || "index"}.html`;
+  const url = new URL(config?.sourceUrl || fallback, window.location.href);
+  url.searchParams.set("worksheetControls", "1");
+  if (config?.settings?.level) url.searchParams.set("level", config.settings.level);
+  if (config?.profileSettings) url.searchParams.set("settings", config.profileSettings);
+  return url.toString();
+}
+
+function WorksheetSourceControls({ config }) {
+  const frameRef = useRef(null);
+  const [height, setHeight] = useState(62);
+  const source = useMemo(() => worksheetControlsUrl(config), [config?.activityId]);
+  useEffect(() => {
+    const receive = (event) => {
+      if (event.source !== frameRef.current?.contentWindow) return;
+      if (event.data?.type === "mlh-worksheet-controls-height") {
+        setHeight(Math.max(62, Math.min(620, Number(event.data.height) || 62)));
+        return;
+      }
+      if (event.data?.type !== "mlh-worksheet-source-config") return;
+      const next = event.data.config;
+      if (!next || next.version !== 1 || next.activityId !== config.activityId || !next.settings) return;
+      if (worksheetSettingsFingerprint(next) === worksheetSettingsFingerprint(config)) return;
+      sessionStorage.setItem("worksheetSourceConfig", JSON.stringify(next));
+      sessionStorage.setItem("worksheetReturnUrl", next.sourceUrl || config.sourceUrl || "index.html");
+      window.location.reload();
+    };
+    window.addEventListener("message", receive);
+    return () => window.removeEventListener("message", receive);
+  }, [config]);
+  return <div className="worksheet-source-controls mb-4 rounded-xl border border-stone-200 bg-white px-3 py-2"><iframe ref={frameRef} src={source} title="Activity level and custom settings" style={{ height: `${height}px` }} /></div>;
+}
+window.MLH.WorksheetSourceControls = WorksheetSourceControls;
 
 function importedConfig() {
   try {
@@ -358,19 +439,22 @@ function drawPdfNotation(page, question, staffBottom, bravuraFont, showAnswer, s
 
 function App() {
   const imported = useMemo(importedConfig, []);
+  const editorState = useMemo(() => readWorksheetEditorState("intervals"), []);
+  const configFingerprint = worksheetSettingsFingerprint(imported);
   const initialLevel = imported?.settings.level || "N5";
   const initialModes = imported?.settings.enabledModes || DEFAULT_MODES;
   const initialTitle = `${imported?.activityName || "Intervals"} · ${LEVELS[initialLevel]}`;
+  const initialCount = Number(editorState?.count) || 10;
   const initialQuestionSet = useMemo(() => {
     const modes = initialLevel === "N5" ? { identify: true, create: false } : initialModes;
-    return createWorksheetQuestionSet(10, initialLevel, modes);
+    return createWorksheetQuestionSet(initialCount, initialLevel, modes);
   }, []);
-  const [title, setTitle] = useState(initialTitle);
-  const [subtitle, setSubtitle] = useState(() => defaultWorksheetInstructions(initialQuestionSet.questions));
-  const [subtitleCustomized, setSubtitleCustomized] = useState(false);
-  const [includeName, setIncludeName] = useState(true), [includeClass, setIncludeClass] = useState(true), [includeDate, setIncludeDate] = useState(true);
-  const [countChoice, setCountChoice] = useState("10"), [includeNumbers, setIncludeNumbers] = useState(true), [includeMarks, setIncludeMarks] = useState(true);
-  const [includeAnswers, setIncludeAnswers] = useState(false), [includeExampleAnswer, setIncludeExampleAnswer] = useState(true), [showGridlines, setShowGridlines] = useState(true);
+  const [title, setTitle] = useState(editorState?.fingerprint === configFingerprint ? editorState.title || initialTitle : initialTitle);
+  const [subtitle, setSubtitle] = useState(() => editorState?.subtitle || defaultWorksheetInstructions(initialQuestionSet.questions));
+  const [subtitleCustomized, setSubtitleCustomized] = useState(Boolean(editorState?.subtitleCustomized));
+  const [includeName, setIncludeName] = useState(editorState?.name ?? true), [includeClass, setIncludeClass] = useState(editorState?.classField ?? true), [includeDate, setIncludeDate] = useState(editorState?.date ?? true);
+  const [countChoice, setCountChoice] = useState(String(initialCount)), [includeNumbers, setIncludeNumbers] = useState(editorState?.numbers ?? true), [includeMarks, setIncludeMarks] = useState(editorState?.marks ?? true);
+  const [includeAnswers, setIncludeAnswers] = useState(editorState?.answers ?? false), [includeExampleAnswer, setIncludeExampleAnswer] = useState(editorState?.example ?? true), [showGridlines, setShowGridlines] = useState(editorState?.gridlines ?? true);
   const level = initialLevel;
   const enabledModes = { ...DEFAULT_MODES, ...initialModes };
   const [error, setError] = useState("");
@@ -393,6 +477,9 @@ function App() {
   const answerPageCount = previewWorksheet.includeAnswers ? Math.ceil(previewWorksheet.questions.length / 6) : 0;
   const totalPreviewPages = worksheetPageCount + answerPageCount;
   useEffect(() => { try { window.sessionStorage.setItem("worksheetGeneratedData", JSON.stringify(previewWorksheet)); } catch {} }, [previewWorksheet]);
+  useEffect(() => {
+    sessionStorage.setItem("worksheetEditorState", JSON.stringify({ activityId: "intervals", fingerprint: configFingerprint, title, subtitle, subtitleCustomized, name: includeName, classField: includeClass, date: includeDate, count: Number(countChoice), numbers: includeNumbers, marks: includeMarks, answers: includeAnswers, example: includeExampleAnswer, gridlines: showGridlines }));
+  }, [configFingerprint, title, subtitle, subtitleCustomized, includeName, includeClass, includeDate, countChoice, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines]);
   function resizeQuestions(count, nextLevel = level, nextModes = currentModes) {
     if (!Number.isInteger(count) || count < 1 || count > 50) return;
     setWorksheet((current) => {
@@ -556,6 +643,7 @@ function App() {
       <div className={`${SHELL.pageContentClass} worksheet-page-content`}>
         <main className={`${SHELL.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}>
           <div className="no-print">
+            <WorksheetSourceControls config={imported} />
             <div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
               <h2 className="flex items-center gap-2 text-xl font-bold"><img src="intervals-icon.svg" alt="" aria-hidden="true" className="h-7 w-7 object-contain" />Intervals · {LEVELS[level]}</h2>
               <p className="mt-1 text-sm leading-relaxed text-stone-600">Generate a printable worksheet using the current activity and settings.</p>
@@ -567,7 +655,7 @@ function App() {
                 <label className="block text-sm font-semibold">Instructions<textarea ref={resizeWorksheetTextarea} rows="2" className={`${fieldClass} min-h-16 resize-none overflow-hidden`} value={effectiveSubtitle} onChange={(event) => { resizeWorksheetTextarea(event.currentTarget); setSubtitle(event.target.value); setSubtitleCustomized(true); }} /></label>
                 <div className="flex flex-wrap items-center justify-start gap-x-7 gap-y-2">{check("Name", includeName, setIncludeName)}{check("Class", includeClass, setIncludeClass)}{check("Date", includeDate, setIncludeDate)}</div>
                 <label className="flex items-center justify-between gap-4 border-t border-stone-200 pt-4 text-sm font-semibold"><span>Number of Questions</span><select className={compactSelectClass} value={countChoice} onChange={(event) => { const value = event.target.value; setCountChoice(value); resizeQuestions(Number(value)); setError(""); }}>{[10,15,20,25].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-                <div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] gap-x-3 gap-y-3">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}{check("Gridlines", showGridlines, setShowGridlines)}{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}{check("Print Answers", includeAnswers, setIncludeAnswers)}</div>
+                <div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] gap-x-3 gap-y-3">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}{check("Gridlines", showGridlines, setShowGridlines)}{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}{check("Include Answers", includeAnswers, setIncludeAnswers)}</div>
               </div>
               {error && <p className="mt-5 font-semibold text-red-700" role="alert">{error}</p>}
               <div className="mt-6 grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button type="button" onClick={generate} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-semibold text-stone-800 transition hover:bg-stone-100"><span className="flex items-center justify-center gap-2"><img src="restart.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" /><span>Refresh</span></span></button><button type="button" onClick={downloadPdf} disabled={downloading} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="download.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>{downloading ? "Preparing…" : "Download"}</span></span></button><button type="button" onClick={() => window.print()} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white"><span className="flex items-center justify-center gap-2"><img src="worksheet.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain invert" /><span>Print</span></span></button></div>
@@ -588,7 +676,7 @@ function App() {
 const sourceActivityId = (() => { try { return JSON.parse(sessionStorage.getItem("worksheetSourceConfig") || "null")?.activityId; } catch { return null; } })();
 if (!sourceActivityId || sourceActivityId === "intervals") ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
-  <script type="text/babel" src="./worksheet-generic.jsx?v=20260713"></script>
+  <script type="text/babel" src="./worksheet-generic.jsx?v=20260714-worksheet-controls"></script>
   <script src="./footer.js?v=1.3"></script>
 </body>
 </html>

@@ -13,10 +13,11 @@
   <script src="./piano%20audio/salamander-browser-map.js"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-shell.js?v=20260714-worksheet-controls"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
+  <script src="./bravura-worksheet-outlines.js"></script>
   <script src="./shared-notation-config.js"></script>
   <script src="./practice-melody-generator.js?v=20260710-ah-rules"></script>
 </head>
@@ -6953,7 +6954,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
     function selectedAdvancedHigherPracticeQuestionTypeIds(enabledQuestionTypes, selectionAttempt = 0) {
       const selected = [];
-      const sourceTypeEnabled = (id) => id === "ahChordTypes" ? enabledQuestionTypes.ahChord !== false : enabledQuestionTypes[id] !== false;
+      const sourceTypeEnabled = (id) => id === "ahChordTypes"
+        ? enabledQuestionTypes.ahChordTypes !== false && enabledQuestionTypes.ahChord !== false
+        : enabledQuestionTypes[id] !== false;
       const addIfEnabled = (id) => {
         if (!sourceTypeEnabled(id) || selected.includes(id) || hasAdvancedHigherFixedBarSelectionConflict([...selected, id])) return false;
         selected.push(id);
@@ -6972,10 +6975,10 @@ function advancedHigherInversionAnswerLabel(inversion) {
       };
 
       if (enabledQuestionTypes.ahChord !== false) {
-        selected.push(weightedRandomItem([
+        addWeighted([
           { id: "ahChord", weight: 8 },
           { id: "ahChordTypes", weight: 2 },
-        ]).id);
+        ]);
       }
       addWeighted([
         { id: "ahBassLine", weight: 75 },
@@ -7419,7 +7422,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
         : [];
       if (needsBarlines) hiddenBarNumbers.forEach((barIndex) => reserveQuestionBar(barIndex));
       const dynamicQuestionType = needsDynamic
-        ? level === "N3"
+        ? enabledQuestionTypes.worksheetWrittenOnly
+          ? randomItem(["dynamicName", "hairpinName"])
+        : level === "N3"
           ? randomItem(["marking", "dynamicName", "hairpinName"])
           : level === "N4"
             ? randomItem(["marking", "dynamicName", "hairpinName"])
@@ -8288,6 +8293,261 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
     }
 
+    const PRACTICE_WORKSHEET_PAPER_COUNT = 20;
+    const PRACTICE_WORKSHEET_AUDIO_ONLY_TYPES = new Set(["missing", "rhythmicDictation", "tempoQuestion", "cadence", "repeatSigns", "chord", "accidentals"]);
+
+    function practiceWorksheetQuestionTypes(enabledQuestionTypes) {
+      const worksheetTypes = Object.fromEntries(PRACTICE_QUESTION_TYPES.map((type) => [
+        type.id,
+        Boolean(enabledQuestionTypes?.[type.id]) && !PRACTICE_WORKSHEET_AUDIO_ONLY_TYPES.has(type.id),
+      ]));
+      const hasVisibleQuestionType = PRACTICE_QUESTION_TYPES.some((type) => worksheetTypes[type.id]);
+      if (hasVisibleQuestionType) return { ...worksheetTypes, ahChordTypes: false, worksheetWrittenOnly: true };
+      return {
+        ...worksheetTypes,
+        ahChordTypes: false,
+        worksheetWrittenOnly: true,
+        noteIdentification: true,
+        barlines: true,
+        time: true,
+        dynamic: true,
+        interval: true,
+        rhythmIdentification: true,
+      };
+    }
+
+    function practiceWorksheetAnswer(part) {
+      const answer = part.feedbackAnswer ?? part.answer ?? "Answer shown in the score";
+      return typeof answer === "string" || typeof answer === "number" ? String(answer) : "Answer shown in the score";
+    }
+
+    function practiceWorksheetPrompt(part) {
+      const prompt = String(part.prompt ?? "");
+      if (part.type === "articulationPlacement") {
+        return prompt.replace(
+          "Select the correct articulation marking to apply it to the full bar.",
+          "Write the correct articulation marking over the notes in the bar.",
+        );
+      }
+      return prompt;
+    }
+
+    function practiceWorksheetFrame() {
+      return new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+    }
+
+    async function renderPracticeWorksheetScore(question, { userNotes = {}, practiceAnswers = {}, feedback = null } = {}) {
+      const host = document.createElement("div");
+      host.setAttribute("aria-hidden", "true");
+      Object.assign(host.style, {
+        position: "fixed",
+        left: "-12000px",
+        top: "0",
+        width: "910px",
+        visibility: "hidden",
+        pointerEvents: "none",
+      });
+      document.body.appendChild(host);
+      const root = ReactDOM.createRoot(host);
+      const ignore = () => {};
+      try {
+        root.render(
+          <MissingNotesScore
+            question={question}
+            worksheetSystemGapReduction={question.bars.length > 8 ? 30 : 0}
+            worksheetTranspositionGapReduction={10}
+            worksheetAhChordGapExtension={40}
+            worksheetAhChordGuideRowHeight={60}
+            userNotes={userNotes}
+            setUserNotes={ignore}
+            practiceAnswers={practiceAnswers}
+            setPracticeAnswers={ignore}
+            feedback={feedback}
+            activeIndex={0}
+            setActiveIndex={ignore}
+            activeNoteId={null}
+            hoverNote={null}
+            setHoverNote={ignore}
+          />
+        );
+        await document.fonts?.ready;
+        await practiceWorksheetFrame();
+        const wrapper = host.firstElementChild;
+        const svg = wrapper?.querySelector("svg");
+        const viewBox = svg?.getAttribute("viewBox")?.trim().split(/\s+/).map(Number) ?? [];
+        if (!wrapper || viewBox.length !== 4 || !viewBox.every(Number.isFinite)) {
+          throw new Error("The practice-paper score could not be prepared.");
+        }
+        return {
+          markup: wrapper.outerHTML,
+          scoreWidth: viewBox[2],
+          scoreHeight: viewBox[3],
+        };
+      } finally {
+        root.unmount();
+        host.remove();
+      }
+    }
+
+    function practiceWorksheetCircleSelection(target) {
+      if (!target) return null;
+      const startIndex = target.startIndex ?? target.noteIndex ?? target.noteIndices?.[0] ?? 0;
+      return { ...target, startIndex, noteIndex: target.noteIndex ?? startIndex };
+    }
+
+    function practiceWorksheetCompletedState(question) {
+      const practiceAnswers = {};
+      const userNotes = {};
+      let completedQuestion = { ...question };
+      question.subquestions.forEach((part) => {
+        if (["text", "choice", "timeChoice"].includes(part.type)) {
+          practiceAnswers[part.id] = part.answer;
+          return;
+        }
+        if (part.type === "notes") {
+          missingNoteIndicesForQuestion(question).forEach((noteIndex) => {
+            const note = question.bars[question.targetBar]?.notes?.[noteIndex];
+            if (note) userNotes[noteAnswerKey(question.targetBar, noteIndex)] = note;
+          });
+          return;
+        }
+        if (part.type === "intervalInsert") {
+          const target = question.intervalInsertTarget;
+          if (target?.answerNote) userNotes[noteAnswerKey(target.barIndex, target.answerIndex)] = target.answerNote;
+          return;
+        }
+        if (part.type === "dynamic") {
+          practiceAnswers[part.id] = question.dynamic?.id;
+          completedQuestion = { ...completedQuestion, placedDynamic: question.dynamic };
+          return;
+        }
+        if (part.type === "repeat") {
+          const placements = question.repeatTarget?.placements ?? [question.repeatTarget].filter(Boolean);
+          practiceAnswers[part.id] = { selectedSymbolId: null, placements };
+          return;
+        }
+        if (part.type === "barlines") {
+          practiceAnswers[part.id] = {
+            placements: (question.barlineTargets ?? []).map((target) => ({ ...target, slot: "end", type: "single" })),
+          };
+          return;
+        }
+        if (part.type === "rhythm") {
+          practiceAnswers[part.id] = { placements: Object.fromEntries((question.rhythmTargetPattern ?? []).map((rhythm, index) => [index, rhythm])) };
+          return;
+        }
+        if (part.type === "rhythmFix") {
+          practiceAnswers[part.id] = { placements: { ...(question.rhythmFixTarget?.targetRhythms ?? {}) } };
+          return;
+        }
+        if (part.type === "scotchSnap") {
+          const sourceId = part.sourceId ?? part.id;
+          const target = sourceId === "noteIdentification"
+            ? question.noteValueCircleTarget
+            : sourceId === "scaleDegrees"
+              ? question.scaleDegreeTarget
+              : question.rhythmIdentificationTarget;
+          practiceAnswers[part.id] = { selected: practiceWorksheetCircleSelection(target) };
+          return;
+        }
+        if (part.type === "accidentalPlacement") {
+          const target = question.accidentalTarget;
+          practiceAnswers[part.id] = {
+            selectedSymbolId: target?.symbolId,
+            placements: target ? [{ symbolId: target.symbolId, barIndex: target.barIndex, noteIndex: target.noteIndex }] : [],
+          };
+          return;
+        }
+        if (part.type === "articulationPlacement") {
+          practiceAnswers[part.id] = { selectedMarkingId: question.articulationTarget?.marking?.id, placements: [] };
+          return;
+        }
+        if (part.type === "tripletPlacement") {
+          const target = question.tripletTarget;
+          practiceAnswers[part.id] = { selectedTripletKind: target?.tripletKind, placements: target ? [target] : [] };
+          return;
+        }
+        if (part.type === "transposition") {
+          const target = question.transpositionTarget;
+          const notes = Object.fromEntries((target?.answerNotes ?? []).map((note, index) => [index, note]));
+          const sourceNotes = question.bars[target?.barIndex]?.notes ?? [];
+          const ties = Object.fromEntries(sourceNotes.map((note, index) => [index, Boolean(note.tieToNext)]));
+          practiceAnswers[part.id] = { notes, ties };
+          return;
+        }
+        if (part.type === "enharmonic") {
+          practiceAnswers[part.id] = { selectedAccidental: question.enharmonicTarget?.answerNote?.writtenAccidental, note: question.enharmonicTarget?.answerNote };
+          return;
+        }
+        if (part.type === "higherChord") {
+          practiceAnswers[part.id] = {
+            answers: Object.fromEntries((question.higherChordTargets ?? []).map((barIndex) => [barIndex, chordAnswerForQuestion(question, question.bars[barIndex].chordSymbol)])),
+          };
+          return;
+        }
+        if (part.type === "ahChord") {
+          practiceAnswers[part.id] = {
+            chordAnswers: Object.fromEntries((question.advancedHigherChordTarget?.identifySlots ?? []).map((slot) => [slot.slotIndex, {
+              chord: slot.answer,
+              inversion: advancedHigherInversionAnswerLabel(slot.inversion),
+            }])),
+          };
+          return;
+        }
+        if (part.type === "ahBassLine") {
+          practiceAnswers[part.id] = {
+            bassNotes: Object.fromEntries((question.advancedHigherChordTarget?.bassLineSlots ?? []).map((slot) => [slot.slotIndex, slot.bassNote])),
+          };
+        }
+      });
+      return { question: completedQuestion, practiceAnswers, userNotes };
+    }
+
+    async function buildPracticeWorksheetConfig(level, enabledQuestionTypes) {
+      const worksheetTypes = practiceWorksheetQuestionTypes(enabledQuestionTypes);
+      const papers = [];
+      for (let index = 0; index < PRACTICE_WORKSHEET_PAPER_COUNT; index += 1) {
+        const question = makeQuestion(level, index, worksheetTypes);
+        const expectedBarCount = ["N3", "N4", "N5"].includes(level) ? 8 : 16;
+        const expectedPartCount = level === "AH" ? 8 : 6;
+        if (level === "AH" && question.subquestions.some((part) => (part.sourceId ?? part.id) === "ahChordTypes")) {
+          throw new Error("Advanced Higher worksheets must not include chord-type identification questions.");
+        }
+        if (question.bars.length !== expectedBarCount || question.subquestions.length !== expectedPartCount) {
+          throw new Error(`The ${level} practice paper did not match its required structure.`);
+        }
+        const score = await renderPracticeWorksheetScore(question);
+        const completed = practiceWorksheetCompletedState(question);
+        const answerScore = await renderPracticeWorksheetScore(completed.question, completed);
+        papers.push({
+          id: question.id ?? `practice-paper-${index}`,
+          answerScoreVersion: 1,
+          barCount: question.bars.length,
+          ...score,
+          answerMarkup: answerScore.markup,
+          parts: question.subquestions.map((part) => ({
+            id: part.id,
+            label: part.label,
+            sourceId: part.sourceId ?? part.id,
+            type: part.type,
+            prompt: practiceWorksheetPrompt(part),
+            answer: practiceWorksheetAnswer(part),
+          })),
+        });
+      }
+      return {
+        version: 1,
+        activityId: "practicequestions",
+        sourceUrl: window.location.href,
+        settings: {
+          level,
+          enabledQuestionTypes: worksheetTypes,
+          excludeAudio: true,
+          practicePapers: papers,
+        },
+      };
+    }
+
     function barStart(barIndex, displayBarCount = BARS_PER_SYSTEM) {
       const topSystem = barIndex < 4;
       const musicStart = topSystem ? STAFF.left + 122 : STAFF.left + 74;
@@ -8929,7 +9189,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return null;
     }
 
-    function MissingNotesScore({ question, userNotes, setUserNotes, practiceAnswers = {}, setPracticeAnswers, feedback, activeIndex = 0, setActiveIndex = () => {}, activeNoteId, hoverNote, setHoverNote }) {
+    function MissingNotesScore({ question, worksheetSystemGapReduction = 0, worksheetTranspositionGapReduction = 0, worksheetAhChordGapExtension = 0, worksheetAhChordGuideRowHeight = 32.5, userNotes, setUserNotes, practiceAnswers = {}, setPracticeAnswers, feedback, activeIndex = 0, setActiveIndex = () => {}, activeNoteId, hoverNote, setHoverNote }) {
       const [draggingNote, setDraggingNote] = useState(null);
       const [hoverBarlineSlot, setHoverBarlineSlot] = useState(null);
       const [hoverRhythmTarget, setHoverRhythmTarget] = useState(null);
@@ -8961,14 +9221,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
         if (systemIndex < 0 || systemIndex >= systemCount) return;
         extraSpacingAfterSystem[systemIndex] = Math.max(extraSpacingAfterSystem[systemIndex], spacing);
       };
-      reserveExtraSpacingAfterSystem(transpositionSystemIndex, question.transpositionTarget?.type === "meaning" ? 0 : 95);
+      reserveExtraSpacingAfterSystem(transpositionSystemIndex, question.transpositionTarget?.type === "meaning" ? 0 : 95 - worksheetTranspositionGapReduction);
       reserveExtraSpacingAfterSystem(enharmonicSystemIndex, 90);
-      reserveExtraSpacingAfterSystem(ahChordSystemIndex, 300);
+      reserveExtraSpacingAfterSystem(ahChordSystemIndex, 300 + worksheetAhChordGapExtension);
       const cumulativeSpacingBeforeSystem = extraSpacingAfterSystem.map((_, index) => (
         extraSpacingAfterSystem.slice(0, index).reduce((sum, spacing) => sum + spacing, 0)
       ));
       const systems = Array.from({ length: systemCount }, (_, index) => (
-        STAFF.topA + index * (STAFF.topB - STAFF.topA + EXTRA_SYSTEM_SPACING) + cumulativeSpacingBeforeSystem[index]
+        STAFF.topA + index * (STAFF.topB - STAFF.topA + EXTRA_SYSTEM_SPACING - worksheetSystemGapReduction) + cumulativeSpacingBeforeSystem[index]
       ));
       const standardBottomPadding = STAFF.topA + STAFF.gap * 4 - 20;
       const lastSystemNeedsExtraSpacing = extraSpacingAfterSystem[lastSystemIndex] > 0;
@@ -10888,7 +11148,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const ahChordBassTop = top + 220 + AH_CHORD_STAFF_OFFSET_Y;
             const ahChordGuideBoxTop = ahChordBassTop + STAFF.gap * 8;
             const ahChordBoxY = ahChordTrebleTop - 32 - BOX_LABEL_BAND_HEIGHT + MARKING_BOX_Y_OFFSET;
-            const ahChordBoxHeight = ahChordBassTop + STAFF.gap * 16 - ahChordBoxY;
+            const ahChordBoxHeight = ahChordBassTop + STAFF.gap * 16 + worksheetAhChordGapExtension - ahChordBoxY;
             const ahChordStartsSystem = bar.barIndex % BARS_PER_SYSTEM === 0;
             const ahChordClefX = STAFF.left + 32;
             const ahChordStaffStart = ahChordStartsSystem ? STAFF.left : start;
@@ -11421,8 +11681,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
                       const guideBottomLabel = guideInversion;
                       const guideBoxGroupWidth = Math.max(58, end - start - 8);
                       const guideBoxWidth = Math.min(74, guideBoxGroupWidth / 2);
-                      const guideBoxRowHeight = 32.5;
+                      const guideBoxRowHeight = worksheetAhChordGuideRowHeight;
                       const guideBoxHeight = guideBoxRowHeight * 2;
+                      const guideBoxTextY = guideBoxRowHeight / 2 + 5;
                       const sortedGuideSlots = [...ahChordBassLineSlots].sort((first, second) => (first.slotIndex ?? 0) - (second.slotIndex ?? 0));
                       const guideBoxGroupCenterX = start + 4 + guideBoxGroupWidth / 2;
                       const guideBoxCenterX = sortedGuideSlots.length === 2
@@ -11470,10 +11731,10 @@ function advancedHigherInversionAnswerLabel(inversion) {
                           <g pointerEvents="none">
                             <rect x={guideBoxCenterX - guideBoxWidth / 2} y={ahChordGuideBoxTop} width={guideBoxWidth} height={guideBoxHeight} fill="white" stroke="#444" strokeWidth="1.3" />
                             <line x1={guideBoxCenterX - guideBoxWidth / 2} x2={guideBoxCenterX + guideBoxWidth / 2} y1={ahChordGuideBoxTop + guideBoxRowHeight} y2={ahChordGuideBoxTop + guideBoxRowHeight} stroke="#444" strokeWidth="1.3" />
-                            <text x={guideBoxCenterX} y={ahChordGuideBoxTop + 20} textAnchor="middle" fontSize="14" fontWeight="600" fill="#111">
+                            <text x={guideBoxCenterX} y={ahChordGuideBoxTop + guideBoxTextY} textAnchor="middle" fontSize="14" fontWeight="600" fill="#111">
                               {guideTopLabel}
                             </text>
-                            <text x={guideBoxCenterX} y={ahChordGuideBoxTop + 52.5} textAnchor="middle" fontSize="14" fontWeight="600" fill="#111">
+                            <text x={guideBoxCenterX} y={ahChordGuideBoxTop + guideBoxRowHeight + guideBoxTextY} textAnchor="middle" fontSize="14" fontWeight="600" fill="#111">
                               {guideBottomLabel}
                             </text>
                           </g>
@@ -11740,10 +12001,15 @@ function advancedHigherInversionAnswerLabel(inversion) {
                   </>
                 )}
                 {(isIntervalInsertTarget ? intervalInsertFeedback : missingFeedback) && isMissingTarget && <CorrectionLayer bar={bar} userNotes={userNotes} positions={positions} top={top} timeSignature={barTimeSignature} clef={question.clef} noteIndices={isIntervalInsertTarget ? [question.intervalInsertTarget.answerIndex] : null} />}
-                {!hideBarline && !hasEndRepeatOnBar && (bar.barIndex === question.bars.length - 1 || endsTimeChange ? (
+                {!hideBarline && !hasEndRepeatOnBar && (bar.barIndex === question.bars.length - 1 ? (
                   <g>
                     <line x1={end - 5} x2={end - 5} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="1.4" pointerEvents="none" />
                     <line x1={end} x2={end} y1={top - 0.5} y2={top + STAFF.gap * 4 + 0.5} stroke="currentColor" strokeWidth="4" pointerEvents="none" />
+                  </g>
+                ) : endsTimeChange ? (
+                  <g data-time-change-barline="true">
+                    <line x1={end - 5} x2={end - 5} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.35" pointerEvents="none" />
+                    <line x1={end} x2={end} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.35" pointerEvents="none" />
                   </g>
                 ) : (
                   <line x1={end} x2={end} y1={top} y2={top + STAFF.gap * 4} stroke="currentColor" strokeWidth="1.35" pointerEvents="none" />
@@ -12067,7 +12333,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const y = top + 220 + AH_CHORD_STAFF_OFFSET_Y + STAFF.gap * 8;
             const value = makePlacementAnswer(practiceAnswers[part.id], { chordAnswers: {}, bassNotes: {} }).chordAnswers?.[slot.slotIndex] ?? "";
             const rowLabelWidth = 48;
-            const rowLabelGap = 22;
+            const rowLabelGap = 57;
             const rowLabelX = sortedSlots.length === 2
               ? lockedGroupLeft - rowLabelWidth - rowLabelGap
               : x - rowLabelWidth - rowLabelGap;
@@ -15041,7 +15307,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
       return (
         <div className="overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12">
-          <window.MLH.AppHeader icon={ASSET.appIcon} title="Practice Questions" subtitle="Complete exam-style questions combining multiple music literacy concepts." worksheetConfig={() => ({ version: 1, activityId: "practicequestions", sourceUrl: window.location.href, settings: { level: activeLevel, enabledQuestionTypes, excludeAudio: true, excludeRhythmIdentification: true } })}>
+          <window.MLH.AppHeader icon={ASSET.appIcon} title="Practice Questions" subtitle="Complete exam-style questions combining multiple music literacy concepts." worksheetConfig={() => buildPracticeWorksheetConfig(activeLevel, enabledQuestionTypes)}>
             <PracticeScoreTimerPanel
               correct={score.correct}
               attempted={score.attempted}

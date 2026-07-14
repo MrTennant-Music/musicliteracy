@@ -1,5 +1,36 @@
 (function () {
   const MLH = window.MLH || {};
+  const worksheetControlsMode = new URLSearchParams(window.location.search).get("worksheetControls") === "1";
+  if (worksheetControlsMode) {
+    document.documentElement.classList.add("worksheet-controls-mode");
+    const controlsStyle = document.createElement("style");
+    controlsStyle.textContent = `
+      html.worksheet-controls-mode, html.worksheet-controls-mode body { min-height: 0 !important; background: transparent !important; overflow: visible !important; }
+      html.worksheet-controls-mode header, html.worksheet-controls-mode footer { display: none !important; }
+      html.worksheet-controls-mode #root > div > div { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+      html.worksheet-controls-mode main { min-height: 0 !important; height: auto !important; overflow: visible !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
+      html.worksheet-controls-mode main > :not(.hub-toolbar) { display: none !important; }
+      html.worksheet-controls-mode .hub-toolbar { position: relative !important; top: 0 !important; z-index: 20 !important; width: max-content !important; min-height: 52px !important; margin: 0 !important; padding: 0 !important; }
+      html.worksheet-controls-mode .hub-toolbar-feedback, html.worksheet-controls-mode .hub-toolbar-right { display: none !important; }
+      html.worksheet-controls-mode .hub-toolbar-left button[data-menu-trigger] { width: auto !important; height: 44px !important; padding-left: 10px !important; padding-right: 10px !important; }
+      html.worksheet-controls-mode .hub-toolbar-left button[data-menu-trigger] > .hidden { display: inline !important; }
+      html.worksheet-controls-mode .hub-toolbar-left button[data-menu-trigger] > span[class*="sm:hidden"] { display: none !important; }
+    `;
+    document.head.appendChild(controlsStyle);
+    const publishControlsHeight = () => {
+      window.requestAnimationFrame(() => {
+        const toolbar = document.querySelector(".hub-toolbar");
+        if (!toolbar) return;
+        const panel = document.querySelector("[data-menu-panel]");
+        const bottom = Math.max(toolbar.getBoundingClientRect().bottom, panel?.getBoundingClientRect().bottom || 0);
+        window.parent.postMessage({ type: "mlh-worksheet-controls-height", height: Math.ceil(bottom + 10) }, "*");
+      });
+    };
+    window.addEventListener("load", publishControlsHeight);
+    document.addEventListener("click", () => window.setTimeout(publishControlsHeight, 40));
+    document.addEventListener("change", () => window.setTimeout(publishControlsHeight, 40));
+    new MutationObserver(publishControlsHeight).observe(document.documentElement, { childList: true, subtree: true });
+  }
 
   function decodeSharedSettings() {
     const encoded = new URLSearchParams(window.location.search).get("settings");
@@ -181,6 +212,7 @@
 
   function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, worksheetConfig, worksheetMode = false }) {
     const [qrOpen, setQrOpen] = React.useState(false);
+    const [worksheetOpening, setWorksheetOpening] = React.useState(false);
     const [, setProfileRevision] = React.useState(0);
     const worksheetHeader = MLH.worksheetHeaderMode;
     const activeWorksheetMode = worksheetMode || Boolean(worksheetHeader);
@@ -199,18 +231,24 @@
       ? React.createElement("div", { className: "pointer-events-none opacity-40 grayscale", "aria-disabled": "true", inert: "" },
           React.createElement(ScoreStreakPanel, { assets: worksheetHeader.assets, correct: 0, attempted: 0, accuracy: 0, streak: 0, bestStreak: 0, resetScore: () => {}, confettiKey: 0, medalEligible: true }))
       : children;
-    function createWorksheet() {
-      if (!worksheetEnabled) return;
+    async function createWorksheet() {
+      if (!worksheetEnabled || worksheetOpening) return;
+      setWorksheetOpening(true);
       try {
-        const config = worksheetConfig();
+        const config = await worksheetConfig();
         if (!config || config.version !== 1 || typeof config.activityId !== "string" || !config.settings || typeof config.settings !== "object") return;
-        const worksheetSourceConfig = { ...config, subtitle: typeof subtitle === "string" ? subtitle : (config.subtitle || "") };
-        window.sessionStorage.setItem("worksheetSourceConfig", JSON.stringify(worksheetSourceConfig));
-        window.sessionStorage.setItem("worksheetReturnConfig", JSON.stringify(worksheetSourceConfig));
+        const worksheetSourceConfig = { ...config, subtitle: typeof subtitle === "string" ? subtitle : (config.subtitle || ""), profileSettings: MLH.profileSettings.encoded() };
+        const serializedWorksheetConfig = JSON.stringify(worksheetSourceConfig);
+        window.sessionStorage.setItem("worksheetSourceConfig", serializedWorksheetConfig);
+        if (config.activityId === "intervals") window.sessionStorage.setItem("worksheetReturnConfig", serializedWorksheetConfig);
+        else window.sessionStorage.removeItem("worksheetReturnConfig");
         window.sessionStorage.setItem("worksheetReturnUrl", window.location.href);
         window.location.href = "worksheet-generator.html";
-      } catch {
-        // Leave the pupil on the current activity if their browser cannot save the settings.
+      } catch (error) {
+        console.error("The worksheet could not be prepared.", error);
+        window.alert("The worksheet could not be prepared. Please try again.");
+      } finally {
+        setWorksheetOpening(false);
       }
     }
     React.useEffect(() => {
@@ -218,6 +256,25 @@
       window.addEventListener("mlh-profile-settings-change", refresh);
       return () => window.removeEventListener("mlh-profile-settings-change", refresh);
     }, []);
+    React.useEffect(() => {
+      if (!worksheetControlsMode || typeof worksheetConfig !== "function" || sharedSettings.restoring) return undefined;
+      let cancelled = false;
+      const timer = window.setTimeout(async () => {
+        try {
+          const config = await worksheetConfig();
+          if (cancelled || !config || config.version !== 1 || typeof config.activityId !== "string" || !config.settings) return;
+          const sourceUrl = new URL(window.location.href);
+          sourceUrl.searchParams.delete("worksheetControls");
+          window.parent.postMessage({
+            type: "mlh-worksheet-source-config",
+            config: { ...config, sourceUrl: sourceUrl.toString(), subtitle: typeof subtitle === "string" ? subtitle : (config.subtitle || ""), profileSettings: MLH.profileSettings.encoded() },
+          }, "*");
+        } catch (error) {
+          console.error("The worksheet settings could not be updated.", error);
+        }
+      }, 500);
+      return () => { cancelled = true; window.clearTimeout(timer); };
+    }, [worksheetConfig, subtitle, worksheetControlsMode, setProfileRevision]);
     React.useEffect(() => {
       if (!sharedSettings.restoring) return undefined;
       let closeTimer;
@@ -278,7 +335,7 @@
                 React.createElement("h1", { className: "relative top-[1px] inline-flex items-center gap-2 text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl" },
                   displayedTitle,
                   React.createElement(ProfileQrButton, { disabled: activeWorksheetMode, onClick: () => setQrOpen(true) }),
-                  React.createElement(WorksheetButton, { enabled: worksheetEnabled, selected: activeWorksheetMode, returnLabel: typeof displayedTitle === "string" ? displayedTitle : "activity", onClick: activeWorksheetMode ? worksheetHeader?.onExit : createWorksheet })
+                  React.createElement(WorksheetButton, { enabled: worksheetEnabled && !worksheetOpening, selected: activeWorksheetMode, returnLabel: typeof displayedTitle === "string" ? displayedTitle : "activity", onClick: activeWorksheetMode ? worksheetHeader?.onExit : createWorksheet })
                 ),
                 React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap" }, displayedSubtitle)
               )
