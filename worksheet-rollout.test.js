@@ -91,6 +91,8 @@ assert.match(generic, /y=\{bottomBar-13\}[\s\S]*height=\{gap\*4\+26\}/, "The mel
 assert.doesNotMatch(generic, />Bar [12]<\/text>/, "Melodic Dictation worksheet staves must not display bar numbers");
 const practiceSource = fs.readFileSync("practicequestions.html", "utf8");
 const hubShellSource = fs.readFileSync("hub-shell.js", "utf8");
+assert.match(hubShellSource, /button\[data-profile-customise="true"\][\s\S]*toolbar\.classList\.add\("hub-toolbar"\)/, "Embedded worksheet controls must identify activity toolbars that do not already carry the shared toolbar class");
+assert.match(hubShellSource, /\.hub-toolbar-left button span\.hidden \{ display: inline !important; \}/, "Embedded worksheet controls must show their full activity button labels at narrow iframe widths");
 assert.match(practiceSource, /PRACTICE_WORKSHEET_PAPER_COUNT = 20/, "Mixed Practice Questions should prepare twenty complete paper choices");
 assert.match(practiceSource, /new Set\(\["missing", "rhythmicDictation", "tempoQuestion", "cadence", "repeatSigns", "chord", "accidentals"\]\)/, "Mixed Practice Questions should exclude listening-dependent cadence, repeat-sign, chord and accidental questions");
 assert.match(practiceSource, /enabledQuestionTypes\.worksheetWrittenOnly[\s\S]*randomItem\(\["dynamicName", "hairpinName"\]\)/, "Printed Practice Questions should use only dynamics that can be answered from the score");

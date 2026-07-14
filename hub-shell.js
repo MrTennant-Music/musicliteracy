@@ -11,13 +11,26 @@
       html.worksheet-controls-mode main { min-height: 0 !important; height: auto !important; overflow: visible !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
       html.worksheet-controls-mode main > :not(.hub-toolbar) { display: none !important; }
       html.worksheet-controls-mode .hub-toolbar { position: relative !important; top: 0 !important; z-index: 20 !important; width: max-content !important; min-height: 52px !important; margin: 0 !important; padding: 0 !important; }
+      html.worksheet-controls-mode .hub-toolbar > :not(.hub-toolbar-left) { display: none !important; }
       html.worksheet-controls-mode .hub-toolbar-feedback, html.worksheet-controls-mode .hub-toolbar-right { display: none !important; }
-      html.worksheet-controls-mode .hub-toolbar-left button[data-menu-trigger] { width: auto !important; height: 44px !important; padding-left: 10px !important; padding-right: 10px !important; }
-      html.worksheet-controls-mode .hub-toolbar-left button[data-menu-trigger] > .hidden { display: inline !important; }
-      html.worksheet-controls-mode .hub-toolbar-left button[data-menu-trigger] > span[class*="sm:hidden"] { display: none !important; }
+      html.worksheet-controls-mode .hub-toolbar-left button { width: auto !important; height: 44px !important; padding-left: 10px !important; padding-right: 10px !important; }
+      html.worksheet-controls-mode .hub-toolbar-left button span.hidden { display: inline !important; }
+      html.worksheet-controls-mode .hub-toolbar-left button span[class*="sm:hidden"] { display: none !important; }
     `;
     document.head.appendChild(controlsStyle);
+    const markWorksheetToolbar = () => {
+      const customiseButton = document.querySelector('button[data-profile-customise="true"]');
+      const main = customiseButton?.closest("main");
+      if (!customiseButton || !main) return;
+      let toolbar = customiseButton;
+      while (toolbar.parentElement && toolbar.parentElement !== main) toolbar = toolbar.parentElement;
+      if (toolbar.parentElement !== main) return;
+      toolbar.classList.add("hub-toolbar");
+      const leftGroup = customiseButton.closest("div.relative.flex.items-center");
+      (leftGroup || toolbar).classList.add("hub-toolbar-left");
+    };
     const publishControlsHeight = () => {
+      markWorksheetToolbar();
       window.requestAnimationFrame(() => {
         const toolbar = document.querySelector(".hub-toolbar");
         if (!toolbar) return;
