@@ -136,6 +136,30 @@ function safePdfTitle(title, fallback = "Worksheet") {
 }
 window.MLH.safePdfTitle = safePdfTitle;
 
+function worksheetExerciseUrl(config) {
+  const rawUrl = config?.exerciseUrl || config?.sourceUrl || "";
+  try {
+    const url = new URL(rawUrl, window.location.href);
+    if (url.protocol === "file:" || ["localhost", "127.0.0.1", "::1"].includes(url.hostname)) {
+      const fileName = url.pathname.split("/").filter(Boolean).pop() || `${config?.activityId || "index"}.html`;
+      return `https://mrtennant-music.github.io/musicliteracy/${fileName}${url.search}${url.hash}`;
+    }
+    return url.toString();
+  } catch {
+    return `https://mrtennant-music.github.io/musicliteracy/${config?.activityId || "index"}.html`;
+  }
+}
+function worksheetQrImageUrl(exerciseUrl, size = 180) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(exerciseUrl)}`;
+}
+window.MLH.worksheetExerciseUrl = worksheetExerciseUrl;
+window.MLH.worksheetQrImageUrl = worksheetQrImageUrl;
+
+function WorksheetQr({ exerciseUrl, bordered = false, dividerClass = "" }) {
+  if (!exerciseUrl) return null;
+  return <section className={`worksheet-qr flex min-h-0 flex-col items-center justify-center gap-2 p-4 text-center ${bordered ? "border border-black" : ""} ${dividerClass}`}><img src="the-music-literacy-hub-logo.svg" className="h-auto w-24 max-w-full" alt="The Music Literacy Hub" /><div className="flex flex-col items-center gap-1"><img src={worksheetQrImageUrl(exerciseUrl)} crossOrigin="anonymous" className="h-16 w-16" alt="QR code linking to more questions" /><span className="flex w-16 justify-center whitespace-nowrap text-[7px] font-bold uppercase text-black"><span className="tracking-[0.08em]">More questions</span></span></div></section>;
+}
+
 function createPdfPrintWindow() {
   const printWindow = window.open("", "_blank");
   if (!printWindow) throw new Error("Allow pop-ups for The Music Literacy Hub, then try Print again.");
@@ -274,7 +298,8 @@ function WorksheetPages({ worksheet, answerSheet = false, pageOffset = 0, totalP
   const rowsPerPage = Math.ceil(perPage / 2);
   const { mixed: mixedQuestionTypes } = worksheetQuestionTypes(worksheet.questions);
   const questionItems = worksheet.questions.map((question) => ({ question, workedExample: false }));
-  const items = answerSheet ? questionItems : worksheet.includeExampleAnswer ? [{ question: worksheet.workedExample, workedExample: true }, ...questionItems] : questionItems;
+  const questionPageItems = worksheet.includeExampleAnswer ? [{ question: worksheet.workedExample, workedExample: true }, ...questionItems] : questionItems;
+  const items = answerSheet ? questionItems : worksheet.includeQr ? [...questionPageItems, { worksheetQr: true }] : questionPageItems;
   const pages = chunk(items, perPage);
   return pages.map((pageItems, pageIndex) => (
     <article className="worksheet-page" key={`${answerSheet ? "answers" : "questions"}-${pageIndex}`}>
@@ -292,14 +317,16 @@ function WorksheetPages({ worksheet, answerSheet = false, pageOffset = 0, totalP
         )}
       </div>}
       <div className={`worksheet-questions ${worksheet.showGridlines ? "border border-black" : "border border-transparent"}`} style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gridTemplateRows: `repeat(${rowsPerPage}, minmax(0, 1fr))` }}>
-        {pageItems.map(({ question, workedExample }, index) => {
+        {pageItems.map((item, index) => {
           const row = Math.floor(index / 2);
           const dividerClass = worksheet.showGridlines ? `${index % 2 === 0 ? "border-r border-black" : ""} ${row < rowsPerPage - 1 ? "border-b border-black" : ""}` : "";
+          if (item.worksheetQr) return <WorksheetQr key="worksheet-qr" exerciseUrl={worksheet.exerciseUrl} bordered={!worksheet.showGridlines} dividerClass={dividerClass} />;
+          const { question, workedExample } = item;
           const number = answerSheet || !worksheet.includeExampleAnswer ? pageIndex * perPage + index + 1 : pageIndex * perPage + index;
           return <QuestionCard key={`${workedExample ? "example" : "question"}-${question.id}`} question={question} number={number} showNumbers={worksheet.includeNumbers} showMarks={worksheet.includeMarks && !answerSheet} marks={1} showIdentifyPrompt={mixedQuestionTypes} answer={answerSheet} workedExample={workedExample} dividerClass={dividerClass} />;
         })}
       </div>
-      {!answerSheet && worksheet.includeMarks && pageIndex === pages.length - 1 && <div className="mt-3 flex shrink-0 items-center justify-end gap-2 text-sm font-bold"><span>Total marks</span><span className="flex h-9 min-w-24 items-center justify-end rounded-lg border border-black px-3">&nbsp; / {worksheet.questions.length}</span></div>}
+      {!answerSheet && pageIndex === pages.length - 1 && worksheet.includeMarks && <div className="mt-3 flex shrink-0 items-end justify-end gap-3"><div className="flex items-center justify-end gap-2 text-sm font-bold"><span>Total marks</span><span className="flex h-9 min-w-24 items-center justify-end rounded-lg border border-black px-3">&nbsp; / {worksheet.questions.length}</span></div></div>}
       <div className="mt-3 flex shrink-0 items-center justify-between text-[10px] text-stone-400"><span>The Music Literacy Hub</span><span>Page {pageOffset + pageIndex + 1} of {totalPages}</span></div>
     </article>
   ));
@@ -364,26 +391,28 @@ function layoutPdfStyledText(runs, size, maxWidth, spaceFont) {
   return lines;
 }
 
-async function worksheetIconPngBytes() {
+async function worksheetSvgPngBytes(assetName, width = 256, height = 256) {
   let response;
-  try { response = await fetch("intervals-icon.svg"); } catch {}
-  if (!response?.ok) response = await fetch("https://mrtennant-music.github.io/musicliteracy/intervals-icon.svg");
+  try { response = await fetch(assetName); } catch {}
+  if (!response?.ok) response = await fetch(`https://mrtennant-music.github.io/musicliteracy/${assetName}`);
   const svgText = await response.text();
   const objectUrl = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }));
   try {
     const image = new Image();
     await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = objectUrl; });
     const canvas = document.createElement("canvas");
-    canvas.width = 256;
-    canvas.height = 256;
+    canvas.width = width;
+    canvas.height = height;
     const context = canvas.getContext("2d");
-    context.drawImage(image, 0, 0, 256, 256);
+    context.drawImage(image, 0, 0, width, height);
     const pngBlob = await new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Icon conversion failed")), "image/png"));
     return new Uint8Array(await pngBlob.arrayBuffer());
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
 }
+const worksheetIconPngBytes = () => worksheetSvgPngBytes("intervals-icon.svg");
+const worksheetWordmarkPngBytes = () => worksheetSvgPngBytes("the-music-literacy-hub-logo.svg", 561, 170);
 
 function roundedRectangleSvgPath(width, height, radius) {
   const right = width, top = height, r = Math.min(radius, width / 2, height / 2), curve = r * 0.55228475;
@@ -435,6 +464,7 @@ function App() {
   const initialLevel = imported?.settings.level || "N5";
   const initialModes = imported?.settings.enabledModes || DEFAULT_MODES;
   const initialTitle = `${imported?.activityName || "Intervals"} · ${LEVELS[initialLevel]}`;
+  const exerciseUrl = worksheetExerciseUrl(imported);
   const initialCount = Number(editorState?.count) || 10;
   const initialQuestionSet = useMemo(() => {
     const modes = initialLevel === "N5" ? { identify: true, create: false } : initialModes;
@@ -445,7 +475,7 @@ function App() {
   const [subtitleCustomized, setSubtitleCustomized] = useState(Boolean(editorState?.subtitleCustomized));
   const [includeHeader, setIncludeHeader] = useState(editorState?.header ?? true), [includeName, setIncludeName] = useState(editorState?.name ?? true), [includeClass, setIncludeClass] = useState(editorState?.classField ?? false), [includeDate, setIncludeDate] = useState(editorState?.date ?? false);
   const [countChoice, setCountChoice] = useState(String(initialCount)), [includeNumbers, setIncludeNumbers] = useState(editorState?.numbers ?? true), [includeMarks, setIncludeMarks] = useState(editorState?.marks ?? true);
-  const [includeAnswers, setIncludeAnswers] = useState(editorState?.answers ?? false), [includeExampleAnswer, setIncludeExampleAnswer] = useState(editorState?.example ?? true), [showGridlines, setShowGridlines] = useState(editorState?.gridlines ?? true);
+  const [includeAnswers, setIncludeAnswers] = useState(editorState?.answers ?? false), [includeExampleAnswer, setIncludeExampleAnswer] = useState(editorState?.example ?? true), [showGridlines, setShowGridlines] = useState(editorState?.gridlines ?? true), [includeQr, setIncludeQr] = useState(editorState?.qr ?? true);
   const level = initialLevel;
   const enabledModes = { ...DEFAULT_MODES, ...initialModes };
   const [error, setError] = useState("");
@@ -464,14 +494,14 @@ function App() {
   const requestedCount = Number(countChoice);
   const currentModes = isN5 ? { identify: true, create: false } : enabledModes;
   const effectiveSubtitle = subtitleCustomized ? subtitle : defaultWorksheetInstructions(worksheet.questions);
-  const previewWorksheet = useMemo(() => ({ ...worksheet, title: title.trim() || initialTitle, subtitle: effectiveSubtitle.trim(), includeHeader, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines }), [worksheet, title, effectiveSubtitle, includeHeader, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines, initialTitle]);
-  const worksheetPageCount = Math.ceil((previewWorksheet.questions.length + (previewWorksheet.includeExampleAnswer ? 1 : 0)) / 6);
+  const previewWorksheet = useMemo(() => ({ ...worksheet, title: title.trim() || initialTitle, subtitle: effectiveSubtitle.trim(), exerciseUrl, includeHeader, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines, includeQr }), [worksheet, title, effectiveSubtitle, exerciseUrl, includeHeader, includeName, includeClass, includeDate, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines, includeQr, initialTitle]);
+  const worksheetPageCount = Math.ceil((previewWorksheet.questions.length + (previewWorksheet.includeExampleAnswer ? 1 : 0) + (previewWorksheet.includeQr ? 1 : 0)) / 6);
   const answerPageCount = previewWorksheet.includeAnswers ? Math.ceil(previewWorksheet.questions.length / 6) : 0;
   const totalPreviewPages = worksheetPageCount + answerPageCount;
   useEffect(() => { try { window.sessionStorage.setItem("worksheetGeneratedData", JSON.stringify(previewWorksheet)); } catch {} }, [previewWorksheet]);
   useEffect(() => {
-    sessionStorage.setItem("worksheetEditorState", JSON.stringify({ activityId: "intervals", fingerprint: configFingerprint, title, subtitle, subtitleCustomized, header: includeHeader, name: includeName, classField: includeClass, date: includeDate, count: Number(countChoice), numbers: includeNumbers, marks: includeMarks, answers: includeAnswers, example: includeExampleAnswer, gridlines: showGridlines }));
-  }, [configFingerprint, title, subtitle, subtitleCustomized, includeHeader, includeName, includeClass, includeDate, countChoice, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines]);
+    sessionStorage.setItem("worksheetEditorState", JSON.stringify({ activityId: "intervals", fingerprint: configFingerprint, title, subtitle, subtitleCustomized, header: includeHeader, name: includeName, classField: includeClass, date: includeDate, count: Number(countChoice), numbers: includeNumbers, marks: includeMarks, answers: includeAnswers, example: includeExampleAnswer, gridlines: showGridlines, qr: includeQr }));
+  }, [configFingerprint, title, subtitle, subtitleCustomized, includeHeader, includeName, includeClass, includeDate, countChoice, includeNumbers, includeMarks, includeAnswers, includeExampleAnswer, showGridlines, includeQr]);
   function resizeQuestions(count, nextLevel = level, nextModes = currentModes) {
     if (!Number.isInteger(count) || count < 1 || count > 50) return;
     setWorksheet((current) => {
@@ -516,9 +546,16 @@ function App() {
       const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const worksheetIcon = await pdfDoc.embedPng(await worksheetIconPngBytes());
+      const worksheetWordmark = await pdfDoc.embedPng(await worksheetWordmarkPngBytes());
+      let worksheetQrImage = null;
+      try {
+        const qrResponse = await fetch(worksheetQrImageUrl(previewWorksheet.exerciseUrl, 240));
+        if (qrResponse.ok) worksheetQrImage = await pdfDoc.embedPng(await qrResponse.arrayBuffer());
+      } catch {}
       const perPage = 6;
       const assessedItems = previewWorksheet.questions.map((question) => ({ question, workedExample: false }));
-      const questionItems = previewWorksheet.includeExampleAnswer ? [{ question: previewWorksheet.workedExample, workedExample: true }, ...assessedItems] : assessedItems;
+      const baseQuestionItems = previewWorksheet.includeExampleAnswer ? [{ question: previewWorksheet.workedExample, workedExample: true }, ...assessedItems] : assessedItems;
+      const questionItems = previewWorksheet.includeQr ? [...baseQuestionItems, { worksheetQr: true }] : baseQuestionItems;
       const answerItems = previewWorksheet.questions.map((question) => ({ question, workedExample: false }));
       const { mixed: mixedQuestionTypes } = worksheetQuestionTypes(previewWorksheet.questions);
       const questionGroups = chunk(questionItems, perPage), answerGroups = chunk(answerItems, perPage);
@@ -570,11 +607,22 @@ function App() {
             page.drawLine({ start: { x: tableLeft, y }, end: { x: tableRight, y }, thickness: 0.5, color: black, opacity: 1 });
           }
         }
-        pageItems.forEach(({ question, workedExample }, index) => {
-          const globalNumber = answerSheet || !previewWorksheet.includeExampleAnswer ? pageIndex * perPage + index + 1 : pageIndex * perPage + index;
+        pageItems.forEach((item, index) => {
           const row = Math.floor(index / 2), column = index % 2;
           const cellLeft = tableLeft + column * columnWidth, cellRight = cellLeft + columnWidth;
           const cellTop = contentTop - row * rowHeight, cellBottom = cellTop - rowHeight;
+          if (item.worksheetQr) {
+            if (!previewWorksheet.showGridlines) page.drawRectangle({ x: cellLeft, y: cellBottom, width: columnWidth, height: rowHeight, borderColor: black, borderWidth: 0.5 });
+            const wordmarkWidth = 80, wordmarkHeight = wordmarkWidth * 170 / 561;
+            const qrSize = 56, groupHeight = wordmarkHeight + qrSize + 10, groupBottom = cellBottom + (rowHeight - groupHeight) / 2;
+            page.drawImage(worksheetWordmark, { x: cellLeft + (columnWidth - wordmarkWidth) / 2, y: groupBottom + qrSize + 10, width: wordmarkWidth, height: wordmarkHeight });
+            if (worksheetQrImage) page.drawImage(worksheetQrImage, { x: cellLeft + (columnWidth - qrSize) / 2, y: groupBottom, width: qrSize, height: qrSize });
+            const qrLabel = "MORE QUESTIONS", qrLabelSize = 6.5;
+            page.drawText(qrLabel, { x: cellLeft + (columnWidth - boldFont.widthOfTextAtSize(qrLabel, qrLabelSize)) / 2, y: groupBottom - 10.5, size: qrLabelSize, font: boldFont, color: black });
+            return;
+          }
+          const { question, workedExample } = item;
+          const globalNumber = answerSheet || !previewWorksheet.includeExampleAnswer ? pageIndex * perPage + index + 1 : pageIndex * perPage + index;
           const intervalText = question.type === "create" ? window.MLHIntervalsWorksheet.intervalLabel(question.intervalSize).toLowerCase() : "";
           const questionPromptRuns = question.type === "create" ? [{ text: intervalText === "tritone" ? "Write a note a" : "Write a", font: regularFont }, { text: intervalText, font: boldFont }, { text: question.direction, font: boldFont }, { text: "than the note given.", font: regularFont }] : mixedQuestionTypes ? [{ text: "Identify the interval.", font: regularFont }] : null;
           const headingText = workedExample ? "Example Answer" : previewWorksheet.includeNumbers ? `${globalNumber}.` : "";
@@ -661,7 +709,7 @@ function App() {
                 <label className="block text-sm font-semibold">Instructions<textarea ref={resizeWorksheetTextarea} rows="2" className={`${fieldClass} min-h-16 resize-none overflow-hidden`} value={effectiveSubtitle} onChange={(event) => { resizeWorksheetTextarea(event.currentTarget); setSubtitle(event.target.value); setSubtitleCustomized(true); }} /></label>
                 <div className="flex flex-wrap items-center justify-start gap-x-7 gap-y-2">{check("Header", includeHeader, changeHeader)}{check("Name", includeName, setIncludeName, !includeHeader)}{check("Class", includeClass, setIncludeClass, !includeHeader)}{check("Date", includeDate, setIncludeDate, !includeHeader)}</div>
                 <label className="flex items-center justify-between gap-4 border-t border-stone-200 pt-4 text-sm font-semibold"><span>Number of Questions</span><select className={compactSelectClass} value={countChoice} onChange={(event) => { const value = event.target.value; setCountChoice(value); resizeQuestions(Number(value)); setError(""); }}>{[10,15,20,25].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-                <div className="grid grid-cols-[minmax(0,1fr)_max-content_max-content] gap-x-3 gap-y-3">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}{check("Gridlines", showGridlines, setShowGridlines)}{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}{check("Include Answers", includeAnswers, setIncludeAnswers)}</div>
+                <div className="grid grid-cols-[minmax(0,1fr)_max-content] items-center gap-x-6 gap-y-3">{check("Question Numbers", includeNumbers, setIncludeNumbers)}{check("Marks", includeMarks, setIncludeMarks)}{check("Gridlines", showGridlines, setShowGridlines)}{check("Example Answer", includeExampleAnswer, setIncludeExampleAnswer)}{check("Include Answers", includeAnswers, setIncludeAnswers)}{check("QR Code", includeQr, setIncludeQr)}</div>
               </div>
               {error && <p className="mt-5 font-semibold text-red-700" role="alert">{error}</p>}
               <div className="mt-6 grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button type="button" onClick={generate} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-semibold text-stone-800 transition hover:bg-stone-100"><span className="flex items-center justify-center gap-2"><img src="restart.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" /><span>Refresh</span></span></button><button type="button" onClick={() => outputPdf("download")} disabled={Boolean(preparingMode)} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="download.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain invert" /><span>{preparingMode === "download" ? "Preparing…" : "Download"}</span></span></button><button type="button" onClick={() => outputPdf("print")} disabled={Boolean(preparingMode)} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><span className="flex items-center justify-center gap-2"><img src="worksheet.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain invert" /><span>{preparingMode === "print" ? "Preparing…" : "Print"}</span></span></button></div>

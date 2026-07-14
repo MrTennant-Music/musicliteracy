@@ -205,7 +205,9 @@
       try {
         const config = await worksheetConfig();
         if (!config || config.version !== 1 || typeof config.activityId !== "string" || !config.settings || typeof config.settings !== "object") return;
-        const worksheetSourceConfig = { ...config, subtitle: typeof subtitle === "string" ? subtitle : (config.subtitle || "") };
+        const exerciseUrlObject = new URL(shareUrl);
+        if (typeof config.settings.level === "string") exerciseUrlObject.searchParams.set("level", config.settings.level);
+        const worksheetSourceConfig = { ...config, exerciseUrl: exerciseUrlObject.toString(), subtitle: typeof subtitle === "string" ? subtitle : (config.subtitle || "") };
         const serializedWorksheetConfig = JSON.stringify(worksheetSourceConfig);
         window.sessionStorage.setItem("worksheetSourceConfig", serializedWorksheetConfig);
         if (config.activityId === "intervals") window.sessionStorage.setItem("worksheetReturnConfig", serializedWorksheetConfig);
