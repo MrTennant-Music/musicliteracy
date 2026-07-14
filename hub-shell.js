@@ -1,50 +1,5 @@
 (function () {
   const MLH = window.MLH || {};
-  const worksheetControlsMode = new URLSearchParams(window.location.search).get("worksheetControls") === "1";
-  if (worksheetControlsMode) {
-    document.documentElement.classList.add("worksheet-controls-mode");
-    const controlsStyle = document.createElement("style");
-    controlsStyle.textContent = `
-      html.worksheet-controls-mode, html.worksheet-controls-mode body { min-height: 0 !important; background: transparent !important; overflow: visible !important; }
-      html.worksheet-controls-mode header, html.worksheet-controls-mode footer { display: none !important; }
-      html.worksheet-controls-mode #root > div > div { max-width: none !important; margin: 0 !important; padding: 0 !important; }
-      html.worksheet-controls-mode main { min-height: 0 !important; height: auto !important; overflow: visible !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
-      html.worksheet-controls-mode main > :not(.hub-toolbar) { display: none !important; }
-      html.worksheet-controls-mode .hub-toolbar { position: relative !important; top: 0 !important; z-index: 20 !important; width: max-content !important; min-height: 52px !important; margin: 0 !important; padding: 0 !important; }
-      html.worksheet-controls-mode .hub-toolbar > :not(.hub-toolbar-left) { display: none !important; }
-      html.worksheet-controls-mode .hub-toolbar-feedback, html.worksheet-controls-mode .hub-toolbar-right { display: none !important; }
-      html.worksheet-controls-mode .hub-toolbar-left button { width: auto !important; height: 44px !important; padding-left: 10px !important; padding-right: 10px !important; }
-      html.worksheet-controls-mode .hub-toolbar-left button span.hidden { display: inline !important; }
-      html.worksheet-controls-mode .hub-toolbar-left button span[class*="sm:hidden"] { display: none !important; }
-    `;
-    document.head.appendChild(controlsStyle);
-    const markWorksheetToolbar = () => {
-      const customiseButton = document.querySelector('button[data-profile-customise="true"]');
-      const main = customiseButton?.closest("main");
-      if (!customiseButton || !main) return;
-      let toolbar = customiseButton;
-      while (toolbar.parentElement && toolbar.parentElement !== main) toolbar = toolbar.parentElement;
-      if (toolbar.parentElement !== main) return;
-      toolbar.classList.add("hub-toolbar");
-      const leftGroup = customiseButton.closest("div.relative.flex.items-center");
-      (leftGroup || toolbar).classList.add("hub-toolbar-left");
-    };
-    const publishControlsHeight = () => {
-      markWorksheetToolbar();
-      window.requestAnimationFrame(() => {
-        const toolbar = document.querySelector(".hub-toolbar");
-        if (!toolbar) return;
-        const panel = document.querySelector("[data-menu-panel]");
-        const bottom = Math.max(toolbar.getBoundingClientRect().bottom, panel?.getBoundingClientRect().bottom || 0);
-        window.parent.postMessage({ type: "mlh-worksheet-controls-height", height: Math.ceil(bottom + 10) }, "*");
-      });
-    };
-    window.addEventListener("load", publishControlsHeight);
-    document.addEventListener("click", () => window.setTimeout(publishControlsHeight, 40));
-    document.addEventListener("change", () => window.setTimeout(publishControlsHeight, 40));
-    new MutationObserver(publishControlsHeight).observe(document.documentElement, { childList: true, subtree: true });
-  }
-
   function decodeSharedSettings() {
     const encoded = new URLSearchParams(window.location.search).get("settings");
     if (!encoded) return { toggles: {}, fields: {}, buttons: {} };
@@ -250,7 +205,7 @@
       try {
         const config = await worksheetConfig();
         if (!config || config.version !== 1 || typeof config.activityId !== "string" || !config.settings || typeof config.settings !== "object") return;
-        const worksheetSourceConfig = { ...config, subtitle: typeof subtitle === "string" ? subtitle : (config.subtitle || ""), profileSettings: MLH.profileSettings.encoded() };
+        const worksheetSourceConfig = { ...config, subtitle: typeof subtitle === "string" ? subtitle : (config.subtitle || "") };
         const serializedWorksheetConfig = JSON.stringify(worksheetSourceConfig);
         window.sessionStorage.setItem("worksheetSourceConfig", serializedWorksheetConfig);
         if (config.activityId === "intervals") window.sessionStorage.setItem("worksheetReturnConfig", serializedWorksheetConfig);
@@ -269,25 +224,6 @@
       window.addEventListener("mlh-profile-settings-change", refresh);
       return () => window.removeEventListener("mlh-profile-settings-change", refresh);
     }, []);
-    React.useEffect(() => {
-      if (!worksheetControlsMode || typeof worksheetConfig !== "function" || sharedSettings.restoring) return undefined;
-      let cancelled = false;
-      const timer = window.setTimeout(async () => {
-        try {
-          const config = await worksheetConfig();
-          if (cancelled || !config || config.version !== 1 || typeof config.activityId !== "string" || !config.settings) return;
-          const sourceUrl = new URL(window.location.href);
-          sourceUrl.searchParams.delete("worksheetControls");
-          window.parent.postMessage({
-            type: "mlh-worksheet-source-config",
-            config: { ...config, sourceUrl: sourceUrl.toString(), subtitle: typeof subtitle === "string" ? subtitle : (config.subtitle || ""), profileSettings: MLH.profileSettings.encoded() },
-          }, "*");
-        } catch (error) {
-          console.error("The worksheet settings could not be updated.", error);
-        }
-      }, 500);
-      return () => { cancelled = true; window.clearTimeout(timer); };
-    }, [worksheetConfig, subtitle, worksheetControlsMode, setProfileRevision]);
     React.useEffect(() => {
       if (!sharedSettings.restoring) return undefined;
       let closeTimer;

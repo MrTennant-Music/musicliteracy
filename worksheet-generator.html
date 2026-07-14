@@ -37,8 +37,6 @@
     .worksheet-builder .grid.grid-cols-3.border-t > button img { display: none; }
     .worksheet-builder .grid.grid-cols-3.border-t > button:nth-child(2) { order: 3; }
     .worksheet-builder .grid.grid-cols-3.border-t > button:nth-child(3) { order: 2; }
-    .worksheet-source-controls { position: relative; z-index: 40; overflow: visible; }
-    .worksheet-source-controls iframe { display: block; width: 100%; border: 0; background: transparent; }
     .worksheet-activity-tonic .generic-grid > .generic-question.bg-stone-100:first-child > div:first-child { display: block; }
     .worksheet-activity-tonic .generic-grid > .generic-question.bg-stone-100:first-child > div:first-child > strong,
     .worksheet-activity-tonic .generic-grid > .generic-question.bg-stone-100:first-child > div:first-child > span { display: block; }
@@ -155,41 +153,6 @@ function readWorksheetEditorState(activityId) {
   } catch { return null; }
 }
 window.MLH.readWorksheetEditorState = readWorksheetEditorState;
-
-function worksheetControlsUrl(config) {
-  const fallback = `${config?.activityId || "index"}.html`;
-  const url = new URL(config?.sourceUrl || fallback, window.location.href);
-  url.searchParams.set("worksheetControls", "1");
-  if (config?.settings?.level) url.searchParams.set("level", config.settings.level);
-  if (config?.profileSettings) url.searchParams.set("settings", config.profileSettings);
-  return url.toString();
-}
-
-function WorksheetSourceControls({ config }) {
-  const frameRef = useRef(null);
-  const [height, setHeight] = useState(62);
-  const source = useMemo(() => worksheetControlsUrl(config), [config?.activityId]);
-  useEffect(() => {
-    const receive = (event) => {
-      if (event.source !== frameRef.current?.contentWindow) return;
-      if (event.data?.type === "mlh-worksheet-controls-height") {
-        setHeight(Math.max(62, Math.min(620, Number(event.data.height) || 62)));
-        return;
-      }
-      if (event.data?.type !== "mlh-worksheet-source-config") return;
-      const next = event.data.config;
-      if (!next || next.version !== 1 || next.activityId !== config.activityId || !next.settings) return;
-      if (worksheetSettingsFingerprint(next) === worksheetSettingsFingerprint(config)) return;
-      sessionStorage.setItem("worksheetSourceConfig", JSON.stringify(next));
-      sessionStorage.setItem("worksheetReturnUrl", next.sourceUrl || config.sourceUrl || "index.html");
-      window.location.reload();
-    };
-    window.addEventListener("message", receive);
-    return () => window.removeEventListener("message", receive);
-  }, [config]);
-  return <div className="worksheet-source-controls mb-4 rounded-xl border border-stone-200 bg-white px-3 py-2"><iframe ref={frameRef} src={source} title="Activity level and custom settings" style={{ height: `${height}px` }} /></div>;
-}
-window.MLH.WorksheetSourceControls = WorksheetSourceControls;
 
 function importedConfig() {
   try {
@@ -643,7 +606,6 @@ function App() {
       <div className={`${SHELL.pageContentClass} worksheet-page-content`}>
         <main className={`${SHELL.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}>
           <div className="no-print">
-            <WorksheetSourceControls config={imported} />
             <div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3">
               <h2 className="flex items-center gap-2 text-xl font-bold"><img src="intervals-icon.svg" alt="" aria-hidden="true" className="h-7 w-7 object-contain" />Intervals · {LEVELS[level]}</h2>
               <p className="mt-1 text-sm leading-relaxed text-stone-600">Generate a printable worksheet using the current activity and settings.</p>

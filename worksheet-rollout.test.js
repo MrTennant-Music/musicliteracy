@@ -91,8 +91,8 @@ assert.match(generic, /y=\{bottomBar-13\}[\s\S]*height=\{gap\*4\+26\}/, "The mel
 assert.doesNotMatch(generic, />Bar [12]<\/text>/, "Melodic Dictation worksheet staves must not display bar numbers");
 const practiceSource = fs.readFileSync("practicequestions.html", "utf8");
 const hubShellSource = fs.readFileSync("hub-shell.js", "utf8");
-assert.match(hubShellSource, /button\[data-profile-customise="true"\][\s\S]*toolbar\.classList\.add\("hub-toolbar"\)/, "Embedded worksheet controls must identify activity toolbars that do not already carry the shared toolbar class");
-assert.match(hubShellSource, /\.hub-toolbar-left button span\.hidden \{ display: inline !important; \}/, "Embedded worksheet controls must show their full activity button labels at narrow iframe widths");
+assert.doesNotMatch(hubShellSource, /worksheetControlsMode|mlh-worksheet-controls-height|mlh-worksheet-source-config/, "Activities should not expose embedded Level or Customise controls in worksheet mode");
+assert.doesNotMatch(fs.readFileSync("worksheet-generator.html", "utf8"), /WorksheetSourceControls|worksheet-source-controls/, "The worksheet generator should use its original layout without embedded activity controls");
 assert.match(practiceSource, /PRACTICE_WORKSHEET_PAPER_COUNT = 20/, "Mixed Practice Questions should prepare twenty complete paper choices");
 assert.match(practiceSource, /new Set\(\["missing", "rhythmicDictation", "tempoQuestion", "cadence", "repeatSigns", "chord", "accidentals"\]\)/, "Mixed Practice Questions should exclude listening-dependent cadence, repeat-sign, chord and accidental questions");
 assert.match(practiceSource, /enabledQuestionTypes\.worksheetWrittenOnly[\s\S]*randomItem\(\["dynamicName", "hairpinName"\]\)/, "Printed Practice Questions should use only dynamics that can be answered from the score");
@@ -434,13 +434,8 @@ assert.match(intervalWorksheet, /worksheet\.includeMarks && pageIndex === pages\
 assert.match(intervalWorksheet, /previewWorksheet\.includeMarks && !answerSheet && pageIndex === questionGroups\.length - 1/, "Intervals PDFs must hide total marks when Marks is disabled");
 assert.match(generic, /root position\|first inversion\|second inversion/, "Chord positions must be included in worksheet emphasis");
 assert.match(hubShell, /worksheetSourceConfig = \{ \.\.\.config, subtitle: typeof subtitle === "string" \? subtitle/, "Every pupil activity must carry its normal subtitle into worksheet mode");
-assert.match(hubShell, /worksheetControlsMode = new URLSearchParams\(window\.location\.search\)\.get\("worksheetControls"\) === "1"/, "Activities should expose their existing toolbar in worksheet-controls mode");
-assert.match(hubShell, /type: "mlh-worksheet-source-config"/, "Activity controls should send updated worksheet settings back to the generator");
-assert.match(hubShell, /profileSettings: MLH\.profileSettings\.encoded\(\)/, "Worksheet hand-offs should preserve the activity's exact Customise settings");
-assert.match(worksheetGeneratorSource, /function WorksheetSourceControls\(\{ config \}\)/, "The worksheet generator should host the source activity's real level and Customise controls");
-assert.match(worksheetGeneratorSource, /worksheetSettingsFingerprint\(next\) === worksheetSettingsFingerprint\(config\)/, "The worksheet generator should reload only when activity settings genuinely change");
-assert.match(worksheetGeneratorSource, /sessionStorage\.setItem\("worksheetEditorState"/, "Worksheet-only choices should be preserved while source settings regenerate the preview");
-assert.match(generic, /<window\.MLH\.WorksheetSourceControls config=\{CONFIG\}\/>/, "Generic and practice worksheets should show the shared source activity controls");
+assert.match(worksheetGeneratorSource, /sessionStorage\.setItem\("worksheetEditorState"/, "Worksheet-only choices should be preserved between worksheet visits");
+assert.doesNotMatch(generic, /WorksheetSourceControls/, "Generic and practice worksheets should use their original layout without embedded activity controls");
 assert.match(generic, /subtitle:CONFIG\.subtitle\|\|DEF\.subtitle/, "Generic worksheets must display the saved pupil-facing subtitle");
 assert.match(generic, /subtitle=\{CONFIG\.subtitle\|\|DEF\.subtitle\}/, "Generic worksheet headers must fall back to their pupil-facing subtitle for an already-open worksheet");
 assert.doesNotMatch(generic, /Generate a printable worksheet from \$\{DEF\.title\}/, "Generic worksheet mode must not replace pupil-facing subtitles with worksheet text");
