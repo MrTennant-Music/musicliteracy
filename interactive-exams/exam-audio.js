@@ -16,33 +16,27 @@
   }
 
   function createPlayer(container, config) {
-    const { clips, mode, playCounts, onPlayCountChange, locked = false } = config;
+    const { clips, locked = false, limitPlayback = false, playConsumed = false, onConsumed } = config;
     let clipIndex = 0;
     let audio = null;
     let destroyed = false;
-
-    function remaining(clip) {
-      if (mode !== "exam") return null;
-      return Math.max(0, clip.maxPlaysExam - (playCounts[clip.file] || 0));
-    }
+    let consumed = Boolean(limitPlayback && playConsumed);
 
     function render() {
       const clip = clips[clipIndex];
-      const left = remaining(clip);
       container.innerHTML = `
         <div class="exam-audio-player" data-audio-player>
-          ${clips.length > 1 ? `<div class="audio-clip-tabs" role="tablist">${clips.map((item, index) => `<button type="button" class="audio-clip-tab ${index === clipIndex ? "is-active" : ""}" data-clip="${index}">${item.label}</button>`).join("")}</div>` : `<div class="audio-title">${clip.label}</div>`}
+          ${clips.length > 1 ? `<div class="audio-clip-tabs" role="tablist">${clips.map((item, index) => `<button type="button" class="audio-clip-tab ${index === clipIndex ? "is-active" : ""}" data-clip="${index}">${item.label}</button>`).join("")}</div>` : ""}
           <audio preload="metadata" src="${clip.file}"></audio>
           <div class="audio-controls">
-            <button type="button" class="audio-icon-button" data-audio-action="play" ${locked || left === 0 ? "disabled" : ""} aria-label="Play">▶</button>
-            <button type="button" class="audio-icon-button" data-audio-action="pause" aria-label="Pause">Ⅱ</button>
-            <button type="button" class="audio-icon-button" data-audio-action="restart" ${locked ? "disabled" : ""} aria-label="Restart">↺</button>
+            <button type="button" class="audio-play-button" data-audio-action="toggle" ${locked || consumed ? "disabled" : ""} aria-label="${consumed ? "Audio already played" : "Play"}"><span class="audio-play-glyph" data-play-glyph>▶</span><span data-play-label>Play</span></button>
             <span class="audio-time" data-elapsed>0:00</span>
-            <input class="audio-progress" data-progress type="range" min="0" max="1000" value="0" ${mode === "exam" || locked ? "disabled" : ""} aria-label="Audio progress" />
+            <div class="audio-progress-wrap">
+              <input class="audio-progress" data-progress type="range" min="0" max="1000" value="0" ${locked || limitPlayback ? "disabled" : ""} aria-label="Audio progress" />
+              ${clip.markers?.length ? `<div class="audio-markers" aria-label="Audio section timestamps">${clip.markers.map(marker => `<button type="button" class="audio-marker" data-marker-time="${marker.time}" ${locked || limitPlayback ? "disabled" : ""} aria-label="Go to part ${marker.label}">${marker.label}</button>`).join("")}</div>` : ""}
+            </div>
             <span class="audio-time" data-duration>0:00</span>
-            <label class="audio-volume-label"><span>Volume</span><input data-volume type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume" /></label>
           </div>
-          ${mode === "exam" ? `<p class="plays-remaining" data-plays-remaining>${left} ${left === 1 ? "play" : "plays"} remaining</p>` : `<p class="plays-remaining">Unlimited plays · seeking available</p>`}
         </div>`;
       audio = container.querySelector("audio");
       players.add(audio);
@@ -50,48 +44,60 @@
     }
 
     function bind(clip) {
-      const play = container.querySelector('[data-audio-action="play"]');
-      const pause = container.querySelector('[data-audio-action="pause"]');
-      const restart = container.querySelector('[data-audio-action="restart"]');
+      const playToggle = container.querySelector('[data-audio-action="toggle"]');
+      const playGlyph = container.querySelector("[data-play-glyph]");
+      const playLabel = container.querySelector("[data-play-label]");
       const progress = container.querySelector("[data-progress]");
       const elapsed = container.querySelector("[data-elapsed]");
       const duration = container.querySelector("[data-duration]");
-      const volume = container.querySelector("[data-volume]");
 
-      play?.addEventListener("click", async () => {
-        const left = remaining(clip);
-        if (locked || left === 0) return;
-        const startingNewPlay = audio.paused && (audio.currentTime === 0 || audio.ended);
-        if (startingNewPlay && mode === "exam") {
-          playCounts[clip.file] = (playCounts[clip.file] || 0) + 1;
-          onPlayCountChange?.(playCounts);
-          const nowLeft = remaining(clip);
-          const label = container.querySelector("[data-plays-remaining]");
-          if (label) label.textContent = `${nowLeft} ${nowLeft === 1 ? "play" : "plays"} remaining`;
+      function updatePlayButton(isPlaying) {
+        playGlyph.textContent = isPlaying ? "Ⅱ" : "▶";
+        playLabel.textContent = isPlaying ? "Pause" : "Play";
+        playToggle.setAttribute("aria-label", isPlaying ? "Pause" : "Play");
+      }
+
+      playToggle?.addEventListener("click", async () => {
+        if (locked || consumed) return;
+        if (!audio.paused) {
+          audio.pause();
+          return;
         }
         pauseOtherPlayers(audio);
         try { await audio.play(); } catch { /* Browser playback messages are handled by native controls state. */ }
       });
-      pause?.addEventListener("click", () => audio.pause());
-      restart?.addEventListener("click", () => {
-        audio.pause();
-        audio.currentTime = 0;
-        progress.value = 0;
-        elapsed.textContent = "0:00";
+      audio.addEventListener("play", () => updatePlayButton(true));
+      audio.addEventListener("pause", () => updatePlayButton(false));
+      audio.addEventListener("ended", () => {
+        updatePlayButton(false);
+        if (!limitPlayback || consumed) return;
+        consumed = true;
+        playToggle.disabled = true;
+        playToggle.setAttribute("aria-label", "Audio already played");
+        onConsumed?.();
       });
-      audio.addEventListener("loadedmetadata", () => { duration.textContent = formatTime(audio.duration); });
+      audio.addEventListener("loadedmetadata", () => {
+        duration.textContent = formatTime(audio.duration);
+        container.querySelectorAll("[data-marker-time]").forEach(marker => {
+          const markerTime = Number(marker.dataset.markerTime);
+          marker.style.left = `${Math.min(100, Math.max(0, (markerTime / audio.duration) * 100))}%`;
+        });
+      });
       audio.addEventListener("timeupdate", () => {
         elapsed.textContent = formatTime(audio.currentTime);
         progress.value = audio.duration ? String(Math.round((audio.currentTime / audio.duration) * 1000)) : "0";
       });
-      audio.addEventListener("ended", () => {
-        if (mode === "exam" && remaining(clip) === 0) play.disabled = true;
-      });
       progress.addEventListener("input", () => {
-        if (mode !== "practice" || !audio.duration) return;
+        if (locked || limitPlayback || !audio.duration) return;
         audio.currentTime = (Number(progress.value) / 1000) * audio.duration;
+        elapsed.textContent = formatTime(audio.currentTime);
       });
-      volume.addEventListener("input", () => { audio.volume = Number(volume.value); });
+      container.querySelectorAll("[data-marker-time]").forEach(marker => marker.addEventListener("click", () => {
+        if (locked || limitPlayback || !audio.duration) return;
+        audio.currentTime = Math.min(Number(marker.dataset.markerTime), audio.duration);
+        progress.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
+        elapsed.textContent = formatTime(audio.currentTime);
+      }));
       container.querySelectorAll("[data-clip]").forEach(button => button.addEventListener("click", () => {
         audio.pause();
         players.delete(audio);

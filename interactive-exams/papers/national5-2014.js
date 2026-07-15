@@ -2,11 +2,13 @@
   "use strict";
 
   const practice = (href, label) => ({ href: `../${href}?level=N5`, label });
-  const audio = (track, maxPlaysExam = 1, label = "Question audio") => ({
+  const audio = (track, maxPlaysExam = 1, label = "Question audio", markers = []) => ({
     file: `../exampapers/n5/2014/N5 2014 Track ${track}-1.mp3`,
     label,
     maxPlaysExam,
+    markers,
   });
+  const timedAudio = (track, markers) => audio(track, 1, "Question audio", markers);
   const option = (value, label = value) => ({ value, label });
 
   const paper = {
@@ -23,7 +25,13 @@
     attribution: "Original question paper and audio content © Qualifications Scotland. Interactive adaptation created independently for non-commercial educational use. This resource is not endorsed by Qualifications Scotland.",
     questions: [
       {
-        id: "q1", number: "1", marks: 5, topic: "Musical concepts", audio: { clips: [audio(2)] },
+        id: "q1", number: "1", marks: 5, topic: "Musical concepts", audio: { clips: [timedAudio(2, [
+          { label: "(a)", time: 6.12 },
+          { label: "(b)", time: 45.12 },
+          { label: "(c)", time: 84.78 },
+          { label: "(d)", time: 124.04 },
+          { label: "(e)", time: 171.1 },
+        ])] },
         intro: "This question features different styles of music.",
         subquestions: [
           { id: "q1a", label: "(a)", marks: 1, type: "radio", prompt: "Choose the description that matches the first excerpt.", options: ["Latin American", "Rapping", "Gospel", "Swing"].map(x => option(x)), answer: "Gospel", explanation: "The excerpt is in a Gospel style." },
@@ -34,7 +42,11 @@
         ],
       },
       {
-        id: "q2", number: "2", marks: 4, topic: "Musical concepts", audio: { clips: [audio(3)] },
+        id: "q2", number: "2", marks: 4, topic: "Musical concepts", audio: { clips: [timedAudio(3, [
+          { label: "1st", time: 101.82 },
+          { label: "2nd", time: 204.96 },
+          { label: "3rd", time: 308.38 },
+        ])] },
         intro: "Listen to the instrumental excerpt and complete all four parts of the music guide.",
         subquestions: [
           { id: "q2a", label: "1", marks: 1, type: "short-text", prompt: "The tonality is…", acceptedAnswers: ["major"], answerDisplay: "major", explanation: "The excerpt is in a major key.", practiceLinks: [practice("keysig.html", "Practise keys and tonality")] },
@@ -44,7 +56,12 @@
         ],
       },
       {
-        id: "q3", number: "3", marks: 6, topic: "Music notation", audio: { clips: [audio(4)] },
+        id: "q3", number: "3", marks: 6, topic: "Music notation", audio: { clips: [timedAudio(4, [
+          { label: "Preview", time: 14.6 },
+          { label: "1st", time: 105.6 },
+          { label: "2nd", time: 205.06 },
+          { label: "3rd", time: 304.86 },
+        ])] },
         intro: "Follow the music guide, then complete the notation and written questions.",
         score: { key: "G major", bars: 8 },
         subquestions: [
@@ -57,7 +74,15 @@
         ],
       },
       {
-        id: "q4", number: "4", marks: 9, topic: "Vocal music", audio: { clips: [audio(5)] },
+        id: "q4", number: "4", marks: 9, topic: "Vocal music", audio: { clips: [timedAudio(5, [
+          { label: "(a)", time: 5.74 },
+          { label: "(b)", time: 56.68 },
+          { label: "(c)", time: 100.84 },
+          { label: "(d)", time: 162.06 },
+          { label: "(e)", time: 220.46 },
+          { label: "(f)", time: 357.02 },
+          { label: "(g)", time: 435.88 },
+        ])] },
         intro: "This question features vocal music.",
         subquestions: [
           { id: "q4a", label: "(a)", marks: 1, type: "radio", prompt: "Choose the description that matches the first excerpt.", options: ["Opera", "Syllabic", "A cappella", "Descant"].map(x => option(x)), answer: "Syllabic", explanation: "The words are set syllabically." },
@@ -70,7 +95,11 @@
         ],
       },
       {
-        id: "q5", number: "5", marks: 4, topic: "Musical concepts", audio: { clips: [audio(6)] },
+        id: "q5", number: "5", marks: 4, topic: "Musical concepts", audio: { clips: [timedAudio(6, [
+          { label: "1st", time: 83.54 },
+          { label: "2nd", time: 118.74 },
+          { label: "3rd", time: 154.34 },
+        ])] },
         intro: "Choose one answer in each section.",
         subquestions: [
           { id: "q5a", label: "Melody", marks: 1, type: "radio", prompt: "Melody", options: ["Inverted pedal", "Grace notes", "Countermelody"].map(x => option(x)), answer: "Grace notes", explanation: "Grace notes decorate the melody." },
@@ -80,7 +109,10 @@
         ],
       },
       {
-        id: "q6", number: "6", marks: 3, topic: "Musical concepts", audio: { clips: [audio(7)] },
+        id: "q6", number: "6", marks: 3, topic: "Musical concepts", audio: { clips: [timedAudio(7, [
+          { label: "1st", time: 56.1 },
+          { label: "2nd", time: 129.26 },
+        ])] },
         intro: "Complete the description using the appropriate musical concepts.",
         subquestions: [
           { id: "q6a", label: "1", marks: 1, type: "short-text", prompt: "There are ___ beats in each bar.", acceptedAnswers: ["2", "4", "2/4", "4/4", "2 4", "4 4"], answerDisplay: "2 or 4 (2/4 or 4/4)", explanation: "The marking instructions accept 2 or 4." },
@@ -89,7 +121,10 @@
         ],
       },
       {
-        id: "q7", number: "7", marks: 4, topic: "Styles and justification", audio: { clips: [audio(8)] },
+        id: "q7", number: "7", marks: 4, topic: "Styles and justification", audio: { clips: [timedAudio(8, [
+          { label: "(a)", time: 6.68 },
+          { label: "(b)", time: 102.5 },
+        ])] },
         intro: "Identify the style of each excerpt and give one supporting reason.",
         subquestions: [
           { id: "q7a1", label: "(a)(i)", marks: 1, type: "radio", prompt: "Identify the style of Excerpt A.", options: ["Ragtime", "Symphony", "Baroque", "Concerto"].map(x => option(x)), answer: "Concerto", explanation: "The excerpt is a concerto." },
@@ -99,7 +134,11 @@
         ],
       },
       {
-        id: "q8", number: "8", marks: 5, topic: "Listening analysis", audio: { clips: [audio(9)] },
+        id: "q8", number: "8", marks: 5, topic: "Listening analysis", audio: { clips: [timedAudio(9, [
+          { label: "1st", time: 47.58 },
+          { label: "2nd", time: 126.34 },
+          { label: "3rd", time: 205.64 },
+        ])] },
         intro: "Identify prominent features in at least three headings. You may write bullet points or sentences.",
         subquestions: [
           { id: "q8a", label: "Final answer", marks: 5, type: "structured-review", prompt: "Record your observations under the four headings.", headings: [

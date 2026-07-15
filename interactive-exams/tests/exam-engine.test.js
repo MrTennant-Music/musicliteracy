@@ -42,6 +42,9 @@ const attempt = createAttempt(paper, "exam", true);
 assert.equal(attempt.timer.remainingSeconds, 2700);
 assert.ok(attempt.timer.lastUpdatedAt);
 assert.equal(attempt.mode, "exam");
+assert.equal(attempt.audioLimitEnabled, false, "Audio limiting should remain optional by default.");
+assert.equal(attempt.questionsLocked, false, "Question locking should be off by default.");
+assert.equal(createAttempt(paper, "exam").timer.enabled, false, "The timer should be off by default.");
 
 const engine = new ExamEngine(paper);
 engine.start("practice");
@@ -55,5 +58,29 @@ assert.equal(saved.answers.q1a, "Gospel");
 assert.deepEqual(saved.flaggedQuestions, ["q2"]);
 assert.deepEqual(saved.audioPlayCounts, { track: 1 });
 engine.destroy();
+
+const timerEngine = new ExamEngine(paper);
+timerEngine.start("exam", true);
+timerEngine.attempt.timer.remainingSeconds = 1200;
+timerEngine.setTimerEnabled(false);
+assert.equal(timerEngine.attempt.timer.enabled, false, "The Customise timer switch should pause the countdown.");
+assert.equal(timerEngine.attempt.timer.remainingSeconds, 2700, "Turning the timer off should reset it to the paper's full duration.");
+assert.equal(timerEngine.timerId, null, "Turning the timer off should stop its interval.");
+assert.equal(storage.loadDraft(paper.id).timer.enabled, false, "The timer preference should be saved with the attempt.");
+timerEngine.setTimerEnabled(true);
+assert.equal(timerEngine.attempt.timer.enabled, true, "The Customise timer switch should restart the countdown.");
+assert.ok(timerEngine.timerId, "Turning the timer on should restart its interval.");
+timerEngine.destroy();
+
+const audioLimitEngine = new ExamEngine(paper);
+audioLimitEngine.start("exam", false);
+audioLimitEngine.setPlayCounts({ q1: 1 });
+audioLimitEngine.setAudioLimitEnabled(true);
+assert.equal(audioLimitEngine.attempt.audioLimitEnabled, true, "The Audio Limit switch should enable exam-style playback restrictions.");
+assert.deepEqual(audioLimitEngine.attempt.audioPlayCounts, {}, "Changing the Audio Limit setting should reset playback availability.");
+audioLimitEngine.setQuestionsLocked(true);
+assert.equal(audioLimitEngine.attempt.questionsLocked, true, "The Questions Locked switch should enable sequential navigation.");
+assert.equal(storage.loadDraft(paper.id).questionsLocked, true, "The question-locking preference should be saved with the attempt.");
+audioLimitEngine.destroy();
 
 console.log("Interactive exam engine tests passed.");

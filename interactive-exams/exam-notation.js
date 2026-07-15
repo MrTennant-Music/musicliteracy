@@ -42,7 +42,7 @@
       svg.append(dynamic);
     }
     if (tool === "note-entry") {
-      const cover = svgElement("rect", { x: 238, y: 35, width: 116, height: 72, rx: 5, fill: selected ? "#eff6ff" : "#f5f5f4", stroke: selected ? "#2563eb" : "#a8a29e", "stroke-dasharray": "5 4" });
+      const cover = svgElement("rect", { x: 238, y: 35, width: 116, height: 72, rx: 5, fill: "#f5f5f4", stroke: selected ? "#1c1917" : "#a8a29e", "stroke-dasharray": "5 4" });
       svg.append(cover);
       const pitches = String(selected || "").split(",").filter(Boolean);
       const pitchY = { "B": 72, "D": 86, "E": 79, "F♯": 65 };

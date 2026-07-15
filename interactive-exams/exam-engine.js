@@ -13,6 +13,9 @@
       answers: {},
       flaggedQuestions: [],
       audioPlayCounts: {},
+      audioLimitEnabled: false,
+      questionsLocked: false,
+      customiseDefaultsVersion: 1,
       startedAt: new Date().toISOString(),
       timer: { enabled: mode === "exam" && timerEnabled, remainingSeconds: paper.estimatedMinutes * 60, lastUpdatedAt: new Date().toISOString() },
       retryQuestionIds: null,
@@ -89,6 +92,32 @@
       this.attempt.audioPlayCounts = { ...counts };
       this.persist();
       this.notify("audio");
+    }
+
+    setAudioLimitEnabled(enabled) {
+      if (!this.attempt || this.attempt.status !== "active") return;
+      this.attempt.audioLimitEnabled = Boolean(enabled);
+      this.attempt.audioPlayCounts = {};
+      this.persist();
+      this.notify("audio-limit");
+    }
+
+    setTimerEnabled(enabled) {
+      if (!this.attempt || this.attempt.status !== "active") return;
+      this.stopTimer();
+      this.attempt.timer.enabled = Boolean(enabled);
+      if (!this.attempt.timer.enabled) this.attempt.timer.remainingSeconds = this.paper.estimatedMinutes * 60;
+      this.attempt.timer.lastUpdatedAt = new Date().toISOString();
+      this.persist();
+      if (this.attempt.timer.enabled) this.startTimer();
+      this.notify("timer-setting");
+    }
+
+    setQuestionsLocked(enabled) {
+      if (!this.attempt || this.attempt.status !== "active") return;
+      this.attempt.questionsLocked = Boolean(enabled);
+      this.persist();
+      this.notify("questions-locked");
     }
 
     questionState(question) {

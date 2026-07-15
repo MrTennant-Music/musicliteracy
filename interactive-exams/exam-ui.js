@@ -6,56 +6,122 @@
   let engine;
   let paper;
   let audioPlayer;
+  let allQuestionAudioPlayers = [];
+  let showingAllQuestions = false;
 
-  function formatDuration(seconds) {
-    const minutes = Math.floor(seconds / 60);
-    const remainder = seconds % 60;
-    return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
-  }
-
-  function formatDate(value) {
-    try { return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
-    catch { return value; }
+  function destroyAudioPlayers() {
+    audioPlayer?.destroy();
+    audioPlayer = null;
+    allQuestionAudioPlayers.forEach(player => player.destroy());
+    allQuestionAudioPlayers = [];
   }
 
   function showScreen(name) {
+    closePaperMenus();
     document.querySelectorAll("[data-screen]").forEach(screen => screen.hidden = screen.dataset.screen !== name);
     document.body.dataset.view = name;
     root.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function renderIntroduction() {
-    const draft = root.ExamStorage.loadDraft(paper.id);
-    const attempts = root.ExamStorage.loadAttempts(paper.id);
-    const best = root.ExamStorage.bestScore(paper.id);
-    $("[data-paper-title]").textContent = paper.title;
-    $("[data-paper-summary]").innerHTML = `
-      <div><strong>${paper.estimatedMinutes} minutes</strong><span>Estimated duration</span></div>
-      <div><strong>${paper.questions.length}</strong><span>Main questions</span></div>
-      <div><strong>${paper.totalMarks}</strong><span>Total marks</span></div>
-      <div><strong>${best === null ? "—" : `${best}/${paper.totalMarks}`}</strong><span>Previous best</span></div>`;
-    $("[data-draft-panel]").hidden = !draft;
-    if (draft) {
-      $("[data-draft-description]").textContent = `${draft.mode === "exam" ? "Exam" : "Practice"} Mode · saved ${formatDate(draft.savedAt || draft.startedAt)}`;
-    }
-    $("[data-attempt-count]").textContent = attempts.length ? `${attempts.length} completed ${attempts.length === 1 ? "attempt" : "attempts"} stored on this device.` : "No completed attempts on this device yet.";
+  function currentQuestion() { return paper.questions.find(question => question.id === engine.attempt.currentQuestion) || engine.visibleQuestions()[0]; }
+
+  function questionIsComplete(question) { return engine.questionState(question) === "answered"; }
+
+  function lastUnlockedQuestionIndex(questions) {
+    const firstIncomplete = questions.findIndex(question => !questionIsComplete(question));
+    return firstIncomplete === -1 ? questions.length - 1 : firstIncomplete;
   }
 
-  function currentQuestion() { return paper.questions.find(question => question.id === engine.attempt.currentQuestion) || engine.visibleQuestions()[0]; }
+  function canShowAllQuestions() {
+    const questions = engine.visibleQuestions();
+    return !engine.attempt.questionsLocked || lastUnlockedQuestionIndex(questions) === questions.length - 1;
+  }
+
+  function formatTimer(seconds) {
+    const safeSeconds = Math.max(0, Number(seconds) || 0);
+    return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, "0")}`;
+  }
+
+  function renderToolbarStats() {
+    const remainingSeconds = engine?.attempt?.timer?.remainingSeconds ?? paper.estimatedMinutes * 60;
+    const submitted = engine?.attempt?.status === "submitted" && engine.attempt.result;
+    const score = submitted ? engine.attempt.result.score : null;
+    const timerCard = $("[data-toolbar-duration]").closest(".exam-header-stat");
+    const timerEnabled = Boolean(engine?.attempt?.timer?.enabled);
+    const marksFill = $("[data-toolbar-marks-fill]");
+    $("[data-toolbar-duration]").textContent = formatTimer(remainingSeconds);
+    timerCard.hidden = !timerEnabled;
+    timerCard.closest(".exam-header-stats").classList.toggle("is-timer-hidden", !timerEnabled);
+    timerCard.classList.toggle("is-urgent", timerEnabled && !submitted && remainingSeconds <= 30);
+    $("[data-toolbar-marks]").textContent = submitted ? `${score}/${paper.totalMarks}` : String(paper.totalMarks);
+    if (!submitted) {
+      marksFill.style.height = "0";
+      marksFill.style.backgroundColor = "transparent";
+      return;
+    }
+    const fill = Math.max(0, Math.min(100, (score / paper.totalMarks) * 100));
+    const colour = score >= 20 ? "rgba(22, 163, 74, .38)" : score >= 15 ? "rgba(250, 204, 21, .42)" : "rgba(220, 38, 38, .38)";
+    marksFill.style.height = score === 0 ? "100%" : `${fill}%`;
+    marksFill.style.backgroundColor = score === 0 ? "rgba(220, 38, 38, .72)" : colour;
+  }
+
+  function renderCustomiseMenu() {
+    const timerToggle = $("[data-timer-toggle]");
+    if (!timerToggle) return;
+    const timerEnabled = Boolean(engine?.attempt?.timer?.enabled);
+    timerToggle.setAttribute("aria-pressed", String(timerEnabled));
+    timerToggle.disabled = engine?.attempt?.status === "submitted";
+    $("[data-timer-toggle-track]").classList.toggle("is-on", timerEnabled);
+    const audioLimitToggle = $("[data-audio-limit-toggle]");
+    const audioLimitEnabled = Boolean(engine?.attempt?.audioLimitEnabled);
+    audioLimitToggle.setAttribute("aria-pressed", String(audioLimitEnabled));
+    audioLimitToggle.disabled = engine?.attempt?.status === "submitted";
+    $("[data-audio-limit-toggle-track]").classList.toggle("is-on", audioLimitEnabled);
+    const questionsLockedToggle = $("[data-questions-locked-toggle]");
+    const questionsLocked = Boolean(engine?.attempt?.questionsLocked);
+    questionsLockedToggle.setAttribute("aria-pressed", String(questionsLocked));
+    questionsLockedToggle.disabled = engine?.attempt?.status === "submitted";
+    $("[data-questions-locked-toggle-track]").classList.toggle("is-on", questionsLocked);
+  }
 
   function renderNavigator() {
     if (!engine?.attempt) return;
     const navigator = $("[data-question-navigator]");
     const questions = engine.visibleQuestions();
-    navigator.innerHTML = questions.map(question => {
+    const lastUnlocked = lastUnlockedQuestionIndex(questions);
+    const current = currentQuestion();
+    $("[data-current-question-label]").textContent = showingAllQuestions ? "All Questions" : `Question ${current.number}`;
+    navigator.innerHTML = questions.map((question, index) => {
       const state = engine.questionState(question);
-      const flagged = engine.attempt.flaggedQuestions.includes(question.id);
-      const current = question.id === engine.attempt.currentQuestion;
-      return `<button type="button" class="navigator-item is-${state} ${flagged ? "is-flagged" : ""} ${current ? "is-current" : ""}" data-go-question="${question.id}" aria-current="${current ? "step" : "false"}">
-        <span class="navigator-number">${question.number}</span><span class="navigator-label">Question ${question.number}</span><span class="navigator-state">${state === "partial" ? "Partially answered" : state[0].toUpperCase() + state.slice(1)}</span>${flagged ? '<span class="navigator-flag" aria-label="Flagged">⚑</span>' : ""}
+      const isCurrent = question.id === engine.attempt.currentQuestion;
+      const locked = Boolean(engine.attempt.questionsLocked) && index > lastUnlocked;
+      const stateLabel = state === "partial" ? "Partially answered" : state === "answered" ? "Answered" : "Unanswered";
+      const subtitle = state === "answered" || state === "partial" ? `<span class="navigator-status">${stateLabel}</span>` : "";
+      return `<button type="button" class="navigator-item is-${state} ${isCurrent ? "is-current" : ""} ${locked ? "is-locked" : ""}" data-go-question="${question.id}" aria-label="Question ${question.number}, ${stateLabel}${locked ? ", locked" : ""}" aria-current="${isCurrent ? "step" : "false"}" ${locked ? "disabled aria-disabled=\"true\"" : ""}>
+        <span class="navigator-question-glyph" aria-hidden="true">${question.number}</span>
+        <span class="navigator-copy"><span class="navigator-label">Question ${question.number}</span>${subtitle}</span>
+        <span class="navigator-marks">${question.marks} ${question.marks === 1 ? "mark" : "marks"}</span>
       </button>`;
     }).join("");
-    navigator.querySelectorAll("[data-go-question]").forEach(button => button.addEventListener("click", () => engine.goToQuestion(button.dataset.goQuestion)));
+    navigator.querySelectorAll("[data-go-question]").forEach(button => button.addEventListener("click", () => {
+      showingAllQuestions = false;
+      closePaperMenus();
+      engine.goToQuestion(button.dataset.goQuestion);
+    }));
+    const showAllButton = $("[data-show-all-questions]");
+    showAllButton.disabled = !canShowAllQuestions();
+    showAllButton.setAttribute("aria-disabled", String(showAllButton.disabled));
+  }
+
+  function updateQuestionActions() {
+    const questions = engine.visibleQuestions();
+    const question = currentQuestion();
+    const index = questions.findIndex(item => item.id === question.id);
+    const complete = questionIsComplete(question);
+    const next = $("[data-next-question]");
+    const submit = $("[data-submit-paper]");
+    if (index < questions.length - 1) next.disabled = Boolean(engine.attempt.questionsLocked) && !complete;
+    if (index === questions.length - 1) submit.disabled = !complete;
   }
 
   function optionMarkup(subquestion, value, checkbox = false) {
@@ -75,6 +141,14 @@
     }
     if (subquestion.type === "notation-choice") return `<div data-notation-container></div>`;
     return "";
+  }
+
+  function subquestionsMarkup(question) {
+    return question.subquestions.map(subquestion => `<section class="subquestion" data-subquestion="${subquestion.id}">
+      <div class="subquestion-heading"><span>${escapeHtml(subquestion.label)}</span><span>${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}</span></div>
+      <p class="subquestion-prompt">${escapeHtml(subquestion.prompt)}</p>
+      ${inputMarkup(subquestion, engine.attempt.answers[subquestion.id])}
+    </section>`).join("");
   }
 
   function bindSubquestion(card, subquestion) {
@@ -105,49 +179,72 @@
   }
 
   function renderQuestion() {
-    audioPlayer?.destroy();
-    const question = currentQuestion();
+    destroyAudioPlayers();
+    showingAllQuestions = false;
+    $("[data-single-question-area]").hidden = false;
+    $("[data-all-questions-area]").hidden = true;
+    $("[data-all-questions-area]").innerHTML = "";
+    let question = currentQuestion();
     if (!question) return;
     const visible = engine.visibleQuestions();
-    const index = visible.findIndex(item => item.id === question.id);
-    const flagged = engine.attempt.flaggedQuestions.includes(question.id);
+    let index = visible.findIndex(item => item.id === question.id);
+    const lastUnlocked = lastUnlockedQuestionIndex(visible);
+    if (engine.attempt.questionsLocked && index > lastUnlocked) {
+      engine.goToQuestion(visible[lastUnlocked].id);
+      return;
+    }
     engine.attempt.currentQuestion = question.id;
-    $("[data-mode-label]").textContent = engine.attempt.mode === "exam" ? "Exam Mode" : "Practice Mode";
     $("[data-question-heading]").textContent = `Question ${question.number}`;
     $("[data-question-marks]").textContent = `${question.marks} ${question.marks === 1 ? "mark" : "marks"}`;
     $("[data-question-intro]").textContent = question.intro || "";
-    const flagButton = $("[data-flag-question]");
-    flagButton.classList.toggle("is-active", flagged);
-    flagButton.setAttribute("aria-pressed", String(flagged));
-    flagButton.textContent = flagged ? "⚑ Flagged for review" : "⚐ Flag for review";
     const parts = $("[data-subquestions]");
-    parts.innerHTML = question.subquestions.map(subquestion => `<section class="subquestion" data-subquestion="${subquestion.id}">
-      <div class="subquestion-heading"><span>${escapeHtml(subquestion.label)}</span><span>${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}</span></div>
-      <p class="subquestion-prompt">${escapeHtml(subquestion.prompt)}</p>
-      ${inputMarkup(subquestion, engine.attempt.answers[subquestion.id])}
-    </section>`).join("");
+    parts.innerHTML = subquestionsMarkup(question);
     question.subquestions.forEach(subquestion => bindSubquestion(parts.querySelector(`[data-subquestion="${subquestion.id}"]`), subquestion));
     audioPlayer = root.ExamAudio.createPlayer($("[data-audio-container]"), {
       clips: question.audio.clips,
       mode: engine.attempt.mode,
-      playCounts: engine.attempt.audioPlayCounts,
-      onPlayCountChange: counts => engine.setPlayCounts(counts),
+      limitPlayback: Boolean(engine.attempt.audioLimitEnabled),
+      playConsumed: Boolean(engine.attempt.audioLimitEnabled && engine.attempt.audioPlayCounts?.[question.id]),
+      onConsumed: () => engine.setPlayCounts({ ...engine.attempt.audioPlayCounts, [question.id]: 1 }),
     });
     const previous = $("[data-previous-question]");
     const next = $("[data-next-question]");
-    previous.disabled = index === 0;
+    previous.hidden = index === 0;
+    if (index > 0) $("[data-previous-label]").textContent = `Question ${visible[index - 1].number}`;
     next.hidden = index === visible.length - 1;
+    if (index < visible.length - 1) $("[data-next-label]").textContent = `Question ${visible[index + 1].number}`;
     $("[data-submit-paper]").hidden = index !== visible.length - 1;
     renderNavigator();
-    renderTimer();
+    updateQuestionActions();
   }
 
-  function renderTimer() {
-    const timer = $("[data-timer]");
-    if (!engine?.attempt?.timer.enabled) { timer.hidden = true; return; }
-    timer.hidden = false;
-    timer.textContent = `Time remaining ${root.ExamAudio.formatTime(engine.attempt.timer.remainingSeconds)}`;
-    timer.classList.toggle("is-low", engine.attempt.timer.remainingSeconds <= 300);
+  function renderAllQuestions() {
+    if (!canShowAllQuestions()) return;
+    destroyAudioPlayers();
+    showingAllQuestions = true;
+    const singleArea = $("[data-single-question-area]");
+    const allArea = $("[data-all-questions-area]");
+    singleArea.hidden = true;
+    allArea.hidden = false;
+    allArea.innerHTML = engine.visibleQuestions().map(question => `<article class="question-card all-question-card" data-all-question="${question.id}">
+      <div data-all-question-audio></div>
+      <header class="question-header"><div><span class="eyebrow">${question.marks} ${question.marks === 1 ? "mark" : "marks"}</span><h2>Question ${question.number}</h2></div></header>
+      <p class="question-intro">${escapeHtml(question.intro || "")}</p>
+      <div class="subquestions">${subquestionsMarkup(question)}</div>
+    </article>`).join("");
+    engine.visibleQuestions().forEach(question => {
+      const card = allArea.querySelector(`[data-all-question="${question.id}"]`);
+      question.subquestions.forEach(subquestion => bindSubquestion(card.querySelector(`[data-subquestion="${subquestion.id}"]`), subquestion));
+      allQuestionAudioPlayers.push(root.ExamAudio.createPlayer(card.querySelector("[data-all-question-audio]"), {
+        clips: question.audio.clips,
+        mode: engine.attempt.mode,
+        limitPlayback: Boolean(engine.attempt.audioLimitEnabled),
+        playConsumed: Boolean(engine.attempt.audioLimitEnabled && engine.attempt.audioPlayCounts?.[question.id]),
+        onConsumed: () => engine.setPlayCounts({ ...engine.attempt.audioPlayCounts, [question.id]: 1 }),
+      }));
+    });
+    renderNavigator();
+    closePaperMenus();
   }
 
   function answerDisplay(value) {
@@ -164,6 +261,7 @@
     root.ExamAudio.pauseAll();
     const result = engine.attempt.result;
     const best = root.ExamStorage.bestScore(paper.id);
+    renderToolbarStats();
     $("[data-results-summary]").innerHTML = `
       <div class="result-score"><strong>${result.score}<span>/${paper.totalMarks}</span></strong><p>${result.percentage}% provisional score</p></div>
       <div class="result-stat"><strong>${result.automaticallyMarkableMarks}</strong><span>Automatically markable marks</span></div>
@@ -181,53 +279,88 @@
           <p><b>Accepted answer:</b> ${escapeHtml(subquestion.answerDisplay || subquestion.answer || (subquestion.answers || []).join(", "))}</p>
           ${matches.length ? `<p><b>Suggested marking-point matches:</b> ${escapeHtml(matches.join("; "))}</p>` : ""}
           <p>${escapeHtml(subquestion.explanation || "")}</p>
-          ${subquestion.practiceLinks?.length ? `<div class="practice-links">${subquestion.practiceLinks.map(link => `<a href="${link.href}">${escapeHtml(link.label)}</a>`).join("")}</div>` : ""}
+          ${subquestion.practiceLinks?.length ? `<div class="related-links">${subquestion.practiceLinks.map(link => `<a href="${link.href}">${escapeHtml(link.label)}</a>`).join("")}</div>` : ""}
         </article>`;
       }).join("")}</div>
     </details>`).join("");
     $("[data-topic-breakdown]").innerHTML = result.topicBreakdown.map(topic => `<div><span>${escapeHtml(topic.topic)}</span><strong>${topic.marks}/${topic.maxMarks}${topic.reviewRequired ? " + review" : ""}</strong></div>`).join("");
-    $("[data-retry-incorrect]").hidden = engine.attempt.mode !== "practice" || !result.questionBreakdown.some(question => question.parts.some(part => part.status === "incorrect" || part.status === "unanswered"));
     showScreen("results");
   }
 
   function onEngineChange(attempt, reason) {
     if (reason === "submit") return renderResults();
-    if (reason === "timer") return renderTimer();
-    if (reason === "answer" || reason === "audio") {
-      renderNavigator();
-      const saved = $("[data-save-status]");
-      saved.textContent = "Saved";
-      root.setTimeout(() => { saved.textContent = "Autosave on"; }, 900);
+    if (reason === "timer") {
+      renderToolbarStats();
       return;
     }
+    if (reason === "timer-setting") {
+      renderToolbarStats();
+      renderCustomiseMenu();
+      return;
+    }
+    if (reason === "audio-limit") {
+      renderCustomiseMenu();
+      if (showingAllQuestions) renderAllQuestions();
+      else renderQuestion();
+      return;
+    }
+    if (reason === "questions-locked") {
+      renderCustomiseMenu();
+      if (showingAllQuestions && canShowAllQuestions()) renderAllQuestions();
+      else renderQuestion();
+      return;
+    }
+    if (reason === "answer") {
+      renderNavigator();
+      updateQuestionActions();
+      return;
+    }
+    if (reason === "audio") {
+      renderNavigator();
+      return;
+    }
+    renderToolbarStats();
     showScreen("exam");
     renderQuestion();
   }
 
-  function start(mode) {
-    const timerEnabled = mode === "exam" && $("[data-timer-option]").checked;
-    engine.start(mode, timerEnabled);
+  function startExam() { engine.start("exam", false); }
+
+  function openSubmitModal() {
+    if (!questionIsComplete(currentQuestion())) return;
+    $("[data-submit-overlay]").classList.add("is-open");
+  }
+  function closeSubmitModal() { $("[data-submit-overlay]").classList.remove("is-open"); }
+  function openResetModal() { closePaperMenus(); $("[data-reset-overlay]").classList.add("is-open"); }
+  function closeResetModal() { $("[data-reset-overlay]").classList.remove("is-open"); }
+
+  function closePaperMenus() {
+    document.querySelectorAll("[data-exam-menu]").forEach(menu => { menu.hidden = true; });
+    document.querySelectorAll("[data-exam-menu-trigger]").forEach(trigger => trigger.setAttribute("aria-expanded", "false"));
   }
 
-  function openSubmitModal() { $("[data-submit-overlay]").classList.add("is-open"); }
-  function closeSubmitModal() { $("[data-submit-overlay]").classList.remove("is-open"); }
+  function bindPaperMenus() {
+    document.querySelectorAll("[data-exam-menu-trigger]").forEach(trigger => trigger.addEventListener("click", event => {
+      event.stopPropagation();
+      const menu = document.querySelector(`[data-exam-menu="${trigger.dataset.examMenuTrigger}"]`);
+      const shouldOpen = menu.hidden;
+      closePaperMenus();
+      menu.hidden = !shouldOpen;
+      trigger.setAttribute("aria-expanded", String(shouldOpen));
+    }));
+    document.querySelectorAll("[data-exam-menu] button[data-selection-label]:not(:disabled)").forEach(option => option.addEventListener("click", () => {
+      const menu = option.closest("[data-exam-menu]");
+      const label = document.querySelector(`[data-exam-menu-trigger="${menu.dataset.examMenu}"] [data-exam-selection-label]`);
+      if (label && option.dataset.selectionLabel) label.textContent = option.dataset.selectionLabel;
+      closePaperMenus();
+    }));
+    document.addEventListener("click", event => {
+      if (!event.target.closest("[data-exam-menu-anchor]")) closePaperMenus();
+    });
+  }
 
   function bindEvents() {
-    $("[data-start-practice]").addEventListener("click", () => start("practice"));
-    $("[data-start-exam]").addEventListener("click", () => start("exam"));
-    $("[data-continue-draft]").addEventListener("click", () => {
-      const draft = root.ExamStorage.loadDraft(paper.id);
-      if (draft) engine.resume(draft);
-    });
-    $("[data-delete-draft]").addEventListener("click", () => {
-      root.ExamStorage.deleteDraft(paper.id);
-      renderIntroduction();
-    });
-    $("[data-new-attempt]").addEventListener("click", () => {
-      root.ExamStorage.deleteDraft(paper.id);
-      renderIntroduction();
-    });
-    $("[data-flag-question]").addEventListener("click", () => engine.toggleFlag(currentQuestion().id));
+    bindPaperMenus();
     $("[data-previous-question]").addEventListener("click", () => {
       const questions = engine.visibleQuestions();
       const index = questions.findIndex(item => item.id === currentQuestion().id);
@@ -236,16 +369,37 @@
     $("[data-next-question]").addEventListener("click", () => {
       const questions = engine.visibleQuestions();
       const index = questions.findIndex(item => item.id === currentQuestion().id);
-      if (index < questions.length - 1) engine.goToQuestion(questions[index + 1].id);
+      if (index < questions.length - 1 && (!engine.attempt.questionsLocked || questionIsComplete(questions[index]))) engine.goToQuestion(questions[index + 1].id);
     });
     $("[data-submit-paper]").addEventListener("click", openSubmitModal);
     $("[data-cancel-submit]").addEventListener("click", closeSubmitModal);
     $("[data-confirm-submit]").addEventListener("click", () => { closeSubmitModal(); engine.submit(); });
     $("[data-submit-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeSubmitModal(); });
-    $("[data-retry-incorrect]").addEventListener("click", () => engine.retryIncorrect());
-    $("[data-results-new-attempt]").addEventListener("click", () => { engine.attempt = null; renderIntroduction(); showScreen("intro"); });
+    $("[data-timer-toggle]").addEventListener("click", () => engine.setTimerEnabled(!engine.attempt.timer.enabled));
+    $("[data-audio-limit-toggle]").addEventListener("click", () => engine.setAudioLimitEnabled(!engine.attempt.audioLimitEnabled));
+    $("[data-questions-locked-toggle]").addEventListener("click", () => engine.setQuestionsLocked(!engine.attempt.questionsLocked));
+    $("[data-show-all-questions]").addEventListener("click", () => {
+      if (canShowAllQuestions()) renderAllQuestions();
+    });
+    $("[data-reset-paper]").addEventListener("click", openResetModal);
+    $("[data-cancel-reset]").addEventListener("click", closeResetModal);
+    $("[data-confirm-reset]").addEventListener("click", () => {
+      closeResetModal();
+      root.ExamStorage.deleteDraft(paper.id);
+      startExam();
+    });
+    $("[data-reset-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeResetModal(); });
+    $("[data-results-new-attempt]").addEventListener("click", () => {
+      root.ExamStorage.deleteDraft(paper.id);
+      startExam();
+    });
     $("[data-continue-review]").addEventListener("click", () => $("[data-question-breakdown]").scrollIntoView({ behavior: "smooth" }));
-    document.addEventListener("keydown", event => { if (event.key === "Escape") closeSubmitModal(); });
+    document.addEventListener("keydown", event => {
+      if (event.key !== "Escape") return;
+      closeSubmitModal();
+      closeResetModal();
+      closePaperMenus();
+    });
   }
 
   function initialise() {
@@ -256,11 +410,30 @@
       return;
     }
     engine = new root.ExamEngineCore.ExamEngine(paper, onEngineChange);
-    renderIntroduction();
+    renderToolbarStats();
     bindEvents();
-    const resumeRequested = new URLSearchParams(root.location.search).get("resume") === "1";
     const draft = root.ExamStorage.loadDraft(paper.id);
-    if (resumeRequested && draft) engine.resume(draft); else showScreen("intro");
+    if (draft?.mode === "exam") {
+      const usesCurrentDefaults = draft.customiseDefaultsVersion === 1;
+      const timerWasEnabled = usesCurrentDefaults && draft.timer?.enabled === true;
+      draft.timer = {
+        ...draft.timer,
+        enabled: timerWasEnabled,
+        remainingSeconds: timerWasEnabled && Number.isFinite(draft.timer?.remainingSeconds) ? draft.timer.remainingSeconds : paper.estimatedMinutes * 60,
+        lastUpdatedAt: timerWasEnabled ? draft.timer.lastUpdatedAt : new Date().toISOString(),
+      };
+      draft.audioLimitEnabled = usesCurrentDefaults && Boolean(draft.audioLimitEnabled);
+      draft.questionsLocked = Boolean(draft.questionsLocked);
+      draft.customiseDefaultsVersion = 1;
+      draft.audioPlayCounts = { ...(draft.audioPlayCounts || {}) };
+      delete draft.audioPlayCounts[draft.currentQuestion];
+      root.ExamStorage.saveDraft(paper.id, draft);
+      engine.resume(draft);
+    } else {
+      if (draft) root.ExamStorage.deleteDraft(paper.id);
+      startExam();
+    }
+    renderCustomiseMenu();
     root.addEventListener("beforeunload", () => { root.ExamAudio.pauseAll(); engine.destroy(); });
   }
 
