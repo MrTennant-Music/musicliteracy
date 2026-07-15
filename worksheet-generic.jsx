@@ -1163,7 +1163,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
       const svgNamespace="http://www.w3.org/2000/svg";
       wrapper.querySelectorAll("text.music-symbol").forEach(textElement=>{
         const symbolKey=glyphToKey.get(textElement.textContent?.trim()), outline=outlineSet.symbols[symbolKey], x=Number(textElement.getAttribute("x")), y=Number(textElement.getAttribute("y")), fontSize=Number(textElement.getAttribute("font-size"));
-        if(!outline||!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(fontSize))return;
+        if(symbolKey==="tie"||!outline||!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(fontSize))return;
         const anchor=textElement.getAttribute("text-anchor")||"start", anchorOffset=anchor==="middle"?outline.advance/2:anchor==="end"?outline.advance:0, scale=fontSize/outlineSet.unitsPerEm;
         const outerGroup=document.createElementNS(svgNamespace,"g"), outlineGroup=document.createElementNS(svgNamespace,"g"), path=document.createElementNS(svgNamespace,"path");
         ["transform","opacity","fill","stroke","stroke-width","stroke-linejoin","stroke-linecap","pointer-events"].forEach(attribute=>{if(textElement.hasAttribute(attribute))outerGroup.setAttribute(attribute,textElement.getAttribute(attribute));});
@@ -1195,8 +1195,8 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
         <div className="flex items-center gap-3"><img src={DEF.icon} className="h-10 w-10 object-contain" alt=""/><div className="min-w-0"><h1 className="worksheet-header-title text-lg font-bold leading-tight">{answers ? `${data.title} - Answers` : data.title}</h1>{!answers&&<p className="worksheet-header-instructions text-xs text-stone-700">{data.instructions}</p>}</div></div>
         {showPupilFields?<div className="mt-2 flex gap-5 text-xs">{data.name&&<span className="flex min-w-0 flex-[2] items-end gap-2"><span>Name:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.classField&&<span className="flex min-w-0 flex-1 items-end gap-2"><span>Class:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}{data.date&&<span className="flex min-w-0 flex-1 items-end gap-2"><span>Date:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black"/></span>}</div>:null}
       </div>:null}
-      {showScore?<div className="min-h-0 shrink"><PracticePaperScore paper={paper} answers={answers}/></div>:null}
-      {showQuestions?<div className={`practice-paper-questions mt-1 shrink-0 ${data.gridlines?"with-gridlines":""}`}>
+      {showScore?<div className={`practice-paper-score-frame min-h-0 shrink ${data.gridlines?"with-gridlines":""}`}><PracticePaperScore paper={paper} answers={answers}/></div>:null}
+      {showQuestions?<div className={`practice-paper-questions ${data.gridlines&&showScore?"mt-0":"mt-1"} shrink-0 ${data.gridlines?"with-gridlines":""}`}>
         {paper.parts.map((part,partIndex) => <div key={part.id} className="grid grid-cols-[22px_28px_1fr_auto] items-baseline gap-x-1 px-1 py-1 text-xs leading-tight">
           <strong>{data.paperCount>1&&partIndex===0?`${paperIndex+1}.`:""}</strong>
           <strong>{data.numbers ? `(${part.label})` : ""}</strong>
@@ -1205,7 +1205,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
         </div>)}
       </div>:null}
       {showQuestions&&!answers&&data.marks?<div className="practice-paper-total-marks mt-1 flex shrink-0 justify-end gap-2 text-xs font-bold"><span className="practice-paper-total-marks-label h-6 leading-6">Total marks</span><span className="total-marks-box practice-paper-total-marks-box relative h-6 min-w-16 border border-black"><span className="total-marks-value practice-paper-total-marks-value absolute left-2 right-2 text-right leading-none">/ {markTotal}</span></span></div>:null}
-      {showQr?<div className="mt-1 flex shrink-0 justify-start"><WorksheetQr bordered compact/></div>:null}
+      {showQr?<div className={`mt-1 flex shrink-0 justify-center ${level==="AH"?"translate-y-[25px]":""}`}><WorksheetQr compact/></div>:null}
       <footer className="mt-auto flex shrink-0 justify-between pt-1 text-[9px] text-stone-400"><span>The Music Literacy Hub</span><span>Page {pageNumber} of {totalPages}</span></footer>
     </article>;
   }
@@ -1249,7 +1249,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     const initialCount = Math.max(1,Math.min(Number(editorState?.count)||1,paperBank.length||1));
     const [count,setCount]=useGenericState(initialCount), [bankOffset,setBankOffset]=useGenericState(0);
     const [title,setTitle]=useGenericState(editorState?.fingerprint===configFingerprint?editorState.title||defaultTitle:defaultTitle), [instructions,setInstructions]=useGenericState(editorState?.instructions||"Answer each question using the music shown.");
-    const [header,setHeader]=useGenericState(editorState?.header??true), [name,setName]=useGenericState(editorState?.name??true), [classField,setClassField]=useGenericState(editorState?.classField??false), [date,setDate]=useGenericState(editorState?.date??false), [gridlines,setGridlines]=useGenericState(editorState?.gridlines??true), [answersOn,setAnswersOn]=useGenericState(editorState?.answers??false), [qr,setQr]=useGenericState(editorState?.qr??true), [preparingMode,setPreparingMode]=useGenericState(null);
+    const [header,setHeader]=useGenericState(editorState?.header??true), [name,setName]=useGenericState(editorState?.name??true), [classField,setClassField]=useGenericState(editorState?.classField??false), [date,setDate]=useGenericState(editorState?.date??false), [gridlines,setGridlines]=useGenericState(false), [answersOn,setAnswersOn]=useGenericState(editorState?.answers??false), [qr,setQr]=useGenericState(false), [preparingMode,setPreparingMode]=useGenericState(null);
     const [previewVisible,setPreviewVisible]=useGenericState(true), refreshTimer=useGenericRef(null);
     const papers=Array.from({length:Math.min(count,paperBank.length)},(_,index)=>paperBank[(bankOffset+index)%paperBank.length]);
     const splitAdvancedHigherPages=level==="AH", pagesPerPaper=splitAdvancedHigherPages?2:1;
@@ -1258,7 +1258,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     const refresh=()=>{if(refreshTimer.current)clearTimeout(refreshTimer.current);setPreviewVisible(false);refreshTimer.current=setTimeout(()=>{setBankOffset(current=>(current+Math.max(1,count))%Math.max(1,paperBank.length));setPreviewVisible(true);refreshTimer.current=null;},260);};
     useGenericEffect(()=>()=>{if(refreshTimer.current)clearTimeout(refreshTimer.current);},[]);
     useGenericEffect(()=>{sessionStorage.setItem("worksheetEditorState",JSON.stringify({activityId:CONFIG.activityId,fingerprint:configFingerprint,title,instructions,header,name,classField,date,count,gridlines,answers:answersOn,qr}));},[configFingerprint,title,instructions,header,name,classField,date,count,gridlines,answersOn,qr]);
-    const check=(label,value,setter,disabled=false)=>{const option=<label className={`flex items-center gap-2 whitespace-nowrap text-sm ${disabled?"text-stone-400 opacity-60":""}`}><input className="worksheet-checkbox" type="checkbox" checked={value} onChange={event=>setter(event.target.checked)} disabled={disabled}/>{label}</label>;if(label==="Include Answers")return null;if(label==="Gridlines")return <div className="grid grid-cols-2 items-center gap-x-6 gap-y-3">{option}<span/><label className="flex items-center gap-2 whitespace-nowrap text-sm"><input className="worksheet-checkbox" type="checkbox" checked={answersOn} onChange={event=>setAnswersOn(event.target.checked)}/>Include Answers</label><label className="flex items-center gap-2 whitespace-nowrap text-sm"><input className="worksheet-checkbox" type="checkbox" checked={qr} onChange={event=>setQr(event.target.checked)}/>QR Code</label></div>;return option;};
+    const check=(label,value,setter,disabled=false)=>{const option=<label className={`flex items-center gap-2 whitespace-nowrap text-sm ${disabled?"text-stone-400 opacity-60":""}`}><input className="worksheet-checkbox" type="checkbox" checked={value} onChange={event=>setter(event.target.checked)} disabled={disabled}/>{label}</label>;if(label==="Include Answers")return null;if(label==="Gridlines")return <div className="grid grid-cols-2 items-center gap-x-6 gap-y-3"><label className="flex items-center gap-2 whitespace-nowrap text-sm"><input className="worksheet-checkbox" type="checkbox" checked={answersOn} onChange={event=>setAnswersOn(event.target.checked)}/>Include Answers</label><label className="flex items-center gap-2 whitespace-nowrap text-sm"><input className="worksheet-checkbox" type="checkbox" checked={qr} onChange={event=>setQr(event.target.checked)}/>QR Code</label></div>;return option;};
     const changeHeader=(enabled)=>{setHeader(enabled);if(!enabled){setName(false);setClassField(false);setDate(false);}};
     async function outputPdf(mode){
       if(preparingMode)return;

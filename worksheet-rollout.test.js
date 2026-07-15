@@ -111,6 +111,7 @@ assert.doesNotMatch(practiceSource, /function practiceWorksheetOutlinedMarkup/, 
 assert.match(practiceSource, /markup: wrapper\.outerHTML/, "Practice worksheet configuration should store lightweight score markup");
 assert.match(generic, /function practicePaperOutlinedMarkup/, "The worksheet page should convert stored Bravura symbols into vector outlines");
 assert.match(generic, /outlinedScoreMarkup=useGenericMemo\(\(\)=>practicePaperOutlinedMarkup\(scoreMarkup\)/, "Practice score outlines should be prepared and cached inside the worksheet page");
+assert.match(generic, /if\(symbolKey==="tie"\|\|!outline/, "Stretched Advanced Higher ties must remain font glyphs so downloaded worksheets do not turn them into black blocks");
 assert.match(hubShellSource, /config\.activityId === "intervals"[\s\S]*removeItem\("worksheetReturnConfig"\)/, "Large non-Intervals worksheets should not save an unnecessary duplicate configuration");
 assert.match(hubShellSource, /exerciseUrlObject\.searchParams\.set\("level", config\.settings\.level\)/, "Worksheet QR links must retain the exact selected activity level");
 assert.match(hubShellSource, /worksheetSourceConfig = \{ \.\.\.config, exerciseUrl: exerciseUrlObject\.toString\(\), subtitle:/, "Worksheets must retain the exact public activity profile URL for their QR code");
@@ -122,9 +123,11 @@ assert.match(practiceSource, /worksheetSystemGapIncrease=\{question\.level === "
 assert.match(practiceSource, /worksheetTranspositionGapReduction=\{10\}/, "Practice worksheets should reduce the extra space below a transposition stave by ten pixels");
 assert.match(practiceSource, /95 - worksheetTranspositionGapReduction/, "Transposition spacing should apply the worksheet-only reduction without changing the activity layout");
 assert.match(practiceSource, /worksheetAhChordGapExtension=\{40\}/, "Advanced Higher worksheet chord tasks should request enough room beneath their enlarged answer boxes");
-assert.match(practiceSource, /worksheetAhChordGuideRowHeight=\{60\}/, "Worksheet bass-note guide boxes should match the displayed height of the chord-answer rows");
-assert.match(practiceSource, /300 \+ worksheetAhChordGapExtension/, "The stave following an Advanced Higher chord task should move down with its extended answer box");
-assert.match(practiceSource, /STAFF\.gap \* 16 \+ worksheetAhChordGapExtension - ahChordBoxY/, "The Advanced Higher chord box should extend below both smaller answer boxes");
+assert.match(practiceSource, /worksheetAhChordBoxHeightReduction=\{question\.level === "AH" \? 15 : 0\}/, "Advanced Higher worksheet surrounding chord boxes should be fifteen pixels shorter");
+assert.match(practiceSource, /worksheetAhChordFollowingStaveOffset=\{question\.level === "AH" \? 10 : 0\}/, "The stave following Advanced Higher chord boxes should move down ten pixels");
+assert.match(practiceSource, /worksheetAhChordGuideRowHeight=\{question\.level === "AH" \? 45 : 60\}/, "Advanced Higher user answer rows should be fifteen pixels shorter");
+assert.match(practiceSource, /300 \+ worksheetAhChordGapExtension \+ worksheetAhChordFollowingStaveOffset/, "The stave following an Advanced Higher chord task should move independently from its shorter boxes");
+assert.match(practiceSource, /STAFF\.gap \* 16 \+ worksheetAhChordGapExtension - worksheetAhChordBoxHeightReduction - ahChordBoxY/, "The Advanced Higher surrounding chord boxes should apply their independent height reduction");
 assert.match(practiceSource, /const rowLabelGap = 57/, "Advanced Higher Chord and Position labels should sit a further twenty-five pixels left");
 assert.match(practiceSource, /EXTRA_SYSTEM_SPACING - worksheetSystemGapReduction \+ worksheetSystemGapIncrease/, "Practice worksheet stave positions should apply the compact gap and the Advanced Higher increase");
 assert.match(fs.readFileSync("worksheet-generic.jsx", "utf8"), /document\.fonts\?\.load\?\.\("32px Bravura"\)/, "Practice worksheet downloads should wait for the Bravura font fallback before capture");
@@ -170,7 +173,9 @@ assert.match(worksheetGeneratorSource, /if \(hasHeader\) \{[\s\S]*?page\.drawIma
 assert.match(generic, /check\("Header",header,changeHeader\)\}\{check\("Name",name,setName,!header\)/, "Generic and Practice worksheets must place Header before Name and disable pupil fields when it is off");
 assert.match(generic, /setHeader\(enabled\);if\(!enabled\)\{setName\(false\);setClassField\(false\);setDate\(false\);\}/, "Generic and Practice worksheets must clear pupil fields when Header is turned off");
 assert.match(generic, /data\.header\?<div className="worksheet-header-card/, "Generic and Practice worksheet pages must remove the complete header when disabled");
-assert.match(generic, /practice-paper-questions mt-1 shrink-0 \$\{data\.gridlines\?"with-gridlines":""\}/, "Practice Questions must apply its Gridlines option to the question rows");
+assert.match(generic, /\[gridlines,setGridlines\]=useGenericState\(false\)[\s\S]*?\[qr,setQr\]=useGenericState\(false\)/, "Practice Questions must permanently remove gridlines and default its QR code off");
+assert.match(generic, /if\(label==="Gridlines"\)return <div className="grid grid-cols-2 items-center gap-x-6 gap-y-3"><label[\s\S]*?>Include Answers<\/label><label[\s\S]*?>QR Code<\/label><\/div>/, "Practice Questions must remove the Gridlines option while retaining its answer and QR controls");
+assert.match(generic, /showQr\?<div className=\{`mt-1 flex shrink-0 justify-center \$\{level==="AH"\?"translate-y-\[25px\]":""\}`\}><WorksheetQr compact\/>/, "Advanced Higher Practice Questions must move its centred borderless QR panel down 25px");
 assert.match(worksheetGeneratorSource, /\.generic-grid\.with-gridlines \{ border-left: 1px solid #000; border-top: 1px solid #000; \}/, "Generic worksheet gridlines should be solid black");
 assert.match(worksheetGeneratorSource, /borderColor: black, borderWidth: 0\.5, borderOpacity: 1/, "Intervals PDF gridlines should be fully opaque black");
 assert.match(worksheetGeneratorSource, /\.practice-paper-score-sixteen \{ transform: translateY\(-3px\); \}/, "Sixteen-bar practice scores should sit 3px closer to the header after being moved down by 7px");
