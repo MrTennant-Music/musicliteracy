@@ -493,6 +493,59 @@ a { color: inherit; }
   color: #64748b;
   cursor: not-allowed;
 }
+.level-choice.is-selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+.year-picker {
+  position: relative;
+  grid-column: 1 / -1;
+  margin-left: -16px;
+  width: calc(100% + 64px);
+  padding: 0 16px;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transform: translateY(-6px);
+  transition: max-height .24s ease, opacity .18s ease, padding-top .24s ease, transform .24s ease;
+  pointer-events: none;
+}
+.card.year-open .year-picker {
+  max-height: 64px;
+  opacity: 1;
+  margin-top: 10px;
+  padding-top: 10px;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.card.year-open .year-picker::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 16px;
+  left: 16px;
+  border-top: 1px solid var(--border);
+}
+.year-choice {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+}
+.year-choice:hover,
+.year-choice:focus-visible {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+  outline: none;
+}
 
 .footer {
   width: min(1180px, calc(100% - 36px));
@@ -887,13 +940,14 @@ function renderApps() {
         ${group.apps.map(app => `
           <div class="card" data-title="${app.title}" data-keywords="${app.keywords}" data-href="${app.href}" data-disabled-levels="${app.disabled.join(',')}">
             <button class="card-main" type="button" aria-expanded="false">
-              <div class="card-icon">${appIcons[app.title] ? `<img src="${iconBase}${appIcons[app.title]}" alt="" loading="lazy" />` : ""}</div>
+              <div class="card-icon">${appIcons[app.title] ? `<img src="${app.title === "Interactive Exam Papers" ? appIcons[app.title] : iconBase + appIcons[app.title]}" alt="" loading="lazy" />` : ""}</div>
               <div><h3>${app.title}${app.audio ? ` <span class="audio-tag" aria-label="Contains audio"><img src="https://mrtennant-music.github.io/musicliteracy/audio-svgrepo-com.svg" alt="" aria-hidden="true" class="audio-tag-icon"></span>` : ""}</h3><p>${app.desc}</p></div>
               <span class="arrow"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:24px;height:24px;display:block;"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
             </button>
             <div class="level-picker" aria-label="Choose level">
-              ${levels.map(([key, label]) => `<button class="level-choice ${app.disabled.includes(key) ? "disabled" : ""}" type="button" data-level="${key}" ${app.disabled.includes(key) ? "disabled aria-disabled=\"true\"" : ""}>${label}</button>`).join("")}
+              ${levels.map(([key, label]) => `<button class="level-choice ${app.disabled.includes(key) ? "disabled" : ""}" type="button" data-level="${key}" ${app.disabled.includes(key) ? "disabled aria-disabled=\"true\"" : ""} ${app.title === "Interactive Exam Papers" && key === "N5" ? "aria-expanded=\"false\" aria-controls=\"interactive-exam-years\"" : ""}>${label}</button>`).join("")}
             </div>
+            ${app.title === "Interactive Exam Papers" ? `<div class="year-picker" id="interactive-exam-years" aria-label="Choose year"><button class="year-choice" type="button" data-href="interactive-exams/exam.html?paper=national5-2014">2014</button></div>` : ""}
           </div>`).join("")}
       </div>
     </section>`).join("");
@@ -944,7 +998,11 @@ function applyCardFilters() {
     card.classList.toggle("hidden", shouldHide);
     if (shouldHide) {
       card.classList.remove("open");
+      card.classList.remove("year-open");
       card.querySelector(".card-main")?.setAttribute("aria-expanded", "false");
+      const selectedLevel = card.querySelector(".level-choice.is-selected");
+      selectedLevel?.classList.remove("is-selected");
+      selectedLevel?.setAttribute("aria-expanded", "false");
     }
   });
   document.querySelectorAll("[data-category]").forEach(category => category.classList.toggle("hidden", !category.querySelector(".card:not(.hidden)")));
@@ -992,10 +1050,24 @@ document.addEventListener("click", event => {const filterChoice = event.target.c
     return;
   }
 
+  const yearChoice = event.target.closest(".year-choice");
+  if (yearChoice) {
+    event.preventDefault();
+    window.location.href = yearChoice.dataset.href;
+    return;
+  }
+
   const levelChoice = event.target.closest(".level-choice");
   if (levelChoice && !levelChoice.disabled) {
     event.preventDefault();
     const card = levelChoice.closest(".card");
+    if (card.dataset.title === "Interactive Exam Papers" && levelChoice.dataset.level === "N5") {
+      const open = !card.classList.contains("year-open");
+      card.classList.toggle("year-open", open);
+      levelChoice.classList.toggle("is-selected", open);
+      levelChoice.setAttribute("aria-expanded", String(open));
+      return;
+    }
     window.location.href = `${card.dataset.href}?level=${encodeURIComponent(levelChoice.dataset.level)}`;
     return;
   }
@@ -1005,8 +1077,17 @@ document.addEventListener("click", event => {const filterChoice = event.target.c
     event.preventDefault();
     const card = cardMain.closest(".card");
 
-    if (activeLevelFilter !== "all") {
+    if (activeLevelFilter !== "all" && !(card.dataset.title === "Interactive Exam Papers" && activeLevelFilter === "N5")) {
       window.location.href = `${card.dataset.href}?level=${encodeURIComponent(activeLevelFilter)}`;
+      return;
+    }
+
+    if (card.dataset.title === "Interactive Exam Papers" && activeLevelFilter === "N5") {
+      card.classList.add("open", "year-open");
+      cardMain.setAttribute("aria-expanded", "true");
+      const national5Button = card.querySelector('[data-level="N5"]');
+      national5Button?.classList.add("is-selected");
+      national5Button?.setAttribute("aria-expanded", "true");
       return;
     }
 
@@ -1014,10 +1095,20 @@ document.addEventListener("click", event => {const filterChoice = event.target.c
     document.querySelectorAll(".card.open").forEach(item => {
       if (item !== card) {
         item.classList.remove("open");
+        item.classList.remove("year-open");
         item.querySelector(".card-main")?.setAttribute("aria-expanded", "false");
+        const selectedLevel = item.querySelector(".level-choice.is-selected");
+        selectedLevel?.classList.remove("is-selected");
+        selectedLevel?.setAttribute("aria-expanded", "false");
       }
     });
     card.classList.toggle("open", !open);
+    if (open) {
+      card.classList.remove("year-open");
+      const selectedLevel = card.querySelector(".level-choice.is-selected");
+      selectedLevel?.classList.remove("is-selected");
+      selectedLevel?.setAttribute("aria-expanded", "false");
+    }
     cardMain.setAttribute("aria-expanded", String(!open));
     return;
   }
