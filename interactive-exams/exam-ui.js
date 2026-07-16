@@ -75,6 +75,7 @@
   let pendingModeChange = null;
   let returnToModePickerAfterCancel = false;
   let pendingQuestionCheck = null;
+  let feedbackPrintState = null;
 
   function destroyAudioPlayers() {
     audioPlayer?.destroy();
@@ -578,6 +579,7 @@
   }
 
   function renderPrintPaper() {
+    if (document.body.dataset.printFeedback === "true") return;
     const printArea = $("[data-print-paper]");
     if (!printArea) return;
     printArea.innerHTML = `<header class="print-paper-header"><h1>${escapeHtml(paper.title)}</h1><span>Total marks: ${paper.totalMarks}</span></header>${paper.questions.map(question => `<article class="question-card print-question-card question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}" data-print-question="${question.id}">
@@ -592,6 +594,52 @@
       const notation = card?.querySelector("[data-shared-notation]");
       if (notation && root.ExamNotation?.renderSharedScore) root.ExamNotation.renderSharedScore(notation, question, engine.attempt.answers, () => {});
     });
+  }
+
+  function openShareNameModal() {
+    if (engine?.attempt?.status !== "submitted" || !engine.attempt.result) return;
+    const overlay = $("[data-share-name-overlay]");
+    const input = $("[data-share-name-input]");
+    input.value = "";
+    $("[data-share-include-date]").checked = false;
+    $("[data-share-include-time]").checked = false;
+    overlay.classList.add("is-open");
+    input.focus();
+  }
+
+  function closeShareNameModal() {
+    $("[data-share-name-overlay]")?.classList.remove("is-open");
+  }
+
+  function restoreAfterFeedbackPrint() {
+    if (!feedbackPrintState) return;
+    document.body.removeAttribute("data-print-feedback");
+    $("[data-feedback-export-meta]").hidden = true;
+    showingAllQuestions = feedbackPrintState.showingAllQuestions;
+    engine.attempt.currentQuestion = feedbackPrintState.currentQuestion;
+    feedbackPrintState = null;
+    renderResultsPaper();
+    renderNavigator();
+    updateResultNavigation();
+  }
+
+  async function shareFeedback({ name, includeDate, includeTime }) {
+    if (engine?.attempt?.status !== "submitted" || !engine.attempt.result) return;
+    const now = new Date();
+    const nameLine = $("[data-feedback-export-name]");
+    const dateLine = $("[data-feedback-export-date]");
+    const timeLine = $("[data-feedback-export-time]");
+    nameLine.textContent = name ? `Name: ${name}` : "";
+    dateLine.textContent = includeDate ? `Date: ${new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(now)}` : "";
+    timeLine.textContent = includeTime ? `Time: ${new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(now)}` : "";
+    $("[data-feedback-export-meta]").hidden = !name && !includeDate && !includeTime;
+    feedbackPrintState = { showingAllQuestions, currentQuestion: engine.attempt.currentQuestion };
+    showingAllQuestions = true;
+    renderResultsPaper();
+    document.body.dataset.printFeedback = "true";
+    await document.fonts?.ready;
+    await new Promise(resolve => root.requestAnimationFrame(() => root.requestAnimationFrame(resolve)));
+    root.print();
   }
 
   function paperShareUrl() {
@@ -951,6 +999,7 @@
   function startAttempt(mode) {
     root.ExamStorage.deleteDraft(paper.id);
     root.ExamStorage.deleteSubmitted(paper.id);
+    feedbackPrintState = null;
     document.body.dataset.examActive = String(mode === "exam");
     engine.start(mode, false);
     renderCustomiseMenu();
@@ -1126,20 +1175,37 @@
     $("[data-copy-paper-link]").addEventListener("click", copyPaperLink);
     $("[data-qr-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeQrOverlay(); });
     $("[data-results-new-attempt]").addEventListener("click", () => {
-      root.ExamStorage.deleteDraft(paper.id);
-      openBlankModePicker();
+      openBlankModePicker(true);
+    });
+    $("[data-share-feedback]").addEventListener("click", openShareNameModal);
+    $("[data-cancel-share-name]").addEventListener("click", closeShareNameModal);
+    $("[data-share-name-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeShareNameModal(); });
+    $("[data-share-name-form]").addEventListener("submit", event => {
+      event.preventDefault();
+      const options = {
+        name: $("[data-share-name-input]").value.trim(),
+        includeDate: $("[data-share-include-date]").checked,
+        includeTime: $("[data-share-include-time]").checked,
+      };
+      closeShareNameModal();
+      shareFeedback(options);
     });
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape") return;
       closeSubmitModal();
       closeQuestionCheckModal();
       closeResetModal();
+      closeShareNameModal();
       closeQrOverlay();
       closePaperMenus();
       closeActiveModePicker();
     });
     root.addEventListener("beforeprint", renderPrintPaper);
-    root.addEventListener("afterprint", () => { const printArea = $("[data-print-paper]"); if (printArea) printArea.innerHTML = ""; });
+    root.addEventListener("afterprint", () => {
+      restoreAfterFeedbackPrint();
+      const printArea = $("[data-print-paper]");
+      if (printArea) printArea.innerHTML = "";
+    });
   }
 
   function bindStartOverlay() {
