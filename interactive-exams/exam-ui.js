@@ -601,8 +601,6 @@
     const overlay = $("[data-share-name-overlay]");
     const input = $("[data-share-name-input]");
     input.value = "";
-    $("[data-share-include-date]").checked = false;
-    $("[data-share-include-time]").checked = false;
     overlay.classList.add("is-open");
     input.focus();
   }
@@ -614,7 +612,7 @@
   function restoreAfterFeedbackPrint() {
     if (!feedbackPrintState) return;
     document.body.removeAttribute("data-print-feedback");
-    $("[data-feedback-export-meta]").hidden = true;
+    $("[data-feedback-export-name]").hidden = true;
     showingAllQuestions = feedbackPrintState.showingAllQuestions;
     engine.attempt.currentQuestion = feedbackPrintState.currentQuestion;
     feedbackPrintState = null;
@@ -623,16 +621,11 @@
     updateResultNavigation();
   }
 
-  async function shareFeedback({ name, includeDate, includeTime }) {
+  async function shareFeedback(name) {
     if (engine?.attempt?.status !== "submitted" || !engine.attempt.result) return;
-    const now = new Date();
     const nameLine = $("[data-feedback-export-name]");
-    const dateLine = $("[data-feedback-export-date]");
-    const timeLine = $("[data-feedback-export-time]");
     nameLine.textContent = name ? `Name: ${name}` : "";
-    dateLine.textContent = includeDate ? `Date: ${new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(now)}` : "";
-    timeLine.textContent = includeTime ? `Time: ${new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(now)}` : "";
-    $("[data-feedback-export-meta]").hidden = !name && !includeDate && !includeTime;
+    nameLine.hidden = !name;
     feedbackPrintState = { showingAllQuestions, currentQuestion: engine.attempt.currentQuestion };
     showingAllQuestions = true;
     renderResultsPaper();
@@ -908,12 +901,15 @@
     showingAllQuestions = false;
     engine.attempt.currentQuestion = paper.questions[0].id;
     renderToolbarStats();
-    $("[data-results-score]").textContent = `${result.score}/${paper.totalMarks}`;
+    $("[data-results-score]").innerHTML = `<span class="result-score-earned">${result.score}</span><span class="result-score-total">/${paper.totalMarks}</span>`;
     const performanceClass = result.score < 15 ? "is-score-low" : result.score < 20 ? "is-score-middle" : "is-score-high";
     const scoreStat = $("[data-results-score-stat]");
     scoreStat.classList.remove("is-score-low", "is-score-middle", "is-score-high");
     scoreStat.classList.add(performanceClass);
     $("[data-results-percentage]").textContent = `${result.percentage}%`;
+    const completedAt = new Date(engine.attempt.completedAt);
+    $("[data-feedback-export-date]").textContent = `Completed: ${new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(completedAt)}`;
+    $("[data-feedback-export-time]").textContent = `• ${new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }).format(completedAt)}`;
     const questionPerformance = result.questionBreakdown.map(questionResult => ({
       ...questionResult,
       number: paper.questions.find(question => question.id === questionResult.id)?.number || questionResult.id,
@@ -1182,13 +1178,9 @@
     $("[data-share-name-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeShareNameModal(); });
     $("[data-share-name-form]").addEventListener("submit", event => {
       event.preventDefault();
-      const options = {
-        name: $("[data-share-name-input]").value.trim(),
-        includeDate: $("[data-share-include-date]").checked,
-        includeTime: $("[data-share-include-time]").checked,
-      };
+      const name = $("[data-share-name-input]").value.trim();
       closeShareNameModal();
-      shareFeedback(options);
+      shareFeedback(name);
     });
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape") return;
