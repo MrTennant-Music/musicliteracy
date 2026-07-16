@@ -1,0 +1,176 @@
+# The Music Literacy Hub project instructions
+
+## Interactive exam notation questions
+
+When creating or changing a notation-based question in Interactive Exam Papers:
+
+1. Treat `practicequestions.html` as the source of truth for appearance and interaction. Find the closest existing question at the same qualification level before implementing anything new.
+2. Reuse the established notation code, `shared-notation-config.js`, Bravura glyphs, staff spacing, note positioning, beaming, stem rules, buttons, hover behaviour, dragging, clear/reset behaviour and responsive layout. Do not create a separate approximation when an equivalent component already exists.
+3. Compare the original Qualifications Scotland paper, the matching Practice Questions implementation and the shared notation configuration before writing code.
+4. Describe the musical content as structured data: pitches, rhythms, bars, key and time signatures, barlines, repeat signs, editable elements and correct answers. Keep this content separate from the renderer.
+5. Reuse complete interactions, not only their visual styling. If Practice Questions already supports placing notes, dynamics, time signatures, repeat signs or other symbols, adapt that behaviour directly.
+6. Verify every bar against an explicit bar-by-bar inventory of pitches and rhythms before considering the question complete.
+7. Check Bravura glyphs, staff and system spacing, note sizes, alignment, beaming, stems, barlines, editable-area boxes, hover previews, dragging, clear controls and desktop/mobile presentation.
+8. Do not guess when the source paper is visually or musically ambiguous. Ask one precise musical question and wait for confirmation before encoding the uncertain detail.
+9. Make the smallest maintainable change and preserve existing Practice Questions and shared notation behaviour.
+
+## Reusable Digital Past Paper notation decisions
+
+Apply these established decisions when the same interaction appears in later papers:
+
+1. Keep shared score panels visually clean. Do not add a separate “Music guide” heading, explanatory strip or labels inside an editable notation box unless the source paper or the user specifically requires them.
+2. For direct missing-note entry, show a right-aligned Clear control only. Do not add Undo, entry-count text or separate instructions telling the pupil to select notes on the score unless requested.
+3. Hovered notes must preview in grey. Any ledger lines belonging to the preview must use the same opacity as the previewed note, including the stronger opacity used while dragging.
+4. Repeat-sign placement must use the shared Bravura glyph and a faint glyph preview, never a shaded rectangular hover target. The preview and placed answer must use the same positioning helper so they remain aligned.
+5. Treat repeat-sign placement as a one-use armed tool: clicking the answer button arms it; placing the sign disarms and visually deselects it; clicking the button again allows the pupil to move the answer elsewhere.
+6. When the repeat tool is inactive, its invisible score targets must not receive pointer focus or show a coloured focus box. Preserve visible focus and keyboard placement when the tool is armed for accessibility.
+7. Reuse the established dynamic and repeat-sign answer-button classes so Bravura glyphs retain their optical vertical centring. Do not position these glyphs using ordinary text baselines.
+8. Keep Clear controls right-aligned and preserve the existing responsive button and score layout.
+
+## Reusable Digital Past Paper design and interaction decisions
+
+Use the completed National 5 Music 2014 paper in `interactive-exams/` as the reference implementation for later Digital Past Papers. Apply the following decisions by default unless the source paper or the user explicitly requires something different.
+
+### Source fidelity and typography
+
+1. Recreate the usable question area of the original Qualifications Scotland paper; do not embed the PDF and do not reproduce print-only material such as candidate boxes, barcodes, official-use columns, page-turn instructions or blank pages.
+2. Follow the source paper wording verbatim, including its original use of “tick”, “write”, “insert”, “name”, punctuation, capitalisation, line breaks, bold text, question numbering, lettered parts and Roman-numeral subparts. Only change wording when a digital interaction makes the printed instruction impossible or misleading.
+3. Omit repeated “Question … (continued)” headings when the content is presented continuously on one digital page.
+4. Load the supplied Trebuchet MS files locally with `@font-face`, and use Trebuchet only for text that belongs to the original paper or for answers entered by the pupil. Keep site navigation, audio controls, toolbar buttons, mode controls, Clear controls and other added interface text in the normal Music Literacy Hub interface font.
+5. Match the source paper’s emphasis rather than making all question text bold. Main “Question …” headings and mark numerals are bold; part labels such as “(a)” remain regular unless the source shows otherwise.
+
+### Paper layout and marks
+
+6. Present each question on a white, A4-proportioned paper panel with a sensible A4 minimum height, restrained border, subtle paper shadow and the source paper’s thick right-angle corner decorations. Keep the surrounding page white and do not add a coloured or grey backdrop container around the paper.
+7. Keep the paper visually square and document-like. Rounded Music Literacy Hub styling remains appropriate for interface controls and menus, but not for the paper itself.
+8. Put the paper toolbar inside the top of the paper, recessed between the upper corner decorations. Keep its controls close together without pushing the authentic question content down. Put the bottom navigation controls inside the paper as well.
+9. Show `MARKS` in capitals at the top-right of every paper page. Show only the bold mark numeral beside the relevant source-paper row; do not append the word “mark” or “marks”. Where the source paper includes opening instructions such as `Total marks — …` and `Attempt ALL questions`, reproduce them centred above Question 1 in single-question, Practice, Exam and All Questions views. Where the source gives one combined mark for a whole question, place that numeral on the same row as the source does rather than adding marks beside every answer.
+10. Keep question letters, question text and mark numerals on the same row where the source does. Preserve the source indentation from part (a) onwards, its deliberate line wrapping and the alignment of answer spaces.
+11. Do not add decorative divider lines between subquestions or thick rules below question headings unless they are genuinely part of the source layout.
+12. Recreate distinctive source layouts directly, including guide shapes and arrows, chord-sequence grids, category tables, sentence-completion lines, rough-work tables and final-answer pages. Extend the digital paper vertically when required instead of compressing the source structure.
+
+### Answer controls and pupil input
+
+13. Render choice answers as large empty square boxes aligned with their labels, matching the paper rather than using radio circles or quiz tiles. A selected box displays the established heavy, rounded Trebuchet MS Bold `✓`, including its slight thickening stroke; do not substitute the thin shared `tick.svg`. Retain correct radio or checkbox semantics invisibly for accessibility.
+14. Limit each choice row’s clickable area to the square and its text; empty space to the right must not select an answer accidentally.
+15. Use simple underline fields for short answers, inline answer lines for sentence completions and paper-like ruled or bordered areas for longer answers. Keep short-answer lines to the established Question 1 width unless the source clearly requires another length.
+16. Display pupil-entered text in bold Trebuchet so it is distinct from printed paper text. Automatically capitalise the first character of standalone answers, but not answers embedded inside a sentence-completion line.
+17. Give entered text and selected ticks a slow, subtle glimmer to distinguish pupil input. Keep the animation infrequent and respect reduced-motion preferences; do not add visible side borders or other artefacts to underlined fields.
+18. Do not add Clear or Undo buttons to ordinary paper questions. Allow an entered choice, typed answer or score item to be removed with double-click, double-tap or right-click while retaining keyboard-accessible removal. Notation-specific Clear controls remain governed by the notation decisions above.
+19. Before submission, keep answers visually neutral and do not expose correctness. Show marking feedback only after submission without substantially changing the paper layout.
+
+### Audio, navigation and menus
+
+20. Keep the active question’s audio player in the main site header. During an active Exam Mode attempt, show the timer beside it. In “Show All”/“All Questions”, place each question’s audio with that question and leave no line, placeholder or other artefact in the header.
+21. The audio play button reads `Play` in Practice Mode. In Exam Mode, show the current question number without a play or document glyph and do not offer pause or replay controls.
+22. Keep the Level and Year controls at the left of the in-paper toolbar. Centre the current-question control between fixed-width previous and next arrow buttons, and show the current mode at the right. The question button contains centred text only, with no glyph.
+23. Use the same toolbar height, border, radius, font and menu appearance as equivalent controls elsewhere in the Hub. Use the established Practice Questions question-arrow width. Arrow buttons have no heavy black outline; unavailable arrows remain visible but are greyed out.
+24. Keep bottom previous/next arrow buttons as a second navigation route. They use the same width and centred arrows as the toolbar buttons. On the final question, `Submit` replaces the next arrow in both places and remains immediately beside the question control.
+25. The question menu labels untouched questions `Not attempted`, partly completed questions `Partially answered` and completed questions `Answered`. Keep the menu aligned and centred in both single-question and Show All views.
+26. The QR button remains beside the Digital Past Papers title. Its modal heading uses `Level • Year`; show no explanatory subtitle beneath it. Keep the QR code, close control and `Copy link` button, and ensure the encoded link includes the selected level and year.
+
+### Practice Mode and Exam Mode
+
+27. Always offer two title-cased modes: `Practice Mode` with `practicemode.svg`, and `Exam Mode` with `worksheet.svg`. The toolbar button displays the currently selected mode. Present both as full menu buttons styled like the Level menu, not as a native select dropdown, and include a full-width red `Restart` control with no glyph.
+28. Practice Mode has no timer, unlimited audio replay and free movement between questions or into Show All. Do not interrupt normal next/previous navigation merely because a question is incomplete.
+29. Before the first attempt, show the centred `Select Mode` prompt with neither mode preselected and no start button visible. Selecting a mode reveals its matching information panel and start button. Exam Mode must still start only after explicit confirmation.
+30. Exam Mode uses a 45-minute timer and the All Questions view. The timer and continuous Question 1-to-Question 8 audio begin together when the attempt starts. Audio cannot be paused or replayed; future questions unlock as their audio begins.
+31. An Exam Mode attempt must be completed in one sitting. Refreshing or leaving resets the attempt. Choosing either mode from an existing attempt starts a new attempt. If the current paper contains any entered answers, selecting `Start Practice Mode` or `Start Exam Mode` must show a separate confirmation before clearing them. If the paper is blank, start the selected mode immediately. Clear the old Exam Mode page state before drawing Practice Mode so its navigation arrows appear immediately.
+32. Allow moving forward or submitting even when answers are missing. Only show the unanswered-questions warning when the pupil attempts to submit, and clearly offer a way to keep working or submit anyway.
+33. In Exam Mode, show Submit only once Question 8 is available. Place it where the next arrow normally appears in both the toolbar and bottom navigation.
+
+### Established shared interface details
+
+1. Keep the gap between the bottom of the paper and the Qualifications Scotland attribution at approximately `30px` on desktop and mobile.
+2. Use short, centre-aligned titles for all pop-ups rather than question-style headings. Established titles are `Select Mode`, `Submit`, `Exam Mode` and `Restart`; QR headings remain `Level • Year` and are also centred.
+3. The submission pop-up uses `Cancel` and `Submit`. Do not use `Keep working` or `Submit final answers`.
+4. The Restart pop-up uses the centred title `Restart`, the sentence `This will permanently clear all of your answers and reset the paper to the start.` with `permanently clear all of your answers` in bold, and the buttons `Cancel` and `Restart`. Restarting must stop audio and timers, clear the attempt and return to a blank `Select Mode` prompt with neither mode selected and no start button visible.
+5. In the opening mode prompt, top-align both mode cards so their icons and titles share the same rows. Show small, subdued `45 minutes` text on the same baseline as the `Exam Mode` card title. Keep both cards deselected initially.
+6. When Practice Mode is selected, show the standard information container headed only `Practice Mode` with these points: `There is no timer.`, `Audio can be paused and replayed unlimited times.`, `You can move freely between questions.` and `You can check your answers as you complete each question.` Do not show `You can submit when you are ready.` Then show `Start Practice Mode`.
+7. When Exam Mode is selected, show the same style of information container headed only `Exam Mode` with these points: `Audio and 45-minute timer start immediately.`, `All questions appear together and the audio plays continuously from the start to the end of the paper.`, `The audio cannot be paused or replayed.` and `Refreshing or leaving resets the attempt.` Then show `Start Exam Mode`.
+8. When a mode change would discard answers, use a separate confirmation with the selected mode as its centred title, the standard grey sentence `Changing mode will clear your current answers and start a new attempt.`, and `Cancel` plus the matching `Start Practice Mode` or `Start Exam Mode` button. Keep the inline warning under the guidance container only when progress exists. The mode picker retains both an `×` close control and a white `Cancel` button. Do not show a separate Restart button in this picker.
+9. In the Mode menu, always show the shared tick beside the active mode. Refresh this active state as soon as an attempt begins.
+10. Keep the toolbar’s question control in exactly the same horizontal position in Practice Mode and Exam Mode. Preserve invisible previous/next button space in Exam Mode and preserve an invisible previous-button placeholder in All Questions so its button stays centred. Make the desktop Practice/Exam toolbar control wrap closely around its icon and text rather than giving it a fixed width. `Practice Mode` must remain on one line; retain the compact icon-only control on mobile.
+11. In Exam Mode, render the disabled grey audio progress line and playhead above the `(a)`, `(b)`, `(c)` and later section-marker lines so the playhead remains visible where they overlap.
+12. After submission, show a score card containing a centred `Results` heading, `Score`, `Percentage`, `Best Question` and `Weakest Question`, followed by the automatic-marking disclaimer, review actions and marked paper. Do not show Personal Best or Mode in this row. Determine best and weakest by percentage earned; show only one question for each, breaking percentage ties by choosing the question with the most marks available. Display `Question …` with `… of … marks` beneath it.
+13. Show feedback inside the marked paper beside each answer. Colour the pupil’s correct tick, text or notation green and an incorrect response red; use the same red feedback container for unanswered parts. Identify the correct answer in green text inside the written feedback, but do not add a green tick or green answer styling to an unselected correct choice merely to reveal it. Use written `Correct`, `Partially correct`, `Incorrect` or `Not answered` labels as well as colour so the feedback remains accessible. Multi-mark parts with some earned marks use yellow feedback and `Partially correct`.
+14. In the marked Question 8 paper, keep rough work visibly unmarked and assess only the Final answer. Present the marking-instruction concepts under their original headings and highlight earned concepts green in those lists. Do not add a separate `Awarded concepts` summary line above the lists.
+15. Keep marked-paper feedback self-contained within Digital Past Papers. Do not include links from feedback to Practice Questions pages or other areas outside `interactive-exams/`.
+16. Persist the submitted attempt and marked feedback screen across refreshes. Keep restoring that feedback until the pupil deliberately starts a new attempt or confirms Restart; merely opening the mode picker must not discard the submitted result.
+17. Keep audio section markers hidden by default and vertically centre the progress line and times. When the player is hovered or contains keyboard focus, reveal the markers and animate only the progress line and playhead to their lower marked position; keep both time labels fixed. On touchscreens, tapping an eligible audio-player container must reveal the markers persistently so the pupil can tap them; keep them open during interactions inside that player and close them only when the pupil taps elsewhere. During an active Exam Mode attempt, never reveal section markers.
+18. On the marked feedback screen, show the active question’s unrestricted audio player in the site header when reviewing one question at a time. In All Questions, hide the header player and give every question in the read-only paper its own unrestricted audio player. Allow unlimited replay, pausing, seeking and section-marker navigation regardless of whether the submitted attempt used Practice Mode or Exam Mode.
+19. Run the pupil-answer text and tick glimmer on the established shared 8-second cycle. Synchronise newly entered text and newly selected ticks to the same page-wide animation phase so all visible pupil input glimmers together, while continuing to respect reduced-motion preferences.
+20. On the feedback screen, place the complete experience inside one main Music Literacy Hub container: Level, Year and Mode toolbar; score card containing the disclaimer and action; and the full marked paper. Keep the paper itself visually distinct within that container.
+21. Open marked feedback on `Question 1` by default. Keep the toolbar question button and previous/next arrows available on feedback: the question menu switches between individual marked questions, the arrows move through them, and `Show All` opens the complete marked paper. Repeat the previous/next arrows at the bottom of each single-question feedback paper; do not add them between pages in the continuous All Questions view.
+22. Do not show `MARKS` or `BEST` stat cards in the site header. Keep only the essential timer card during an active Exam Mode attempt, and collapse the header-stat area completely at all other times.
+23. On feedback, place the score card beneath the in-container toolbar, with a centred `Results` heading at the top, followed by the automatic-marking disclaimer. Keep `20px` above and below the score card so its spacing from the toolbar matches its spacing from the disclaimer.
+24. In feedback-paper audio players, keep the time labels in their established position and lower only the progress line and playhead by `2px` for optical alignment.
+25. Do not show a separate `Review paper` button on feedback. The marked paper already follows the Results summary directly. Present a four-part summary row in a white card with black text: `Score`, `Percentage`, `Best Question` and `Weakest Question`, separated by vertical dividers and vertically aligned. Centre all four stats. Give only the Score a filled colour pill: green at 20 marks and above, yellow from 15–19 and red below 15; the fill and outline use the same threshold colour. Percentage has no pill. Beneath it, place the automatic-marking disclaimer, white `Marking Instructions` link and `Try Again` in one row with matching heights; use compact disclaimer text and put the two buttons immediately to its right. Stack this footer row on narrow mobile screens for readability. The link opens the official marking-instructions PDF in a new tab; `Try Again` starts the existing fresh-attempt flow. Store the PDF path in the paper data and hide the link when a paper has no path.
+26. Give the automatic-marking disclaimer the same shared grey background as the audio playback container, while retaining its own border, text colour and spacing. Begin with bold `Notice:` followed by: `This paper is marked automatically using the official marking instructions. Unusual phrasing or spelling may occasionally produce a different result from a human marker. If you think a mark is incorrect, refer to the marking instructions.`
+27. Keep the external vertical spacing around the complete feedback container equal: `23px` above and below on desktop, and `20px` above and below on mobile. Do not change the container’s internal padding to achieve this.
+28. Do not show a black surrounding outline when buttons are hovered anywhere in Digital Past Papers. Keep hover feedback through the established colour, border and movement changes. Preserve accessibility by using the Hub’s subtle green outline for `:focus-visible` keyboard focus only.
+29. Give every enabled button and button-style link the same desktop hover animation as the Level control: lift by `1px`, scale to `1.01`, brighten to `1.08` and add the shared subtle shadow. Keep disabled controls still and retain the Hub’s no-hover-motion touchscreen behaviour.
+30. Do not add a separate bottom-centred awarded/available total to each marked question. Show marks at their authentic source-paper positions and summarise question totals only in the Best/Weakest statistics.
+31. Do not use red or green background fills behind marked answers. Communicate correctness through the pupil’s answer text, square-box outline, tick or notation symbol, and typed-answer line only: green for a correct response and red for an incorrect or unanswered response. Disable the pupil-input glimmer on marked ticks so it cannot override their fixed feedback colour. If a pupil selects an incorrect choice, leave the missed correct option visually neutral and name it in the feedback instead of adding a green tick. Keep the separate written feedback panels unchanged.
+32. In the feedback summary, keep `Score`, `Percentage`, `Best Question` and `Weakest Question` in title case and use the small, muted-grey stat-label styling with lighter font weight. Keep their values in the established summary styling.
+33. Keep inline answer-feedback boxes concise. Show the result label, the correct answer when needed and a single short concept definition for both correct and incorrect responses. Put the definition directly beneath `Correct answer`. Prefer My Music Online’s A–Z wording; when no matching A–Z definition exists, provide a short, accurate pupil-friendly definition rather than omitting it. Do not show part-mark fractions inside these boxes. Do not restore generic rationale paragraphs unrelated to the concept definition.
+34. On marked feedback papers, colour each source-paper part-mark or combined question-mark numeral green when the pupil earns all available marks and red when they do not. For a part or combined question worth more than one mark that is not fully correct, show the actual awarded mark in green directly beneath the red maximum. Keep these marks neutral before submission and retain accessible awarded/available labels.
+
+### Reusable marking and feedback decisions from the National 5 2014 review
+
+1. Use the official marking instructions, including every accepted alternative in the additional guidance, as the source of truth for marking. Do not reduce a reason answer to only one example when the marking scheme lists several valid features.
+2. Mark natural text by the required musical keywords or concepts rather than requiring the pupil to reproduce one exact model phrase. Word order, surrounding sentence wording, capitalisation and punctuation must not prevent a mark when the required keywords are present.
+3. Build common, unambiguous misspellings into accepted text answers. Normalise harmless punctuation, spaces and hyphens where the intended musical term is clear, for example `Bari-tone` for `Baritone`.
+4. For numerical text answers, accept both digits and number words, such as `4` and `four`. Accept equivalent time-signature spacing such as `2/4` and `2 / 4`.
+5. When a question asks for a musical style, allow the otherwise-correct style followed by the word `music`, for example `Reggae music`.
+6. Automatically capitalise the displayed first character of every standalone short answer in both entry and feedback views. Do not capitalise an answer embedded inside a printed sentence-completion line. Continue to mark without regard to capitalisation.
+7. If a question asks for several selections and is worth several marks, award one mark for each correct selected concept even if another selected option is wrong. When the pupil earns some but not all marks, use yellow feedback headed `Partially correct`.
+8. For a multi-mark source numeral that is not fully achieved, keep the maximum red with a thin diagonal strike that leaves the numeral readable, and show the awarded mark in green directly beneath it. Extend the strike just beyond the numeral and keep its optical alignment consistent. If zero marks are earned, do not print a green `0` beneath the red maximum.
+9. Use the same darker red for `Incorrect`/`Not answered` result text and the same darker green for `Correct` text and correct-answer labels.
+10. Number feedback panels `1`, `2`, `3`, `4` when they correspond to numbered areas in a visual guide, and keep the entered answers centred on their answer lines in guide, sentence-completion and similar diagram layouts.
+11. For notation questions, reuse the Practice Questions notation renderer for marked feedback. Show the correct notation in green immediately to the right of an incorrect pupil insertion when the answer is something applied directly to the score, such as missing notes, dynamics, time signatures or repeat signs.
+12. Keep struck-through source marks thin enough for the original numeral to remain legible. When a multi-part item earns one of two marks, show the red struck-through `2` and a green `1` underneath in addition to yellow partial feedback.
+13. Question 8-style extended responses are concept based: accept short forms that unambiguously identify the concept, such as `scat` for `scat singing`; accept spelling variation where intent is clear; cap marks exactly as specified by the marking instructions, including per-heading and overall limits; and allow a valid concept under the wrong heading when the guidance permits it.
+14. In Question 8 feedback, reproduce the marking-instruction headings and concept lists. Highlight each earned concept green in place within the list and highlight the matching words in the pupil’s displayed final answer. Leave unrecognised or incorrect words unchanged. If the pupil supplies more valid concepts under one heading than can earn marks and therefore does not reach full marks, explain the heading limit briefly.
+15. Remove redundant Question 8 guidance from pupil feedback, including generic statements about what a valid concept is, procedural marking rules, `No other answers are accepted`, and repeated rough-work warnings. Do not show `Rough work is not marked` beneath the grid.
+16. When `Additional guidance` contains only `No other answers are accepted`, omit the heading and statement entirely. When additional guidance contains real accepted alternatives or restrictions, include only the useful marking-scheme detail.
+
+### Reusable Practice Mode checking decisions
+
+1. In Practice Mode, place a black `Check Answers` button with white text at the bottom centre of each question paper.
+2. Enable checking only when that question has been completed. Before marking it, show the prompt `Checking the answers will mark and lock your answers in. You will not be able to change them afterwards.` with `lock your answers in` in bold.
+3. Checking marks only the current question, displays the same inline feedback used after submission, locks that question’s answers and persists the checked state. The pupil can continue through the remaining questions one by one.
+4. A checked question must expand vertically enough to contain its feedback inside the paper. Feedback must never overflow through the paper, attribution or site footer.
+5. Keep the bottom navigation layout as three stable columns: previous arrow on the left, `Check Answers` in the centre and next arrow or Submit on the right. Adding the centre control must never pull the right arrow into the middle.
+6. In All Questions view, do not show a previous/back arrow. Preserve its invisible toolbar space so `All Questions` remains centred. Place the final Submit control at the right-hand side of the bottom action row.
+
+### Reusable mode-picker and toolbar decisions
+
+1. Opening the mode picker during an attempt must not itself clear or alter the attempt. Keep both an `×` close control at the top-right and a white `Cancel` button beside the start action.
+2. Selecting a mode shows its information container and matching `Start … Mode` button. Starting either mode creates a fresh attempt; never label the action `Continue Practice Mode`.
+3. Detect progress from all answer structures, including simple text, selections, notation data, rough work and final-answer objects. Only show the progress-loss warning and additional confirmation when actual pupil content exists.
+4. The progress-loss sentence is `Changing mode will clear your current answers and start a new attempt.` Use normal-weight, standard grey pop-up text. Place the inline copy below the selected mode’s guidance container.
+5. If progress exists, pressing the selected mode’s Start button opens a second confirmation. Cancelling it returns to the still-selected mode picker. Confirming pauses old audio, clears the draft and submitted state and starts the chosen mode.
+6. When the paper contains no answers, pressing a mode Start button launches it immediately without the extra confirmation.
+7. The Exam header countdown label is `Time`, not `Timer`.
+8. Keep the Mode toolbar control content-sized on desktop, wrapping closely around its icon and title, and compact/icon-only on mobile.
+9. In All Questions and Exam Mode, hidden navigation controls must retain their grid footprint so the centred question control does not shift. Restore their visibility synchronously when Practice Mode begins.
+10. In the site-header audio player, lower only the feedback/review progress line and playhead by `2px`; keep time labels fixed.
+11. In Exam Mode, future question content may remain unavailable until its audio begins, but do not print a `Locked until this question’s audio begins` message over or beneath the paper.
+
+### Reusable score, answer-line and table layout decisions
+
+1. Centre pupil answers within the answer lines or cells of Questions 2- and 6-style visual completion layouts. Keep their feedback panels full width beneath the diagram rather than squeezing one beneath each narrow column.
+2. In category tables with a narrow `Tick` column, align the `Tick` heading cell’s left edge with the tick cells below it.
+3. Keep diagram answer boxes close to their source-paper position. Do not push them far down merely to make room for feedback; place full-width feedback below the complete diagram.
+4. Do not show a green correct-answer tick beside an option the pupil did not select. Written feedback already identifies the correct answer.
+5. In Question 3-style notation controls, include only answer options supported by the paper and marking scheme; for the 2014 time-signature question this means removing the Common time `C` button.
+6. Keep user-entered short-answer text in bold Trebuchet, including on marked feedback. Standalone displayed answers begin with a capital letter; sentence-completion answers retain the case needed to complete the sentence.
+7. Make result-stat headings lighter in weight than their values and align all headings to the same vertical baseline. Keep Best/Weakest question text compact enough that the stat headings remain aligned.
+8. Show only one Best Question and one Weakest Question. Rank by percentage earned; when tied, choose the tied question with the greatest available mark total, then use question order as the final deterministic tie-break.
+
+### Implementation and verification
+
+34. Extend the existing shared HTML, CSS and JavaScript rather than building a separate paper renderer. Store paper wording, marks, audio timing and answer data separately from reusable rendering and interaction behaviour.
+35. Preserve keyboard labels, visible focus, radio/checkbox semantics, reduced-motion support and screen-reader names even when the visual controls imitate printed boxes.
+36. When adding a new paper, compare every question against its source PDF and the 2014 reference implementation. Verify wording, bold text, indentation, line breaks, marks, control limits, audio markers, answer persistence, submission, both modes and Show All alignment before considering it complete.

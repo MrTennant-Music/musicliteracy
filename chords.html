@@ -246,6 +246,29 @@ const N5_RHYTHM_PATTERNS = [
   ["crotchet","crotchet","minim"],
   ["minim","crotchet","crotchet"],
 ];
+const N5_SEQUENCE_ACCOMPANIMENT_STYLES = [
+  "block_chords", "waltz", "romantic_octaves", "pop_ballad", "pop_power_piano", "stride_piano",
+];
+const N5_SEQUENCE_CHORD_SYMBOLS = ["I", "IV", "V", "VI"];
+function n5SequenceEvent(time,duration,notes,volume=.052){ return {time,duration,notes:Array.isArray(notes)?notes:[notes],volume}; }
+function n5SequenceAccompanimentEvents(styleId,beats){
+  const beatRange=Array.from({length:beats},(_,index)=>index);
+  const eighthRange=Array.from({length:beats*2},(_,index)=>index*.5);
+  if(styleId==="block_chords") return [n5SequenceEvent(0,beats,["lowRoot","third","fifth","octaveRoot"],.06)];
+  if(styleId==="broken_chords") return eighthRange.map((time,index)=>n5SequenceEvent(time,.48,["root","fifth","octaveRoot","fifth"][index%4],.058));
+  if(styleId==="alberti_bass") return eighthRange.map((time,index)=>n5SequenceEvent(time,.48,["root","fifth","third","fifth"][index%4],.058));
+  if(styleId==="waltz") return [n5SequenceEvent(0,.92,"lowRoot",.068),...beatRange.slice(1).map(time=>n5SequenceEvent(time,.82,["third","fifth","octaveRoot"],.054))];
+  if(styleId==="romantic_octaves") return [n5SequenceEvent(0,beats,["lowRoot","root"],.07),n5SequenceEvent(0,beats,["third","fifth","octaveRoot"],.058)];
+  if(styleId==="pop_ballad") return [n5SequenceEvent(0,Math.min(2,beats),["lowRoot","root"],.066),n5SequenceEvent(Math.min(2,beats-1),Math.max(1,beats-2),["lowFifth","fifth"],.06),n5SequenceEvent(0,beats,["third","fifth","octaveRoot"],.048)];
+  if(styleId==="piano_ballad") return [n5SequenceEvent(0,.92,"lowRoot",.068),...eighthRange.map((time,index)=>n5SequenceEvent(time,.46,["third","fifth","octaveRoot"][index%3],.052))];
+  if(styleId==="contemporary_pop") return [n5SequenceEvent(0,.92,"lowRoot",.068),...beatRange.map(time=>n5SequenceEvent(time+.5,.42,indexParityToken(time),.054)).filter(event=>event.time<beats)];
+  if(styleId==="pop_power_piano") return [n5SequenceEvent(0,Math.min(2,beats),["lowRoot","root","third","fifth"],.07),n5SequenceEvent(Math.min(2,beats-1),Math.max(1,beats-2),["lowFifth","fifth","third"],.064)];
+  if(styleId==="rock_octaves") return eighthRange.map((time,index)=>n5SequenceEvent(time,.45,index<beats?["lowRoot","root"]:["lowFifth","fifth"],.07));
+  if(styleId==="power_chords") return beatRange.map((time,index)=>n5SequenceEvent(time,.86,index<beats/2?["lowRoot","root","fifth"]:["lowFifth","fifth","octaveRoot"],.07));
+  if(styleId==="stride_piano") return beatRange.map((time,index)=>n5SequenceEvent(time,.82,index%2===0?["lowRoot","root"]:["third","fifth","octaveRoot"],index%2===0?.068:.056));
+  return beatRange.map((time,index)=>n5SequenceEvent(time,.86,["lowRoot","lowThird","lowFifth","lowFifth"][index%4],.064));
+}
+function indexParityToken(index){ return index%2?["third","fifth","octaveRoot"]:["third","fifth"]; }
 function noteByPitch(letter, octave){ return NOTE_POOL.find(n=>n.letter===letter&&n.octave===octave) || noteByLetter(letter,6); }
 function normaliseChordAnswer(value){ return normaliseAnswer(value).replace(/major$/,"maj").replace(/minor$/,"min"); }
 function isN5AnswerCorrect(value, chord){
@@ -640,9 +663,9 @@ function chooseMelodyBase({ key, chord, rhythmId, previousBase, currentIndex, st
   for(const item of candidates){ roll-=item.weight; if(roll<=0) return item.candidate; }
   return candidates[candidates.length-1].candidate;
 }
-function makeMelodyForBar(key, chordSymbol, barIndex, previousIndex, ts){
+function makeMelodyForBar(key, chordSymbol, barIndex, previousIndex, ts, totalBars=BAR_COUNT){
   const chord=key.chords[chordSymbol];
-  const pattern = barIndex === BAR_COUNT - 1 ? { "2/4":["minim"], "3/4":["dottedMinim"], "4/4":["semibreve"] }[ts.id] : r(validPatternsFor(ts));
+  const pattern = barIndex === totalBars - 1 ? { "2/4":["minim"], "3/4":["dottedMinim"], "4/4":["semibreve"] }[ts.id] : r(validPatternsFor(ts));
   const accidentalMemory={}; let currentIndex=previousIndex, beatPosition=0, previousBase=NOTE_POOL[currentIndex] || noteByLetter(key.tonic,6), previousMove=0, repeatedCount=0;
   const phraseAnchorIndex=currentIndex, phraseDirection=barIndex<4?1:-1;
   const notes=pattern.map((rhythmId,noteIndex)=>{
@@ -650,7 +673,7 @@ function makeMelodyForBar(key, chordSymbol, barIndex, previousIndex, ts){
     const strongBeat=beatPosition===0 || (ts.id==="4/4" && beatPosition===2);
     let base=chooseMelodyBase({ key,chord,rhythmId,previousBase,currentIndex,strongBeat,phraseDirection,previousMove,phraseAnchorIndex,repeatedCount });
     if(barIndex===0 && noteIndex===0) base=noteByLetter(key.tonic,6);
-    if(barIndex===BAR_COUNT-1 && noteIndex===pattern.length-1){ const finalChord=chordSymbol==="V"?key.chords.V:key.chords.I; base=noteByLetter(finalChord.notes[0],currentIndex); }
+    if(barIndex===totalBars-1 && noteIndex===pattern.length-1) base=noteByLetter(chord.notes[0],currentIndex);
     const before=currentIndex;
     currentIndex=notePoolIndex(base)>=0?notePoolIndex(base):currentIndex;
     const accidentalValue=writtenAccidentalForMelody(key,chord,base.letter);
@@ -690,6 +713,52 @@ function makeN5Question(){
     targetBars:[],
   };
 }
+function n5SequenceWithViPosition(position,reverse=false){
+  const available=N5_SEQUENCE_CHORD_SYMBOLS.filter(symbol=>symbol!=="I"&&symbol!=="VI");
+  const remaining=reverse?[...available].reverse():available;
+  const tail=[];
+  for(let slot=1;slot<=3;slot++) tail.push(slot===position?"VI":remaining.shift());
+  return ["I",...tail];
+}
+function makeN5SequenceOptions(){
+  let sequences;
+  if(Math.random()<.2){
+    const sharedPosition=r([1,2,3]);
+    const otherPosition=r([1,2,3].filter(position=>position!==sharedPosition));
+    sequences=[
+      n5SequenceWithViPosition(sharedPosition,false),
+      n5SequenceWithViPosition(sharedPosition,true),
+      n5SequenceWithViPosition(otherPosition,Math.random()<.5),
+    ];
+  } else {
+    sequences=shuffleCopy([1,2,3]).map(position=>n5SequenceWithViPosition(position,Math.random()<.5));
+  }
+  return shuffleCopy(sequences).map((symbols,index)=>({id:`sequence-${index}`,symbols}));
+}
+function makeN5ChordSequenceQuestion(){
+  const key=r(KEYS.filter(item=>["C","F","G"].includes(item.id)));
+  const timeSignature=r(TIME_SIGNATURES);
+  const options=makeN5SequenceOptions();
+  const answerIndex=Math.floor(Math.random()*options.length);
+  const progression=options[answerIndex].symbols;
+  let previousIndex=notePoolIndex(noteByLetter(key.tonic,6));
+  const bars=progression.map((symbol,barIndex)=>{
+    const melody=makeMelodyForBar(key,symbol,barIndex,previousIndex,timeSignature,progression.length);
+    previousIndex=melody.lastIndex;
+    return {barIndex,chordSymbol:symbol,chord:key.chords[symbol],notes:melody.notes};
+  });
+  return {
+    type:"n5ChordSequence",
+    id:Math.random().toString(36).slice(2),
+    key,
+    timeSignature,
+    accompanimentStyle:r(N5_SEQUENCE_ACCOMPANIMENT_STYLES),
+    options,
+    answerIndex,
+    bars,
+    targetBars:[],
+  };
+}
 function makeHigherQuestion(){
   const majorKeys=KEYS.filter(k=>k.id!=="Am");
   const key=Math.random()<.8?r(majorKeys):KEYS.find(k=>k.id==="Am");
@@ -723,7 +792,7 @@ function makeAHAudioChordQuestion(){
   };
 }
 function makeQuestion(level="N5", ahCustomise=DEFAULT_AH_CUSTOMISE){
-  if(level==="N5") return makeN5Question();
+  if(level==="N5") return Math.random()<.5?makeN5Question():makeN5ChordSequenceQuestion();
   if(level==="AH"){
     const hasAudio=Boolean(ahCustomise.identifyChords);
     const hasInsert=ahCustomise.insertPosition;
@@ -1104,6 +1173,37 @@ function N5Score({question,level,showNoteNames=false}){
     </g>
   </svg>;
 }
+function N5ChordSequenceScore({question,answers,setAnswers,feedback}){
+  const selected=answers.n5Sequence;
+  return <div className="w-full space-y-2" role="group" aria-label="Chord sequence answer options">
+    {question.options.map((option,index)=>{
+      const selectedOption=selected===option.id;
+      const correctOption=index===question.answerIndex;
+      const showCorrect=feedback&&correctOption;
+      const showWrong=feedback&&selectedOption&&!correctOption;
+      const textColour=showCorrect?"text-green-700":showWrong?"text-red-700":"text-stone-950";
+      const borderColour=showCorrect?"border-green-500 bg-green-50":showWrong?"border-red-500 bg-red-50":selectedOption?"border-stone-950 bg-stone-50":"border-stone-200 bg-white hover:bg-stone-50";
+      const tableLines=showCorrect?"border-green-600 bg-green-600":showWrong?"border-red-600 bg-red-600":"border-stone-700 bg-stone-700";
+      return <button
+        type="button"
+        key={option.id}
+        aria-disabled={Boolean(feedback)}
+        aria-label={`Option ${index+1}: ${option.symbols.join(", ")}`}
+        aria-pressed={selectedOption}
+        onClick={()=>{if(!feedback)setAnswers({n5Sequence:option.id});}}
+        className={`relative mx-auto flex w-fit max-w-full items-center rounded-xl border px-3 py-3 text-left shadow-sm ${borderColour}`}
+      >
+        <span className="flex min-w-0 justify-center px-1 sm:px-2">
+          <span className={`grid w-[232px] grid-cols-4 grid-rows-2 gap-px overflow-hidden rounded-sm border sm:w-[300px] ${tableLines} ${textColour}`}>
+            {option.symbols.map(symbol=><span key={`${option.id}-${symbol}-number`} className="flex h-8 items-center justify-center bg-white px-1 text-center text-sm font-bold">{symbol}</span>)}
+            {option.symbols.map(symbol=><span key={`${option.id}-${symbol}-name`} className="flex h-8 items-center justify-center bg-white px-1 text-center text-sm font-bold">{question.key.chords[symbol].shortName}</span>)}
+          </span>
+        </span>
+        <span className={`ml-3 mr-[25px] flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-lg font-black ${showCorrect?"border-green-600 bg-green-600 text-white":showWrong?"border-red-600 bg-red-600 text-white":selectedOption?"border-stone-950 bg-stone-950 text-white":"border-black/20 bg-white text-transparent"}`}>✓</span>
+      </button>;
+    })}
+  </div>;
+}
 function N5ChoiceAnswers({question,answers,feedback,onSelect}){
   const selected=answers.n5Choice;
   return <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1458,9 +1558,11 @@ function MenuRows({level,tempo,setTempo,metronomeOn,setMetronomeOn,highlightPlay
     });
   };
   return <>
-    {level==="H"&&<>
+    {(level==="N5"||level==="H")&&<>
       <window.MLH.MenuSubheading>Audio</window.MLH.MenuSubheading>
       <TempoDropdownRow tempo={tempo} setTempo={setTempo} stopAudio={stopAudio} />
+    </>}
+    {level==="H"&&<>
       <window.MLH.MenuToggleRow
         glyph={<MenuSvgGlyph src={ASSET.metronome} alt="" />}
         label="Metronome"
@@ -1498,7 +1600,7 @@ function MenuRows({level,tempo,setTempo,metronomeOn,setMetronomeOn,highlightPlay
   </>;
 }
 function ChordOptions({question}){ const options=getChordOptions(question.key); return <div className="grid w-fit grid-cols-[48px_120px] gap-x-3 text-base leading-tight">{options.map(option=><React.Fragment key={option.symbol}><div className="font-semibold">{getChordShortName(option.chord)}</div><div>Chord {option.symbol}</div></React.Fragment>)}</div>; }
-function useStyles(){ useEffect(()=>{ if(document.getElementById("golden-style"))return; const s=document.createElement("style"); s.id="golden-style"; s.innerHTML=`button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:brightness(1.08);box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}.chords-customise-panel{z-index:900;max-height:calc(100dvh - 170px);overflow-y:auto}.higher-mobile-answers{display:none}@media (max-width:639px){.chords-main{min-height:0!important;padding-bottom:12px!important}.chords-score-wrap{top:0!important;display:flex;justify-content:center;align-items:center;overflow:hidden;margin-top:0;margin-bottom:10px}.chords-score-wrap svg{width:135%;max-width:none;flex:0 0 auto}.chords-score-higher svg{width:109%}.chords-score-ahAudioChord svg{width:158%}.chords-score-n5,.chords-score-ahAudioChord{height:238px}.chords-score-higher{height:318px}.chords-score-ahInversionBar,.chords-score-ahBassLine{height:370px}.chords-score-n5 svg{transform:translateY(19px)}.chords-score-ahAudioChord svg{transform:translateY(0)}.chords-score-higher svg{transform:translateY(-58px)}.chords-score-ahInversionBar svg,.chords-score-ahBassLine svg{transform:translateY(-47px)}.chords-question-card{margin-top:0!important;margin-left:.75rem!important;margin-right:.75rem!important}.chords-question-higher{margin-top:-125px!important}.chords-question-ah-inversion,.chords-question-ah-bassline{margin-top:-75px!important}.higher-score-answer{display:none}.higher-mobile-answers{display:grid}}@keyframes medalShine{0%,100%{transform:scale(1) rotate(-4deg);filter:drop-shadow(0 0 0 rgba(250,204,21,0))}50%{transform:scale(1.16) rotate(4deg);filter:drop-shadow(0 0 10px rgba(250,204,21,.9))}}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}@keyframes pulseBorder{0%{outline:0 solid rgba(0,0,0,.55);border-color:#000}50%{outline:4px solid rgba(0,0,0,.12);border-color:#666}100%{outline:0 solid rgba(0,0,0,.55);border-color:#000}}`; document.head.appendChild(s); },[]); }
+function useStyles(){ useEffect(()=>{ if(document.getElementById("golden-style"))return; const s=document.createElement("style"); s.id="golden-style"; s.innerHTML=`button{-webkit-tap-highlight-color:transparent;user-select:none;transition:transform .08s ease,filter .08s ease,background-color .12s ease,box-shadow .12s ease;cursor:pointer}button:hover{transform:translateY(-1px) scale(1.01);filter:brightness(1.08);box-shadow:0 6px 18px rgba(0,0,0,.08)}button:active{transform:scale(.96);filter:brightness(.92)}button:disabled{cursor:not-allowed;opacity:.5}.chords-customise-panel{z-index:900;max-height:calc(100dvh - 170px);overflow-y:auto}.higher-mobile-answers{display:none}@media (max-width:639px){.chords-main{min-height:0!important;padding-bottom:12px!important}.chords-score-wrap{top:0!important;display:flex;justify-content:center;align-items:center;overflow:hidden;margin-top:0;margin-bottom:10px}.chords-score-wrap svg{width:135%;max-width:none;flex:0 0 auto}.chords-score-higher svg{width:109%}.chords-score-ahAudioChord svg{width:158%}.chords-score-n5,.chords-score-ahAudioChord{height:238px}.chords-score-n5ChordSequence{height:276px}.chords-score-higher{height:318px}.chords-score-ahInversionBar,.chords-score-ahBassLine{height:370px}.chords-score-n5 svg{transform:translateY(19px)}.chords-score-ahAudioChord svg{transform:translateY(0)}.chords-score-higher svg{transform:translateY(-58px)}.chords-score-ahInversionBar svg,.chords-score-ahBassLine svg{transform:translateY(-47px)}.chords-question-card{margin-top:0!important;margin-left:.75rem!important;margin-right:.75rem!important}.chords-question-higher{margin-top:-125px!important}.chords-question-ah-inversion,.chords-question-ah-bassline{margin-top:-75px!important}.higher-score-answer{display:none}.higher-mobile-answers{display:grid}}@keyframes medalShine{0%,100%{transform:scale(1) rotate(-4deg);filter:drop-shadow(0 0 0 rgba(250,204,21,0))}50%{transform:scale(1.16) rotate(4deg);filter:drop-shadow(0 0 10px rgba(250,204,21,.9))}}@keyframes incorrectDropShake{0%{transform:translateY(-28px);opacity:0}55%{transform:translateY(0);opacity:1}68%{transform:translateX(-5px)}78%{transform:translateX(5px)}88%{transform:translateX(-3px)}100%{transform:translateX(0);opacity:1}}@keyframes correctFade{0%{transform:translateY(-18px);opacity:0}100%{transform:translateY(0);opacity:1}}@keyframes feedbackFadeOut{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-10px)}}@keyframes pulseBorder{0%{outline:0 solid rgba(0,0,0,.55);border-color:#000}50%{outline:4px solid rgba(0,0,0,.12);border-color:#666}100%{outline:0 solid rgba(0,0,0,.55);border-color:#000}}`; document.head.appendChild(s); },[]); }
 const useClickOutside = window.MLH.useClickOutside;
 const playFeedbackSound = (...args) => window.MLH?.playFeedbackSound?.(...args);
 function App(){
@@ -1508,7 +1610,7 @@ function App(){
     return LEVELS[requested] ? requested : "N5";
   },[]);
   const [activeLevel,setActiveLevel]=useState(initialLevel);
-  const [tempo,setTempo]=useState("medium");
+  const [tempo,setTempo]=useState(initialLevel==="N5"?"slow":"medium");
   const [metronomeOn,setMetronomeOn]=useState(false);
   const [showNoteNames,setShowNoteNames]=useState(false);
   const [showScaleDegrees,setShowScaleDegrees]=useState(false);
@@ -1587,6 +1689,7 @@ function App(){
     if(level===activeLevel) return;
     window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
     setActiveLevel(level);
+    if(level==="N5") setTempo("slow");
     const url=new URL(window.location.href);
     url.searchParams.set("level",level);
     window.history.replaceState(null,"",url.toString());
@@ -1616,6 +1719,7 @@ function App(){
   }
   function clearAnswers(){ if(feedback)return; setAnswers({}); setPromptMessage(""); }
   function hasAnyAnswer(){
+    if(question.type==="n5ChordSequence") return Boolean(answers.n5Sequence);
     if(question.type==="n5"){
       return question.answerMode==="choice"
         ? Boolean(answers.n5Choice)
@@ -1638,6 +1742,7 @@ function App(){
     return question.targetBars.some(i=>Boolean(String(answers[i]||"").trim()));
   }
   function hasFullAnswer(){
+    if(question.type==="n5ChordSequence") return Boolean(answers.n5Sequence);
     if(question.type==="n5"){
       return question.answerMode==="choice"
         ? Boolean(answers.n5Choice)
@@ -1658,6 +1763,11 @@ function App(){
   }
   function confirmAnswer(){
     if(feedback)return; stopAudio();
+    if(question.type==="n5ChordSequence"){
+      if(!answers.n5Sequence) return;
+      score(answers.n5Sequence===question.options[question.answerIndex].id);
+      return;
+    }
     if(question.type==="n5"){
       const value=String(answers.n5Typed||"").trim();
       if(!value){ return; }
@@ -1703,9 +1813,9 @@ function App(){
     score(id===question.chordType.id);
   }
   function playOscillator(ctx,{frequency,start,duration,volume=.16}){ window.MLH?.playPianoFrequency?.(ctx,ctx.destination,frequency,start,duration,volume); }
-  function playSynthOscillator(ctx,{frequency,start,duration,volume=.052}){
+  function playSynthOscillator(ctx,{frequency,start,duration,volume=.052,type="triangle"}){
     const oscillator=ctx.createOscillator(), gain=ctx.createGain();
-    oscillator.type="triangle";
+    oscillator.type=type;
     oscillator.frequency.setValueAtTime(frequency,start);
     gain.gain.setValueAtTime(.0001,start);
     gain.gain.exponentialRampToValueAtTime(volume,start+.015);
@@ -1721,9 +1831,56 @@ function App(){
     const AC=window.AudioContext||window.webkitAudioContext; if(!AC){setPromptMessage("Audio playback is not supported in this browser.");return;}
     stopAudio(); const ctx=new AC(); audioRef.current=ctx; setPlaying(true); setPromptMessage("");
     const selectedTempo=TEMPOS.find(t=>t.id===tempo)||TEMPOS[1], beatSeconds=60/selectedTempo.bpm, beatsPerBar=question.timeSignature.beats, barSeconds=beatSeconds*beatsPerBar;
-    const activeDuration=question.bars.length*barSeconds;
+    const playbackLoops=question.type==="n5ChordSequence"?2:1;
+    const activeDuration=question.bars.length*barSeconds*playbackLoops;
     const startOffset=clamp(startOffsetSeconds||0,0,Math.max(0,activeDuration-0.05));
     const audioStartTime=ctx.currentTime+.08;
+    if(question.type==="n5ChordSequence"){
+      Array.from({length:playbackLoops},(_,loopIndex)=>loopIndex).forEach(loopIndex=>{
+        question.bars.forEach(bar=>{
+          const playbackBarIndex=loopIndex*question.bars.length+bar.barIndex;
+          const relativeBarStart=playbackBarIndex*barSeconds;
+          const relativeBarEnd=relativeBarStart+barSeconds;
+          if(relativeBarEnd<=startOffset) return;
+          const barStart=audioStartTime+Math.max(relativeBarStart,startOffset)-startOffset;
+          const chord=bar.chord;
+          highlightTimersRef.current.push(setTimeout(()=>setActiveBarIndex(bar.barIndex),Math.max(0,(barStart-ctx.currentTime)*1000)));
+          highlightTimersRef.current.push(setTimeout(()=>setActiveBarIndex(null),Math.max(0,(barStart-ctx.currentTime+barSeconds)*1000)));
+          bar.notes.forEach((note,noteIndex)=>{
+            const relativeNoteStart=relativeBarStart+note.beatPosition*beatSeconds;
+            const relativeNoteEnd=relativeNoteStart+note.beats*beatSeconds;
+            if(relativeNoteEnd<=startOffset) return;
+            const noteStart=audioStartTime+Math.max(relativeNoteStart,startOffset)-startOffset;
+            const duration=(relativeNoteEnd-Math.max(relativeNoteStart,startOffset))*.94;
+            const pitch=effectivePitchForMelodyNote(question,bar,noteIndex)+12;
+            playOscillator(ctx,{frequency:midiToFrequency(pitch),start:noteStart,duration,volume:.025});
+          });
+          const rootMidi=pitchForChordLetter(question.key,chord,chord.notes[0],3);
+          const thirdMidi=pitchForChordLetter(question.key,chord,chord.notes[1],4);
+          const fifthMidi=pitchForChordLetter(question.key,chord,chord.notes[2],5);
+          const midiMap={
+            lowRoot:rootMidi-12, lowThird:thirdMidi-12, lowFifth:fifthMidi-12,
+            root:rootMidi, third:thirdMidi, fifth:fifthMidi, octaveRoot:rootMidi+12,
+          };
+          const isFinalCadenceBar=loopIndex===playbackLoops-1&&bar.barIndex===question.bars.length-1;
+          const accompanimentEvents=isFinalCadenceBar
+            ? [n5SequenceEvent(0,beatsPerBar,["lowRoot","root","third","fifth","octaveRoot"],.07)]
+            : n5SequenceAccompanimentEvents(question.accompanimentStyle,beatsPerBar);
+          accompanimentEvents.forEach(event=>{
+            const relativeEventStart=relativeBarStart+event.time*beatSeconds;
+            const relativeEventEnd=Math.min(relativeBarEnd,relativeEventStart+event.duration*beatSeconds);
+            if(relativeEventEnd<=startOffset) return;
+            const eventStart=audioStartTime+Math.max(relativeEventStart,startOffset)-startOffset;
+            const duration=Math.max(.08,relativeEventEnd-Math.max(relativeEventStart,startOffset));
+            event.notes.flatMap(token=>midiMap[token]??[]).forEach(midi=>{
+              playOscillator(ctx,{frequency:midiToFrequency(midi),start:eventStart,duration,volume:event.volume});
+            });
+          });
+        });
+      });
+      stopTimerRef.current=setTimeout(()=>{setPlaying(false);setActiveNoteId(null);setActiveBarIndex(null);audioRef.current=null;try{ctx.close()}catch{}},Math.max(0,(activeDuration-startOffset)*1000)+150);
+      return;
+    }
     if(question.type==="ahAudioChord"){
       question.audioBars.forEach(bar=>{
         const relativeBarStart=bar.barIndex*barSeconds;
@@ -1852,8 +2009,10 @@ function App(){
           <window.MLH.SkipButton resetStreak={()=>setStreak(0)} onClick={()=>newQuestion()} icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />}/>
         </div>
       </div>
-      <div className={`chords-score-wrap chords-score-${question.type} relative -top-[68px] transition-opacity duration-300 ${questionVisible?"opacity-100":"opacity-0"}`}>
-        {question.type==="n5"
+      <div className={`chords-score-wrap chords-score-${question.type} relative ${question.type==="n5ChordSequence"?"top-0":"-top-[68px]"} transition-opacity duration-300 ${questionVisible?"opacity-100":"opacity-0"}`}>
+        {question.type==="n5ChordSequence"
+          ? <N5ChordSequenceScore question={question} answers={answers} setAnswers={setAnswers} feedback={feedback}/>
+          : question.type==="n5"
           ? <N5Score question={question} level={activeLevel} showNoteNames={showNoteNames}/>
           : question.type==="ahAudioChord"
           ? <AHListeningScore question={question} activeNoteId={highlightPlayback?activeNoteId:undefined} showNoteNames={showNoteNames}/>
@@ -1863,7 +2022,24 @@ function App(){
           ? <AHBassLineScore question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} showNoteNames={showNoteNames} isMobile={isMobileView}/>
           : <Score question={question} answers={answers} setAnswers={setAnswers} feedback={feedback} activeNoteId={highlightPlayback?activeNoteId:undefined} activeBarIndex={activeBarIndex} level={activeLevel} showNoteNames={showNoteNames}/>}
       </div>
-      {question.type==="n5" ? (
+      {question.type==="n5ChordSequence" ? (
+        <div className="chords-question-card relative z-10 mt-3 flex min-h-[142px] flex-col justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-4 shadow-md md:mx-3">
+          <div className="text-stone-900">
+            <p className="text-base leading-tight">Identify the chord sequence heard. The music is in the key of <strong>{question.key.name}</strong>.</p>
+            {promptMessage&&<p className="mt-2 text-sm font-bold text-red-600">{promptMessage}</p>}
+          </div>
+          <div className="mt-4 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <button type="button" onClick={()=>playQuestionAudio(0)} disabled={Boolean(feedback)} className={window.MLH.PlayButtonClass}>
+              <span className="text-lg leading-none">{playing?"■":"▶"}</span>
+              <span>{playing?"Stop":"Play"}</span>
+            </button>
+            <div className={window.MLH.ActionButtonGroupClass}>
+              <button type="button" disabled={Boolean(feedback) || !hasAnyAnswer()} onClick={clearAnswers} className={window.MLH.ClearButtonClass}>Clear</button>
+              <window.MLH.ConfirmButton disabled={Boolean(feedback) || !hasFullAnswer()} onClick={confirmAnswer} className={window.MLH.AudioConfirmButtonClass}>Confirm</window.MLH.ConfirmButton>
+            </div>
+          </div>
+        </div>
+      ) : question.type==="n5" ? (
         <div className="chords-question-card relative z-10 mt-3 flex min-h-[120px] flex-col justify-between overflow-hidden rounded-xl border border-stone-200 bg-stone-50 px-4 py-4 shadow-md md:-mt-[190px] md:mx-3">
           <div className="text-stone-900">
             <p className="text-base font-semibold leading-tight">Identify the chord outlined in the music above.</p>

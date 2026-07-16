@@ -32,6 +32,7 @@ const BRAVURA_SYMBOLS = {
   timeSig6: "\uE086",
   timeSig8: "\uE088",
   timeSig9: "\uE089",
+  timeSigCommon: "\uE08A",
 
   // Full note symbols
   noteheadBlack: "\uE0A4",
