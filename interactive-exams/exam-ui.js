@@ -31,6 +31,15 @@
     });
   }
 
+  function capitaliseInitialAnswer(field) {
+    const nextValue = field.value.replace(/^(\s*)(\p{Ll})/u, (match, spacing, letter) => `${spacing}${letter.toUpperCase()}`);
+    if (nextValue === field.value) return;
+    const selectionStart = field.selectionStart;
+    const selectionEnd = field.selectionEnd;
+    field.value = nextValue;
+    if (selectionStart !== null && selectionEnd !== null) field.setSelectionRange(selectionStart, selectionEnd);
+  }
+
   function paperTextMarkup(text, boldPhrases = []) {
     const source = String(text ?? "");
     const phrases = [...new Set(boldPhrases.filter(Boolean))].sort((a, b) => b.length - a.length);
@@ -44,6 +53,7 @@
   let audioPlayer;
   let allQuestionAudioPlayers = [];
   let showingAllQuestions = false;
+  let selectedStartMode = "practice";
 
   function destroyAudioPlayers() {
     audioPlayer?.destroy();
@@ -69,6 +79,7 @@
   }
 
   function canShowAllQuestions() {
+    if (engine.attempt.mode === "exam") return true;
     const questions = engine.visibleQuestions();
     return !engine.attempt.questionsLocked || lastUnlockedQuestionIndex(questions) === questions.length - 1;
   }
@@ -102,22 +113,18 @@
   }
 
   function renderCustomiseMenu() {
-    const timerToggle = $("[data-timer-toggle]");
-    if (!timerToggle) return;
-    const timerEnabled = Boolean(engine?.attempt?.timer?.enabled);
-    timerToggle.setAttribute("aria-pressed", String(timerEnabled));
-    timerToggle.disabled = engine?.attempt?.status === "submitted";
-    $("[data-timer-toggle-track]").classList.toggle("is-on", timerEnabled);
-    const audioLimitToggle = $("[data-audio-limit-toggle]");
-    const audioLimitEnabled = Boolean(engine?.attempt?.audioLimitEnabled);
-    audioLimitToggle.setAttribute("aria-pressed", String(audioLimitEnabled));
-    audioLimitToggle.disabled = engine?.attempt?.status === "submitted";
-    $("[data-audio-limit-toggle-track]").classList.toggle("is-on", audioLimitEnabled);
-    const questionsLockedToggle = $("[data-questions-locked-toggle]");
-    const questionsLocked = Boolean(engine?.attempt?.questionsLocked);
-    questionsLockedToggle.setAttribute("aria-pressed", String(questionsLocked));
-    questionsLockedToggle.disabled = engine?.attempt?.status === "submitted";
-    $("[data-questions-locked-toggle-track]").classList.toggle("is-on", questionsLocked);
+    const options = document.querySelectorAll("[data-mode-option]");
+    if (options.length && engine?.attempt) {
+      options.forEach(option => {
+        const active = option.dataset.modeOption === engine.attempt.mode;
+        option.classList.toggle("is-active", active);
+        option.setAttribute("aria-pressed", String(active));
+      });
+      const icon = $("[data-mode-toolbar-icon]");
+      if (icon) icon.src = engine.attempt.mode === "exam" ? "../worksheet.svg" : "../practicemode.svg";
+      const label = $("[data-mode-toolbar-label]");
+      if (label) label.textContent = engine.attempt.mode === "exam" ? "Exam Mode" : "Practice Mode";
+    }
   }
 
   function renderNavigator() {
@@ -130,9 +137,9 @@
     navigator.innerHTML = questions.map((question, index) => {
       const state = engine.questionState(question);
       const isCurrent = question.id === engine.attempt.currentQuestion;
-      const locked = Boolean(engine.attempt.questionsLocked) && index > lastUnlocked;
-      const stateLabel = state === "partial" ? "Partially answered" : state === "answered" ? "Answered" : "Unanswered";
-      const subtitle = state === "answered" || state === "partial" ? `<span class="navigator-status">${stateLabel}</span>` : "";
+      const locked = engine.attempt.mode === "exam" ? index > (engine.attempt.examUnlockedQuestionIndex ?? -1) : Boolean(engine.attempt.questionsLocked) && index > lastUnlocked;
+      const stateLabel = state === "partial" ? "Partially answered" : state === "answered" ? "Answered" : "Not attempted";
+      const subtitle = `<span class="navigator-status">${stateLabel}</span>`;
       return `<button type="button" class="navigator-item is-${state} ${isCurrent ? "is-current" : ""} ${locked ? "is-locked" : ""}" data-go-question="${question.id}" aria-label="Question ${question.number}, ${stateLabel}${locked ? ", locked" : ""}" aria-current="${isCurrent ? "step" : "false"}" ${locked ? "disabled aria-disabled=\"true\"" : ""}>
         <span class="navigator-question-glyph" aria-hidden="true">${question.number}</span>
         <span class="navigator-copy"><span class="navigator-label">Question ${question.number}</span>${subtitle}</span>
@@ -140,12 +147,17 @@
       </button>`;
     }).join("");
     navigator.querySelectorAll("[data-go-question]").forEach(button => button.addEventListener("click", () => {
+      if (engine.attempt.mode === "exam") {
+        closePaperMenus();
+        document.querySelector(`[data-all-question="${button.dataset.goQuestion}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
       showingAllQuestions = false;
       closePaperMenus();
       engine.goToQuestion(button.dataset.goQuestion);
     }));
     const showAllButton = $("[data-show-all-questions]");
-    showAllButton.disabled = !canShowAllQuestions();
+    showAllButton.disabled = !canShowAllQuestions() || engine.attempt.mode === "exam";
     showAllButton.setAttribute("aria-disabled", String(showAllButton.disabled));
   }
 
@@ -160,7 +172,7 @@
     const nextDisabled = Boolean(engine.attempt.questionsLocked) && !complete;
     next.disabled = nextDisabled;
     bottomNext.disabled = nextDisabled;
-    submits.forEach(submit => { submit.disabled = index === questions.length - 1 && !complete; });
+    submits.forEach(submit => { submit.disabled = false; });
   }
 
   function optionMarkup(subquestion, value, checkbox = false) {
@@ -184,14 +196,14 @@
   function inputMarkup(subquestion, value) {
     if (subquestion.type === "radio") return optionMarkup(subquestion, value, false);
     if (subquestion.type === "checkbox") return optionMarkup(subquestion, value, true);
-    if (subquestion.type === "short-text" && subquestion.inlineAnswer) return `<div class="sentence-answer"><span>${paperTextMarkup(subquestion.inlineAnswer.before, subquestion.boldPhrases)}</span><label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(value || "")}" autocomplete="off" /><span>${paperTextMarkup(subquestion.inlineAnswer.after, subquestion.boldPhrases)}</span></div>`;
-    if (subquestion.type === "short-text" && subquestion.answerStyle === "reason") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><textarea id="${subquestion.id}" class="text-answer extended-answer-box" rows="4">${escapeHtml(value || "")}</textarea>`;
-    if (subquestion.type === "short-text") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(value || "")}" autocomplete="off" />`;
+    if (subquestion.type === "short-text" && subquestion.inlineAnswer) return `<div class="sentence-answer"><span>${paperTextMarkup(subquestion.inlineAnswer.before, subquestion.boldPhrases)}</span><label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(value || "")}" autocomplete="off" autocapitalize="none" /><span>${paperTextMarkup(subquestion.inlineAnswer.after, subquestion.boldPhrases)}</span></div>`;
+    if (subquestion.type === "short-text" && subquestion.answerStyle === "reason") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><textarea id="${subquestion.id}" class="text-answer extended-answer-box" rows="4" autocapitalize="sentences">${escapeHtml(value || "")}</textarea>`;
+    if (subquestion.type === "short-text") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(value || "")}" autocomplete="off" autocapitalize="sentences" />`;
     if (subquestion.type === "structured-review") {
       if (subquestion.roughWork && subquestion.finalAnswerField) {
-        return `<div class="q8-answer-workspace"><section class="q8-rough-work" aria-labelledby="q8-rough-work-heading"><h3 id="q8-rough-work-heading">Rough work</h3><div class="q8-rough-work-table">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" aria-label="Rough work: ${escapeHtml(heading.label)}">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div></section><section class="q8-final-answer" aria-labelledby="q8-final-answer-heading"><h3 id="q8-final-answer-heading">Final answer</h3><label class="visually-hidden" for="${subquestion.id}-final">Final answer</label><textarea id="${subquestion.id}-final" data-heading="final" aria-label="Final answer">${escapeHtml(value?.final || "")}</textarea><p class="q8-end-paper">[END OF QUESTION PAPER]</p></section></div>`;
+        return `<div class="q8-answer-workspace"><section class="q8-rough-work" aria-labelledby="q8-rough-work-heading"><h3 id="q8-rough-work-heading">Rough work</h3><div class="q8-rough-work-table">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" aria-label="Rough work: ${escapeHtml(heading.label)}" autocapitalize="sentences">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div></section><section class="q8-final-answer" aria-labelledby="q8-final-answer-heading"><h3 id="q8-final-answer-heading">Final answer</h3><label class="visually-hidden" for="${subquestion.id}-final">Final answer</label><textarea id="${subquestion.id}-final" data-heading="final" aria-label="Final answer" autocapitalize="sentences">${escapeHtml(value?.final || "")}</textarea><p class="q8-end-paper">[END OF QUESTION PAPER]</p></section></div>`;
       }
-      return `<div class="structured-answer">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" rows="4">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div>`;
+      return `<div class="structured-answer">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" rows="4" autocapitalize="sentences">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div>`;
     }
     if (subquestion.type === "notation-choice") return `<div data-notation-container></div>`;
     return "";
@@ -238,7 +250,7 @@
         <div class="q7-prompt-row"><span>${escapeHtml(reasonQuestion.label)}</span><span>${paperTextMarkup(reasonQuestion.prompt, reasonQuestion.boldPhrases)}</span><strong aria-label="${reasonQuestion.marks} mark">${reasonQuestion.marks}</strong></div>
         <div class="q7-playback-lines">${styleQuestion.instructionLines.map(line => `<span>${escapeHtml(line)}</span>`).join("")}</div>
         <section class="subquestion q7-style-options" data-subquestion="${styleQuestion.id}">${inputMarkup(styleQuestion, styleValue)}</section>
-        <section class="subquestion q7-reason-entry" data-subquestion="${reasonQuestion.id}"><label for="${reasonQuestion.id}"><span>Reason</span><textarea id="${reasonQuestion.id}" class="text-answer q7-reason-answer" rows="1">${escapeHtml(reasonValue || "")}</textarea></label></section>
+        <section class="subquestion q7-reason-entry" data-subquestion="${reasonQuestion.id}"><label for="${reasonQuestion.id}"><span>Reason</span><textarea id="${reasonQuestion.id}" class="text-answer q7-reason-answer" rows="1" autocapitalize="sentences">${escapeHtml(reasonValue || "")}</textarea></label></section>
       </div>`);
     }
     return groups.join("");
@@ -295,6 +307,7 @@
   }
 
   function bindSubquestion(card, subquestion) {
+    const syncTypedAnswerStyle = field => field.classList.toggle("has-user-answer", Boolean(field.value.trim()));
     if (subquestion.type === "radio") {
       card.querySelectorAll('input[type="radio"]').forEach(input => {
         const label = input.closest(".answer-option");
@@ -339,10 +352,16 @@
     } else if (subquestion.type === "short-text") {
       const input = card.querySelector("input, textarea");
       input.setAttribute("aria-keyshortcuts", "Shift+Delete");
-      input.addEventListener("input", () => engine.setAnswer(subquestion.id, input.value));
+      syncTypedAnswerStyle(input);
+      input.addEventListener("input", () => {
+        if (!subquestion.inlineAnswer) capitaliseInitialAnswer(input);
+        syncTypedAnswerStyle(input);
+        engine.setAnswer(subquestion.id, input.value);
+      });
       bindRemovalGesture(input, () => {
         if (!input.value) return;
         input.value = "";
+        syncTypedAnswerStyle(input);
         engine.setAnswer(subquestion.id, "");
       });
     } else if (subquestion.type === "structured-review") {
@@ -353,10 +372,16 @@
       };
       card.querySelectorAll("textarea").forEach(textarea => {
         textarea.setAttribute("aria-keyshortcuts", "Shift+Delete");
-        textarea.addEventListener("input", updateStructuredAnswer);
+        syncTypedAnswerStyle(textarea);
+        textarea.addEventListener("input", () => {
+          capitaliseInitialAnswer(textarea);
+          syncTypedAnswerStyle(textarea);
+          updateStructuredAnswer();
+        });
         bindRemovalGesture(textarea, () => {
           if (!textarea.value) return;
           textarea.value = "";
+          syncTypedAnswerStyle(textarea);
           updateStructuredAnswer();
         });
       });
@@ -374,7 +399,10 @@
 
   function renderQuestion() {
     destroyAudioPlayers();
+    const paperToolbar = $(".exam-paper-toolbar");
+    paperToolbar?.remove();
     showingAllQuestions = false;
+    $(".exam-header-audio").hidden = false;
     $("[data-single-question-area]").hidden = false;
     $("[data-all-questions-area]").hidden = true;
     $("[data-all-questions-area]").innerHTML = "";
@@ -389,6 +417,9 @@
     }
     engine.attempt.currentQuestion = question.id;
     const questionCard = $("[data-single-question-area] .question-card");
+    const paperActions = $("[data-single-question-area] .question-actions");
+    if (paperToolbar) questionCard.prepend(paperToolbar);
+    if (paperActions.parentElement !== questionCard) questionCard.append(paperActions);
     questionCard.className = `question-card question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}`;
     $("[data-question-heading]").textContent = `Question ${question.number}`;
     $("[data-question-intro]").innerHTML = questionIntroMarkup(question);
@@ -412,6 +443,7 @@
     $("[data-bottom-previous-question]").disabled = index === 0;
     if (index > 0) $("[data-previous-label]").textContent = "Previous";
     const isLastQuestion = index === visible.length - 1;
+    $(".exam-question-navigation").classList.toggle("is-submit-visible", isLastQuestion);
     next.hidden = isLastQuestion;
     $("[data-bottom-next-question]").hidden = isLastQuestion;
     if (index < visible.length - 1) $("[data-next-label]").textContent = "Next";
@@ -423,9 +455,20 @@
   function renderAllQuestions() {
     if (!canShowAllQuestions()) return;
     destroyAudioPlayers();
+    const paperToolbar = $(".exam-paper-toolbar");
+    paperToolbar?.remove();
     showingAllQuestions = true;
+    const activeExam = engine.attempt.mode === "exam" && engine.attempt.examStarted;
+    $(".exam-header-audio").hidden = !activeExam;
     const singleArea = $("[data-single-question-area]");
     const allArea = $("[data-all-questions-area]");
+    const setExamSubmitVisibility = visible => {
+      const topSubmit = $(".question-submit-button");
+      const bottomSubmit = allArea.querySelector("[data-all-submit-paper]");
+      topSubmit.hidden = !visible;
+      if (bottomSubmit) bottomSubmit.hidden = !visible;
+      $(".exam-question-navigation").classList.toggle("is-submit-visible", visible);
+    };
     singleArea.hidden = true;
     allArea.hidden = false;
     allArea.innerHTML = engine.visibleQuestions().map(question => `<article class="question-card all-question-card question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}" data-all-question="${question.id}">
@@ -435,19 +478,48 @@
       <div class="question-intro">${questionIntroMarkup(question)}</div>
       <div class="subquestions">${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}</div>
       <div class="question-outro">${questionOutroMarkup(question)}</div>
-    </article>`).join("");
-    engine.visibleQuestions().forEach(question => {
+    </article>`).join("") + `<div class="question-actions all-question-actions"><span></span><button class="button button-dark" type="button" data-all-submit-paper>Submit</button></div>`;
+    const firstPaper = allArea.querySelector(".all-question-card");
+    const lastPaper = allArea.querySelector(".all-question-card:last-of-type");
+    const allPaperActions = allArea.querySelector(".all-question-actions");
+    if (firstPaper && paperToolbar) firstPaper.prepend(paperToolbar);
+    if (lastPaper && allPaperActions) {
+      lastPaper.classList.add("has-paper-actions");
+      lastPaper.append(allPaperActions);
+    }
+    engine.visibleQuestions().forEach((question, questionIndex) => {
       const card = allArea.querySelector(`[data-all-question="${question.id}"]`);
+      const locked = activeExam && questionIndex > (engine.attempt.examUnlockedQuestionIndex ?? 0);
+      card.classList.toggle("is-exam-locked", locked);
+      card.inert = locked;
       renderSharedNotation(card, question);
       question.subquestions.forEach(subquestion => bindSubquestion(card.querySelector(`[data-subquestion="${subquestion.id}"]`), subquestion));
-      allQuestionAudioPlayers.push(root.ExamAudio.createPlayer(card.querySelector("[data-all-question-audio]"), {
-        clips: question.audio.clips,
-        mode: engine.attempt.mode,
-        limitPlayback: Boolean(engine.attempt.audioLimitEnabled),
-        playConsumed: Boolean(engine.attempt.audioLimitEnabled && engine.attempt.audioPlayCounts?.[question.id]),
-        onConsumed: () => engine.setPlayCounts({ ...engine.attempt.audioPlayCounts, [question.id]: 1 }),
-      }));
+      if (!activeExam) allQuestionAudioPlayers.push(root.ExamAudio.createPlayer(card.querySelector("[data-all-question-audio]"), { clips: question.audio.clips }));
     });
+    if (activeExam) {
+      const clips = engine.visibleQuestions().map((question, index) => ({ ...question.audio.clips[0], label: `Question ${index + 1}` }));
+      audioPlayer = root.ExamAudio.createPlayer($("[data-audio-container]"), {
+        clips,
+        continuous: true,
+        autoplay: true,
+        limitPlayback: true,
+        onClipStart: index => {
+          engine.unlockExamQuestion(index);
+          const card = allArea.querySelector(`[data-all-question="${paper.questions[index].id}"]`);
+          allArea.querySelectorAll("[data-all-question]").forEach((item, itemIndex) => {
+            const isLocked = itemIndex > index;
+            item.classList.toggle("is-exam-locked", isLocked);
+            item.inert = isLocked;
+          });
+          if (index === engine.visibleQuestions().length - 1) setExamSubmitVisibility(true);
+          card?.scrollIntoView({ behavior: "smooth", block: "start" });
+        },
+      });
+    }
+    $("[data-next-question]").hidden = true;
+    $("[data-previous-question]").hidden = activeExam;
+    setExamSubmitVisibility(!activeExam || (engine.attempt.examUnlockedQuestionIndex ?? 0) === engine.visibleQuestions().length - 1);
+    allArea.querySelector("[data-all-submit-paper]")?.addEventListener("click", openSubmitModal);
     renderNavigator();
     closePaperMenus();
   }
@@ -544,6 +616,25 @@
       renderToolbarStats();
       return;
     }
+    if (reason === "exam-unlock") {
+      renderNavigator();
+      return;
+    }
+    if (reason === "exam-begin") {
+      document.body.dataset.examActive = "true";
+      renderToolbarStats();
+      renderCustomiseMenu();
+      showScreen("exam");
+      renderAllQuestions();
+      return;
+    }
+    if (reason === "mode-practice") {
+      document.body.dataset.examActive = "false";
+      renderToolbarStats();
+      renderCustomiseMenu();
+      renderQuestion();
+      return;
+    }
     if (reason === "timer-setting") {
       renderToolbarStats();
       renderCustomiseMenu();
@@ -575,10 +666,17 @@
     renderQuestion();
   }
 
-  function startExam() { engine.start("exam", false); }
+  function startAttempt(mode) {
+    root.ExamStorage.deleteDraft(paper.id);
+    engine.start(mode, false);
+    if (mode === "exam") engine.beginExamSession();
+  }
 
   function openSubmitModal() {
-    if (!questionIsComplete(currentQuestion())) return;
+    const unanswered = paper.questions.filter(question => !questionIsComplete(question)).length;
+    $("[data-submit-message]").textContent = unanswered
+      ? `${unanswered} ${unanswered === 1 ? "question is" : "questions are"} not fully answered. You can still submit, or keep working and review the paper.`
+      : "All questions have been answered. After submission, your answers will be locked.";
     $("[data-submit-overlay]").classList.add("is-open");
   }
   function closeSubmitModal() { $("[data-submit-overlay]").classList.remove("is-open"); }
@@ -617,20 +715,38 @@
       const index = questions.findIndex(item => item.id === currentQuestion().id);
       if (index > 0) engine.goToQuestion(questions[index - 1].id);
     });
-    $("[data-next-question]").addEventListener("click", () => {
+    const goNext = () => {
       const questions = engine.visibleQuestions();
       const index = questions.findIndex(item => item.id === currentQuestion().id);
-      if (index < questions.length - 1 && (!engine.attempt.questionsLocked || questionIsComplete(questions[index]))) engine.goToQuestion(questions[index + 1].id);
-    });
+      if (index < questions.length - 1) engine.goToQuestion(questions[index + 1].id);
+    };
+    $("[data-next-question]").addEventListener("click", goNext);
     $("[data-bottom-previous-question]").addEventListener("click", () => $("[data-previous-question]").click());
     $("[data-bottom-next-question]").addEventListener("click", () => $("[data-next-question]").click());
     document.querySelectorAll("[data-submit-paper]").forEach(submit => submit.addEventListener("click", openSubmitModal));
     $("[data-cancel-submit]").addEventListener("click", closeSubmitModal);
     $("[data-confirm-submit]").addEventListener("click", () => { closeSubmitModal(); engine.submit(); });
     $("[data-submit-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeSubmitModal(); });
-    $("[data-timer-toggle]").addEventListener("click", () => engine.setTimerEnabled(!engine.attempt.timer.enabled));
-    $("[data-audio-limit-toggle]").addEventListener("click", () => engine.setAudioLimitEnabled(!engine.attempt.audioLimitEnabled));
-    $("[data-questions-locked-toggle]").addEventListener("click", () => engine.setQuestionsLocked(!engine.attempt.questionsLocked));
+    document.querySelectorAll("[data-mode-option]").forEach(option => option.addEventListener("click", () => {
+      closePaperMenus();
+      const requestedMode = option.dataset.modeOption;
+      if (requestedMode === engine.attempt.mode) return;
+      if (requestedMode === "practice" && engine.attempt.mode === "exam") {
+        root.ExamAudio.pauseAll();
+        engine.convertExamToPractice();
+      } else {
+        $("[data-mode-warning-overlay]").classList.add("is-open");
+      }
+    }));
+    $("[data-cancel-mode-change]").addEventListener("click", () => $("[data-mode-warning-overlay]").classList.remove("is-open"));
+    $("[data-confirm-mode-change]").addEventListener("click", () => {
+      $("[data-mode-warning-overlay]").classList.remove("is-open");
+      selectedStartMode = "exam";
+      document.querySelectorAll("[data-start-mode]").forEach(button => { const selected = button.dataset.startMode === "exam"; button.classList.toggle("is-selected", selected); button.setAttribute("aria-checked", String(selected)); });
+      $("[data-exam-mode-warning]").hidden = false;
+      $("[data-start-attempt]").textContent = "Start Exam Mode";
+      $("[data-start-overlay]").classList.add("is-open");
+    });
     $("[data-show-all-questions]").addEventListener("click", () => {
       if (canShowAllQuestions()) renderAllQuestions();
     });
@@ -639,7 +755,14 @@
     $("[data-confirm-reset]").addEventListener("click", () => {
       closeResetModal();
       root.ExamStorage.deleteDraft(paper.id);
-      startExam();
+      root.ExamAudio.pauseAll();
+      if (engine.attempt.mode === "exam") {
+        engine.destroy();
+        selectedStartMode = "exam";
+        $("[data-exam-mode-warning]").hidden = false;
+        $("[data-start-attempt]").textContent = "Start Exam Mode";
+        $("[data-start-overlay]").classList.add("is-open");
+      } else startAttempt("practice");
     });
     $("[data-reset-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeResetModal(); });
     $("[data-open-qr]").addEventListener("click", openQrOverlay);
@@ -648,7 +771,7 @@
     $("[data-qr-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeQrOverlay(); });
     $("[data-results-new-attempt]").addEventListener("click", () => {
       root.ExamStorage.deleteDraft(paper.id);
-      startExam();
+      $("[data-start-overlay]").classList.add("is-open");
     });
     $("[data-continue-review]").addEventListener("click", () => $("[data-question-breakdown]").scrollIntoView({ behavior: "smooth" }));
     document.addEventListener("keydown", event => {
@@ -662,6 +785,19 @@
     root.addEventListener("afterprint", () => { const printArea = $("[data-print-paper]"); if (printArea) printArea.innerHTML = ""; });
   }
 
+  function bindStartOverlay() {
+    document.querySelectorAll("[data-start-mode]").forEach(button => button.addEventListener("click", () => {
+      selectedStartMode = button.dataset.startMode;
+      document.querySelectorAll("[data-start-mode]").forEach(item => { const selected = item === button; item.classList.toggle("is-selected", selected); item.setAttribute("aria-checked", String(selected)); });
+      $("[data-exam-mode-warning]").hidden = selectedStartMode !== "exam";
+      $("[data-start-attempt]").textContent = selectedStartMode === "exam" ? "Start Exam Mode" : "Start Practice Mode";
+    }));
+    $("[data-start-attempt]").addEventListener("click", () => {
+      $("[data-start-overlay]").classList.remove("is-open");
+      startAttempt(selectedStartMode);
+    });
+  }
+
   function initialise() {
     const id = new URLSearchParams(root.location.search).get("paper") || "national5-2014";
     paper = root.InteractiveExamPapers?.[id];
@@ -672,29 +808,24 @@
     engine = new root.ExamEngineCore.ExamEngine(paper, onEngineChange);
     renderToolbarStats();
     bindEvents();
+    bindStartOverlay();
     const draft = root.ExamStorage.loadDraft(paper.id);
-    if (draft?.mode === "exam") {
-      const usesCurrentDefaults = draft.customiseDefaultsVersion === 1;
-      const timerWasEnabled = usesCurrentDefaults && draft.timer?.enabled === true;
-      draft.timer = {
-        ...draft.timer,
-        enabled: timerWasEnabled,
-        remainingSeconds: timerWasEnabled && Number.isFinite(draft.timer?.remainingSeconds) ? draft.timer.remainingSeconds : paper.estimatedMinutes * 60,
-        lastUpdatedAt: timerWasEnabled ? draft.timer.lastUpdatedAt : new Date().toISOString(),
-      };
-      draft.audioLimitEnabled = usesCurrentDefaults && Boolean(draft.audioLimitEnabled);
-      draft.questionsLocked = Boolean(draft.questionsLocked);
-      draft.customiseDefaultsVersion = 1;
-      draft.audioPlayCounts = { ...(draft.audioPlayCounts || {}) };
-      delete draft.audioPlayCounts[draft.currentQuestion];
-      root.ExamStorage.saveDraft(paper.id, draft);
+    if (draft?.mode === "practice") {
       engine.resume(draft);
-    } else {
-      if (draft) root.ExamStorage.deleteDraft(paper.id);
-      startExam();
-    }
+      selectedStartMode = "practice";
+      $("[data-start-overlay]").classList.remove("is-open");
+    } else if (draft) root.ExamStorage.deleteDraft(paper.id);
     renderCustomiseMenu();
-    root.addEventListener("beforeunload", () => { root.ExamAudio.pauseAll(); engine.destroy(); });
+    root.addEventListener("beforeunload", event => {
+      if (engine.attempt?.mode === "exam" && engine.attempt.examStarted && engine.attempt.status === "active") {
+        root.ExamStorage.deleteDraft(paper.id);
+        event.preventDefault();
+        event.returnValue = "";
+        return;
+      }
+      root.ExamAudio.pauseAll();
+      engine.destroy();
+    });
   }
 
   root.ExamUI = { initialise };

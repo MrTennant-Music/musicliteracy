@@ -15,6 +15,8 @@
       audioPlayCounts: {},
       audioLimitEnabled: false,
       questionsLocked: false,
+      examStarted: false,
+      examUnlockedQuestionIndex: mode === "exam" ? -1 : paper.questions.length - 1,
       customiseDefaultsVersion: 1,
       startedAt: new Date().toISOString(),
       timer: { enabled: mode === "exam" && timerEnabled, remainingSeconds: paper.estimatedMinutes * 60, lastUpdatedAt: new Date().toISOString() },
@@ -47,6 +49,42 @@
       this.startTimer();
       this.notify("start");
       return this.attempt;
+    }
+
+    beginExamSession() {
+      if (!this.attempt || this.attempt.mode !== "exam" || this.attempt.status !== "active") return;
+      this.stopTimer();
+      this.attempt.examStarted = true;
+      this.attempt.questionsLocked = true;
+      this.attempt.audioLimitEnabled = true;
+      this.attempt.examUnlockedQuestionIndex = 0;
+      this.attempt.timer.enabled = true;
+      this.attempt.timer.remainingSeconds = this.paper.estimatedMinutes * 60;
+      this.attempt.timer.lastUpdatedAt = new Date().toISOString();
+      root.ExamStorage.deleteDraft(this.paper.id);
+      this.startTimer();
+      this.notify("exam-begin");
+    }
+
+    unlockExamQuestion(index) {
+      if (!this.attempt || this.attempt.mode !== "exam") return;
+      this.attempt.examUnlockedQuestionIndex = Math.max(this.attempt.examUnlockedQuestionIndex ?? 0, index);
+      this.attempt.currentQuestion = this.paper.questions[index]?.id || this.attempt.currentQuestion;
+      this.notify("exam-unlock");
+    }
+
+    convertExamToPractice() {
+      if (!this.attempt || this.attempt.mode !== "exam") return;
+      this.stopTimer();
+      this.attempt.mode = "practice";
+      this.attempt.examStarted = false;
+      this.attempt.questionsLocked = false;
+      this.attempt.audioLimitEnabled = false;
+      this.attempt.examUnlockedQuestionIndex = this.paper.questions.length - 1;
+      this.attempt.timer.enabled = false;
+      this.attempt.timer.remainingSeconds = this.paper.estimatedMinutes * 60;
+      this.persist();
+      this.notify("mode-practice");
     }
 
     resume(attempt) {
@@ -189,7 +227,7 @@
     }
 
     stopTimer() { if (this.timerId) root.clearInterval(this.timerId); this.timerId = null; }
-    persist() { if (this.attempt?.status === "active") root.ExamStorage.saveDraft(this.paper.id, this.attempt); }
+    persist() { if (this.attempt?.status === "active" && this.attempt.mode === "practice") root.ExamStorage.saveDraft(this.paper.id, this.attempt); }
     notify(reason) { this.onChange?.(this.attempt, reason); }
     destroy() { this.stopTimer(); }
   }

@@ -16,7 +16,7 @@
   }
 
   function createPlayer(container, config) {
-    const { clips, locked = false, limitPlayback = false, playConsumed = false, onConsumed } = config;
+    const { clips, locked = false, limitPlayback = false, playConsumed = false, onConsumed, continuous = false, autoplay = false, onClipStart, onSequenceEnd } = config;
     let clipIndex = 0;
     let audio = null;
     let destroyed = false;
@@ -26,10 +26,10 @@
       const clip = clips[clipIndex];
       container.innerHTML = `
         <div class="exam-audio-player" data-audio-player>
-          ${clips.length > 1 ? `<div class="audio-clip-tabs" role="tablist">${clips.map((item, index) => `<button type="button" class="audio-clip-tab ${index === clipIndex ? "is-active" : ""}" data-clip="${index}">${item.label}</button>`).join("")}</div>` : ""}
+          ${clips.length > 1 && !continuous ? `<div class="audio-clip-tabs" role="tablist">${clips.map((item, index) => `<button type="button" class="audio-clip-tab ${index === clipIndex ? "is-active" : ""}" data-clip="${index}">${item.label}</button>`).join("")}</div>` : ""}
           <audio preload="metadata" src="${clip.file}"></audio>
           <div class="audio-controls">
-            <button type="button" class="audio-play-button" data-audio-action="toggle" ${locked || consumed ? "disabled" : ""} aria-label="${consumed ? "Audio already played" : "Play excerpt"}"><span class="audio-play-glyph" data-play-glyph>▶</span><span data-play-label>Play</span></button>
+            <button type="button" class="audio-play-button ${continuous ? "is-exam-sequence" : ""}" data-audio-action="toggle" ${locked || consumed || (continuous && autoplay) ? "disabled" : ""} aria-label="${continuous ? "Exam audio playing" : consumed ? "Audio already played" : "Play excerpt"}">${continuous ? "" : `<span class="audio-play-glyph" data-play-glyph>▶</span>`}<span data-play-label>${continuous ? `Question ${clipIndex + 1}` : "Play"}</span></button>
             <span class="audio-time" data-elapsed>0:00</span>
             <div class="audio-progress-wrap">
               <input class="audio-progress" data-progress type="range" min="0" max="1000" value="0" ${locked || limitPlayback ? "disabled" : ""} aria-label="Audio progress" />
@@ -41,6 +41,10 @@
       audio = container.querySelector("audio");
       players.add(audio);
       bind(clip);
+      if (autoplay) {
+        pauseOtherPlayers(audio);
+        audio.play().then(() => onClipStart?.(clipIndex)).catch(() => {});
+      }
     }
 
     function bind(clip) {
@@ -52,6 +56,10 @@
       const duration = container.querySelector("[data-duration]");
 
       function updatePlayButton(isPlaying) {
+        if (continuous) {
+          playLabel.textContent = `Question ${clipIndex + 1}`;
+          return;
+        }
         playGlyph.textContent = isPlaying ? "Ⅱ" : "▶";
         playLabel.textContent = isPlaying ? "Pause" : "Play";
         playToggle.setAttribute("aria-label", isPlaying ? "Pause excerpt" : "Play excerpt");
@@ -70,12 +78,23 @@
       audio.addEventListener("pause", () => updatePlayButton(false));
       audio.addEventListener("ended", () => {
         updatePlayButton(false);
+        if (continuous) {
+          if (clipIndex < clips.length - 1) {
+            players.delete(audio);
+            clipIndex += 1;
+            render();
+          } else {
+            onSequenceEnd?.();
+          }
+          return;
+        }
         if (!limitPlayback || consumed) return;
         consumed = true;
         playToggle.disabled = true;
         playToggle.setAttribute("aria-label", "Audio already played");
         onConsumed?.();
       });
+      audio.addEventListener("play", () => onClipStart?.(clipIndex), { once: true });
       audio.addEventListener("loadedmetadata", () => {
         duration.textContent = formatTime(audio.duration);
         container.querySelectorAll("[data-marker-time]").forEach(marker => {
