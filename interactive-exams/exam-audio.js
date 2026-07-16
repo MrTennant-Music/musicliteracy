@@ -29,11 +29,38 @@
   }
 
   function createPlayer(container, config) {
-    const { clips, locked = false, limitPlayback = false, playConsumed = false, onConsumed, continuous = false, autoplay = false, onClipStart, onSequenceEnd } = config;
+    const { clips, locked = false, limitPlayback = false, playConsumed = false, onConsumed, continuous = false, autoplay = false, onClipStart, onSequenceEnd, onPlaybackError } = config;
     let clipIndex = 0;
     let audio = null;
     let destroyed = false;
     let consumed = Boolean(limitPlayback && playConsumed);
+    let stalledTimer = null;
+    let playbackErrorReported = false;
+
+    function clearStalledTimer() {
+      if (stalledTimer) root.clearTimeout(stalledTimer);
+      stalledTimer = null;
+    }
+
+    function reportPlaybackError(error) {
+      clearStalledTimer();
+      if (destroyed || playbackErrorReported) return;
+      playbackErrorReported = true;
+      onPlaybackError?.(error instanceof Error ? error : new Error("The audio could not be played."), clipIndex);
+    }
+
+    async function playCurrent() {
+      if (!audio || destroyed) return false;
+      playbackErrorReported = false;
+      pauseOtherPlayers(audio);
+      try {
+        await audio.play();
+        return true;
+      } catch (error) {
+        reportPlaybackError(error);
+        return false;
+      }
+    }
 
     function render() {
       const clip = clips[clipIndex];
@@ -54,10 +81,7 @@
       audio = container.querySelector("audio");
       players.add(audio);
       bind(clip);
-      if (autoplay) {
-        pauseOtherPlayers(audio);
-        audio.play().then(() => onClipStart?.(clipIndex)).catch(() => {});
-      }
+      if (autoplay) void playCurrent();
     }
 
     function bind(clip) {
@@ -84,11 +108,19 @@
           audio.pause();
           return;
         }
-        pauseOtherPlayers(audio);
-        try { await audio.play(); } catch { /* Browser playback messages are handled by native controls state. */ }
+        await playCurrent();
       });
-      audio.addEventListener("play", () => updatePlayButton(true));
+      audio.addEventListener("play", () => { clearStalledTimer(); playbackErrorReported = false; updatePlayButton(true); });
+      audio.addEventListener("playing", clearStalledTimer);
+      audio.addEventListener("canplay", clearStalledTimer);
       audio.addEventListener("pause", () => updatePlayButton(false));
+      audio.addEventListener("error", () => reportPlaybackError(audio.error || new Error("The audio file could not be loaded.")));
+      audio.addEventListener("stalled", () => {
+        clearStalledTimer();
+        stalledTimer = root.setTimeout(() => {
+          if (audio && !audio.ended && audio.readyState < 3) reportPlaybackError(new Error("The audio stopped loading."));
+        }, 8000);
+      });
       audio.addEventListener("ended", () => {
         updatePlayButton(false);
         if (continuous) {
@@ -143,10 +175,18 @@
       destroy() {
         if (destroyed) return;
         destroyed = true;
+        clearStalledTimer();
         audio?.pause();
         players.delete(audio);
         if (activeAudio === audio) activeAudio = null;
         container.innerHTML = "";
+      },
+      async retry() {
+        if (!audio || destroyed) return false;
+        clearStalledTimer();
+        playbackErrorReported = false;
+        audio.load();
+        return playCurrent();
       },
     };
   }

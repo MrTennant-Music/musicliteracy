@@ -15,6 +15,10 @@
     let lastTouchEnd = 0;
     let lastRemoval = 0;
     const removeOnce = event => {
+      if (target.closest(".is-practice-checked")) {
+        event?.preventDefault();
+        return;
+      }
       const now = Date.now();
       if (now - lastRemoval < 250) return;
       lastRemoval = now;
@@ -76,12 +80,52 @@
   let returnToModePickerAfterCancel = false;
   let pendingQuestionCheck = null;
   let feedbackPrintState = null;
+  let failedAudioPlayer = null;
+  let audioErrorContext = "exam";
+
+  function renderPaperSelectors() {
+    const entries = Object.values(root.InteractiveExamPaperRegistry || {});
+    const levels = [
+      { code: "N5", label: "National 5" },
+      { code: "H", label: "Higher" },
+      { code: "AH", label: "Advanced Higher" },
+    ];
+    $("[data-paper-level-label]").textContent = paper.level;
+    $("[data-paper-year-label]").textContent = String(paper.year);
+    $("[data-paper-level-options]").innerHTML = levels.map(level => {
+      const available = entries.filter(entry => entry.levelCode === level.code).sort((left, right) => Number(right.year) - Number(left.year));
+      const active = level.code === paper.levelCode;
+      const target = active ? paper.id : available[0]?.id;
+      const availability = available.length + " " + (available.length === 1 ? "paper" : "papers") + " available";
+      return '<button class="exam-menu-option ' + (active ? "is-active" : "") + '" type="button" '
+        + (target ? 'data-paper-id="' + escapeHtml(target) + '" data-selection-label="' + escapeHtml(level.label) + '"' : 'disabled aria-disabled="true"')
+        + '><span class="exam-menu-glyph">' + escapeHtml(level.code) + '</span>'
+        + '<span class="exam-menu-copy"><strong>' + escapeHtml(level.label) + '</strong><span>' + availability + '</span></span>'
+        + (active ? '<img class="exam-menu-tick" src="../tick.svg" alt="" aria-hidden="true" />' : "")
+        + '</button>';
+    }).join("");
+    const years = entries.filter(entry => entry.levelCode === paper.levelCode).sort((left, right) => Number(right.year) - Number(left.year));
+    $("[data-paper-year-options]").innerHTML = years.map(entry => '<button class="exam-menu-option ' + (entry.id === paper.id ? "is-active" : "") + '" type="button" data-paper-id="' + escapeHtml(entry.id) + '" data-selection-label="' + escapeHtml(entry.year) + '">'
+      + '<span class="exam-menu-glyph">' + escapeHtml(entry.levelCode) + '</span>'
+      + '<span class="exam-menu-copy"><strong>' + escapeHtml(entry.year) + '</strong><span>' + escapeHtml(entry.level) + ' Music</span></span>'
+      + (entry.id === paper.id ? '<img class="exam-menu-tick" src="../tick.svg" alt="" aria-hidden="true" />' : "")
+      + '</button>').join("");
+  }
 
   function destroyAudioPlayers() {
     audioPlayer?.destroy();
     audioPlayer = null;
     allQuestionAudioPlayers.forEach(player => player.destroy());
     allQuestionAudioPlayers = [];
+  }
+
+  function createRecoverableAudioPlayer(container, config) {
+    let player;
+    player = root.ExamAudio.createPlayer(container, {
+      ...config,
+      onPlaybackError: error => openStandardAudioErrorModal(error, player),
+    });
+    return player;
   }
 
   function showScreen(name) {
@@ -478,7 +522,7 @@
     }
     question.subquestions.forEach(subquestion => bindSubquestion(parts.querySelector(`[data-subquestion="${subquestion.id}"]`), subquestion));
     if (checked) applyPracticeQuestionMarking(questionCard, question, questionResult);
-    audioPlayer = root.ExamAudio.createPlayer($("[data-audio-container]"), {
+    audioPlayer = createRecoverableAudioPlayer($("[data-audio-container]"), {
       clips: question.audio.clips,
       mode: engine.attempt.mode,
       limitPlayback: Boolean(engine.attempt.audioLimitEnabled),
@@ -546,7 +590,7 @@
       card.inert = locked;
       renderSharedNotation(card, question);
       question.subquestions.forEach(subquestion => bindSubquestion(card.querySelector(`[data-subquestion="${subquestion.id}"]`), subquestion));
-      if (!activeExam) allQuestionAudioPlayers.push(root.ExamAudio.createPlayer(card.querySelector("[data-all-question-audio]"), { clips: question.audio.clips }));
+      if (!activeExam) allQuestionAudioPlayers.push(createRecoverableAudioPlayer(card.querySelector("[data-all-question-audio]"), { clips: question.audio.clips }));
     });
     if (activeExam) {
       const clips = engine.visibleQuestions().map((question, index) => ({ ...question.audio.clips[0], label: `Question ${index + 1}` }));
@@ -566,6 +610,7 @@
           if (index === engine.visibleQuestions().length - 1) setExamSubmitVisibility(true);
           card?.scrollIntoView({ behavior: "smooth", block: "start" });
         },
+        onPlaybackError: openAudioErrorModal,
       });
     }
     $("[data-next-question]").hidden = !activeExam;
@@ -612,6 +657,7 @@
   function restoreAfterFeedbackPrint() {
     if (!feedbackPrintState) return;
     document.body.removeAttribute("data-print-feedback");
+    document.body.removeAttribute("data-pdf-feedback");
     $("[data-feedback-export-name]").hidden = true;
     showingAllQuestions = feedbackPrintState.showingAllQuestions;
     engine.attempt.currentQuestion = feedbackPrintState.currentQuestion;
@@ -621,18 +667,167 @@
     updateResultNavigation();
   }
 
+  function createFeedbackPdfWindow() {
+    const pdfWindow = root.open("", "_blank");
+    if (!pdfWindow) throw new Error("Allow pop-ups for The Music Literacy Hub, then try Share again.");
+    pdfWindow.document.title = "Preparing feedback PDF…";
+    pdfWindow.document.body.innerHTML = '<p style="font: 16px system-ui; padding: 24px;">Preparing your feedback PDF…</p>';
+    return pdfWindow;
+  }
+
+  function outlineFeedbackBravuraGlyphs(clonedDocument) {
+    const outlineSet = root.BRAVURA_WORKSHEET_OUTLINES;
+    const glyphToKey = new Map(Object.entries(root.BRAVURA_SYMBOLS || {}).map(([key, glyph]) => [glyph, key]));
+    if (!outlineSet?.symbols || !clonedDocument) return;
+    const svgNamespace = "http://www.w3.org/2000/svg";
+    clonedDocument.querySelectorAll("text.q3-music-glyph, text.notation-glyph").forEach(textElement => {
+      const symbolKey = glyphToKey.get(textElement.textContent?.trim());
+      const outline = outlineSet.symbols[symbolKey];
+      const x = Number(textElement.getAttribute("x"));
+      const y = Number(textElement.getAttribute("y"));
+      const computedFontSize = clonedDocument.defaultView?.getComputedStyle(textElement).fontSize;
+      const fontSize = Number(textElement.getAttribute("font-size")) || Number.parseFloat(computedFontSize);
+      if (symbolKey === "tie") {
+        const tieGroup = clonedDocument.createElementNS(svgNamespace, "g");
+        const tiePath = clonedDocument.createElementNS(svgNamespace, "path");
+        ["class", "transform", "opacity", "fill", "stroke", "stroke-width", "stroke-linejoin", "stroke-linecap", "pointer-events", "style"].forEach(attribute => {
+          if (textElement.hasAttribute(attribute)) tieGroup.setAttribute(attribute, textElement.getAttribute(attribute));
+        });
+        tiePath.setAttribute("d", "M -10 0 Q 0 5 10 0 Q 0 3.6 -10 0 Z");
+        tieGroup.append(tiePath);
+        textElement.replaceWith(tieGroup);
+        return;
+      }
+      if (!outline || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(fontSize)) return;
+      const anchor = textElement.getAttribute("text-anchor") || "start";
+      const anchorOffset = anchor === "middle" ? outline.advance / 2 : anchor === "end" ? outline.advance : 0;
+      const scale = fontSize / outlineSet.unitsPerEm;
+      const outerGroup = clonedDocument.createElementNS(svgNamespace, "g");
+      const outlineGroup = clonedDocument.createElementNS(svgNamespace, "g");
+      const path = clonedDocument.createElementNS(svgNamespace, "path");
+      ["class", "transform", "opacity", "fill", "stroke", "stroke-width", "stroke-linejoin", "stroke-linecap", "pointer-events", "style"].forEach(attribute => {
+        if (textElement.hasAttribute(attribute)) outerGroup.setAttribute(attribute, textElement.getAttribute(attribute));
+      });
+      outlineGroup.setAttribute("transform", `translate(${x} ${y}) scale(${scale} ${-scale}) translate(${-anchorOffset} 0)`);
+      path.setAttribute("d", outline.path);
+      outlineGroup.append(path);
+      outerGroup.append(outlineGroup);
+      textElement.replaceWith(outerGroup);
+    });
+  }
+
+  function feedbackPdfBreakpoints(element, canvas) {
+    const elementRect = element.getBoundingClientRect();
+    if (!elementRect.height) return [];
+    const scale = canvas.height / elementRect.height;
+    const selectors = [
+      ".question-intro > *",
+      ".subquestion",
+      ".inline-answer-feedback",
+      ".question-outro > *",
+      ".question-review-footer",
+      ".q8-rough-work",
+      ".q8-final-answer",
+    ];
+    return [...element.querySelectorAll(selectors.join(","))]
+      .flatMap(node => {
+        const rect = node.getBoundingClientRect();
+        return [rect.top - elementRect.top, rect.bottom - elementRect.top];
+      })
+      .map(position => Math.round(position * scale))
+      .filter(position => position > 0 && position < canvas.height)
+      .sort((left, right) => left - right);
+  }
+
+  async function buildFeedbackPdf() {
+    if (!root.html2canvas || !root.jspdf?.jsPDF) throw new Error("The PDF tools could not be loaded. Reload the page and try again.");
+    await document.fonts?.load?.("32px Bravura");
+    await document.fonts?.ready;
+    const images = [...document.querySelectorAll(".results-summary img, [data-results-paper] img")];
+    await Promise.all(images.map(image => image.complete && image.decode ? image.decode().catch(() => {}) : Promise.resolve()));
+    const pages = [$(".results-summary"), ...document.querySelectorAll("[data-results-paper] .marked-question-card")].filter(Boolean);
+    if (!pages.length) throw new Error("The feedback could not be prepared.");
+    const { jsPDF } = root.jspdf;
+    const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+    pdf.setProperties({ title: `${paper.title} Feedback`, subject: "Digital Past Paper feedback" });
+    const top = 8;
+    const bottom = 289;
+    const maxWidth = 194;
+    const maxHeight = bottom - top;
+    const gap = 5;
+    let cursorY = top;
+    let pageHasContent = false;
+    for (let index = 0; index < pages.length; index += 1) {
+      const page = pages[index];
+      const canvas = await root.html2canvas(page, {
+        scale: 2.5,
+        backgroundColor: "#fff",
+        useCORS: true,
+        logging: false,
+        onclone: outlineFeedbackBravuraGlyphs,
+      });
+      const breakpoints = feedbackPdfBreakpoints(page, canvas);
+      let sourceY = 0;
+      while (sourceY < canvas.height) {
+        let availableHeight = bottom - cursorY;
+        if (pageHasContent && availableHeight < 60) {
+          pdf.addPage();
+          cursorY = top;
+          availableHeight = maxHeight;
+        }
+        const pixelCapacity = Math.max(1, Math.floor(availableHeight * canvas.width / maxWidth));
+        let sourceEnd = Math.min(canvas.height, sourceY + pixelCapacity);
+        if (sourceEnd < canvas.height) {
+          const safeBreak = breakpoints.filter(point => point > sourceY + pixelCapacity * .5 && point <= sourceEnd).at(-1);
+          if (safeBreak) sourceEnd = safeBreak;
+        }
+        const sliceHeight = Math.max(1, sourceEnd - sourceY);
+        const slice = document.createElement("canvas");
+        slice.width = canvas.width;
+        slice.height = sliceHeight;
+        slice.getContext("2d").drawImage(canvas, 0, sourceY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+        const renderedHeight = sliceHeight * maxWidth / canvas.width;
+        pdf.addImage(slice.toDataURL("image/png"), "PNG", (210 - maxWidth) / 2, cursorY, maxWidth, renderedHeight, undefined, "FAST");
+        cursorY += renderedHeight + gap;
+        sourceY = sourceEnd;
+        pageHasContent = true;
+        if (sourceY < canvas.height) {
+          pdf.addPage();
+          cursorY = top;
+        }
+      }
+    }
+    return pdf.output("blob");
+  }
+
   async function shareFeedback(name) {
     if (engine?.attempt?.status !== "submitted" || !engine.attempt.result) return;
+    let pdfWindow;
+    try {
+      pdfWindow = createFeedbackPdfWindow();
+    } catch (error) {
+      root.alert(error.message);
+      return;
+    }
     const nameLine = $("[data-feedback-export-name]");
     nameLine.textContent = name ? `Name: ${name}` : "";
     nameLine.hidden = !name;
     feedbackPrintState = { showingAllQuestions, currentQuestion: engine.attempt.currentQuestion };
     showingAllQuestions = true;
     renderResultsPaper();
-    document.body.dataset.printFeedback = "true";
-    await document.fonts?.ready;
-    await new Promise(resolve => root.requestAnimationFrame(() => root.requestAnimationFrame(resolve)));
-    root.print();
+    document.body.dataset.pdfFeedback = "true";
+    try {
+      await new Promise(resolve => root.requestAnimationFrame(() => root.requestAnimationFrame(resolve)));
+      const blob = await buildFeedbackPdf();
+      const url = URL.createObjectURL(blob);
+      restoreAfterFeedbackPrint();
+      pdfWindow.location.replace(url);
+      root.setTimeout(() => URL.revokeObjectURL(url), 300000);
+    } catch (error) {
+      restoreAfterFeedbackPrint();
+      pdfWindow.document.title = "Feedback PDF unavailable";
+      pdfWindow.document.body.innerHTML = `<p style="font: 16px system-ui; padding: 24px;">${escapeHtml(error.message)}</p>`;
+    }
   }
 
   function paperShareUrl() {
@@ -837,8 +1032,8 @@
       const notationReview = Object.fromEntries(question.subquestions.filter(subquestion => subquestion.type === "notation-choice").map(subquestion => [subquestion.id, partResult(subquestion.id)?.status]));
       if (sharedNotation && root.ExamNotation?.renderSharedScore) root.ExamNotation.renderSharedScore(sharedNotation, question, engine.attempt.answers, null, notationReview);
       const feedbackAudio = card.querySelector("[data-result-question-audio]");
-      if (feedbackAudio) allQuestionAudioPlayers.push(root.ExamAudio.createPlayer(feedbackAudio, { clips: question.audio.clips }));
-      if (!showingAllQuestions) audioPlayer = root.ExamAudio.createPlayer($("[data-audio-container]"), { clips: question.audio.clips });
+      if (feedbackAudio) allQuestionAudioPlayers.push(createRecoverableAudioPlayer(feedbackAudio, { clips: question.audio.clips }));
+      if (!showingAllQuestions) audioPlayer = createRecoverableAudioPlayer($("[data-audio-container]"), { clips: question.audio.clips });
       question.subquestions.forEach(subquestion => {
         const section = card.querySelector(`[data-subquestion="${subquestion.id}"]`);
         if (subquestion.type === "notation-choice") {
@@ -915,17 +1110,23 @@
       number: paper.questions.find(question => question.id === questionResult.id)?.number || questionResult.id,
       percentage: questionResult.maxMarks ? questionResult.marks / questionResult.maxMarks : 0,
     }));
-    const bestPercentage = Math.max(...questionPerformance.map(question => question.percentage));
-    const weakestPercentage = Math.min(...questionPerformance.map(question => question.percentage));
     const formatQuestions = questions => questions.map(question => `<span class="result-question-entry"><span>Question ${escapeHtml(question.number)}</span><span class="result-question-marks">${question.marks} of ${question.maxMarks} marks</span></span>`).join("");
-    const bestQuestion = questionPerformance
-      .filter(question => question.percentage === bestPercentage)
-      .reduce((best, question) => question.maxMarks > best.maxMarks ? question : best);
-    $("[data-results-best-question]").innerHTML = formatQuestions([bestQuestion]);
-    const weakestQuestion = questionPerformance
-      .filter(question => question.percentage === weakestPercentage)
-      .reduce((weakest, question) => question.maxMarks > weakest.maxMarks ? question : weakest);
-    $("[data-results-weakest-question]").innerHTML = formatQuestions([weakestQuestion]);
+    if (result.score === 0) {
+      const emptyQuestion = '<span class="result-question-entry"><span>–</span><span class="result-question-marks" aria-hidden="true">&nbsp;</span></span>';
+      $("[data-results-best-question]").innerHTML = emptyQuestion;
+      $("[data-results-weakest-question]").innerHTML = emptyQuestion;
+    } else {
+      const bestPercentage = Math.max(...questionPerformance.map(question => question.percentage));
+      const weakestPercentage = Math.min(...questionPerformance.map(question => question.percentage));
+      const bestQuestion = questionPerformance
+        .filter(question => question.percentage === bestPercentage)
+        .reduce((best, question) => question.maxMarks > best.maxMarks ? question : best);
+      $("[data-results-best-question]").innerHTML = formatQuestions([bestQuestion]);
+      const weakestQuestion = questionPerformance
+        .filter(question => question.percentage === weakestPercentage)
+        .reduce((weakest, question) => question.maxMarks > weakest.maxMarks ? question : weakest);
+      $("[data-results-weakest-question]").innerHTML = formatQuestions([weakestQuestion]);
+    }
     const markingInstructions = $("[data-marking-instructions]");
     markingInstructions.hidden = !paper.markingInstructionsPath;
     if (paper.markingInstructionsPath) markingInstructions.href = paper.markingInstructionsPath;
@@ -1022,6 +1223,28 @@
   }
   function openResetModal() { closePaperMenus(); $("[data-reset-overlay]").classList.add("is-open"); }
   function closeResetModal() { $("[data-reset-overlay]").classList.remove("is-open"); }
+  function openAudioErrorModal(error) {
+    if (engine?.attempt?.mode !== "exam" || engine.attempt.status !== "active") return;
+    engine.stopTimer();
+    audioErrorContext = "exam";
+    failedAudioPlayer = audioPlayer;
+    $("[data-audio-error-practice]").textContent = "Use Practice Mode";
+    const detail = error?.message ? " " + error.message : "";
+    $("[data-audio-error-message]").textContent = "The exam audio could not be played. The timer has been paused." + detail;
+    $("[data-audio-error-overlay]").classList.add("is-open");
+  }
+  function openStandardAudioErrorModal(error, player) {
+    audioErrorContext = "standard";
+    failedAudioPlayer = player;
+    $("[data-audio-error-practice]").textContent = "Close";
+    const detail = error?.message ? " " + error.message : "";
+    $("[data-audio-error-message]").textContent = "The audio could not be played. Please try again." + detail;
+    $("[data-audio-error-overlay]").classList.add("is-open");
+  }
+  function closeAudioErrorModal() {
+    $("[data-audio-error-overlay]").classList.remove("is-open");
+    failedAudioPlayer = null;
+  }
   function openBlankModePicker(existingAttempt = false) {
     modePickerForExistingAttempt = existingAttempt;
     const hasAttemptedAnswers = existingAttempt && Object.values(engine?.attempt?.answers || {}).some(hasAnswerContent);
@@ -1075,6 +1298,10 @@
       trigger.setAttribute("aria-expanded", String(shouldOpen));
     }));
     document.querySelectorAll("[data-exam-menu] button[data-selection-label]:not(:disabled)").forEach(option => option.addEventListener("click", () => {
+      if (option.dataset.paperId && option.dataset.paperId !== paper.id) {
+        root.location.href = "exam.html?paper=" + encodeURIComponent(option.dataset.paperId);
+        return;
+      }
       const menu = option.closest("[data-exam-menu]");
       const label = document.querySelector(`[data-exam-menu-trigger="${menu.dataset.examMenu}"] [data-exam-selection-label]`);
       if (label && option.dataset.selectionLabel) label.textContent = option.dataset.selectionLabel;
@@ -1121,6 +1348,24 @@
       if (questionId) engine.checkQuestion(questionId);
     });
     $("[data-check-question-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeQuestionCheckModal(); });
+    $("[data-retry-exam-audio]").addEventListener("click", async () => {
+      const retryButton = $("[data-retry-exam-audio]");
+      retryButton.disabled = true;
+      const resumed = await (failedAudioPlayer || audioPlayer)?.retry?.();
+      retryButton.disabled = false;
+      if (!resumed) return;
+      closeAudioErrorModal();
+      if (audioErrorContext === "exam") engine.startTimer();
+    });
+    $("[data-audio-error-practice]").addEventListener("click", () => {
+      if (audioErrorContext !== "exam") {
+        closeAudioErrorModal();
+        return;
+      }
+      closeAudioErrorModal();
+      root.ExamAudio.pauseAll();
+      engine.convertExamToPractice();
+    });
     $("[data-cancel-submit]").addEventListener("click", closeSubmitModal);
     $("[data-confirm-submit]").addEventListener("click", () => { closeSubmitModal(); engine.submit(); });
     $("[data-submit-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeSubmitModal(); });
@@ -1235,20 +1480,21 @@
       $("main").innerHTML = '<section class="empty-state"><h1>Paper unavailable</h1><p>This paper is not currently available.</p><a class="button" href="index.html">Choose another paper</a></section>';
       return;
     }
+    document.title = paper.title + " · Digital Past Papers";
     engine = new root.ExamEngineCore.ExamEngine(paper, onEngineChange);
+    renderPaperSelectors();
     renderToolbarStats();
     bindEvents();
     bindStartOverlay();
     const submitted = root.ExamStorage.loadSubmitted(paper.id);
     const draft = root.ExamStorage.loadDraft(paper.id);
-    if (submitted?.status === "submitted" && submitted.result) {
+    if (root.ExamEngineCore.validateAttempt(paper, submitted, "submitted")) {
       selectedStartMode = submitted.mode;
       $("[data-start-overlay]").classList.remove("is-open");
       engine.restoreSubmitted(submitted);
     } else {
       if (submitted) root.ExamStorage.deleteSubmitted(paper.id);
-      if (draft?.mode === "practice") {
-        engine.resume(draft);
+      if (root.ExamEngineCore.validateAttempt(paper, draft, "active") && draft.mode === "practice" && engine.resume(draft)) {
         selectedStartMode = "practice";
         $("[data-start-overlay]").classList.remove("is-open");
       } else if (draft) root.ExamStorage.deleteDraft(paper.id);

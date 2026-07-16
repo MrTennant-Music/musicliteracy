@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 
 global.localStorage = {
   values: new Map(),
@@ -12,7 +13,30 @@ global.ExamStorage = storage;
 const marking = require("../exam-marking.js");
 global.ExamMarking = marking;
 const paper = require("../papers/national5-2014.js");
-const { ExamEngine, createAttempt } = require("../exam-engine.js");
+const paperRegistry = require("../paper-registry.js");
+const { ExamEngine, createAttempt, validateAttempt } = require("../exam-engine.js");
+const examHtml = fs.readFileSync(require.resolve("../exam.html"), "utf8");
+const examUiSource = fs.readFileSync(require.resolve("../exam-ui.js"), "utf8");
+const examAudioSource = fs.readFileSync(require.resolve("../exam-audio.js"), "utf8");
+const examStyles = fs.readFileSync(require.resolve("../styles.css"), "utf8");
+
+assert.match(examStyles, /mask:\s*url\("\.\.\/prtick\.svg"\)/, "Selected paper answers should use the established prtick.svg tick.");
+assert.match(examStyles, /input:checked::after\s*\{[^}]*translate\(\.5px,\s*-1px\)/, "The selected-answer tick should retain its established half-pixel right adjustment.");
+assert.match(examStyles, /\.result-footer-row\s*\{[^}]*gap:\s*16px/, "Feedback actions should have the same 16px space above them as below them.");
+assert.match(examHtml, /bravura-worksheet-outlines\.js/, "Feedback PDFs should load the same Bravura vector outlines as Practice Questions PDFs.");
+assert.match(examUiSource, /onclone:\s*outlineFeedbackBravuraGlyphs/, "Feedback PDF capture should replace Bravura font characters with vector paths.");
+assert.match(examUiSource, /symbolKey === "tie"[\s\S]*tiePath\.setAttribute\("d"/, "Feedback PDF capture should also replace tied-note font characters with a vector tie.");
+assert.match(examUiSource, /feedbackPdfBreakpoints/, "Feedback PDF generation should find safe page breaks within long questions.");
+assert.match(examUiSource, /while \(sourceY < canvas\.height\)/, "Long feedback questions should be divided across PDF pages instead of being shrunk.");
+assert.match(examHtml, /vendor\/html2canvas-1\.4\.1\.min\.js/, "Feedback PDF generation should use the local html2canvas copy.");
+assert.match(examHtml, /vendor\/jspdf-2\.5\.2\.umd\.min\.js/, "Feedback PDF generation should use the local jsPDF copy.");
+assert.equal(paperRegistry["national5-2014"].dataFile.startsWith("papers/national5-2014.js"), true, "The reusable registry should load the 2014 paper without a paper-specific script in exam.html.");
+assert.match(examAudioSource, /audio\.addEventListener\("error",/, "Audio loading failures should be reported instead of silently stalling Exam Mode.");
+assert.match(examAudioSource, /async retry\(\)/, "The Exam Mode audio failure prompt should be able to retry playback from a pupil gesture.");
+assert.doesNotMatch(examAudioSource, /audio\.play\(\)\.then\(\(\) => onClipStart/, "Autoplay should not fire the first clip-start callback a second time.");
+assert.match(examUiSource, /function createRecoverableAudioPlayer[\s\S]*onPlaybackError: error => openStandardAudioErrorModal/, "Practice and feedback audio should show the same recoverable failure prompt rather than failing silently.");
+assert.match(examUiSource, /The PDF tools could not be loaded\. Reload the page and try again\./, "Local PDF-tool failures should give relevant recovery advice.");
+assert.doesNotMatch(examUiSource, /PDF tools could not be loaded\. Check your internet connection/, "Local PDF-tool failures should not incorrectly blame the internet connection.");
 
 assert.equal(paper.questions.length, 8, "The paper should contain eight main questions.");
 assert.equal(paper.questions.reduce((sum, question) => sum + question.marks, 0), 40, "Question marks should total 40.");
@@ -62,6 +86,8 @@ const commonMisspellings = {
 Object.entries(commonMisspellings).forEach(([id, response]) => {
   assert.equal(marking.markSubquestion(typedParts.get(id), response).marks, 1, `${id} should accept the common misspelling “${response}”.`);
 });
+assert.ok(["pitsicato", "pitzicato", "pitsickato"].every(answer => typedParts.get("q6c").acceptedAnswers.includes(answer)), "Question 6(c) should accept the requested common pizzicato spellings.");
+assert.match(examUiSource, /target\.closest\("\.is-practice-checked"\)/, "Checked Practice Mode questions should block answer-removal gestures.");
 assert.equal(marking.markSubquestion(concertoReason, "A pianno plays with an orcestra.").marks, 1, "Question 7(a) should tolerate minor spelling errors in its required keywords.");
 
 assert.equal(marking.normalise("  Dominant--Seventh!  "), "dominant seventh");
@@ -97,6 +123,9 @@ assert.equal(marking.isAnswered(questionEightPart, { final: "Swing, major tonali
 assert.equal(marking.markSubquestion(questionEightPart, { rhythm: "swing, major, piano, mf, crescendo", final: "" }).marks, 0, "Rough work must earn no marks when the Final answer is blank.");
 assert.equal(marking.markSubquestion(questionEightPart, { rhythm: "swing, dotted rhythms, piano, mf", final: "Major" }).marks, 1, "Only concepts written in the Final answer should be marked.");
 assert.equal(marking.markSubquestion(questionEightPart, { final: "2 beats in the bar, 4/4 and simple time." }).marks, 1, "Alternative descriptions of the same metre concept should earn one mark only.");
+assert.equal(marking.markSubquestion(questionEightPart, { final: "3 beats in the bar." }).marks, 0, "Question 8 must not ignore an incorrect standalone beat count.");
+assert.equal(marking.markSubquestion(questionEightPart, { final: "beats in the bar." }).marks, 0, "Question 8 must require an accepted beat count when marking the metre description.");
+assert.deepEqual(marking.markSubquestion(questionEightPart, { final: "4 beats per bar." }).matchedEvidence.rhythm.map(item => item.text), ["4 beats per bar"], "Question 8 should highlight the accepted beat count as well as its surrounding phrase.");
 assert.equal(marking.markSubquestion(questionEightPart, { final: "Major, repetition, riff, scat singing, sequence, syllabic and walking bass." }).marks, 2, "A single heading should contribute no more than two marks.");
 const cappedQuestionEightResult = marking.markSubquestion(questionEightPart, { final: "Major, repetition, riff and scat singing." });
 assert.equal(cappedQuestionEightResult.validConceptCounts.melody, 4, "Question 8 feedback should retain the number of valid concepts found before applying the heading cap.");
@@ -111,12 +140,18 @@ assert.equal(marking.markSubquestion(questionEightPart, { final: "Bass guitar, d
 assert.equal(marking.markSubquestion(questionEightPart, { final: "There are many irrelevant words here, but the music is in a major key, uses swing, piano, crescendo and forte." }).marks, 5, "Irrelevant prose should be ignored while valid concepts are banked up to five marks.");
 
 const attempt = createAttempt(paper, "exam", true);
+assert.equal(attempt.storageVersion, 1, "New attempts should identify their storage format.");
 assert.equal(attempt.timer.remainingSeconds, 2700);
 assert.ok(attempt.timer.lastUpdatedAt);
 assert.equal(attempt.mode, "exam");
 assert.equal(attempt.audioLimitEnabled, false, "Audio limiting should remain optional by default.");
 assert.equal(attempt.questionsLocked, false, "Question locking should be off by default.");
 assert.equal(createAttempt(paper, "exam").timer.enabled, false, "The timer should be off by default.");
+assert.equal(validateAttempt(paper, attempt, "active"), true, "A new attempt should pass storage validation.");
+assert.equal(validateAttempt(paper, { ...attempt, storageVersion: 999 }, "active"), false, "An attempt from an incompatible storage format must not be restored.");
+assert.equal(validateAttempt(paper, { ...attempt, paperId: "another-paper" }, "active"), false, "An attempt saved for another paper must not be restored.");
+assert.equal(validateAttempt(paper, { ...attempt, currentQuestion: "missing-question" }, "active"), false, "An attempt with an unknown current question must not be restored.");
+assert.equal(validateAttempt(paper, { ...attempt, answers: { unknownPart: "answer" } }, "active"), false, "An attempt containing unknown answer IDs must not be restored.");
 
 const engine = new ExamEngine(paper);
 engine.start("practice");
@@ -153,6 +188,10 @@ const savedSubmission = storage.loadSubmitted(paper.id);
 assert.equal(savedSubmission.status, "submitted", "A submitted attempt should be saved for persistent feedback.");
 assert.equal(savedSubmission.answers.q1a, "Gospel", "The saved feedback attempt should retain the pupil's answers.");
 assert.equal(savedSubmission.result.questionBreakdown[0].parts[0].status, "correct", "The saved feedback attempt should retain its marking result.");
+assert.equal(validateAttempt(paper, { ...savedSubmission, result: { ...savedSubmission.result, questionBreakdown: [] } }, "submitted"), false, "A submitted attempt with a missing question breakdown must not be restored.");
+const malformedSubmission = JSON.parse(JSON.stringify(savedSubmission));
+malformedSubmission.result.questionBreakdown[0].parts[0].id = "unknown-part";
+assert.equal(validateAttempt(paper, malformedSubmission, "submitted"), false, "A submitted attempt containing an unknown part result must not be restored.");
 let restoreReason = "";
 const restoredEngine = new ExamEngine(paper, (restoredAttempt, reason) => { restoreReason = reason; });
 assert.equal(restoredEngine.restoreSubmitted(savedSubmission), true, "A valid submitted attempt should be restorable after refresh.");

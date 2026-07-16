@@ -13,6 +13,10 @@
     let lastTouchEnd = 0;
     let lastRemoval = 0;
     const removeOnce = event => {
+      if (target.closest(".is-practice-checked")) {
+        event?.preventDefault();
+        return;
+      }
       const now = Date.now();
       if (now - lastRemoval < 250) return;
       lastRemoval = now;

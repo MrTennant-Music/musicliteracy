@@ -1,10 +1,13 @@
 (function (root) {
   "use strict";
 
+  const STORAGE_VERSION = 1;
+
   function deepCopy(value) { return JSON.parse(JSON.stringify(value)); }
 
   function createAttempt(paper, mode, timerEnabled = false) {
     return {
+      storageVersion: STORAGE_VERSION,
       id: `${paper.id}-${Date.now()}`,
       paperId: paper.id,
       mode,
@@ -23,6 +26,52 @@
       timer: { enabled: mode === "exam" && timerEnabled, remainingSeconds: paper.estimatedMinutes * 60, lastUpdatedAt: new Date().toISOString() },
       retryQuestionIds: null,
     };
+  }
+
+  function validDate(value) { return typeof value === "string" && Number.isFinite(Date.parse(value)); }
+  function plainObject(value) { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+
+  function validSubmittedResult(paper, result) {
+    if (!plainObject(result) || !Number.isFinite(result.score) || result.totalMarks !== paper.totalMarks || !Array.isArray(result.questionBreakdown)) return false;
+    if (result.score < 0 || result.score > paper.totalMarks || result.questionBreakdown.length !== paper.questions.length) return false;
+    const validStatuses = new Set(["correct", "partial", "incorrect", "unanswered", "review"]);
+    const questionResults = new Map(result.questionBreakdown.map(question => [question?.id, question]));
+    if (questionResults.size !== paper.questions.length) return false;
+    let calculatedScore = 0;
+    for (const question of paper.questions) {
+      const questionResult = questionResults.get(question.id);
+      if (!plainObject(questionResult) || !Number.isFinite(questionResult.marks) || questionResult.maxMarks !== question.marks || !Array.isArray(questionResult.parts)) return false;
+      if (questionResult.marks < 0 || questionResult.marks > question.marks || questionResult.parts.length !== question.subquestions.length) return false;
+      const partResults = new Map(questionResult.parts.map(part => [part?.id, part]));
+      if (partResults.size !== question.subquestions.length) return false;
+      let questionScore = 0;
+      for (const subquestion of question.subquestions) {
+        const partResult = partResults.get(subquestion.id);
+        if (!plainObject(partResult) || !Number.isFinite(partResult.marks) || partResult.maxMarks !== subquestion.marks || !validStatuses.has(partResult.status)) return false;
+        if (partResult.marks < 0 || partResult.marks > subquestion.marks) return false;
+        questionScore += partResult.marks;
+      }
+      if (questionScore !== questionResult.marks) return false;
+      calculatedScore += questionScore;
+    }
+    return calculatedScore === result.score;
+  }
+
+  function validateAttempt(paper, attempt, expectedStatus) {
+    if (!plainObject(attempt) || attempt.storageVersion !== STORAGE_VERSION || attempt.paperId !== paper.id) return false;
+    if (!["practice", "exam"].includes(attempt.mode) || attempt.status !== expectedStatus) return false;
+    if (!plainObject(attempt.answers) || !validDate(attempt.startedAt)) return false;
+    if (!paper.questions.some(question => question.id === attempt.currentQuestion)) return false;
+    const validQuestionIds = new Set(paper.questions.map(question => question.id));
+    const validPartIds = new Set(paper.questions.flatMap(question => question.subquestions.map(part => part.id)));
+    if (Object.keys(attempt.answers).some(id => !validPartIds.has(id))) return false;
+    if (attempt.checkedQuestionIds && (!Array.isArray(attempt.checkedQuestionIds) || attempt.checkedQuestionIds.some(id => !validQuestionIds.has(id)))) return false;
+    if (!plainObject(attempt.timer) || typeof attempt.timer.enabled !== "boolean" || !Number.isFinite(Number(attempt.timer.remainingSeconds))) return false;
+    if (expectedStatus === "submitted") {
+      if (!validSubmittedResult(paper, attempt.result)) return false;
+      if (!validDate(attempt.completedAt)) return false;
+    }
+    return true;
   }
 
   function answerComplete(subquestion, value) {
@@ -89,6 +138,7 @@
     }
 
     resume(attempt) {
+      if (!validateAttempt(this.paper, attempt, "active")) return false;
       this.stopTimer();
       this.attempt = deepCopy(attempt);
       this.attempt.status = "active";
@@ -105,12 +155,13 @@
       }
       this.startTimer();
       this.notify("resume");
+      return true;
     }
 
     restoreSubmitted(attempt) {
       this.stopTimer();
       const restoredAttempt = deepCopy(attempt);
-      if (restoredAttempt?.status !== "submitted" || !restoredAttempt.result) return false;
+      if (!validateAttempt(this.paper, restoredAttempt, "submitted")) return false;
       this.attempt = restoredAttempt;
       this.notify("restore-submit");
       return true;
@@ -262,7 +313,7 @@
     destroy() { this.stopTimer(); }
   }
 
-  const api = { ExamEngine, createAttempt, answerComplete };
+  const api = { ExamEngine, createAttempt, answerComplete, validateAttempt };
   root.ExamEngineCore = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

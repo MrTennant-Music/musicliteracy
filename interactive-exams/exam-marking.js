@@ -80,11 +80,11 @@
 
   function phraseEvidence(source, phrase, allowFuzzy = true) {
     const responseTokens = [];
-    const tokenPattern = /[a-z]+|\d+\s*\/\s*\d+|[<＜]/gi;
+    const tokenPattern = /[a-z]+|\d+(?:\s*\/\s*\d+)?|[<＜]/gi;
     for (const match of String(source || "").matchAll(tokenPattern)) {
       responseTokens.push({ value: normalise(match[0]), start: match.index, end: match.index + match[0].length });
     }
-    const expectedTokens = normalise(phrase).match(/[a-z]+|\d+\/\d+|[<＜]/g) || [];
+    const expectedTokens = normalise(phrase).match(/[a-z]+|\d+(?:\/\d+)?|[<＜]/g) || [];
     if (!expectedTokens.length || responseTokens.length < expectedTokens.length) return null;
     for (let index = 0; index <= responseTokens.length - expectedTokens.length; index += 1) {
       const window = responseTokens.slice(index, index + expectedTokens.length);
