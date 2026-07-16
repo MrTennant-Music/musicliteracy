@@ -98,32 +98,14 @@
   function renderToolbarStats() {
     const remainingSeconds = engine?.attempt?.timer?.remainingSeconds ?? paper.estimatedMinutes * 60;
     const submitted = engine?.attempt?.status === "submitted" && engine.attempt.result;
-    const score = submitted ? engine.attempt.result.score : null;
     const timerCard = $("[data-toolbar-duration]").closest(".exam-header-stat");
-    const bestCard = $("[data-toolbar-best-score]").closest(".exam-header-stat");
     const headerStats = timerCard.closest(".exam-header-stats");
     const timerEnabled = Boolean(engine?.attempt?.timer?.enabled);
-    const marksFill = $("[data-toolbar-marks-fill]");
+    const timerVisible = timerEnabled && !submitted;
     $("[data-toolbar-duration]").textContent = formatTimer(remainingSeconds);
-    timerCard.hidden = !timerEnabled;
-    bestCard.hidden = !submitted;
-    headerStats.classList.toggle("is-timer-hidden", !timerEnabled);
-    headerStats.classList.toggle("has-best-score", Boolean(submitted));
-    timerCard.classList.toggle("is-urgent", timerEnabled && !submitted && remainingSeconds <= 30);
-    $("[data-toolbar-marks]").textContent = submitted ? `${score}/${paper.totalMarks}` : String(paper.totalMarks);
-    if (submitted) {
-      const best = root.ExamStorage.bestScore(paper.id) ?? score;
-      $("[data-toolbar-best-score]").textContent = `${best}/${paper.totalMarks}`;
-    }
-    if (!submitted) {
-      marksFill.style.height = "0";
-      marksFill.style.backgroundColor = "transparent";
-      return;
-    }
-    const fill = Math.max(0, Math.min(100, (score / paper.totalMarks) * 100));
-    const colour = score >= 20 ? "rgba(22, 163, 74, .38)" : score >= 15 ? "rgba(250, 204, 21, .42)" : "rgba(220, 38, 38, .38)";
-    marksFill.style.height = score === 0 ? "100%" : `${fill}%`;
-    marksFill.style.backgroundColor = score === 0 ? "rgba(220, 38, 38, .72)" : colour;
+    timerCard.hidden = !timerVisible;
+    headerStats.classList.toggle("is-timer-hidden", !timerVisible);
+    timerCard.classList.toggle("is-urgent", timerVisible && remainingSeconds <= 30);
   }
 
   function renderCustomiseMenu() {
@@ -236,7 +218,7 @@
       const isTotalMarksRow = question.introTotalMarks && index === lastTextIndex;
       if (!isTotalMarksRow) return `<p>${paperTextMarkup(text, question.introBoldPhrases)}</p>`;
       const marks = Number(question.introTotalMarks);
-      return `<p class="question-intro-mark-row"><span>${paperTextMarkup(text, question.introBoldPhrases)}</span><span class="question-intro-marks" aria-label="${marks} ${marks === 1 ? "mark" : "marks"}">${marks}</span></p>`;
+      return `<p class="question-intro-mark-row"><span>${paperTextMarkup(text, question.introBoldPhrases)}</span><span class="question-intro-marks" ${question.id ? `data-question-total-mark="${escapeHtml(question.id)}"` : ""} aria-label="${marks} ${marks === 1 ? "mark" : "marks"}">${marks}</span></p>`;
     };
     if (!Array.isArray(question.introBulletRange)) return paragraphs.map(paragraphMarkup).join("");
     const [bulletStart, bulletEnd] = question.introBulletRange;
@@ -250,6 +232,7 @@
   function questionOutroMarkup(question) {
     if (!question.outro) return "";
     return questionIntroMarkup({
+      id: question.id,
       intro: question.outro,
       introBoldPhrases: question.outroBoldPhrases,
       introTotalMarks: question.outroTotalMarks,
@@ -265,8 +248,8 @@
       const reasonValue = engine.attempt.answers[reasonQuestion.id];
       groups.push(`<div class="q7-question-group">
         <div class="q7-group-heading"><span>${escapeHtml(styleQuestion.groupStart.label)}</span><span>${escapeHtml(styleQuestion.groupStart.prompt)}</span></div>
-        <div class="q7-prompt-row"><span>${escapeHtml(styleQuestion.label)}</span><span>${paperTextMarkup(styleQuestion.prompt, styleQuestion.boldPhrases)}</span><strong aria-label="${styleQuestion.marks} mark">${styleQuestion.marks}</strong></div>
-        <div class="q7-prompt-row"><span>${escapeHtml(reasonQuestion.label)}</span><span>${paperTextMarkup(reasonQuestion.prompt, reasonQuestion.boldPhrases)}</span><strong aria-label="${reasonQuestion.marks} mark">${reasonQuestion.marks}</strong></div>
+        <div class="q7-prompt-row"><span>${escapeHtml(styleQuestion.label)}</span><span>${paperTextMarkup(styleQuestion.prompt, styleQuestion.boldPhrases)}</span><strong data-subquestion-mark="${styleQuestion.id}" aria-label="${styleQuestion.marks} mark">${styleQuestion.marks}</strong></div>
+        <div class="q7-prompt-row"><span>${escapeHtml(reasonQuestion.label)}</span><span>${paperTextMarkup(reasonQuestion.prompt, reasonQuestion.boldPhrases)}</span><strong data-subquestion-mark="${reasonQuestion.id}" aria-label="${reasonQuestion.marks} mark">${reasonQuestion.marks}</strong></div>
         <div class="q7-playback-lines">${styleQuestion.instructionLines.map(line => `<span>${escapeHtml(line)}</span>`).join("")}</div>
         <section class="subquestion q7-style-options" data-subquestion="${styleQuestion.id}">${inputMarkup(styleQuestion, styleValue)}</section>
         <section class="subquestion q7-reason-entry" data-subquestion="${reasonQuestion.id}"><label for="${reasonQuestion.id}"><span>Reason</span><textarea id="${reasonQuestion.id}" class="text-answer q7-reason-answer" rows="1" autocapitalize="sentences">${escapeHtml(reasonValue || "")}</textarea></label></section>
@@ -299,7 +282,7 @@
         ? `<svg class="music-guide-arrow" viewBox="0 0 52 28" aria-hidden="true" focusable="false"><path d="M0 8 H35 V1 L51 14 L35 27 V20 H0 Z" /></svg>`
         : "";
       return `${groupStart}<section class="subquestion subquestion-${subquestion.type} ${showHeading ? "has-part-label" : ""} ${subquestion.answerStyle ? `answer-style-${subquestion.answerStyle}` : ""}" data-subquestion="${subquestion.id}">
-        ${showHeading || headingQuestion || showMarks ? `<div class="subquestion-heading"><span class="subquestion-heading-label">${showHeading ? escapeHtml(subquestion.label) : ""}</span><div class="subquestion-heading-question">${headingQuestion}</div>${showMarks ? `<span class="subquestion-heading-marks ${subquestion.markAlign === "prompt-end" ? "is-prompt-end" : ""}" aria-label="${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}">${subquestion.marks}</span>` : ""}</div>` : ""}
+        ${showHeading || headingQuestion || showMarks ? `<div class="subquestion-heading"><span class="subquestion-heading-label">${showHeading ? escapeHtml(subquestion.label) : ""}</span><div class="subquestion-heading-question">${headingQuestion}</div>${showMarks ? `<span class="subquestion-heading-marks ${subquestion.markAlign === "prompt-end" ? "is-prompt-end" : ""}" data-subquestion-mark="${subquestion.id}" aria-label="${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}">${subquestion.marks}</span>` : ""}</div>` : ""}
         ${instruction}
         ${inlineAnswer ? "" : inputMarkup(subquestion, value)}
         ${guideArrow}
@@ -614,16 +597,30 @@
       ? Object.entries(part.matchedConcepts).flatMap(([heading, items]) => items.map(item => `${heading}: ${item}`))
       : [];
     return `<aside class="inline-answer-feedback is-${state}" aria-label="Feedback for ${escapeHtml(subquestion.label || subquestion.prompt)}">
-      <div class="inline-feedback-heading"><strong>${title}</strong><span>${part.marks}/${part.maxMarks}</span></div>
+      <div class="inline-feedback-heading"><strong>${title}</strong></div>
       ${awardedConcepts.length ? `<p class="inline-awarded-concepts"><b>Awarded concepts:</b> ${escapeHtml(awardedConcepts.join("; "))}</p>` : ""}
-      ${part.status !== "correct" && !subquestion.finalAnswerField ? `<p class="inline-correct-answer"><b>Correct answer:</b> ${escapeHtml(acceptedAnswerDisplay(subquestion))}</p>` : ""}
-      ${subquestion.explanation ? `<p>${escapeHtml(subquestion.explanation)}</p>` : ""}
+      ${part.status !== "correct" && !subquestion.finalAnswerField ? `<p class="inline-correct-answer"><b>Correct answer:</b> ${escapeHtml(acceptedAnswerDisplay(subquestion))}</p>
+      ${subquestion.definition ? `<p class="inline-answer-definition">${escapeHtml(subquestion.definition)}</p>` : ""}` : ""}
     </aside>`;
+  }
+
+  function applyReviewMark(markElement, awardedMarks, availableMarks) {
+    if (!markElement) return;
+    const fullMarks = awardedMarks >= availableMarks;
+    markElement.classList.add(fullMarks ? "is-awarded" : "is-not-awarded");
+    markElement.setAttribute("aria-label", fullMarks
+      ? `${awardedMarks} out of ${availableMarks} marks awarded`
+      : `Maximum ${availableMarks} marks; ${awardedMarks} awarded`);
+    if (availableMarks > 1 && !fullMarks) {
+      markElement.innerHTML = `<span>${availableMarks}</span><span class="subquestion-earned-marks" aria-hidden="true">${awardedMarks}</span>`;
+    }
   }
 
   function applyInlineMarking(card, subquestion, part) {
     const section = card.querySelector(`[data-subquestion="${subquestion.id}"]`);
     if (!section || !part) return;
+    const partMark = card.querySelector(`[data-subquestion-mark="${subquestion.id}"]`);
+    applyReviewMark(partMark, part.marks, part.maxMarks);
     const expected = new Set((subquestion.type === "checkbox" ? subquestion.answers : [subquestion.answer]).filter(Boolean).map(String));
     const chosen = new Set((Array.isArray(part.value) ? part.value : [part.value]).filter(value => value !== undefined && value !== null && String(value) !== "").map(String));
 
@@ -635,6 +632,7 @@
         option.classList.toggle("is-review-correct", isExpected);
         option.classList.toggle("is-user-correct", isChosen && isExpected);
         option.classList.toggle("is-user-incorrect", isChosen && !isExpected);
+        option.classList.toggle("is-correct-answer-reveal", isExpected && !isChosen && part.status !== "unanswered");
       });
     } else if (subquestion.type === "short-text") {
       const field = section.querySelector("input, textarea");
@@ -667,29 +665,37 @@
 
   function renderResultsPaper() {
     const resultsPaper = $("[data-results-paper]");
-    allQuestionAudioPlayers.forEach(player => player.destroy());
-    allQuestionAudioPlayers = [];
+    destroyAudioPlayers();
+    document.body.dataset.resultsLayout = showingAllQuestions ? "all" : "single";
+    $(".exam-header-audio").hidden = showingAllQuestions;
     const questions = showingAllQuestions ? paper.questions : [currentQuestion()];
     resultsPaper.innerHTML = questions.map(question => {
       const questionResult = engine.attempt.result.questionBreakdown.find(item => item.id === question.id);
       return `<article class="question-card all-question-card marked-question-card ${showingAllQuestions ? "" : "has-paper-actions"} question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}" data-result-question="${question.id}">
-        <div data-result-question-audio></div>
+        ${showingAllQuestions ? "<div data-result-question-audio></div>" : ""}
         <div class="paper-marks-heading">MARKS</div>
-        <header class="question-header"><h2>Question ${question.number}</h2><span class="question-review-score" aria-label="${questionResult.marks} out of ${questionResult.maxMarks} marks">${questionResult.marks}/${questionResult.maxMarks}</span></header>
+        <header class="question-header"><h2>Question ${question.number}</h2></header>
         <div class="question-intro">${questionIntroMarkup(question)}</div>
         <div class="subquestions">${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}</div>
         <div class="question-outro">${questionOutroMarkup(question)}</div>
-        ${showingAllQuestions ? "" : `<div class="question-actions result-question-actions"><button class="button button-primary question-navigation-button" type="button" data-result-bottom-previous aria-label="Previous question" title="Previous"><img class="question-nav-arrow is-previous" src="../next.svg" alt="" aria-hidden="true" /></button><div><button class="button button-primary question-navigation-button" type="button" data-result-bottom-next aria-label="Next question" title="Next"><img class="question-nav-arrow" src="../next.svg" alt="" aria-hidden="true" /></button></div></div>`}
+        <div class="question-review-footer ${showingAllQuestions ? "is-score-only" : ""}">
+          ${showingAllQuestions ? "" : `<button class="button button-primary question-navigation-button" type="button" data-result-bottom-previous aria-label="Previous question" title="Previous"><img class="question-nav-arrow is-previous" src="../next.svg" alt="" aria-hidden="true" /></button>`}
+          <span class="question-review-score" aria-label="${questionResult.marks} out of ${questionResult.maxMarks} marks">${questionResult.marks}/${questionResult.maxMarks}</span>
+          ${showingAllQuestions ? "" : `<button class="button button-primary question-navigation-button" type="button" data-result-bottom-next aria-label="Next question" title="Next"><img class="question-nav-arrow" src="../next.svg" alt="" aria-hidden="true" /></button>`}
+        </div>
       </article>`;
     }).join("");
 
     questions.forEach(question => {
       const card = resultsPaper.querySelector(`[data-result-question="${question.id}"]`);
+      const questionResult = engine.attempt.result.questionBreakdown.find(item => item.id === question.id);
+      applyReviewMark(card.querySelector(`[data-question-total-mark="${question.id}"]`), questionResult.marks, questionResult.maxMarks);
       const sharedNotation = card.querySelector("[data-shared-notation]");
       const notationReview = Object.fromEntries(question.subquestions.filter(subquestion => subquestion.type === "notation-choice").map(subquestion => [subquestion.id, partResult(subquestion.id)?.status]));
       if (sharedNotation && root.ExamNotation?.renderSharedScore) root.ExamNotation.renderSharedScore(sharedNotation, question, engine.attempt.answers, null, notationReview);
       const feedbackAudio = card.querySelector("[data-result-question-audio]");
       if (feedbackAudio) allQuestionAudioPlayers.push(root.ExamAudio.createPlayer(feedbackAudio, { clips: question.audio.clips }));
+      if (!showingAllQuestions) audioPlayer = root.ExamAudio.createPlayer($("[data-audio-container]"), { clips: question.audio.clips });
       question.subquestions.forEach(subquestion => {
         const section = card.querySelector(`[data-subquestion="${subquestion.id}"]`);
         if (subquestion.type === "notation-choice") {
@@ -746,12 +752,18 @@
   function renderResults() {
     root.ExamAudio.pauseAll();
     destroyAudioPlayers();
-    $(".exam-header-audio").hidden = true;
     const result = engine.attempt.result;
-    showingAllQuestions = true;
+    showingAllQuestions = false;
+    engine.attempt.currentQuestion = paper.questions[0].id;
     renderToolbarStats();
-    $("[data-results-score]").innerHTML = `${result.score}<span>/${paper.totalMarks}</span>`;
-    $("[data-results-percentage]").textContent = `${result.percentage}% ${result.reviewMarks ? "provisional score" : "final score"}`;
+    const best = root.ExamStorage.bestScore(paper.id) ?? result.score;
+    $("[data-results-score]").textContent = `${result.score}/${paper.totalMarks}`;
+    $("[data-results-percentage]").textContent = `${result.percentage}%`;
+    $("[data-results-best]").textContent = `${best}/${paper.totalMarks}`;
+    $("[data-results-mode]").textContent = engine.attempt.mode === "exam" ? "Exam Mode" : "Practice Mode";
+    const markingInstructions = $("[data-marking-instructions]");
+    markingInstructions.hidden = !paper.markingInstructionsPath;
+    if (paper.markingInstructionsPath) markingInstructions.href = paper.markingInstructionsPath;
     $("[data-review-notice]").hidden = !result.reviewMarks;
     renderResultsPaper();
     renderNavigator();
