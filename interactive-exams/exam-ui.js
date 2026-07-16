@@ -3,6 +3,42 @@
 
   const $ = selector => document.querySelector(selector);
   const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
+  const escapeRegExp = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  function bindRemovalGesture(target, remove) {
+    let lastTouchEnd = 0;
+    let lastRemoval = 0;
+    const removeOnce = event => {
+      const now = Date.now();
+      if (now - lastRemoval < 250) return;
+      lastRemoval = now;
+      event?.preventDefault();
+      remove();
+    };
+    target.addEventListener("dblclick", removeOnce);
+    target.addEventListener("contextmenu", removeOnce);
+    target.addEventListener("touchend", event => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 350) {
+        lastTouchEnd = 0;
+        removeOnce(event);
+        return;
+      }
+      lastTouchEnd = now;
+    }, { passive: false });
+    target.addEventListener("keydown", event => {
+      if (event.shiftKey && event.key === "Delete") removeOnce(event);
+    });
+  }
+
+  function paperTextMarkup(text, boldPhrases = []) {
+    const source = String(text ?? "");
+    const phrases = [...new Set(boldPhrases.filter(Boolean))].sort((a, b) => b.length - a.length);
+    if (!phrases.length) return escapeHtml(source);
+    const phraseSet = new Set(phrases);
+    const pattern = new RegExp(`(${phrases.map(escapeRegExp).join("|")})`, "g");
+    return source.split(pattern).map(part => phraseSet.has(part) ? `<strong class="paper-emphasis">${escapeHtml(part)}</strong>` : escapeHtml(part)).join("");
+  }
   let engine;
   let paper;
   let audioPlayer;
@@ -119,60 +155,134 @@
     const index = questions.findIndex(item => item.id === question.id);
     const complete = questionIsComplete(question);
     const next = $("[data-next-question]");
-    const submit = $("[data-submit-paper]");
-    if (index < questions.length - 1) next.disabled = Boolean(engine.attempt.questionsLocked) && !complete;
-    if (index === questions.length - 1) submit.disabled = !complete;
+    const bottomNext = $("[data-bottom-next-question]");
+    const submits = [...document.querySelectorAll("[data-submit-paper]")];
+    const nextDisabled = Boolean(engine.attempt.questionsLocked) && !complete;
+    next.disabled = nextDisabled;
+    bottomNext.disabled = nextDisabled;
+    submits.forEach(submit => { submit.disabled = index === questions.length - 1 && !complete; });
   }
 
   function optionMarkup(subquestion, value, checkbox = false) {
     const selected = checkbox ? (Array.isArray(value) ? value : []) : value;
-    return `<div class="answer-options ${checkbox ? "answer-options-checkbox" : ""}">${subquestion.options.map(item => {
+    const limitId = `${subquestion.id}-selection-limit`;
+    const removalId = `${subquestion.id}-removal-help`;
+    const options = `<div class="answer-options ${checkbox ? "answer-options-checkbox" : ""}">${subquestion.options.map(item => {
       const checked = checkbox ? selected.includes(item.value) : selected === item.value;
-      return `<label class="answer-option ${checked ? "is-selected" : ""}"><input type="${checkbox ? "checkbox" : "radio"}" name="${subquestion.id}" value="${escapeHtml(item.value)}" ${checked ? "checked" : ""} /><span>${escapeHtml(item.label)}</span></label>`;
-    }).join("")}</div>${checkbox ? `<p class="answer-hint">Choose ${subquestion.maxSelections} answers.</p>` : ""}`;
+      const optionText = item.stackedFraction
+        ? `<span class="answer-option-copy answer-option-fraction"><span>${escapeHtml(item.stackedFraction[0])}</span><span>${escapeHtml(item.stackedFraction[1])}</span></span>`
+        : item.secondaryLabel
+        ? `<span class="answer-option-copy chord-option-copy">${String(item.label).split(/\s+/).map(cell => `<span>${escapeHtml(cell)}</span>`).join("")}${String(item.secondaryLabel).split(/\s+/).map(cell => `<span>${escapeHtml(cell)}</span>`).join("")}</span>`
+        : `<span class="answer-option-copy">${escapeHtml(item.label)}</span>`;
+      const accessibleOptionLabel = item.secondaryLabel ? `${item.label}, ${item.secondaryLabel}` : item.label;
+      return `<label class="answer-option ${checked ? "is-selected" : ""}"><input type="${checkbox ? "checkbox" : "radio"}" name="${subquestion.id}" value="${escapeHtml(item.value)}" aria-label="${escapeHtml(accessibleOptionLabel)}" aria-keyshortcuts="Shift+Delete" ${checked ? "checked" : ""} />${optionText}</label>`;
+    }).join("")}</div>`;
+    const describedBy = checkbox ? `${limitId} ${removalId}` : removalId;
+    return `<fieldset class="answer-fieldset" aria-describedby="${describedBy}"><legend class="visually-hidden">${escapeHtml(subquestion.prompt)}</legend>${options}</fieldset><span class="visually-hidden" id="${removalId}">Double-click, double-tap or right-click a selected answer to remove it. Keyboard users can press Shift and Delete.</span>${checkbox ? `<span class="visually-hidden" id="${limitId}">Tick ${subquestion.maxSelections} boxes.</span><p class="answer-error" data-selection-error role="status" hidden>You can tick no more than ${subquestion.maxSelections} boxes.</p>` : ""}`;
   }
 
   function inputMarkup(subquestion, value) {
     if (subquestion.type === "radio") return optionMarkup(subquestion, value, false);
     if (subquestion.type === "checkbox") return optionMarkup(subquestion, value, true);
-    if (subquestion.type === "short-text") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer" type="text" value="${escapeHtml(value || "")}" autocomplete="off" />`;
+    if (subquestion.type === "short-text" && subquestion.inlineAnswer) return `<div class="sentence-answer"><span>${paperTextMarkup(subquestion.inlineAnswer.before, subquestion.boldPhrases)}</span><label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(value || "")}" autocomplete="off" /><span>${paperTextMarkup(subquestion.inlineAnswer.after, subquestion.boldPhrases)}</span></div>`;
+    if (subquestion.type === "short-text" && subquestion.answerStyle === "reason") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><textarea id="${subquestion.id}" class="text-answer extended-answer-box" rows="4">${escapeHtml(value || "")}</textarea>`;
+    if (subquestion.type === "short-text") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(value || "")}" autocomplete="off" />`;
     if (subquestion.type === "structured-review") {
-      return `<div class="structured-answer">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" rows="3">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div><p class="answer-hint">For full marks, comment under at least three headings.</p>`;
+      if (subquestion.roughWork && subquestion.finalAnswerField) {
+        return `<div class="q8-answer-workspace"><section class="q8-rough-work" aria-labelledby="q8-rough-work-heading"><h3 id="q8-rough-work-heading">Rough work</h3><div class="q8-rough-work-table">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" aria-label="Rough work: ${escapeHtml(heading.label)}">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div></section><section class="q8-final-answer" aria-labelledby="q8-final-answer-heading"><h3 id="q8-final-answer-heading">Final answer</h3><label class="visually-hidden" for="${subquestion.id}-final">Final answer</label><textarea id="${subquestion.id}-final" data-heading="final" aria-label="Final answer">${escapeHtml(value?.final || "")}</textarea><p class="q8-end-paper">[END OF QUESTION PAPER]</p></section></div>`;
+      }
+      return `<div class="structured-answer">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" rows="4">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div>`;
     }
     if (subquestion.type === "notation-choice") return `<div data-notation-container></div>`;
     return "";
   }
 
-  function answerHasValue(value) {
-    if (Array.isArray(value)) return value.length > 0;
-    if (value && typeof value === "object") return Object.values(value).some(item => String(item || "").trim());
-    return Boolean(String(value || "").trim());
+  function questionIntroMarkup(question) {
+    const paragraphs = Array.isArray(question.intro) ? question.intro : [question.intro];
+    const lastTextIndex = paragraphs.reduce((lastIndex, text, index) => text ? index : lastIndex, -1);
+    const paragraphMarkup = (text, index) => {
+      if (!text) return `<p class="question-intro-spacer" aria-hidden="true"></p>`;
+      const isTotalMarksRow = question.introTotalMarks && index === lastTextIndex;
+      if (!isTotalMarksRow) return `<p>${paperTextMarkup(text, question.introBoldPhrases)}</p>`;
+      const marks = Number(question.introTotalMarks);
+      return `<p class="question-intro-mark-row"><span>${paperTextMarkup(text, question.introBoldPhrases)}</span><span class="question-intro-marks" aria-label="${marks} ${marks === 1 ? "mark" : "marks"}">${marks}</span></p>`;
+    };
+    if (!Array.isArray(question.introBulletRange)) return paragraphs.map(paragraphMarkup).join("");
+    const [bulletStart, bulletEnd] = question.introBulletRange;
+    return paragraphs.map((text, index) => {
+      if (index === bulletStart) return `<ul class="question-intro-list">${paragraphs.slice(bulletStart, bulletEnd + 1).map(item => `<li>${paperTextMarkup(item, question.introBoldPhrases)}</li>`).join("")}</ul>`;
+      if (index > bulletStart && index <= bulletEnd) return "";
+      return paragraphMarkup(text, index);
+    }).join("");
   }
 
-  function hasDedicatedClearControl(subquestion) {
-    return subquestion.type === "notation-choice" && subquestion.notationTool === "note-entry";
+  function questionOutroMarkup(question) {
+    if (!question.outro) return "";
+    return questionIntroMarkup({
+      intro: question.outro,
+      introBoldPhrases: question.outroBoldPhrases,
+      introTotalMarks: question.outroTotalMarks,
+    });
   }
 
-  function isClearableSubquestion(subquestion) {
-    return ["short-text", "structured-review", "notation-choice"].includes(subquestion.type) && !hasDedicatedClearControl(subquestion);
-  }
-
-  function clearButtonMarkup(subquestion, value) {
-    if (!isClearableSubquestion(subquestion)) return "";
-    return `<div class="subquestion-clear-row"><button type="button" class="button button-secondary button-small" data-clear-subquestion ${answerHasValue(value) ? "" : "disabled"}>Clear</button></div>`;
+  function styleReasonGroupsMarkup(question) {
+    const groups = [];
+    for (let index = 0; index < question.subquestions.length; index += 2) {
+      const styleQuestion = question.subquestions[index];
+      const reasonQuestion = question.subquestions[index + 1];
+      const styleValue = engine.attempt.answers[styleQuestion.id];
+      const reasonValue = engine.attempt.answers[reasonQuestion.id];
+      groups.push(`<div class="q7-question-group">
+        <div class="q7-group-heading"><span>${escapeHtml(styleQuestion.groupStart.label)}</span><span>${escapeHtml(styleQuestion.groupStart.prompt)}</span></div>
+        <div class="q7-prompt-row"><span>${escapeHtml(styleQuestion.label)}</span><span>${paperTextMarkup(styleQuestion.prompt, styleQuestion.boldPhrases)}</span><strong aria-label="${styleQuestion.marks} mark">${styleQuestion.marks}</strong></div>
+        <div class="q7-prompt-row"><span>${escapeHtml(reasonQuestion.label)}</span><span>${paperTextMarkup(reasonQuestion.prompt, reasonQuestion.boldPhrases)}</span><strong aria-label="${reasonQuestion.marks} mark">${reasonQuestion.marks}</strong></div>
+        <div class="q7-playback-lines">${styleQuestion.instructionLines.map(line => `<span>${escapeHtml(line)}</span>`).join("")}</div>
+        <section class="subquestion q7-style-options" data-subquestion="${styleQuestion.id}">${inputMarkup(styleQuestion, styleValue)}</section>
+        <section class="subquestion q7-reason-entry" data-subquestion="${reasonQuestion.id}"><label for="${reasonQuestion.id}"><span>Reason</span><textarea id="${reasonQuestion.id}" class="text-answer q7-reason-answer" rows="1">${escapeHtml(reasonValue || "")}</textarea></label></section>
+      </div>`);
+    }
+    return groups.join("");
   }
 
   function subquestionsMarkup(question) {
-    return question.subquestions.map(subquestion => `<section class="subquestion" data-subquestion="${subquestion.id}">
-      <div class="subquestion-heading"><span>${escapeHtml(subquestion.label)}</span><span>${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}</span></div>
-      <p class="subquestion-prompt">${escapeHtml(subquestion.prompt)}</p>
-      ${inputMarkup(subquestion, engine.attempt.answers[subquestion.id])}
-      ${clearButtonMarkup(subquestion, engine.attempt.answers[subquestion.id])}
-    </section>`).join("");
+    if (question.layout === "style-reason-groups") return styleReasonGroupsMarkup(question);
+    return question.subquestions.map((subquestion, subquestionIndex) => {
+      const groupStart = subquestion.groupStart ? `<div class="subquestion-group-heading"><strong>${escapeHtml(subquestion.groupStart.label)}</strong><span>${escapeHtml(subquestion.groupStart.prompt)}</span></div>` : "";
+      const showMarks = question.showPartMarks !== false;
+      const showHeading = Boolean(subquestion.label) && subquestion.type !== "structured-review";
+      const promptMatchesLabel = subquestion.prompt === subquestion.label;
+      const value = engine.attempt.answers[subquestion.id];
+      const inlineAnswer = Boolean(subquestion.inlineAnswer);
+      const promptMarkup = Array.isArray(subquestion.promptLines)
+        ? `<div class="subquestion-prompt-lines">${subquestion.promptLines.map(line => line ? `<span>${paperTextMarkup(line, subquestion.boldPhrases)}</span>` : `<span class="subquestion-prompt-spacer" aria-hidden="true"></span>`).join("")}</div>`
+        : `<span>${paperTextMarkup(subquestion.prompt, subquestion.boldPhrases)}</span>`;
+      const headingQuestion = subquestion.type === "structured-review"
+        ? subquestion.roughWork ? "" : `<h3 class="final-answer-heading">${escapeHtml(subquestion.prompt)}</h3>`
+        : inlineAnswer
+          ? inputMarkup(subquestion, value)
+          : promptMatchesLabel
+            ? ""
+            : `${promptMarkup}${subquestion.scoreHint && subquestion.scoreHintPlacement === "prompt" ? `<span class="score-apply-hint score-apply-hint-inline">${escapeHtml(subquestion.scoreHint)}</span>` : ""}`;
+      const instruction = subquestion.instruction ? `<p class="subquestion-instruction">${escapeHtml(subquestion.instruction)}</p>` : "";
+      const guideArrow = question.layout === "music-guide" && subquestionIndex < question.subquestions.length - 1
+        ? `<svg class="music-guide-arrow" viewBox="0 0 52 28" aria-hidden="true" focusable="false"><path d="M0 8 H35 V1 L51 14 L35 27 V20 H0 Z" /></svg>`
+        : "";
+      return `${groupStart}<section class="subquestion subquestion-${subquestion.type} ${showHeading ? "has-part-label" : ""} ${subquestion.answerStyle ? `answer-style-${subquestion.answerStyle}` : ""}" data-subquestion="${subquestion.id}">
+        ${showHeading || headingQuestion || showMarks ? `<div class="subquestion-heading"><span class="subquestion-heading-label">${showHeading ? escapeHtml(subquestion.label) : ""}</span><div class="subquestion-heading-question">${headingQuestion}</div>${showMarks ? `<span class="subquestion-heading-marks ${subquestion.markAlign === "prompt-end" ? "is-prompt-end" : ""}" aria-label="${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}">${subquestion.marks}</span>` : ""}</div>` : ""}
+        ${instruction}
+        ${inlineAnswer ? "" : inputMarkup(subquestion, value)}
+        ${guideArrow}
+      </section>`;
+    }).join("");
   }
 
   function sharedNotationMarkup(question) {
     return question.score?.sharedNotation ? `<div class="shared-notation-panel" data-shared-notation="${escapeHtml(question.score.sharedNotation)}"></div>` : "";
+  }
+
+  function contentHeadingMarkup(question) {
+    if (!question.contentHeading || /\(continued\)\s*$/i.test(question.contentHeading)) return "";
+    return `<h3 class="question-continuation question-content-heading">${escapeHtml(question.contentHeading)}</h3>`;
   }
 
   function renderSharedNotation(card, question) {
@@ -185,64 +295,81 @@
   }
 
   function bindSubquestion(card, subquestion) {
-    const clearButton = card.querySelector("[data-clear-subquestion]");
-    const updateClearButton = value => { if (clearButton) clearButton.disabled = !answerHasValue(value); };
     if (subquestion.type === "radio") {
-      card.querySelectorAll('input[type="radio"]').forEach(input => input.addEventListener("change", () => {
-        card.querySelectorAll(".answer-option").forEach(label => label.classList.toggle("is-selected", label.contains(input) && input.checked));
-        engine.setAnswer(subquestion.id, input.value);
-      }));
+      card.querySelectorAll('input[type="radio"]').forEach(input => {
+        const label = input.closest(".answer-option");
+        input.addEventListener("change", () => {
+          card.querySelectorAll(".answer-option").forEach(option => option.classList.toggle("is-selected", option.contains(input) && input.checked));
+          engine.setAnswer(subquestion.id, input.value);
+        });
+        bindRemovalGesture(label, () => {
+          if (!input.checked) return;
+          input.checked = false;
+          label.classList.remove("is-selected");
+          engine.setAnswer(subquestion.id, "");
+        });
+      });
     } else if (subquestion.type === "checkbox") {
-      card.querySelectorAll('input[type="checkbox"]').forEach(input => input.addEventListener("change", () => {
+      const syncCheckboxes = () => {
         const checked = [...card.querySelectorAll('input[type="checkbox"]:checked')];
-        if (checked.length > subquestion.maxSelections) { input.checked = false; return; }
         card.querySelectorAll(".answer-option").forEach(label => label.classList.toggle("is-selected", label.querySelector("input").checked));
         engine.setAnswer(subquestion.id, checked.map(item => item.value));
-      }));
+      };
+      card.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        const label = input.closest(".answer-option");
+        input.addEventListener("change", () => {
+          const checked = [...card.querySelectorAll('input[type="checkbox"]:checked')];
+          const error = card.querySelector("[data-selection-error]");
+          if (checked.length > subquestion.maxSelections) {
+            input.checked = false;
+            if (error) error.hidden = false;
+            return;
+          }
+          if (error) error.hidden = true;
+          syncCheckboxes();
+        });
+        bindRemovalGesture(label, () => {
+          if (!input.checked) return;
+          input.checked = false;
+          const error = card.querySelector("[data-selection-error]");
+          if (error) error.hidden = true;
+          syncCheckboxes();
+        });
+      });
     } else if (subquestion.type === "short-text") {
-      const input = card.querySelector("input");
-      input.addEventListener("input", () => {
-        engine.setAnswer(subquestion.id, input.value);
-        updateClearButton(input.value);
+      const input = card.querySelector("input, textarea");
+      input.setAttribute("aria-keyshortcuts", "Shift+Delete");
+      input.addEventListener("input", () => engine.setAnswer(subquestion.id, input.value));
+      bindRemovalGesture(input, () => {
+        if (!input.value) return;
+        input.value = "";
+        engine.setAnswer(subquestion.id, "");
       });
     } else if (subquestion.type === "structured-review") {
-      card.querySelectorAll("textarea").forEach(textarea => textarea.addEventListener("input", () => {
+      const updateStructuredAnswer = () => {
         const value = {};
         card.querySelectorAll("textarea").forEach(field => { value[field.dataset.heading] = field.value; });
         engine.setAnswer(subquestion.id, value);
-        updateClearButton(value);
-      }));
+      };
+      card.querySelectorAll("textarea").forEach(textarea => {
+        textarea.setAttribute("aria-keyshortcuts", "Shift+Delete");
+        textarea.addEventListener("input", updateStructuredAnswer);
+        bindRemovalGesture(textarea, () => {
+          if (!textarea.value) return;
+          textarea.value = "";
+          updateStructuredAnswer();
+        });
+      });
     } else if (subquestion.type === "notation-choice") {
       const notationContainer = card.querySelector("[data-notation-container]");
       const renderNotationControl = value => root.ExamNotation.render(notationContainer, subquestion, value, nextValue => {
         engine.setAnswer(subquestion.id, nextValue);
-        updateClearButton(nextValue);
         const questionCard = card.closest(".question-card");
         const question = paper.questions.find(item => item.subquestions.some(part => part.id === subquestion.id));
         if (questionCard && question) renderSharedNotation(questionCard, question);
       });
       renderNotationControl(engine.attempt.answers[subquestion.id]);
     }
-
-    clearButton?.addEventListener("click", () => {
-      const emptyValue = subquestion.type === "structured-review" ? {} : "";
-      engine.setAnswer(subquestion.id, emptyValue);
-      if (subquestion.type === "short-text") card.querySelector("input").value = "";
-      if (subquestion.type === "structured-review") card.querySelectorAll("textarea").forEach(field => { field.value = ""; });
-      if (subquestion.type === "notation-choice") {
-        root.ExamNotation.render(card.querySelector("[data-notation-container]"), subquestion, "", value => {
-          engine.setAnswer(subquestion.id, value);
-          updateClearButton(value);
-          const questionCard = card.closest(".question-card");
-          const question = paper.questions.find(item => item.subquestions.some(part => part.id === subquestion.id));
-          if (questionCard && question) renderSharedNotation(questionCard, question);
-        });
-        const questionCard = card.closest(".question-card");
-        const question = paper.questions.find(item => item.subquestions.some(part => part.id === subquestion.id));
-        if (questionCard && question) renderSharedNotation(questionCard, question);
-      }
-      updateClearButton(emptyValue);
-    });
   }
 
   function renderQuestion() {
@@ -261,11 +388,13 @@
       return;
     }
     engine.attempt.currentQuestion = question.id;
+    const questionCard = $("[data-single-question-area] .question-card");
+    questionCard.className = `question-card question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}`;
     $("[data-question-heading]").textContent = `Question ${question.number}`;
-    $("[data-question-marks]").textContent = `${question.marks} ${question.marks === 1 ? "mark" : "marks"}`;
-    $("[data-question-intro]").textContent = question.intro || "";
+    $("[data-question-intro]").innerHTML = questionIntroMarkup(question);
     const parts = $("[data-subquestions]");
-    parts.innerHTML = `${sharedNotationMarkup(question)}${subquestionsMarkup(question)}`;
+    parts.innerHTML = `${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}`;
+    $("[data-question-outro]").innerHTML = questionOutroMarkup(question);
     renderSharedNotation(parts.closest(".question-card"), question);
     question.subquestions.forEach(subquestion => bindSubquestion(parts.querySelector(`[data-subquestion="${subquestion.id}"]`), subquestion));
     audioPlayer = root.ExamAudio.createPlayer($("[data-audio-container]"), {
@@ -277,11 +406,16 @@
     });
     const previous = $("[data-previous-question]");
     const next = $("[data-next-question]");
-    previous.hidden = index === 0;
-    if (index > 0) $("[data-previous-label]").textContent = `Question ${visible[index - 1].number}`;
-    next.hidden = index === visible.length - 1;
-    if (index < visible.length - 1) $("[data-next-label]").textContent = `Question ${visible[index + 1].number}`;
-    $("[data-submit-paper]").hidden = index !== visible.length - 1;
+    previous.hidden = false;
+    previous.disabled = index === 0;
+    $("[data-bottom-previous-question]").hidden = false;
+    $("[data-bottom-previous-question]").disabled = index === 0;
+    if (index > 0) $("[data-previous-label]").textContent = "Previous";
+    const isLastQuestion = index === visible.length - 1;
+    next.hidden = isLastQuestion;
+    $("[data-bottom-next-question]").hidden = isLastQuestion;
+    if (index < visible.length - 1) $("[data-next-label]").textContent = "Next";
+    document.querySelectorAll("[data-submit-paper]").forEach(submit => { submit.hidden = !isLastQuestion; });
     renderNavigator();
     updateQuestionActions();
   }
@@ -294,11 +428,13 @@
     const allArea = $("[data-all-questions-area]");
     singleArea.hidden = true;
     allArea.hidden = false;
-    allArea.innerHTML = engine.visibleQuestions().map(question => `<article class="question-card all-question-card" data-all-question="${question.id}">
+    allArea.innerHTML = engine.visibleQuestions().map(question => `<article class="question-card all-question-card question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}" data-all-question="${question.id}">
       <div data-all-question-audio></div>
-      <header class="question-header"><div><span class="eyebrow">${question.marks} ${question.marks === 1 ? "mark" : "marks"}</span><h2>Question ${question.number}</h2></div></header>
-      <p class="question-intro">${escapeHtml(question.intro || "")}</p>
-      <div class="subquestions">${sharedNotationMarkup(question)}${subquestionsMarkup(question)}</div>
+      <div class="paper-marks-heading">MARKS</div>
+      <header class="question-header"><h2>Question ${question.number}</h2></header>
+      <div class="question-intro">${questionIntroMarkup(question)}</div>
+      <div class="subquestions">${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}</div>
+      <div class="question-outro">${questionOutroMarkup(question)}</div>
     </article>`).join("");
     engine.visibleQuestions().forEach(question => {
       const card = allArea.querySelector(`[data-all-question="${question.id}"]`);
@@ -314,6 +450,52 @@
     });
     renderNavigator();
     closePaperMenus();
+  }
+
+  function renderPrintPaper() {
+    const printArea = $("[data-print-paper]");
+    if (!printArea) return;
+    printArea.innerHTML = `<header class="print-paper-header"><h1>${escapeHtml(paper.title)}</h1><span>Total marks: ${paper.totalMarks}</span></header>${paper.questions.map(question => `<article class="question-card print-question-card question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}" data-print-question="${question.id}">
+      <div class="paper-marks-heading">MARKS</div>
+      <header class="question-header"><h2>Question ${question.number}</h2></header>
+      <div class="question-intro">${questionIntroMarkup(question)}</div>
+      <div class="subquestions">${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}</div>
+      <div class="question-outro">${questionOutroMarkup(question)}</div>
+    </article>`).join("")}`;
+    paper.questions.forEach(question => {
+      const card = printArea.querySelector(`[data-print-question="${question.id}"]`);
+      const notation = card?.querySelector("[data-shared-notation]");
+      if (notation && root.ExamNotation?.renderSharedScore) root.ExamNotation.renderSharedScore(notation, question, engine.attempt.answers, () => {});
+    });
+  }
+
+  function paperShareUrl() {
+    return `https://mrtennant-music.github.io/musicliteracy/interactive-exams/exam.html?paper=${encodeURIComponent(paper.id)}`;
+  }
+
+  function openQrOverlay() {
+    const overlay = $("[data-qr-overlay]");
+    const shareUrl = paperShareUrl();
+    $("[data-qr-title]").textContent = `${paper.level} • ${paper.year}`;
+    $("[data-qr-subtitle]").textContent = "Scan to open this Digital Past Paper";
+    const image = $("[data-qr-image]");
+    image.src = `https://api.qrserver.com/v1/create-qr-code/?size=560x560&data=${encodeURIComponent(shareUrl)}`;
+    image.alt = `QR code linking to ${paper.level} • ${paper.year}`;
+    overlay.classList.add("is-open");
+    overlay.querySelector("[data-close-qr]")?.focus();
+  }
+
+  function closeQrOverlay() { $("[data-qr-overlay]")?.classList.remove("is-open"); }
+
+  async function copyPaperLink() {
+    const button = $("[data-copy-paper-link]");
+    try {
+      await navigator.clipboard.writeText(paperShareUrl());
+      button.textContent = "Copied";
+      root.setTimeout(() => { button.textContent = "Copy link"; }, 1800);
+    } catch {
+      button.textContent = "Copy unavailable";
+    }
   }
 
   function answerDisplay(value) {
@@ -440,7 +622,9 @@
       const index = questions.findIndex(item => item.id === currentQuestion().id);
       if (index < questions.length - 1 && (!engine.attempt.questionsLocked || questionIsComplete(questions[index]))) engine.goToQuestion(questions[index + 1].id);
     });
-    $("[data-submit-paper]").addEventListener("click", openSubmitModal);
+    $("[data-bottom-previous-question]").addEventListener("click", () => $("[data-previous-question]").click());
+    $("[data-bottom-next-question]").addEventListener("click", () => $("[data-next-question]").click());
+    document.querySelectorAll("[data-submit-paper]").forEach(submit => submit.addEventListener("click", openSubmitModal));
     $("[data-cancel-submit]").addEventListener("click", closeSubmitModal);
     $("[data-confirm-submit]").addEventListener("click", () => { closeSubmitModal(); engine.submit(); });
     $("[data-submit-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeSubmitModal(); });
@@ -458,6 +642,10 @@
       startExam();
     });
     $("[data-reset-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeResetModal(); });
+    $("[data-open-qr]").addEventListener("click", openQrOverlay);
+    $("[data-close-qr]").addEventListener("click", closeQrOverlay);
+    $("[data-copy-paper-link]").addEventListener("click", copyPaperLink);
+    $("[data-qr-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeQrOverlay(); });
     $("[data-results-new-attempt]").addEventListener("click", () => {
       root.ExamStorage.deleteDraft(paper.id);
       startExam();
@@ -467,8 +655,11 @@
       if (event.key !== "Escape") return;
       closeSubmitModal();
       closeResetModal();
+      closeQrOverlay();
       closePaperMenus();
     });
+    root.addEventListener("beforeprint", renderPrintPaper);
+    root.addEventListener("afterprint", () => { const printArea = $("[data-print-paper]"); if (printArea) printArea.innerHTML = ""; });
   }
 
   function initialise() {

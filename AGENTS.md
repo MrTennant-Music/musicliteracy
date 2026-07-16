@@ -14,3 +14,15 @@ When creating or changing a notation-based question in Interactive Exam Papers:
 8. Do not guess when the source paper is visually or musically ambiguous. Ask one precise musical question and wait for confirmation before encoding the uncertain detail.
 9. Make the smallest maintainable change and preserve existing Practice Questions and shared notation behaviour.
 
+## Reusable Digital Past Paper notation decisions
+
+Apply these established decisions when the same interaction appears in later papers:
+
+1. Keep shared score panels visually clean. Do not add a separate “Music guide” heading, explanatory strip or labels inside an editable notation box unless the source paper or the user specifically requires them.
+2. For direct missing-note entry, show a right-aligned Clear control only. Do not add Undo, entry-count text or separate instructions telling the pupil to select notes on the score unless requested.
+3. Hovered notes must preview in grey. Any ledger lines belonging to the preview must use the same opacity as the previewed note, including the stronger opacity used while dragging.
+4. Repeat-sign placement must use the shared Bravura glyph and a faint glyph preview, never a shaded rectangular hover target. The preview and placed answer must use the same positioning helper so they remain aligned.
+5. Treat repeat-sign placement as a one-use armed tool: clicking the answer button arms it; placing the sign disarms and visually deselects it; clicking the button again allows the pupil to move the answer elsewhere.
+6. When the repeat tool is inactive, its invisible score targets must not receive pointer focus or show a coloured focus box. Preserve visible focus and keyboard placement when the tool is armed for accessibility.
+7. Reuse the established dynamic and repeat-sign answer-button classes so Bravura glyphs retain their optical vertical centring. Do not position these glyphs using ordinary text baselines.
+8. Keep Clear controls right-aligned and preserve the existing responsive button and score layout.

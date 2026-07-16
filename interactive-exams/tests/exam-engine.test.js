@@ -38,13 +38,16 @@ assert.equal(marking.markSubquestion({ type: "checkbox", marks: 2, answers: ["A"
 const fullAnswers = {};
 paper.questions.forEach(question => question.subquestions.forEach(part => {
   if (part.type === "checkbox") fullAnswers[part.id] = [...part.answers];
-  else if (part.type === "structured-review") fullAnswers[part.id] = { rhythm: "swing", melody: "major", instruments: "piano", dynamics: "mf" };
+  else if (part.type === "structured-review") fullAnswers[part.id] = { rhythm: "swing", melody: "major", instruments: "piano", dynamics: "mf", final: "Swing, major tonality, piano and mf." };
   else fullAnswers[part.id] = part.answer ?? part.acceptedAnswers?.[0];
 }));
 const result = marking.markPaper(paper, fullAnswers);
 assert.equal(result.score, 35, "Objective and deterministic responses should total 35 marks.");
 assert.equal(result.reviewMarks, 5, "Question 8 should reserve five marks for review.");
 assert.equal(result.automaticallyMarkableMarks, 35);
+const questionEightPart = paper.questions.find(question => question.id === "q8").subquestions[0];
+assert.equal(marking.isAnswered(questionEightPart, { rhythm: "swing", melody: "major", instruments: "piano" }), false, "Rough work alone should not complete Question 8.");
+assert.equal(marking.isAnswered(questionEightPart, { final: "Swing, major tonality and piano." }), true, "The final answer should complete Question 8.");
 
 const attempt = createAttempt(paper, "exam", true);
 assert.equal(attempt.timer.remainingSeconds, 2700);

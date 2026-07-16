@@ -13,6 +13,7 @@
   function isAnswered(subquestion, value) {
     if (subquestion.type === "checkbox") return Array.isArray(value) && value.length > 0;
     if (subquestion.type === "structured-review") {
+      if (subquestion.finalAnswerField) return Boolean(String(value?.final || "").trim());
       return Boolean(value && Object.values(value).some(entry => String(entry || "").trim()));
     }
     return value !== undefined && value !== null && String(value).trim() !== "";
@@ -36,7 +37,7 @@
     const byHeading = {};
     let suggestedCount = 0;
     for (const heading of subquestion.headings || []) {
-      const response = normalise(value?.[heading.id]);
+      const response = normalise(subquestion.finalAnswerField ? value?.final : value?.[heading.id]);
       const matches = heading.markingPoints.filter(point => {
         const target = normalise(point);
         return response && (response.includes(target) || target.includes(response));

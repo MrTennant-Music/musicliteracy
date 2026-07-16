@@ -25,7 +25,10 @@
   function answerComplete(subquestion, value) {
     if (!root.ExamMarking.isAnswered(subquestion, value)) return false;
     if (subquestion.type === "checkbox") return value.length === subquestion.maxSelections;
-    if (subquestion.type === "structured-review") return Object.values(value).filter(entry => String(entry || "").trim()).length >= 3;
+    if (subquestion.type === "structured-review") {
+      if (subquestion.finalAnswerField) return Boolean(String(value?.final || "").trim());
+      return Object.values(value).filter(entry => String(entry || "").trim()).length >= 3;
+    }
     return true;
   }
 

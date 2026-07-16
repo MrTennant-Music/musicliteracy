@@ -29,7 +29,7 @@
           ${clips.length > 1 ? `<div class="audio-clip-tabs" role="tablist">${clips.map((item, index) => `<button type="button" class="audio-clip-tab ${index === clipIndex ? "is-active" : ""}" data-clip="${index}">${item.label}</button>`).join("")}</div>` : ""}
           <audio preload="metadata" src="${clip.file}"></audio>
           <div class="audio-controls">
-            <button type="button" class="audio-play-button" data-audio-action="toggle" ${locked || consumed ? "disabled" : ""} aria-label="${consumed ? "Audio already played" : "Play"}"><span class="audio-play-glyph" data-play-glyph>▶</span><span data-play-label>Play</span></button>
+            <button type="button" class="audio-play-button" data-audio-action="toggle" ${locked || consumed ? "disabled" : ""} aria-label="${consumed ? "Audio already played" : "Play excerpt"}"><span class="audio-play-glyph" data-play-glyph>▶</span><span data-play-label>Play</span></button>
             <span class="audio-time" data-elapsed>0:00</span>
             <div class="audio-progress-wrap">
               <input class="audio-progress" data-progress type="range" min="0" max="1000" value="0" ${locked || limitPlayback ? "disabled" : ""} aria-label="Audio progress" />
@@ -54,7 +54,7 @@
       function updatePlayButton(isPlaying) {
         playGlyph.textContent = isPlaying ? "Ⅱ" : "▶";
         playLabel.textContent = isPlaying ? "Pause" : "Play";
-        playToggle.setAttribute("aria-label", isPlaying ? "Pause" : "Play");
+        playToggle.setAttribute("aria-label", isPlaying ? "Pause excerpt" : "Play excerpt");
       }
 
       playToggle?.addEventListener("click", async () => {

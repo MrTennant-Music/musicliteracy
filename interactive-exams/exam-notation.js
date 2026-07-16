@@ -9,6 +9,37 @@
     return node;
   }
 
+  function bindRemovalGesture(target, remove) {
+    let lastTouchEnd = 0;
+    let lastRemoval = 0;
+    const removeOnce = event => {
+      const now = Date.now();
+      if (now - lastRemoval < 250) return;
+      lastRemoval = now;
+      event?.preventDefault();
+      remove(event);
+    };
+    target.addEventListener("dblclick", removeOnce);
+    target.addEventListener("contextmenu", removeOnce);
+    target.addEventListener("touchend", event => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 350) {
+        lastTouchEnd = 0;
+        removeOnce(event);
+        return;
+      }
+      lastTouchEnd = now;
+    }, { passive: false });
+    target.addEventListener("keydown", event => {
+      if (event.shiftKey && event.key === "Delete") removeOnce(event);
+    });
+  }
+
+  function pointerEventCoordinates(event) {
+    const touch = event?.changedTouches?.[0] || event?.touches?.[0];
+    return touch ? { clientX: touch.clientX, clientY: touch.clientY } : event;
+  }
+
   // These dimensions and rhythmic spacing values deliberately match the score
   // renderer in practicequestions.html. Keep both activities visually aligned.
   const Q3_STAFF = { left: 78, right: 842, topA: 72, gap: 11 };
@@ -265,7 +296,14 @@
     const key = q3NoteSymbolKey(item.rhythm, down, beamed);
     if (!item.rest && (item.step <= -2 || item.step >= 10)) {
       const ledgerY = item.step <= -2 ? q3YForStep(-2, top) : q3YForStep(10, top);
-      svg.append(svgElement("line", { x1: x - Q3_STAFF.gap, x2: x + Q3_STAFF.gap, y1: ledgerY, y2: ledgerY, class: "q3-ledger-line" }));
+      svg.append(svgElement("line", {
+        x1: x - Q3_STAFF.gap,
+        x2: x + Q3_STAFF.gap,
+        y1: ledgerY,
+        y2: ledgerY,
+        class: "q3-ledger-line",
+        opacity: options.opacity ?? 1,
+      }));
     }
     const visualScale = Number(options.scale || 1);
     const symbolSettings = q3SymbolConfig(key);
@@ -422,24 +460,29 @@
       const currentValue = questionCard?.dataset.q3CurrentNoteValue ?? String(answers.q3c || "");
       const current = currentValue.split(",").slice(0, 3);
       while (current.length < 3) current.push("_");
-      if (questionCard) {
-        const undoHistory = JSON.parse(questionCard.dataset.q3NoteHistory || "[]");
-        undoHistory.push(currentValue);
-        questionCard.dataset.q3NoteHistory = JSON.stringify(undoHistory);
-      }
       current[item.noteIndex] = item.pitch;
       const nextValue = current.join(",");
       if (questionCard) questionCard.dataset.q3CurrentNoteValue = nextValue;
       onAnswerChange("q3c", nextValue);
-      if (questionCard) {
-        const count = current.filter(value => value && value !== "_").length;
-        const progress = questionCard.querySelector("[data-note-progress]");
-        const undo = questionCard.querySelector("[data-notation-undo]");
-        const clear = questionCard.querySelector("[data-notation-reset]");
-        if (progress) progress.textContent = `${count} of 3 notes entered`;
-        if (undo) undo.disabled = false;
-        if (clear) clear.disabled = count === 0;
+    }
+
+    function removeNote(event) {
+      const questionCard = svg.closest(".question-card");
+      const currentValue = questionCard?.dataset.q3CurrentNoteValue ?? String(answers.q3c || "");
+      const current = currentValue.split(",").slice(0, 3);
+      while (current.length < 3) current.push("_");
+      const item = Number.isFinite(pointerEventCoordinates(event)?.clientX) ? noteFromEvent(pointerEventCoordinates(event)) : null;
+      let noteIndex = item?.noteIndex ?? -1;
+      if (noteIndex < 0) {
+        for (let index = current.length - 1; index >= 0; index -= 1) {
+          if (current[index] && current[index] !== "_") { noteIndex = index; break; }
+        }
       }
+      if (noteIndex < 0 || !current[noteIndex] || current[noteIndex] === "_") return;
+      current[noteIndex] = "_";
+      const nextValue = current.join(",");
+      if (questionCard) questionCard.dataset.q3CurrentNoteValue = nextValue;
+      onAnswerChange("q3c", nextValue);
     }
 
     const target = svgElement("rect", {
@@ -469,6 +512,11 @@
       commitNote(finalNote);
     });
     target.addEventListener("pointercancel", () => { dragging = null; showPreview(null); });
+    target.setAttribute("tabindex", "0");
+    target.setAttribute("role", "button");
+    target.setAttribute("aria-label", "Missing notes. Double-click, double-tap or right-click a note to remove it. Keyboard users can press Shift and Delete.");
+    target.setAttribute("aria-keyshortcuts", "Shift+Delete");
+    bindRemovalGesture(target, removeNote);
     svg.append(target);
   }
 
@@ -476,37 +524,105 @@
     const top = q3SystemTop(2);
     const positions = q3BarPositions(Q3_BARS[2]);
     const x = positions[0] - 22;
-    const width = positions[2] - positions[0] + 44;
-    const y = top - Q3_STAFF.gap * 3.4;
-    q3Text(svg, "(c) Notes", { x, y: y - 5, "font-size": 12 }, "q3-marking-box-label");
+    const width = positions[2] - positions[0] + 64;
+    const y = top - Q3_STAFF.gap * 3.4 + 18;
+    const height = Q3_STAFF.gap * 10.2 - 26;
     svg.append(svgElement("rect", {
-      x, y, width, height: Q3_STAFF.gap * 10.2,
+      x, y, width, height,
       class: "q3-marking-box",
     }));
   }
 
-  function q3AddRepeatTargets(svg, onAnswerChange) {
+  function q3RepeatPlacement(barIndex) {
+    const barlineX = q3BarStart(barIndex) + q3BarWidth(barIndex);
+    const placementX = barlineX + (barIndex === Q3_BARS.length - 1 ? 6 : 4);
+    return {
+      x: placementX - Q3_STAFF.gap * 1.1 + 3,
+      y: q3YForStep(4, q3SystemTop(barIndex)) + 10,
+    };
+  }
+
+  function q3SetRepeatToolArmed(armed, context) {
+    q3RepeatArmed = armed;
+    const scope = context?.closest?.(".question-card") || document;
+    scope.querySelectorAll(".notation-tool-repeat-sign").forEach(button => {
+      button.classList.toggle("is-selected", armed);
+      button.setAttribute("aria-pressed", String(armed));
+    });
+    scope.querySelectorAll(".q3-repeat-hit-area").forEach(target => {
+      const remainsRemovable = target.dataset.repeatPlaced === "true";
+      target.setAttribute("tabindex", armed || remainsRemovable ? "0" : "-1");
+      target.setAttribute("aria-disabled", String(!armed && !remainsRemovable));
+      if (!armed && !remainsRemovable && target === document.activeElement) target.blur();
+    });
+  }
+
+  function q3AddRepeatTargets(svg, answers, onAnswerChange) {
     if (!onAnswerChange) return;
     Q3_BARS.forEach((bar, barIndex) => {
       const top = q3SystemTop(barIndex);
       const x = q3BarStart(barIndex) + q3BarWidth(barIndex);
+      let preview = null;
+      const showPreview = () => {
+        if (!q3RepeatArmed || preview) return;
+        const placement = q3RepeatPlacement(barIndex);
+        preview = q3CalibratedSymbol(svg, "repeatRight", placement.x, placement.y, { opacity: .35, className: "q3-repeat-preview" });
+      };
+      const hidePreview = () => {
+        preview?.remove();
+        preview = null;
+      };
       const target = svgElement("rect", {
         x: x - 13, y: top - Q3_STAFF.gap * 1.2, width: 26, height: Q3_STAFF.gap * 6.4,
-        class: "q3-repeat-hit-area", role: "button", tabindex: "0",
+        class: "q3-repeat-hit-area", role: "button", tabindex: q3RepeatArmed ? "0" : "-1",
+        "aria-disabled": String(!q3RepeatArmed),
         "aria-label": `Place end repeat at the end of bar ${barIndex + 1}`,
       });
+      const placedHere = answers.q3d === `end-bar-${barIndex + 1}`;
+      if (placedHere) {
+        target.dataset.repeatPlaced = "true";
+        target.setAttribute("tabindex", "0");
+        target.setAttribute("aria-disabled", "false");
+        target.setAttribute("aria-label", `End repeat at the end of bar ${barIndex + 1}. Double-click, double-tap or right-click to remove it.`);
+        target.setAttribute("aria-keyshortcuts", "Shift+Delete");
+      }
       const placeRepeat = event => {
         if (!q3RepeatArmed) return;
         event.preventDefault();
-        q3RepeatArmed = false;
+        hidePreview();
+        q3SetRepeatToolArmed(false, svg);
         onAnswerChange("q3d", `end-bar-${barIndex + 1}`);
       };
+      target.addEventListener("pointerenter", showPreview);
+      target.addEventListener("pointerleave", hidePreview);
+      target.addEventListener("pointerdown", event => event.preventDefault());
+      target.addEventListener("focus", showPreview);
+      target.addEventListener("blur", hidePreview);
       target.addEventListener("click", placeRepeat);
       target.addEventListener("keydown", event => {
         if (["Enter", " "].includes(event.key)) placeRepeat(event);
       });
+      bindRemovalGesture(target, () => {
+        if (!placedHere) return;
+        hidePreview();
+        q3SetRepeatToolArmed(false, svg);
+        onAnswerChange("q3d", "");
+      });
       svg.append(target);
     });
+  }
+
+  function q3AddAppliedAnswerTarget(svg, attributes, label, remove) {
+    const target = svgElement("rect", {
+      ...attributes,
+      class: "q3-applied-answer-hit-area",
+      role: "button",
+      tabindex: "0",
+      "aria-label": `${label}. Double-click, double-tap or right-click to remove it.`,
+      "aria-keyshortcuts": "Shift+Delete",
+    });
+    bindRemovalGesture(target, remove);
+    svg.append(target);
   }
 
   function q3ScoreSvg(answers, onAnswerChange) {
@@ -528,55 +644,45 @@
       }
     });
     const dynamicKey = { p: "piano", mp: "mezzoPiano", mf: "mezzoForte", f: "forte" }[answers.q3b];
-    if (dynamicKey) q3CalibratedSymbol(svg, dynamicKey, q3BarPositions(Q3_BARS[0])[0], Q3_STAFF.topA + Q3_STAFF.gap * 7.85);
+    if (answers.q3a) q3AddAppliedAnswerTarget(svg, { x: 185, y: 49, width: 45, height: 68 }, "Time signature", () => onAnswerChange("q3a", ""));
+    if (dynamicKey) {
+      const dynamicX = q3BarPositions(Q3_BARS[0])[0];
+      const dynamicY = Q3_STAFF.topA + Q3_STAFF.gap * 7.85;
+      q3CalibratedSymbol(svg, dynamicKey, dynamicX, dynamicY);
+      q3AddAppliedAnswerTarget(svg, { x: dynamicX - 25, y: dynamicY - 34, width: 50, height: 46 }, "Dynamic marking", () => onAnswerChange("q3b", ""));
+    }
     const repeat = answers.q3d;
     if (repeat) {
       const match = String(repeat).match(/^end-bar-(\d+)$/);
       const barIndex = match ? Math.max(0, Math.min(7, Number(match[1]) - 1)) : 0;
-      const barlineX = q3BarStart(barIndex) + q3BarWidth(barIndex);
-      const placementX = barlineX + (barIndex === Q3_BARS.length - 1 ? 6 : 4);
-      const x = placementX - Q3_STAFF.gap * 1.1 + 3;
-      q3CalibratedSymbol(svg, "repeatRight", x, q3YForStep(4, q3SystemTop(barIndex)));
+      const placement = q3RepeatPlacement(barIndex);
+      q3CalibratedSymbol(svg, "repeatRight", placement.x, placement.y);
     }
     q3AddNoteEntryTargets(svg, answers, onAnswerChange);
-    q3AddRepeatTargets(svg, onAnswerChange);
+    q3AddRepeatTargets(svg, answers, onAnswerChange);
     return svg;
   }
 
   function renderSharedScore(container, question, answers, onAnswerChange) {
-    container.innerHTML = `<div class="shared-notation-heading"><strong>Music guide</strong><span>Apply answers for parts (a)–(d) directly to the score.</span></div><div class="shared-notation-score-wrap"></div>`;
+    container.innerHTML = `<div class="shared-notation-score-wrap"></div>`;
     container.querySelector(".shared-notation-score-wrap").append(q3ScoreSvg(answers || {}, onAnswerChange));
   }
 
   function renderSharedControls(container, subquestion, value, onChange) {
     let history = String(value || "").split(",").filter(item => item && item !== "_");
-    container.innerHTML = `<div class="notation-controls-only"><div class="notation-tools" role="group" aria-label="${subquestion.prompt}"></div><div class="notation-entry-meta" hidden><span data-note-progress></span><div class="notation-actions"><button type="button" class="button button-secondary button-small" data-notation-undo>Undo</button><button type="button" class="button button-secondary button-small" data-notation-reset>Clear</button></div></div></div>`;
+    const showsHintBelowControls = subquestion.scoreHint && subquestion.scoreHintPlacement !== "prompt";
+    container.innerHTML = `<div class="notation-controls-only"><div class="notation-tools" role="group" aria-label="${subquestion.prompt}"></div>${showsHintBelowControls ? `<p class="score-apply-hint" data-score-apply-hint></p>` : ""}</div>`;
     const tools = container.querySelector(".notation-tools");
-    const meta = container.querySelector(".notation-entry-meta");
-    const progress = container.querySelector("[data-note-progress]");
-    const undo = container.querySelector("[data-notation-undo]");
-    const reset = container.querySelector("[data-notation-reset]");
+    const hint = container.querySelector("[data-score-apply-hint]");
+    if (hint) hint.textContent = subquestion.scoreHint;
     const isNotes = subquestion.notationTool === "note-entry";
-    meta.hidden = !isNotes;
     const questionCard = container.closest(".question-card");
     if (isNotes && questionCard) questionCard.dataset.q3CurrentNoteValue = String(value || "");
 
     function refresh(next, notify = true) {
       const selected = isNotes ? history.join(",") : next;
       tools.querySelectorAll("button").forEach(button => button.classList.toggle("is-selected", !isNotes && button.dataset.value === selected));
-      if (isNotes) {
-        progress.textContent = `${history.length} of ${subquestion.noteSlots} notes entered`;
-        undo.disabled = history.length === 0;
-        reset.disabled = history.length === 0;
-      }
       if (notify) onChange(selected);
-    }
-
-    if (isNotes) {
-      const hint = document.createElement("p");
-      hint.className = "notation-score-hint";
-      hint.textContent = "Select each missing note position directly on the score above.";
-      tools.append(hint);
     }
 
     subquestion.options.forEach(item => {
@@ -584,6 +690,7 @@
       button.type = "button";
       button.className = `notation-tool-button notation-tool-${subquestion.notationTool}`;
       button.dataset.value = item.value;
+      button.setAttribute("aria-keyshortcuts", "Shift+Delete");
       if (subquestion.notationTool === "dynamic") {
         const symbol = { p: "piano", mp: "mezzoPiano", mf: "mezzoForte", f: "forte" }[item.value];
         button.innerHTML = `<span class="notation-option-glyph" aria-hidden="true">${q3Glyph(symbol)}</span><span class="visually-hidden">${item.label}</span>`;
@@ -595,8 +702,7 @@
       } else button.textContent = item.label;
       button.addEventListener("click", () => {
         if (subquestion.notationTool === "repeat-sign") {
-          q3RepeatArmed = true;
-          button.classList.add("is-selected");
+          q3SetRepeatToolArmed(true, button);
           return;
         }
         if (!isNotes) return refresh(item.value);
@@ -604,35 +710,23 @@
         history.push(item.value);
         refresh(history.join(","));
       });
+      bindRemovalGesture(button, () => {
+        if (subquestion.notationTool === "repeat-sign") {
+          q3SetRepeatToolArmed(false, button);
+          return onChange("");
+        }
+        if (isNotes) {
+          history = [];
+          if (questionCard) questionCard.dataset.q3CurrentNoteValue = "";
+          return onChange("");
+        }
+        if (!button.classList.contains("is-selected")) return;
+        refresh("");
+      });
       tools.append(button);
     });
-    undo.addEventListener("click", () => {
-      if (isNotes) {
-        const undoHistory = JSON.parse(questionCard?.dataset.q3NoteHistory || "[]");
-        if (!undoHistory.length) return;
-        const previous = undoHistory.pop();
-        if (questionCard) {
-          questionCard.dataset.q3NoteHistory = JSON.stringify(undoHistory);
-          questionCard.dataset.q3CurrentNoteValue = previous;
-        }
-        return onChange(previous);
-      }
-      history.pop(); refresh(history.join(","));
-    });
-    reset.addEventListener("click", () => {
-      if (isNotes) {
-        const currentValue = questionCard?.dataset.q3CurrentNoteValue || "";
-        if (currentValue && questionCard) {
-          const undoHistory = JSON.parse(questionCard.dataset.q3NoteHistory || "[]");
-          undoHistory.push(currentValue);
-          questionCard.dataset.q3NoteHistory = JSON.stringify(undoHistory);
-          questionCard.dataset.q3CurrentNoteValue = "";
-        }
-        return onChange("");
-      }
-      history = []; refresh("");
-    });
     refresh(value || "", false);
+    if (subquestion.notationTool === "repeat-sign") q3SetRepeatToolArmed(q3RepeatArmed, container);
   }
 
   function drawStaff(svg, selected, tool) {
@@ -699,23 +793,15 @@
       <div class="notation-task" data-notation-task>
         <div class="notation-score-wrap"><svg class="notation-score" viewBox="0 0 640 142" role="img" aria-label="Interactive music notation preview"></svg></div>
         <div class="notation-tools" role="group" aria-label="${subquestion.prompt}"></div>
-        <div class="notation-actions">
-          <button type="button" class="button button-secondary button-small" data-notation-undo>Undo</button>
-          <button type="button" class="button button-secondary button-small" data-notation-reset>Reset</button>
-        </div>
       </div>`;
     const svg = container.querySelector("svg");
     const tools = container.querySelector(".notation-tools");
-    const undo = container.querySelector("[data-notation-undo]");
-    const reset = container.querySelector("[data-notation-reset]");
 
     function update(next, record = true) {
       if (record && next !== history.at(-1)) history.push(next);
       svg.innerHTML = "";
       drawStaff(svg, next, subquestion.notationTool);
       tools.querySelectorAll("button").forEach(button => button.classList.toggle("is-selected", button.dataset.value === next));
-      undo.disabled = history.length < 2;
-      reset.disabled = !next;
       onChange(next);
     }
 
@@ -724,6 +810,7 @@
       button.type = "button";
       button.className = "notation-tool-button";
       button.dataset.value = item.value;
+      button.setAttribute("aria-keyshortcuts", "Shift+Delete");
       button.textContent = item.label;
       button.addEventListener("click", () => {
         if (subquestion.notationTool !== "note-entry") return update(item.value);
@@ -732,14 +819,26 @@
         notes.push(item.value);
         update(notes.join(","));
       });
+      bindRemovalGesture(button, () => {
+        const current = String(history.at(-1) || "");
+        if (!current) return;
+        if (subquestion.notationTool !== "note-entry") return update("", false);
+        const notes = current.split(",").filter(Boolean);
+        notes.pop();
+        update(notes.join(","), false);
+      });
       tools.append(button);
     });
-    undo.addEventListener("click", () => {
-      if (history.length < 2) return;
-      history.pop();
-      update(history.at(-1) || "", false);
+    svg.setAttribute("tabindex", "0");
+    svg.setAttribute("aria-keyshortcuts", "Shift+Delete");
+    bindRemovalGesture(svg, () => {
+      const current = String(history.at(-1) || "");
+      if (!current) return;
+      if (subquestion.notationTool !== "note-entry") return update("", false);
+      const notes = current.split(",").filter(Boolean);
+      notes.pop();
+      update(notes.join(","), false);
     });
-    reset.addEventListener("click", () => { history = []; update("", false); });
     update(value || "", false);
   }
 
