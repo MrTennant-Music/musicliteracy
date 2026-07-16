@@ -38,16 +38,25 @@ assert.equal(marking.markSubquestion({ type: "checkbox", marks: 2, answers: ["A"
 const fullAnswers = {};
 paper.questions.forEach(question => question.subquestions.forEach(part => {
   if (part.type === "checkbox") fullAnswers[part.id] = [...part.answers];
-  else if (part.type === "structured-review") fullAnswers[part.id] = { rhythm: "swing", melody: "major", instruments: "piano", dynamics: "mf", final: "Swing, major tonality, piano and mf." };
+  else if (part.type === "structured-review") fullAnswers[part.id] = { rhythm: "rough work is ignored", melody: "rough work is ignored", instruments: "rough work is ignored", dynamics: "rough work is ignored", final: "Swing, dotted rhythms, major tonality, piano and mf." };
   else fullAnswers[part.id] = part.answer ?? part.acceptedAnswers?.[0];
 }));
 const result = marking.markPaper(paper, fullAnswers);
-assert.equal(result.score, 35, "Objective and deterministic responses should total 35 marks.");
-assert.equal(result.reviewMarks, 5, "Question 8 should reserve five marks for review.");
-assert.equal(result.automaticallyMarkableMarks, 35);
+assert.equal(result.score, 40, "All 40 marks, including Question 8, should be marked automatically.");
+assert.equal(result.reviewMarks, 0, "Question 8 should not require human review.");
+assert.equal(result.automaticallyMarkableMarks, 40);
 const questionEightPart = paper.questions.find(question => question.id === "q8").subquestions[0];
 assert.equal(marking.isAnswered(questionEightPart, { rhythm: "swing", melody: "major", instruments: "piano" }), false, "Rough work alone should not complete Question 8.");
 assert.equal(marking.isAnswered(questionEightPart, { final: "Swing, major tonality and piano." }), true, "The final answer should complete Question 8.");
+assert.equal(marking.markSubquestion(questionEightPart, { rhythm: "swing, major, piano, mf, crescendo", final: "" }).marks, 0, "Rough work must earn no marks when the Final answer is blank.");
+assert.equal(marking.markSubquestion(questionEightPart, { rhythm: "swing, dotted rhythms, piano, mf", final: "Major" }).marks, 1, "Only concepts written in the Final answer should be marked.");
+assert.equal(marking.markSubquestion(questionEightPart, { final: "2 beats in the bar, 4/4 and simple time." }).marks, 1, "Alternative descriptions of the same metre concept should earn one mark only.");
+assert.equal(marking.markSubquestion(questionEightPart, { final: "Major, repetition, riff, scat singing, sequence, syllabic and walking bass." }).marks, 2, "A single heading should contribute no more than two marks.");
+assert.equal(marking.markSubquestion(questionEightPart, { final: "Melody/harmony: 4 beats in the bar. Rhythm/tempo: mf. Instruments: piano." }).marks, 3, "Correct concepts should not be penalised for appearing under the wrong heading.");
+assert.equal(marking.markSubquestion(questionEightPart, { final: "The music uses synchopation, a crecendo and syllibic word setting." }).marks, 3, "Clear minor spelling errors should still earn the intended marks.");
+assert.equal(marking.markSubquestion(questionEightPart, { final: "Guitar, bass, drums, trombone, violin and lead vocals." }).marks, 0, "Explicitly unacceptable standalone instrument and voice terms must not earn marks.");
+assert.equal(marking.markSubquestion(questionEightPart, { final: "Bass guitar, drum kit, trombones, violins, male voice and backing singers." }).marks, 2, "Valid instrument concepts should be recognised but capped at two marks for the heading.");
+assert.equal(marking.markSubquestion(questionEightPart, { final: "There are many irrelevant words here, but the music is in a major key, uses swing, piano, crescendo and forte." }).marks, 5, "Irrelevant prose should be ignored while valid concepts are banked up to five marks.");
 
 const attempt = createAttempt(paper, "exam", true);
 assert.equal(attempt.timer.remainingSeconds, 2700);
@@ -69,6 +78,22 @@ assert.equal(saved.answers.q1a, "Gospel");
 assert.deepEqual(saved.flaggedQuestions, ["q2"]);
 assert.deepEqual(saved.audioPlayCounts, { track: 1 });
 engine.destroy();
+
+storage.deleteSubmitted(paper.id);
+const submittedEngine = new ExamEngine(paper);
+submittedEngine.start("practice");
+submittedEngine.setAnswer("q1a", "Gospel");
+submittedEngine.submit();
+const savedSubmission = storage.loadSubmitted(paper.id);
+assert.equal(savedSubmission.status, "submitted", "A submitted attempt should be saved for persistent feedback.");
+assert.equal(savedSubmission.answers.q1a, "Gospel", "The saved feedback attempt should retain the pupil's answers.");
+assert.equal(savedSubmission.result.questionBreakdown[0].parts[0].status, "correct", "The saved feedback attempt should retain its marking result.");
+let restoreReason = "";
+const restoredEngine = new ExamEngine(paper, (restoredAttempt, reason) => { restoreReason = reason; });
+assert.equal(restoredEngine.restoreSubmitted(savedSubmission), true, "A valid submitted attempt should be restorable after refresh.");
+assert.equal(restoredEngine.attempt.status, "submitted");
+assert.equal(restoreReason, "restore-submit", "Restoring a submission should reopen the feedback screen.");
+storage.deleteSubmitted(paper.id);
 
 storage.deleteDraft(paper.id);
 const examEngine = new ExamEngine(paper);

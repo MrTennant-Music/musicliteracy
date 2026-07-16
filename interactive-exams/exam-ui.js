@@ -4,6 +4,12 @@
   const $ = selector => document.querySelector(selector);
   const escapeHtml = value => String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
   const escapeRegExp = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const USER_ANSWER_GLIMMER_DURATION = 8000;
+
+  function syncUserAnswerGlimmer(target) {
+    const elapsed = root.performance?.now?.() ?? Date.now();
+    target.style.setProperty("--user-answer-glimmer-delay", `${-(elapsed % USER_ANSWER_GLIMMER_DURATION)}ms`);
+  }
 
   function bindRemovalGesture(target, remove) {
     let lastTouchEnd = 0;
@@ -53,7 +59,7 @@
   let audioPlayer;
   let allQuestionAudioPlayers = [];
   let showingAllQuestions = false;
-  let selectedStartMode = "practice";
+  let selectedStartMode = null;
 
   function destroyAudioPlayers() {
     audioPlayer?.destroy();
@@ -94,13 +100,21 @@
     const submitted = engine?.attempt?.status === "submitted" && engine.attempt.result;
     const score = submitted ? engine.attempt.result.score : null;
     const timerCard = $("[data-toolbar-duration]").closest(".exam-header-stat");
+    const bestCard = $("[data-toolbar-best-score]").closest(".exam-header-stat");
+    const headerStats = timerCard.closest(".exam-header-stats");
     const timerEnabled = Boolean(engine?.attempt?.timer?.enabled);
     const marksFill = $("[data-toolbar-marks-fill]");
     $("[data-toolbar-duration]").textContent = formatTimer(remainingSeconds);
     timerCard.hidden = !timerEnabled;
-    timerCard.closest(".exam-header-stats").classList.toggle("is-timer-hidden", !timerEnabled);
+    bestCard.hidden = !submitted;
+    headerStats.classList.toggle("is-timer-hidden", !timerEnabled);
+    headerStats.classList.toggle("has-best-score", Boolean(submitted));
     timerCard.classList.toggle("is-urgent", timerEnabled && !submitted && remainingSeconds <= 30);
     $("[data-toolbar-marks]").textContent = submitted ? `${score}/${paper.totalMarks}` : String(paper.totalMarks);
+    if (submitted) {
+      const best = root.ExamStorage.bestScore(paper.id) ?? score;
+      $("[data-toolbar-best-score]").textContent = `${best}/${paper.totalMarks}`;
+    }
     if (!submitted) {
       marksFill.style.height = "0";
       marksFill.style.backgroundColor = "transparent";
@@ -131,13 +145,14 @@
     if (!engine?.attempt) return;
     const navigator = $("[data-question-navigator]");
     const questions = engine.visibleQuestions();
+    const reviewingResults = engine.attempt.status === "submitted";
     const lastUnlocked = lastUnlockedQuestionIndex(questions);
     const current = currentQuestion();
     $("[data-current-question-label]").textContent = showingAllQuestions ? "All Questions" : `Question ${current.number}`;
     navigator.innerHTML = questions.map((question, index) => {
       const state = engine.questionState(question);
-      const isCurrent = question.id === engine.attempt.currentQuestion;
-      const locked = engine.attempt.mode === "exam" ? index > (engine.attempt.examUnlockedQuestionIndex ?? -1) : Boolean(engine.attempt.questionsLocked) && index > lastUnlocked;
+      const isCurrent = !showingAllQuestions && question.id === engine.attempt.currentQuestion;
+      const locked = reviewingResults ? false : engine.attempt.mode === "exam" ? index > (engine.attempt.examUnlockedQuestionIndex ?? -1) : Boolean(engine.attempt.questionsLocked) && index > lastUnlocked;
       const stateLabel = state === "partial" ? "Partially answered" : state === "answered" ? "Answered" : "Not attempted";
       const subtitle = `<span class="navigator-status">${stateLabel}</span>`;
       return `<button type="button" class="navigator-item is-${state} ${isCurrent ? "is-current" : ""} ${locked ? "is-locked" : ""}" data-go-question="${question.id}" aria-label="Question ${question.number}, ${stateLabel}${locked ? ", locked" : ""}" aria-current="${isCurrent ? "step" : "false"}" ${locked ? "disabled aria-disabled=\"true\"" : ""}>
@@ -147,6 +162,10 @@
       </button>`;
     }).join("");
     navigator.querySelectorAll("[data-go-question]").forEach(button => button.addEventListener("click", () => {
+      if (reviewingResults) {
+        showResultQuestion(button.dataset.goQuestion);
+        return;
+      }
       if (engine.attempt.mode === "exam") {
         closePaperMenus();
         document.querySelector(`[data-all-question="${button.dataset.goQuestion}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -157,7 +176,7 @@
       engine.goToQuestion(button.dataset.goQuestion);
     }));
     const showAllButton = $("[data-show-all-questions]");
-    showAllButton.disabled = !canShowAllQuestions() || engine.attempt.mode === "exam";
+    showAllButton.disabled = reviewingResults ? showingAllQuestions : !canShowAllQuestions() || engine.attempt.mode === "exam";
     showAllButton.setAttribute("aria-disabled", String(showAllButton.disabled));
   }
 
@@ -307,12 +326,18 @@
   }
 
   function bindSubquestion(card, subquestion) {
-    const syncTypedAnswerStyle = field => field.classList.toggle("has-user-answer", Boolean(field.value.trim()));
+    const syncTypedAnswerStyle = field => {
+      const hasAnswer = Boolean(field.value.trim());
+      field.classList.toggle("has-user-answer", hasAnswer);
+      if (hasAnswer) syncUserAnswerGlimmer(field);
+    };
     if (subquestion.type === "radio") {
       card.querySelectorAll('input[type="radio"]').forEach(input => {
         const label = input.closest(".answer-option");
+        if (input.checked) syncUserAnswerGlimmer(input);
         input.addEventListener("change", () => {
           card.querySelectorAll(".answer-option").forEach(option => option.classList.toggle("is-selected", option.contains(input) && input.checked));
+          if (input.checked) syncUserAnswerGlimmer(input);
           engine.setAnswer(subquestion.id, input.value);
         });
         bindRemovalGesture(label, () => {
@@ -326,10 +351,12 @@
       const syncCheckboxes = () => {
         const checked = [...card.querySelectorAll('input[type="checkbox"]:checked')];
         card.querySelectorAll(".answer-option").forEach(label => label.classList.toggle("is-selected", label.querySelector("input").checked));
+        checked.forEach(syncUserAnswerGlimmer);
         engine.setAnswer(subquestion.id, checked.map(item => item.value));
       };
       card.querySelectorAll('input[type="checkbox"]').forEach(input => {
         const label = input.closest(".answer-option");
+        if (input.checked) syncUserAnswerGlimmer(input);
         input.addEventListener("change", () => {
           const checked = [...card.querySelectorAll('input[type="checkbox"]:checked')];
           const error = card.querySelector("[data-selection-error]");
@@ -516,8 +543,8 @@
         },
       });
     }
-    $("[data-next-question]").hidden = true;
-    $("[data-previous-question]").hidden = activeExam;
+    $("[data-next-question]").hidden = !activeExam;
+    $("[data-previous-question]").hidden = false;
     setExamSubmitVisibility(!activeExam || (engine.attempt.examUnlockedQuestionIndex ?? 0) === engine.visibleQuestions().length - 1);
     allArea.querySelector("[data-all-submit-paper]")?.addEventListener("click", openSubmitModal);
     renderNavigator();
@@ -549,7 +576,6 @@
     const overlay = $("[data-qr-overlay]");
     const shareUrl = paperShareUrl();
     $("[data-qr-title]").textContent = `${paper.level} • ${paper.year}`;
-    $("[data-qr-subtitle]").textContent = "Scan to open this Digital Past Paper";
     const image = $("[data-qr-image]");
     image.src = `https://api.qrserver.com/v1/create-qr-code/?size=560x560&data=${encodeURIComponent(shareUrl)}`;
     image.alt = `QR code linking to ${paper.level} • ${paper.year}`;
@@ -570,48 +596,171 @@
     }
   }
 
-  function answerDisplay(value) {
-    if (Array.isArray(value)) return value.join(", ");
-    if (value && typeof value === "object") return Object.entries(value).filter(([, entry]) => String(entry || "").trim()).map(([key, entry]) => `${key}: ${entry}`).join(" · ");
-    return String(value || "Not answered");
+  function acceptedAnswerDisplay(subquestion) {
+    if (subquestion.answerDisplay) return subquestion.answerDisplay;
+    if (subquestion.answers?.length) return subquestion.answers.join(" and ");
+    return subquestion.answer || "See the marking guidance";
   }
 
-  function findSubquestion(id) {
-    return paper.questions.flatMap(question => question.subquestions).find(item => item.id === id);
+  function partResult(id) {
+    return engine.attempt.result.questionBreakdown.flatMap(question => question.parts).find(part => part.id === id);
+  }
+
+  function inlineFeedbackMarkup(subquestion, part) {
+    const hasPartialCredit = part.marks > 0 && part.marks < part.maxMarks;
+    const state = part.status === "correct" ? "correct" : hasPartialCredit ? "partial" : part.status === "unanswered" ? "unanswered" : "incorrect";
+    const title = state === "correct" ? "Correct" : state === "partial" ? "Partly correct" : state === "unanswered" ? "Not answered" : "Incorrect";
+    const awardedConcepts = part.matchedConcepts
+      ? Object.entries(part.matchedConcepts).flatMap(([heading, items]) => items.map(item => `${heading}: ${item}`))
+      : [];
+    return `<aside class="inline-answer-feedback is-${state}" aria-label="Feedback for ${escapeHtml(subquestion.label || subquestion.prompt)}">
+      <div class="inline-feedback-heading"><strong>${title}</strong><span>${part.marks}/${part.maxMarks}</span></div>
+      ${awardedConcepts.length ? `<p class="inline-awarded-concepts"><b>Awarded concepts:</b> ${escapeHtml(awardedConcepts.join("; "))}</p>` : ""}
+      ${part.status !== "correct" && !subquestion.finalAnswerField ? `<p class="inline-correct-answer"><b>Correct answer:</b> ${escapeHtml(acceptedAnswerDisplay(subquestion))}</p>` : ""}
+      ${subquestion.explanation ? `<p>${escapeHtml(subquestion.explanation)}</p>` : ""}
+    </aside>`;
+  }
+
+  function applyInlineMarking(card, subquestion, part) {
+    const section = card.querySelector(`[data-subquestion="${subquestion.id}"]`);
+    if (!section || !part) return;
+    const expected = new Set((subquestion.type === "checkbox" ? subquestion.answers : [subquestion.answer]).filter(Boolean).map(String));
+    const chosen = new Set((Array.isArray(part.value) ? part.value : [part.value]).filter(value => value !== undefined && value !== null && String(value) !== "").map(String));
+
+    if (["radio", "checkbox"].includes(subquestion.type)) {
+      section.querySelectorAll(".answer-option").forEach(option => {
+        const input = option.querySelector("input");
+        const isExpected = expected.has(input.value);
+        const isChosen = chosen.has(input.value);
+        option.classList.toggle("is-review-correct", isExpected);
+        option.classList.toggle("is-user-correct", isChosen && isExpected);
+        option.classList.toggle("is-user-incorrect", isChosen && !isExpected);
+      });
+    } else if (subquestion.type === "short-text") {
+      const field = section.querySelector("input, textarea");
+      if (field) field.classList.add(part.status === "correct" ? "is-user-correct" : part.status === "unanswered" ? "is-unanswered" : "is-user-incorrect");
+    } else if (subquestion.type === "notation-choice") {
+      section.querySelectorAll(".notation-tool-button").forEach(button => {
+        const isExpected = button.dataset.value === subquestion.answer;
+        const hasAnswer = Boolean(String(part.value || "").replace(/_/g, "").replace(/,/g, ""));
+        const representsPlacementTool = ["note-entry", "repeat-sign"].includes(subquestion.notationTool);
+        button.classList.toggle("is-review-correct", isExpected || representsPlacementTool && part.status === "unanswered");
+        button.classList.toggle("is-user-correct", part.status === "correct" && (isExpected || representsPlacementTool));
+        button.classList.toggle("is-user-incorrect", hasAnswer && part.status !== "correct" && (button.classList.contains("is-selected") || representsPlacementTool));
+      });
+    } else if (subquestion.type === "structured-review") {
+      const finalAnswer = section.querySelector('[data-heading="final"]');
+      if (finalAnswer) {
+        const state = part.status === "correct" ? "is-user-correct" : part.marks ? "is-user-partial" : part.status === "unanswered" ? "is-unanswered" : "is-user-incorrect";
+        finalAnswer.classList.add(state);
+      }
+      section.querySelector(".q8-rough-work")?.classList.add("is-unmarked-rough-work");
+    }
+
+    section.querySelectorAll("input, textarea, button").forEach(control => {
+      if (control.matches("input, button")) control.disabled = true;
+      if (control.matches("textarea")) control.readOnly = true;
+      control.removeAttribute("aria-keyshortcuts");
+    });
+    section.insertAdjacentHTML("beforeend", inlineFeedbackMarkup(subquestion, part));
+  }
+
+  function renderResultsPaper() {
+    const resultsPaper = $("[data-results-paper]");
+    allQuestionAudioPlayers.forEach(player => player.destroy());
+    allQuestionAudioPlayers = [];
+    const questions = showingAllQuestions ? paper.questions : [currentQuestion()];
+    resultsPaper.innerHTML = questions.map(question => {
+      const questionResult = engine.attempt.result.questionBreakdown.find(item => item.id === question.id);
+      return `<article class="question-card all-question-card marked-question-card ${showingAllQuestions ? "" : "has-paper-actions"} question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}" data-result-question="${question.id}">
+        <div data-result-question-audio></div>
+        <div class="paper-marks-heading">MARKS</div>
+        <header class="question-header"><h2>Question ${question.number}</h2><span class="question-review-score" aria-label="${questionResult.marks} out of ${questionResult.maxMarks} marks">${questionResult.marks}/${questionResult.maxMarks}</span></header>
+        <div class="question-intro">${questionIntroMarkup(question)}</div>
+        <div class="subquestions">${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}</div>
+        <div class="question-outro">${questionOutroMarkup(question)}</div>
+        ${showingAllQuestions ? "" : `<div class="question-actions result-question-actions"><button class="button button-primary question-navigation-button" type="button" data-result-bottom-previous aria-label="Previous question" title="Previous"><img class="question-nav-arrow is-previous" src="../next.svg" alt="" aria-hidden="true" /></button><div><button class="button button-primary question-navigation-button" type="button" data-result-bottom-next aria-label="Next question" title="Next"><img class="question-nav-arrow" src="../next.svg" alt="" aria-hidden="true" /></button></div></div>`}
+      </article>`;
+    }).join("");
+
+    questions.forEach(question => {
+      const card = resultsPaper.querySelector(`[data-result-question="${question.id}"]`);
+      const sharedNotation = card.querySelector("[data-shared-notation]");
+      const notationReview = Object.fromEntries(question.subquestions.filter(subquestion => subquestion.type === "notation-choice").map(subquestion => [subquestion.id, partResult(subquestion.id)?.status]));
+      if (sharedNotation && root.ExamNotation?.renderSharedScore) root.ExamNotation.renderSharedScore(sharedNotation, question, engine.attempt.answers, null, notationReview);
+      const feedbackAudio = card.querySelector("[data-result-question-audio]");
+      if (feedbackAudio) allQuestionAudioPlayers.push(root.ExamAudio.createPlayer(feedbackAudio, { clips: question.audio.clips }));
+      question.subquestions.forEach(subquestion => {
+        const section = card.querySelector(`[data-subquestion="${subquestion.id}"]`);
+        if (subquestion.type === "notation-choice") {
+          const notationContainer = section?.querySelector("[data-notation-container]");
+          if (notationContainer) root.ExamNotation?.render(notationContainer, subquestion, engine.attempt.answers[subquestion.id], () => {});
+        }
+        applyInlineMarking(card, subquestion, partResult(subquestion.id));
+      });
+      if (!showingAllQuestions) {
+        const questionIndex = paper.questions.findIndex(item => item.id === question.id);
+        const bottomPrevious = card.querySelector("[data-result-bottom-previous]");
+        const bottomNext = card.querySelector("[data-result-bottom-next]");
+        bottomPrevious.disabled = questionIndex <= 0;
+        bottomNext.disabled = questionIndex >= paper.questions.length - 1;
+        bottomPrevious.addEventListener("click", () => showResultQuestion(paper.questions[questionIndex - 1].id));
+        bottomNext.addEventListener("click", () => showResultQuestion(paper.questions[questionIndex + 1].id));
+      }
+    });
+  }
+
+  function updateResultNavigation() {
+    const questions = engine.visibleQuestions();
+    const index = questions.findIndex(question => question.id === engine.attempt.currentQuestion);
+    const previous = $("[data-previous-question]");
+    const next = $("[data-next-question]");
+    previous.hidden = false;
+    next.hidden = false;
+    previous.disabled = showingAllQuestions || index <= 0;
+    next.disabled = showingAllQuestions || index < 0 || index >= questions.length - 1;
+    $(".question-submit-button").hidden = true;
+    $(".exam-question-navigation").classList.remove("is-submit-visible");
+  }
+
+  function showResultQuestion(questionId) {
+    if (!paper.questions.some(question => question.id === questionId)) return;
+    showingAllQuestions = false;
+    engine.attempt.currentQuestion = questionId;
+    closePaperMenus();
+    renderResultsPaper();
+    renderNavigator();
+    updateResultNavigation();
+    $("[data-results-paper]").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function showAllResultQuestions() {
+    showingAllQuestions = true;
+    closePaperMenus();
+    renderResultsPaper();
+    renderNavigator();
+    updateResultNavigation();
+    $("[data-results-paper]").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function renderResults() {
     root.ExamAudio.pauseAll();
+    destroyAudioPlayers();
+    $(".exam-header-audio").hidden = true;
     const result = engine.attempt.result;
-    const best = root.ExamStorage.bestScore(paper.id);
+    showingAllQuestions = true;
     renderToolbarStats();
-    $("[data-results-summary]").innerHTML = `
-      <div class="result-score"><strong>${result.score}<span>/${paper.totalMarks}</span></strong><p>${result.percentage}% provisional score</p></div>
-      <div class="result-stat"><strong>${result.automaticallyMarkableMarks}</strong><span>Automatically markable marks</span></div>
-      <div class="result-stat"><strong>${result.reviewMarks}</strong><span>Marks requiring review</span></div>
-      <div class="result-stat"><strong>${best}/${paper.totalMarks}</strong><span>Best stored score</span></div>`;
+    $("[data-results-score]").innerHTML = `${result.score}<span>/${paper.totalMarks}</span>`;
+    $("[data-results-percentage]").textContent = `${result.percentage}% ${result.reviewMarks ? "provisional score" : "final score"}`;
     $("[data-review-notice]").hidden = !result.reviewMarks;
-    $("[data-question-breakdown]").innerHTML = result.questionBreakdown.map(question => `<details class="result-question" ${question.reviewRequired ? "open" : ""}>
-      <summary><span>Question ${question.number}</span><strong>${question.marks}/${question.maxMarks}${question.reviewRequired ? " + review" : ""}</strong></summary>
-      <div class="result-parts">${question.parts.map(part => {
-        const subquestion = findSubquestion(part.id);
-        const matches = part.suggestedMatches ? Object.entries(part.suggestedMatches).flatMap(([heading, items]) => items.map(item => `${heading}: ${item}`)) : [];
-        return `<article class="result-part is-${part.status}">
-          <div class="result-part-title"><strong>${escapeHtml(subquestion.label)}</strong><span>${part.reviewRequired ? "Review required" : `${part.marks}/${part.maxMarks}`}</span></div>
-          <p><b>Your answer:</b> ${escapeHtml(answerDisplay(part.value))}</p>
-          <p><b>Accepted answer:</b> ${escapeHtml(subquestion.answerDisplay || subquestion.answer || (subquestion.answers || []).join(", "))}</p>
-          ${matches.length ? `<p><b>Suggested marking-point matches:</b> ${escapeHtml(matches.join("; "))}</p>` : ""}
-          <p>${escapeHtml(subquestion.explanation || "")}</p>
-          ${subquestion.practiceLinks?.length ? `<div class="related-links">${subquestion.practiceLinks.map(link => `<a href="${link.href}">${escapeHtml(link.label)}</a>`).join("")}</div>` : ""}
-        </article>`;
-      }).join("")}</div>
-    </details>`).join("");
-    $("[data-topic-breakdown]").innerHTML = result.topicBreakdown.map(topic => `<div><span>${escapeHtml(topic.topic)}</span><strong>${topic.marks}/${topic.maxMarks}${topic.reviewRequired ? " + review" : ""}</strong></div>`).join("");
+    renderResultsPaper();
+    renderNavigator();
+    updateResultNavigation();
     showScreen("results");
   }
 
   function onEngineChange(attempt, reason) {
-    if (reason === "submit") return renderResults();
+    if (reason === "submit" || reason === "restore-submit") return renderResults();
     if (reason === "timer") {
       renderToolbarStats();
       return;
@@ -668,20 +817,30 @@
 
   function startAttempt(mode) {
     root.ExamStorage.deleteDraft(paper.id);
+    root.ExamStorage.deleteSubmitted(paper.id);
     engine.start(mode, false);
+    renderCustomiseMenu();
     if (mode === "exam") engine.beginExamSession();
   }
 
   function openSubmitModal() {
     const unanswered = paper.questions.filter(question => !questionIsComplete(question)).length;
     $("[data-submit-message]").textContent = unanswered
-      ? `${unanswered} ${unanswered === 1 ? "question is" : "questions are"} not fully answered. You can still submit, or keep working and review the paper.`
+      ? "Some questions are not fully answered. You can still submit, or keep working and review the paper."
       : "All questions have been answered. After submission, your answers will be locked.";
     $("[data-submit-overlay]").classList.add("is-open");
   }
   function closeSubmitModal() { $("[data-submit-overlay]").classList.remove("is-open"); }
   function openResetModal() { closePaperMenus(); $("[data-reset-overlay]").classList.add("is-open"); }
   function closeResetModal() { $("[data-reset-overlay]").classList.remove("is-open"); }
+  function openBlankModePicker() {
+    selectedStartMode = null;
+    document.querySelectorAll("[data-start-mode]").forEach(button => { button.classList.remove("is-selected"); button.setAttribute("aria-checked", "false"); });
+    $("[data-practice-mode-information]").hidden = true;
+    $("[data-exam-mode-warning]").hidden = true;
+    $("[data-start-actions]").hidden = true;
+    $("[data-start-overlay]").classList.add("is-open");
+  }
 
   function closePaperMenus() {
     document.querySelectorAll("[data-exam-menu]").forEach(menu => { menu.hidden = true; });
@@ -713,11 +872,19 @@
     $("[data-previous-question]").addEventListener("click", () => {
       const questions = engine.visibleQuestions();
       const index = questions.findIndex(item => item.id === currentQuestion().id);
+      if (engine.attempt.status === "submitted") {
+        if (!showingAllQuestions && index > 0) showResultQuestion(questions[index - 1].id);
+        return;
+      }
       if (index > 0) engine.goToQuestion(questions[index - 1].id);
     });
     const goNext = () => {
       const questions = engine.visibleQuestions();
       const index = questions.findIndex(item => item.id === currentQuestion().id);
+      if (engine.attempt.status === "submitted") {
+        if (!showingAllQuestions && index < questions.length - 1) showResultQuestion(questions[index + 1].id);
+        return;
+      }
       if (index < questions.length - 1) engine.goToQuestion(questions[index + 1].id);
     };
     $("[data-next-question]").addEventListener("click", goNext);
@@ -741,13 +908,14 @@
     $("[data-cancel-mode-change]").addEventListener("click", () => $("[data-mode-warning-overlay]").classList.remove("is-open"));
     $("[data-confirm-mode-change]").addEventListener("click", () => {
       $("[data-mode-warning-overlay]").classList.remove("is-open");
-      selectedStartMode = "exam";
-      document.querySelectorAll("[data-start-mode]").forEach(button => { const selected = button.dataset.startMode === "exam"; button.classList.toggle("is-selected", selected); button.setAttribute("aria-checked", String(selected)); });
-      $("[data-exam-mode-warning]").hidden = false;
-      $("[data-start-attempt]").textContent = "Start Exam Mode";
-      $("[data-start-overlay]").classList.add("is-open");
+      root.ExamAudio.pauseAll();
+      startAttempt("exam");
     });
     $("[data-show-all-questions]").addEventListener("click", () => {
+      if (engine.attempt.status === "submitted") {
+        showAllResultQuestions();
+        return;
+      }
       if (canShowAllQuestions()) renderAllQuestions();
     });
     $("[data-reset-paper]").addEventListener("click", openResetModal);
@@ -755,14 +923,10 @@
     $("[data-confirm-reset]").addEventListener("click", () => {
       closeResetModal();
       root.ExamStorage.deleteDraft(paper.id);
+      root.ExamStorage.deleteSubmitted(paper.id);
       root.ExamAudio.pauseAll();
-      if (engine.attempt.mode === "exam") {
-        engine.destroy();
-        selectedStartMode = "exam";
-        $("[data-exam-mode-warning]").hidden = false;
-        $("[data-start-attempt]").textContent = "Start Exam Mode";
-        $("[data-start-overlay]").classList.add("is-open");
-      } else startAttempt("practice");
+      engine.destroy();
+      openBlankModePicker();
     });
     $("[data-reset-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeResetModal(); });
     $("[data-open-qr]").addEventListener("click", openQrOverlay);
@@ -771,9 +935,8 @@
     $("[data-qr-overlay]").addEventListener("click", event => { if (event.target === event.currentTarget) closeQrOverlay(); });
     $("[data-results-new-attempt]").addEventListener("click", () => {
       root.ExamStorage.deleteDraft(paper.id);
-      $("[data-start-overlay]").classList.add("is-open");
+      openBlankModePicker();
     });
-    $("[data-continue-review]").addEventListener("click", () => $("[data-question-breakdown]").scrollIntoView({ behavior: "smooth" }));
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape") return;
       closeSubmitModal();
@@ -789,10 +952,13 @@
     document.querySelectorAll("[data-start-mode]").forEach(button => button.addEventListener("click", () => {
       selectedStartMode = button.dataset.startMode;
       document.querySelectorAll("[data-start-mode]").forEach(item => { const selected = item === button; item.classList.toggle("is-selected", selected); item.setAttribute("aria-checked", String(selected)); });
+      $("[data-practice-mode-information]").hidden = selectedStartMode !== "practice";
       $("[data-exam-mode-warning]").hidden = selectedStartMode !== "exam";
       $("[data-start-attempt]").textContent = selectedStartMode === "exam" ? "Start Exam Mode" : "Start Practice Mode";
+      $("[data-start-actions]").hidden = false;
     }));
     $("[data-start-attempt]").addEventListener("click", () => {
+      if (!selectedStartMode) return;
       $("[data-start-overlay]").classList.remove("is-open");
       startAttempt(selectedStartMode);
     });
@@ -809,12 +975,20 @@
     renderToolbarStats();
     bindEvents();
     bindStartOverlay();
+    const submitted = root.ExamStorage.loadSubmitted(paper.id);
     const draft = root.ExamStorage.loadDraft(paper.id);
-    if (draft?.mode === "practice") {
-      engine.resume(draft);
-      selectedStartMode = "practice";
+    if (submitted?.status === "submitted" && submitted.result) {
+      selectedStartMode = submitted.mode;
       $("[data-start-overlay]").classList.remove("is-open");
-    } else if (draft) root.ExamStorage.deleteDraft(paper.id);
+      engine.restoreSubmitted(submitted);
+    } else {
+      if (submitted) root.ExamStorage.deleteSubmitted(paper.id);
+      if (draft?.mode === "practice") {
+        engine.resume(draft);
+        selectedStartMode = "practice";
+        $("[data-start-overlay]").classList.remove("is-open");
+      } else if (draft) root.ExamStorage.deleteDraft(paper.id);
+    }
     renderCustomiseMenu();
     root.addEventListener("beforeunload", event => {
       if (engine.attempt?.mode === "exam" && engine.attempt.examStarted && engine.attempt.status === "active") {

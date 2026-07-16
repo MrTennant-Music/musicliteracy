@@ -105,6 +105,15 @@
       this.notify("resume");
     }
 
+    restoreSubmitted(attempt) {
+      this.stopTimer();
+      const restoredAttempt = deepCopy(attempt);
+      if (restoredAttempt?.status !== "submitted" || !restoredAttempt.result) return false;
+      this.attempt = restoredAttempt;
+      this.notify("restore-submit");
+      return true;
+    }
+
     setAnswer(id, value) {
       if (!this.attempt || this.attempt.status !== "active") return;
       this.attempt.answers[id] = value;
@@ -196,6 +205,7 @@
       this.attempt.result = result;
       this.attempt.completedAt = completedAt;
       this.attempt.durationSeconds = durationSeconds;
+      root.ExamStorage.saveSubmitted(this.paper.id, this.attempt);
       this.notify("submit");
       return result;
     }

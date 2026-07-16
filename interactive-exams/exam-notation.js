@@ -354,7 +354,7 @@
     const entered = String(enteredNotes || "").split(",").slice(0, 3);
     return bar.notes.map((item, index) => index < 3 ? (entered[index] && entered[index] !== "_" ? { ...note(q3EnteredPitch(entered[index]), "crotchet"), beat: index, beats: 1 } : null) : item);
   }
-  function q3DrawBarNotes(svg, bar, top, enteredNotes) {
+  function q3DrawBarNotes(svg, bar, top, enteredNotes, enteredAnswerClass = "") {
     const positions = q3BarPositions(bar);
     const notes = q3VisibleNotes(bar, enteredNotes);
     const groupingSource = bar.notes;
@@ -369,7 +369,7 @@
         if (groupNotes.every(Boolean)) beam = q3GetBeam(groupNotes, positions.slice(group.start, group.end + 1), top);
       }
       const stem = beam ? q3GetStem(positions[index], q3YForStep(item.step, top), item.step, beam.down) : null;
-      points[index] = q3DrawNote(svg, item, positions[index], top, { beamed: Boolean(beam), down: beam?.down, forcedEndY: beam && stem ? q3BeamY(stem.stemX, beam) : null });
+      points[index] = q3DrawNote(svg, item, positions[index], top, { beamed: Boolean(beam), down: beam?.down, forcedEndY: beam && stem ? q3BeamY(stem.stemX, beam) : null, className: bar.missing && index < 3 ? enteredAnswerClass : "" });
     });
     groups.forEach(group => {
       const groupNotes = notes.slice(group.start, group.end + 1);
@@ -391,7 +391,7 @@
     });
   }
 
-  function q3DrawTimeSignature(svg, value, top) {
+  function q3DrawTimeSignature(svg, value, top, answerClass = "") {
     if (!value) return;
     const [upper, lower] = String(value).split("/");
     const key = `timeSig${upper}${lower}`;
@@ -399,13 +399,13 @@
     const x = Q3_STAFF.left + 12 * Q3_STAFF.gap + Q3_STAFF.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
     const y = q3YForStep(5.3, top) + Q3_STAFF.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
     const fontSize = Q3_STAFF.gap * Number(settings.fontSizeScale || 3.4);
-    q3Text(svg, q3Glyph(`timeSig${upper}`), { x, y: y - fontSize * .14, "font-size": fontSize, "text-anchor": "middle" }, "q3-music-glyph");
-    q3Text(svg, q3Glyph(`timeSig${lower}`), { x, y: y + fontSize * .43, "font-size": fontSize, "text-anchor": "middle" }, "q3-music-glyph");
+    q3Text(svg, q3Glyph(`timeSig${upper}`), { x, y: y - fontSize * .14, "font-size": fontSize, "text-anchor": "middle" }, `q3-music-glyph ${answerClass}`.trim());
+    q3Text(svg, q3Glyph(`timeSig${lower}`), { x, y: y + fontSize * .43, "font-size": fontSize, "text-anchor": "middle" }, `q3-music-glyph ${answerClass}`.trim());
   }
-  function q3DrawSystemPrefix(svg, top, timeSignature) {
+  function q3DrawSystemPrefix(svg, top, timeSignature, answerClass = "") {
     q3CalibratedSymbol(svg, "gClef", Q3_STAFF.left + 32, q3YForStep(2, top));
     q3CalibratedSymbol(svg, "sharpKeySignature", Q3_STAFF.left + 54, q3YForStep(8, top));
-    q3DrawTimeSignature(svg, timeSignature, top);
+    q3DrawTimeSignature(svg, timeSignature, top, answerClass);
   }
   function q3LocalPoint(svg, event) {
     const matrix = svg.getScreenCTM?.();
@@ -625,47 +625,48 @@
     svg.append(target);
   }
 
-  function q3ScoreSvg(answers, onAnswerChange) {
+  function q3ScoreSvg(answers, onAnswerChange, review = {}) {
     const svg = svgElement("svg", { class: "q3-shared-score", viewBox: "0 0 920 540", role: "img", "aria-label": "Interactive music guide for Question 3" });
+    const answerClass = id => review[id] === "correct" ? "q3-answer-correct" : review[id] === "incorrect" ? "q3-answer-incorrect" : "";
     q3DrawMissingNoteBox(svg);
     [0, 1, 2, 3].forEach(systemIndex => {
       const firstBar = systemIndex * Q3_BARS_PER_SYSTEM;
       const top = q3SystemTop(firstBar);
       for (let line = 0; line < 5; line += 1) svg.append(svgElement("line", { x1: Q3_STAFF.left, x2: Q3_STAFF.right, y1: top + line * Q3_STAFF.gap, y2: top + line * Q3_STAFF.gap, class: "q3-staff-line" }));
-      q3DrawSystemPrefix(svg, top, systemIndex === 0 ? answers.q3a : null);
+      q3DrawSystemPrefix(svg, top, systemIndex === 0 ? answers.q3a : null, systemIndex === 0 ? answerClass("q3a") : "");
       for (let local = 0; local < Q3_BARS_PER_SYSTEM; local += 1) {
         const barIndex = firstBar + local;
         const item = Q3_BARS[barIndex];
         const start = q3BarStart(barIndex);
         const end = start + q3BarWidth(barIndex);
         q3Text(svg, String(barIndex + 1), { x: local === 0 ? start - 15 : start + 5, y: top - 17, "text-anchor": "middle" }, "q3-bar-number");
-        q3DrawBarNotes(svg, item, top, answers.q3c);
+        q3DrawBarNotes(svg, item, top, answers.q3c, answerClass("q3c"));
         svg.append(svgElement("line", { x1: end, x2: end, y1: top, y2: top + Q3_STAFF.gap * 4, class: "q3-barline" }));
       }
     });
     const dynamicKey = { p: "piano", mp: "mezzoPiano", mf: "mezzoForte", f: "forte" }[answers.q3b];
-    if (answers.q3a) q3AddAppliedAnswerTarget(svg, { x: 185, y: 49, width: 45, height: 68 }, "Time signature", () => onAnswerChange("q3a", ""));
+    if (answers.q3a && onAnswerChange) q3AddAppliedAnswerTarget(svg, { x: 185, y: 49, width: 45, height: 68 }, "Time signature", () => onAnswerChange("q3a", ""));
     if (dynamicKey) {
       const dynamicX = q3BarPositions(Q3_BARS[0])[0];
       const dynamicY = Q3_STAFF.topA + Q3_STAFF.gap * 7.85;
-      q3CalibratedSymbol(svg, dynamicKey, dynamicX, dynamicY);
-      q3AddAppliedAnswerTarget(svg, { x: dynamicX - 25, y: dynamicY - 34, width: 50, height: 46 }, "Dynamic marking", () => onAnswerChange("q3b", ""));
+      q3CalibratedSymbol(svg, dynamicKey, dynamicX, dynamicY, { className: answerClass("q3b") });
+      if (onAnswerChange) q3AddAppliedAnswerTarget(svg, { x: dynamicX - 25, y: dynamicY - 34, width: 50, height: 46 }, "Dynamic marking", () => onAnswerChange("q3b", ""));
     }
     const repeat = answers.q3d;
     if (repeat) {
       const match = String(repeat).match(/^end-bar-(\d+)$/);
       const barIndex = match ? Math.max(0, Math.min(7, Number(match[1]) - 1)) : 0;
       const placement = q3RepeatPlacement(barIndex);
-      q3CalibratedSymbol(svg, "repeatRight", placement.x, placement.y);
+      q3CalibratedSymbol(svg, "repeatRight", placement.x, placement.y, { className: answerClass("q3d") });
     }
     q3AddNoteEntryTargets(svg, answers, onAnswerChange);
     q3AddRepeatTargets(svg, answers, onAnswerChange);
     return svg;
   }
 
-  function renderSharedScore(container, question, answers, onAnswerChange) {
+  function renderSharedScore(container, question, answers, onAnswerChange, review = {}) {
     container.innerHTML = `<div class="shared-notation-score-wrap"></div>`;
-    container.querySelector(".shared-notation-score-wrap").append(q3ScoreSvg(answers || {}, onAnswerChange));
+    container.querySelector(".shared-notation-score-wrap").append(q3ScoreSvg(answers || {}, onAnswerChange, review));
   }
 
   function renderSharedControls(container, subquestion, value, onChange) {

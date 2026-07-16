@@ -26,6 +26,9 @@
     loadDraft(paperId) { return read(key(paperId, "draft"), null); },
     saveDraft(paperId, attempt) { return write(key(paperId, "draft"), { ...attempt, savedAt: new Date().toISOString() }); },
     deleteDraft(paperId) { try { root.localStorage.removeItem(key(paperId, "draft")); return true; } catch { return false; } },
+    loadSubmitted(paperId) { return read(key(paperId, "submitted"), null); },
+    saveSubmitted(paperId, attempt) { return write(key(paperId, "submitted"), { ...attempt, savedAt: new Date().toISOString() }); },
+    deleteSubmitted(paperId) { try { root.localStorage.removeItem(key(paperId, "submitted")); return true; } catch { return false; } },
     loadAttempts(paperId) { return read(key(paperId, "attempts"), []); },
     addAttempt(paperId, attempt) {
       const attempts = api.loadAttempts(paperId);
@@ -40,6 +43,7 @@
     clearAll(paperId) {
       try {
         root.localStorage.removeItem(key(paperId, "draft"));
+        root.localStorage.removeItem(key(paperId, "submitted"));
         root.localStorage.removeItem(key(paperId, "attempts"));
         return true;
       } catch { return false; }

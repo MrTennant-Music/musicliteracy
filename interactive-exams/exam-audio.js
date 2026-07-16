@@ -4,6 +4,19 @@
   let activeAudio = null;
   const players = new Set();
 
+  if (typeof document !== "undefined") {
+    document.addEventListener("pointerdown", event => {
+      if (event.pointerType !== "touch") return;
+      const tappedPlayer = event.target?.closest?.("[data-audio-player]");
+      document.querySelectorAll("[data-audio-player].is-markers-expanded").forEach(player => {
+        if (player !== tappedPlayer) player.classList.remove("is-markers-expanded");
+      });
+      if (tappedPlayer?.querySelector("[data-marker-time]:not(:disabled)")) {
+        tappedPlayer.classList.add("is-markers-expanded");
+      }
+    });
+  }
+
   function formatTime(seconds) {
     if (!Number.isFinite(seconds)) return "0:00";
     const rounded = Math.max(0, Math.floor(seconds));

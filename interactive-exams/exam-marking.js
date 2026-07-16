@@ -33,6 +33,64 @@
     return { marks: correct ? subquestion.marks : 0, status: correct ? "correct" : "incorrect" };
   }
 
+  function editDistance(left, right) {
+    const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+    for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+      const current = [leftIndex];
+      for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+        current[rightIndex] = Math.min(
+          current[rightIndex - 1] + 1,
+          previous[rightIndex] + 1,
+          previous[rightIndex - 1] + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+        );
+      }
+      previous.splice(0, previous.length, ...current);
+    }
+    return previous[right.length];
+  }
+
+  function tokenMatches(responseToken, expectedToken) {
+    if (responseToken === expectedToken) return true;
+    if (/\d/.test(expectedToken) || expectedToken.length < 5) return false;
+    const allowance = expectedToken.length >= 8 ? 2 : 1;
+    return editDistance(responseToken, expectedToken) <= allowance;
+  }
+
+  function phraseMatches(response, phrase, allowFuzzy = true) {
+    const expected = normalise(phrase);
+    if (!response || !expected) return false;
+    if (` ${response} `.includes(` ${expected} `)) return true;
+    if (!allowFuzzy || /\d|\//.test(expected)) return false;
+    const responseTokens = response.match(/[a-z]+/g) || [];
+    const expectedTokens = expected.match(/[a-z]+/g) || [];
+    if (!expectedTokens.length || responseTokens.length < expectedTokens.length) return false;
+    for (let index = 0; index <= responseTokens.length - expectedTokens.length; index += 1) {
+      if (expectedTokens.every((token, tokenIndex) => tokenMatches(responseTokens[index + tokenIndex], token))) return true;
+    }
+    return false;
+  }
+
+  function markStructuredResponse(subquestion, value) {
+    if (!isAnswered(subquestion, value)) return { marks: 0, status: "unanswered", matchedConcepts: {} };
+    const response = normalise(value?.final);
+    const matchedConcepts = {};
+    let marks = 0;
+    for (const heading of subquestion.headings || []) {
+      const concepts = heading.concepts || (heading.markingPoints || []).map(point => ({ label: point, answers: [point] }));
+      const matches = concepts.filter(concept => {
+        const answers = concept.answers || [concept.label];
+        if (answers.some(answer => phraseMatches(response, answer, false))) return true;
+        const blocked = (concept.blockedAnswers || []).some(answer => phraseMatches(response, answer, false));
+        return !blocked && answers.some(answer => phraseMatches(response, answer, concept.allowFuzzy !== false));
+      });
+      const banked = matches.slice(0, subquestion.maxMarksPerHeading || 2);
+      matchedConcepts[heading.id] = banked.map(concept => concept.label);
+      marks += banked.length;
+    }
+    marks = Math.min(subquestion.marks, marks);
+    return { marks, status: marks === subquestion.marks ? "correct" : "incorrect", matchedConcepts };
+  }
+
   function suggestedReview(subquestion, value) {
     const byHeading = {};
     let suggestedCount = 0;
@@ -49,6 +107,7 @@
   }
 
   function markSubquestion(subquestion, value) {
+    if (subquestion.type === "structured-review" && subquestion.autoMark) return markStructuredResponse(subquestion, value || {});
     if (subquestion.type === "structured-review") return suggestedReview(subquestion, value || {});
     return markObjective(subquestion, value);
   }
