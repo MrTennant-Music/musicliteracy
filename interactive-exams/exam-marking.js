@@ -7,6 +7,7 @@
       .trim()
       .replace(/[‐‑‒–—-]/g, " ")
       .replace(/[.,;:!?()[\]{}'\"]/g, "")
+      .replace(/\s*\/\s*/g, "/")
       .replace(/\s+/g, " ");
   }
 
@@ -26,10 +27,17 @@
       const chosen = value.map(normalise);
       const correctCount = chosen.filter(item => expected.includes(item)).length;
       const incorrectCount = chosen.filter(item => !expected.includes(item)).length;
-      return { marks: Math.max(0, Math.min(subquestion.marks, correctCount - incorrectCount)), status: correctCount === expected.length && incorrectCount === 0 ? "correct" : "incorrect" };
+      const correct = correctCount === expected.length && incorrectCount === 0;
+      return { marks: Math.min(subquestion.marks, correctCount), status: correct ? "correct" : correctCount > 0 ? "partial" : "incorrect", correctCount, incorrectCount };
     }
     const expected = subquestion.acceptedAnswers || [subquestion.answer];
-    const correct = expected.map(normalise).includes(normalise(value));
+    const rawResponse = normalise(value);
+    const response = subquestion.allowMusicSuffix ? rawResponse.replace(/\s+music$/, "").trim() : rawResponse;
+    const exactMatch = expected.map(normalise).includes(response);
+    const phrasedMatch = subquestion.allowAnswerInPhrase && expected.some(answer => phraseMatches(response, answer));
+    const keywordMatch = (subquestion.acceptedKeywords || []).some(keyword => phraseMatches(response, keyword));
+    const keywordGroupMatch = (subquestion.acceptedKeywordGroups || []).some(group => group.every(keyword => phraseMatches(response, keyword)));
+    const correct = exactMatch || phrasedMatch || keywordMatch || keywordGroupMatch;
     return { marks: correct ? subquestion.marks : 0, status: correct ? "correct" : "incorrect" };
   }
 
@@ -70,25 +78,55 @@
     return false;
   }
 
+  function phraseEvidence(source, phrase, allowFuzzy = true) {
+    const responseTokens = [];
+    const tokenPattern = /[a-z]+|\d+\s*\/\s*\d+|[<＜]/gi;
+    for (const match of String(source || "").matchAll(tokenPattern)) {
+      responseTokens.push({ value: normalise(match[0]), start: match.index, end: match.index + match[0].length });
+    }
+    const expectedTokens = normalise(phrase).match(/[a-z]+|\d+\/\d+|[<＜]/g) || [];
+    if (!expectedTokens.length || responseTokens.length < expectedTokens.length) return null;
+    for (let index = 0; index <= responseTokens.length - expectedTokens.length; index += 1) {
+      const window = responseTokens.slice(index, index + expectedTokens.length);
+      const matches = expectedTokens.every((expected, tokenIndex) => {
+        const actual = window[tokenIndex].value;
+        if (actual === expected) return true;
+        if (!allowFuzzy || /\d|\/|[<＜]/.test(expected)) return false;
+        return tokenMatches(actual, expected);
+      });
+      if (matches) {
+        const start = window[0].start;
+        const end = window.at(-1).end;
+        return { start, end, text: String(source || "").slice(start, end) };
+      }
+    }
+    return null;
+  }
+
   function markStructuredResponse(subquestion, value) {
-    if (!isAnswered(subquestion, value)) return { marks: 0, status: "unanswered", matchedConcepts: {} };
-    const response = normalise(value?.final);
+    if (!isAnswered(subquestion, value)) return { marks: 0, status: "unanswered", matchedConcepts: {}, matchedEvidence: {}, validConceptCounts: {} };
+    const source = String(value?.final || "");
     const matchedConcepts = {};
+    const matchedEvidence = {};
+    const validConceptCounts = {};
     let marks = 0;
     for (const heading of subquestion.headings || []) {
       const concepts = heading.concepts || (heading.markingPoints || []).map(point => ({ label: point, answers: [point] }));
-      const matches = concepts.filter(concept => {
+      const matches = concepts.map(concept => {
         const answers = concept.answers || [concept.label];
-        if (answers.some(answer => phraseMatches(response, answer, false))) return true;
-        const blocked = (concept.blockedAnswers || []).some(answer => phraseMatches(response, answer, false));
-        return !blocked && answers.some(answer => phraseMatches(response, answer, concept.allowFuzzy !== false));
-      });
+        const exactEvidence = answers.map(answer => phraseEvidence(source, answer, false)).find(Boolean);
+        const blocked = (concept.blockedAnswers || []).some(answer => phraseEvidence(source, answer, false));
+        const evidence = exactEvidence || (!blocked ? answers.map(answer => phraseEvidence(source, answer, concept.allowFuzzy !== false)).find(Boolean) : null);
+        return evidence ? { concept, evidence } : null;
+      }).filter(Boolean);
       const banked = matches.slice(0, subquestion.maxMarksPerHeading || 2);
-      matchedConcepts[heading.id] = banked.map(concept => concept.label);
+      matchedConcepts[heading.id] = banked.map(match => match.concept.label);
+      matchedEvidence[heading.id] = banked.map(match => ({ label: match.concept.label, ...match.evidence }));
+      validConceptCounts[heading.id] = matches.length;
       marks += banked.length;
     }
     marks = Math.min(subquestion.marks, marks);
-    return { marks, status: marks === subquestion.marks ? "correct" : "incorrect", matchedConcepts };
+    return { marks, status: marks === subquestion.marks ? "correct" : "incorrect", matchedConcepts, matchedEvidence, validConceptCounts };
   }
 
   function suggestedReview(subquestion, value) {

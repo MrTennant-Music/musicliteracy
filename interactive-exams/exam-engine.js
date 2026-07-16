@@ -11,6 +11,7 @@
       status: "active",
       currentQuestion: paper.questions[0].id,
       answers: {},
+      checkedQuestionIds: [],
       flaggedQuestions: [],
       audioPlayCounts: {},
       audioLimitEnabled: false,
@@ -91,6 +92,7 @@
       this.stopTimer();
       this.attempt = deepCopy(attempt);
       this.attempt.status = "active";
+      this.attempt.checkedQuestionIds ||= [];
       if (this.attempt.timer?.enabled) {
         const lastUpdate = new Date(this.attempt.timer.lastUpdatedAt || this.attempt.savedAt || Date.now()).getTime();
         const elapsedWhileClosed = Math.max(0, Math.floor((Date.now() - lastUpdate) / 1000));
@@ -116,6 +118,8 @@
 
     setAnswer(id, value) {
       if (!this.attempt || this.attempt.status !== "active") return;
+      const question = this.paper.questions.find(item => item.subquestions.some(subquestion => subquestion.id === id));
+      if (question && this.attempt.checkedQuestionIds?.includes(question.id)) return;
       this.attempt.answers[id] = value;
       this.persist();
       this.notify("answer");
@@ -176,6 +180,21 @@
       return completed === question.subquestions.length ? "answered" : "partial";
     }
 
+    isQuestionChecked(id) {
+      return Boolean(this.attempt?.checkedQuestionIds?.includes(id));
+    }
+
+    checkQuestion(id) {
+      if (!this.attempt || this.attempt.status !== "active" || this.attempt.mode !== "practice" || this.isQuestionChecked(id)) return false;
+      const question = this.paper.questions.find(item => item.id === id);
+      if (!question || question.subquestions.some(subquestion => !answerComplete(subquestion, this.attempt.answers[subquestion.id]))) return false;
+      this.attempt.checkedQuestionIds ||= [];
+      this.attempt.checkedQuestionIds.push(id);
+      this.persist();
+      this.notify("question-check");
+      return true;
+    }
+
     visibleQuestions() {
       const ids = this.attempt?.retryQuestionIds;
       return ids?.length ? this.paper.questions.filter(question => ids.includes(question.id)) : this.paper.questions;
@@ -216,6 +235,7 @@
       if (!incorrectParts.length) return;
       incorrectParts.forEach(part => { delete this.attempt.answers[part.partId]; });
       this.attempt.retryQuestionIds = [...new Set(incorrectParts.map(part => part.questionId))];
+      this.attempt.checkedQuestionIds = (this.attempt.checkedQuestionIds || []).filter(id => !this.attempt.retryQuestionIds.includes(id));
       this.attempt.currentQuestion = this.attempt.retryQuestionIds[0];
       this.attempt.status = "active";
       this.attempt.result = null;
