@@ -269,7 +269,10 @@
     if (subquestion.type === "short-text") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(value || "")}" autocomplete="off" autocapitalize="sentences" />`;
     if (subquestion.type === "structured-review") {
       if (subquestion.roughWork && subquestion.finalAnswerField) {
-        return `<div class="q8-answer-workspace"><section class="q8-rough-work" aria-labelledby="q8-rough-work-heading"><h3 id="q8-rough-work-heading">Rough work</h3><div class="q8-rough-work-table">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" aria-label="Rough work: ${escapeHtml(heading.label)}" autocapitalize="sentences">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div></section><section class="q8-final-answer" aria-labelledby="q8-final-answer-heading"><h3 id="q8-final-answer-heading">Final answer</h3><label class="visually-hidden" for="${subquestion.id}-final">Final answer</label><textarea id="${subquestion.id}-final" data-heading="final" aria-label="Final answer" autocapitalize="sentences">${escapeHtml(value?.final || "")}</textarea><p class="q8-end-paper">[END OF QUESTION PAPER]</p></section></div>`;
+        const finalAnswerMark = subquestion.finalAnswerMarks
+          ? `<span class="q8-final-answer-marks" data-question-total-mark="${escapeHtml(subquestion.finalAnswerQuestionId || "")}" aria-label="${subquestion.finalAnswerMarks} marks">${subquestion.finalAnswerMarks}</span>`
+          : "";
+        return `<div class="q8-answer-workspace"><section class="q8-rough-work" aria-labelledby="q8-rough-work-heading"><h3 id="q8-rough-work-heading">Rough work</h3><div class="q8-rough-work-table">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" aria-label="Rough work: ${escapeHtml(heading.label)}" autocapitalize="sentences">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div></section><section class="q8-final-answer" aria-labelledby="q8-final-answer-heading"><div class="q8-final-answer-heading-row"><h3 id="q8-final-answer-heading">Final answer</h3></div><div class="q8-final-answer-lines"><label class="visually-hidden" for="${subquestion.id}-final">Final answer</label><textarea id="${subquestion.id}-final" data-heading="final" aria-label="Final answer" autocapitalize="sentences">${escapeHtml(value?.final || "")}</textarea>${finalAnswerMark}</div><p class="q8-end-paper">[END OF QUESTION PAPER]</p></section></div>`;
       }
       return `<div class="structured-answer">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" rows="4" autocapitalize="sentences">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div>`;
     }
@@ -282,7 +285,8 @@
     const lastTextIndex = paragraphs.reduce((lastIndex, text, index) => text ? index : lastIndex, -1);
     const paragraphMarkup = (text, index) => {
       if (!text) return `<p class="question-intro-spacer" aria-hidden="true"></p>`;
-      const isTotalMarksRow = question.introTotalMarks && index === lastTextIndex;
+      const totalMarksIndex = Number.isInteger(question.introTotalMarksIndex) ? question.introTotalMarksIndex : lastTextIndex;
+      const isTotalMarksRow = question.introTotalMarks && index === totalMarksIndex;
       if (!isTotalMarksRow) return `<p>${paperTextMarkup(text, question.introBoldPhrases)}</p>`;
       const marks = Number(question.introTotalMarks);
       return `<p class="question-intro-mark-row"><span>${paperTextMarkup(text, question.introBoldPhrases)}</span><span class="question-intro-marks" ${question.id ? `data-question-total-mark="${escapeHtml(question.id)}"` : ""} aria-label="${marks} ${marks === 1 ? "mark" : "marks"}">${marks}</span></p>`;
@@ -335,6 +339,7 @@
     return question.subquestions.map((subquestion, subquestionIndex) => {
       const groupStart = subquestion.groupStart ? `<div class="subquestion-group-heading"><strong>${escapeHtml(subquestion.groupStart.label)}</strong><span>${escapeHtml(subquestion.groupStart.prompt)}</span></div>` : "";
       const showMarks = question.showPartMarks !== false;
+      const showQuestionTotal = !showMarks && question.totalMarksOnLastPart && subquestionIndex === question.subquestions.length - 1;
       const showHeading = Boolean(subquestion.label) && subquestion.type !== "structured-review";
       const promptMatchesLabel = subquestion.prompt === subquestion.label;
       const value = engine.attempt.answers[subquestion.id];
@@ -350,11 +355,11 @@
             ? ""
             : `${promptMarkup}${subquestion.scoreHint && subquestion.scoreHintPlacement === "prompt" ? `<span class="score-apply-hint score-apply-hint-inline">${escapeHtml(subquestion.scoreHint)}</span>` : ""}`;
       const instruction = subquestion.instruction ? `<p class="subquestion-instruction">${escapeHtml(subquestion.instruction)}</p>` : "";
-      const guideArrow = question.layout === "music-guide" && subquestionIndex < question.subquestions.length - 1
-        ? `<svg class="music-guide-arrow" viewBox="0 0 52 28" aria-hidden="true" focusable="false"><path d="M0 8 H35 V1 L51 14 L35 27 V20 H0 Z" /></svg>`
+      const guideArrow = ["music-guide", "music-guide-vertical"].includes(question.layout) && subquestionIndex < question.subquestions.length - 1
+        ? `<svg class="music-guide-arrow ${question.layout === "music-guide-vertical" ? "is-vertical" : ""}" viewBox="0 0 52 28" aria-hidden="true" focusable="false"><path d="M0 8 H35 V1 L51 14 L35 27 V20 H0 Z" /></svg>`
         : "";
       return `${groupStart}<section class="subquestion subquestion-${subquestion.type} ${showHeading ? "has-part-label" : ""} ${subquestion.answerStyle ? `answer-style-${subquestion.answerStyle}` : ""}" data-subquestion="${subquestion.id}">
-        ${showHeading || headingQuestion || showMarks ? `<div class="subquestion-heading"><span class="subquestion-heading-label">${showHeading ? escapeHtml(subquestion.label) : ""}</span><div class="subquestion-heading-question">${headingQuestion}</div>${showMarks ? `<span class="subquestion-heading-marks ${subquestion.markAlign === "prompt-end" ? "is-prompt-end" : ""}" data-subquestion-mark="${subquestion.id}" aria-label="${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}">${subquestion.marks}</span>` : ""}</div>` : ""}
+        ${showHeading || headingQuestion || showMarks || showQuestionTotal ? `<div class="subquestion-heading"><span class="subquestion-heading-label">${showHeading ? escapeHtml(subquestion.label) : ""}</span><div class="subquestion-heading-question">${headingQuestion}</div>${showMarks ? `<span class="subquestion-heading-marks ${subquestion.markAlign === "prompt-end" ? "is-prompt-end" : ""}" data-subquestion-mark="${subquestion.id}" aria-label="${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}">${subquestion.marks}</span>` : showQuestionTotal ? `<span class="subquestion-heading-marks" data-question-total-mark="${escapeHtml(question.id)}" aria-label="${question.marks} marks">${question.marks}</span>` : ""}</div>` : ""}
         ${instruction}
         ${inlineAnswer ? "" : inputMarkup(subquestion, value)}
         ${guideArrow}
@@ -948,7 +953,8 @@
       if (field) field.classList.add(part.status === "correct" ? "is-user-correct" : part.status === "unanswered" ? "is-unanswered" : "is-user-incorrect");
     } else if (subquestion.type === "notation-choice") {
       section.querySelectorAll(".notation-tool-button").forEach(button => {
-        const isExpected = button.dataset.value === subquestion.answer;
+        const expectedValues = subquestion.acceptedAnswers || [subquestion.answer];
+        const isExpected = expectedValues.map(String).includes(button.dataset.value);
         const hasAnswer = Boolean(String(part.value || "").replace(/_/g, "").replace(/,/g, ""));
         const representsPlacementTool = ["note-entry", "repeat-sign"].includes(subquestion.notationTool);
         button.classList.toggle("is-review-correct", isExpected || representsPlacementTool && part.status === "unanswered");
@@ -979,7 +985,7 @@
   }
 
   function arrangeMusicGuideFeedback(card, question) {
-    if (question.layout !== "music-guide") return;
+    if (!["music-guide", "music-guide-vertical"].includes(question.layout)) return;
     const feedbackItems = Array.from(card.querySelectorAll(".inline-answer-feedback"));
     if (!feedbackItems.length) return;
     const feedbackList = document.createElement("div");

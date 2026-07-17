@@ -50,8 +50,8 @@
   const Q3_BARS_PER_SYSTEM = 2;
   const Q3_SYSTEM_SPACING = 118;
   const Q3_KEY_SIGNATURE_SPACING = 14;
-  const Q3_PITCH_STEPS = { C4: -2, D4: -1, E4: 0, F4: 1, G4: 2, A4: 3, B4: 4, C5: 5, D5: 6, E5: 7, F5: 8, "F♯5": 8, G5: 9, A5: 10 };
-  const Q3_PITCH_BY_STEP = Object.fromEntries(Object.entries(Q3_PITCH_STEPS).filter(([pitch]) => pitch !== "F♯5").map(([pitch, step]) => [step, pitch]));
+  const Q3_PITCH_STEPS = { C4: -2, D4: -1, E4: 0, F4: 1, G4: 2, A4: 3, B4: 4, Bb4: 4, C5: 5, D5: 6, E5: 7, F5: 8, "F♯5": 8, G5: 9, A5: 10 };
+  const Q3_PITCH_BY_STEP = Object.fromEntries(Object.entries(Q3_PITCH_STEPS).filter(([pitch]) => !["F♯5", "Bb4"].includes(pitch)).map(([pitch, step]) => [step, pitch]));
   let q3RepeatArmed = false;
   const Q3_RHYTHMS = {
     semiquaver: { beats: .25, spacing: .62 },
@@ -61,6 +61,8 @@
     dottedCrotchet: { beats: 1.5, spacing: 1.75 },
     minim: { beats: 2, spacing: 2.15 },
     dottedMinim: { beats: 3, spacing: 2.75 },
+    semibreve: { beats: 4, spacing: 3.35 },
+    dottedQuaverRest: { beats: .75, spacing: 1.12 },
     crotchetRest: { beats: 1, spacing: 1.15 },
   };
   const q3Glyph = key => root.BRAVURA_SYMBOLS?.[q3ActualSymbolKey(key)] || "";
@@ -92,6 +94,31 @@
     bar([note("D4", "semiquaver"), note("B4", "dottedQuaver", { tieToNext: true }), note("B4", "dottedMinim", { tiedFromPrevious: true })]),
     bar([note("D4", "semiquaver"), note("A4", "dottedQuaver", { tieToNext: true }), note("A4", "dottedMinim", { tiedFromPrevious: true })]),
   ].map((item, barIndex) => ({ ...item, barIndex, totalBars: 8 }));
+
+  // National 5 2015, Question 3: "I Dreamed a Dream". The musical
+  // content is kept separate from the drawing code so each printed bar can
+  // be checked directly against the source paper.
+  const N5_2015_Q3_BARS = [
+    bar([rest("dottedQuaverRest"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("E4", "semiquaver"), note("F4", "dottedQuaver"), note("G4", "semiquaver")], { beamGroups: [{ start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 7 }] }),
+    bar([note("A4", "semibreve")]),
+    bar([rest("dottedQuaverRest"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("G4", "dottedQuaver"), note("A4", "semiquaver")], { beamGroups: [{ start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 7 }] }),
+    bar([note("D4", "quaver"), note("F4", "dottedCrotchet", { tieToNext: true }), note("F4", "minim", { tiedFromPrevious: true })]),
+    bar([rest("dottedQuaverRest"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("E4", "semiquaver"), note("A4", "semiquaver"), note("Bb4", "dottedQuaver")], { beamGroups: [{ start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 7 }] }),
+    bar([note("A4", "semibreve")]),
+    bar([rest("dottedQuaverRest"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("A4", "dottedQuaver"), note("A4", "semiquaver"), note("Bb4", "quaver"), note("C5", "quaver")], { missingIndices: [4, 5, 6, 7], beamGroups: [{ start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 7 }] }),
+    bar([note("D4", "quaver"), note("F4", "dottedCrotchet", { tieToNext: true }), note("F4", "minim", { tiedFromPrevious: true })]),
+  ].map((item, barIndex) => ({ ...item, barIndex, totalBars: 8 }));
+
+  const N5_2015_Q3_LYRICS = [
+    "I dreamed     a dream     in time     gone",
+    "by",
+    "When hope     was high     and life     worth",
+    "li-     ving.",
+    "I dreamed     that love     would ne - ver",
+    "die,",
+    "I dreamed that     God would be     for-",
+    "giv - ing.",
+  ];
 
   function q3Text(svg, text, attributes = {}, className = "") {
     const node = svgElement("text", attributes);
@@ -188,6 +215,8 @@
   }
 
   function q3NoteSymbolKey(rhythm, down, beamed = false) {
+    if (rhythm === "semibreve") return "wholeNote";
+    if (rhythm === "dottedQuaverRest") return "eighthRest";
     if (["minim", "dottedMinim"].includes(rhythm)) return down ? "halfNoteStemDown" : "halfNoteStemUp";
     if (rhythm === "crotchetRest") return "quarterRest";
     if (rhythm === "semiquaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
@@ -652,6 +681,245 @@
     svg.append(target);
   }
 
+  function q3EnteredPitch2015(value) {
+    if (value === "Bb4" || value === "B♭4") return "Bb4";
+    return q3EnteredPitch(value);
+  }
+
+  function q3Draw2015BarNotes(svg, bar, top, enteredNotes, enteredAnswerClass = "", enteredReviewStatus = "", correctNotes = "") {
+    const missing = new Set(bar.missingIndices || []);
+    const entered = String(enteredNotes || "").split(",").slice(0, missing.size);
+    const expected = String(correctNotes || "").split(",").slice(0, missing.size);
+    let enteredIndex = 0;
+    const notes = bar.notes.map((item, index) => {
+      if (!missing.has(index)) return item;
+      const value = entered[enteredIndex++];
+      return value && value !== "_" ? { ...item, pitch: q3EnteredPitch2015(value), step: Q3_PITCH_STEPS[q3EnteredPitch2015(value)] } : null;
+    });
+    const positions = q3BarPositions(bar);
+    const groups = bar.beamGroups || q3BeamGroups(bar.notes);
+    const points = [];
+    let missingOrder = 0;
+    notes.forEach((item, index) => {
+      if (!item) { points[index] = null; if (missing.has(index)) missingOrder += 1; return; }
+      const group = q3GroupFor(groups, index);
+      let beam = null;
+      if (group) {
+        const groupNotes = notes.slice(group.start, group.end + 1);
+        if (groupNotes.every(Boolean)) beam = q3GetBeam(groupNotes, positions.slice(group.start, group.end + 1), top);
+      }
+      const stem = beam ? q3GetStem(positions[index], q3YForStep(item.step, top), item.step, beam.down) : null;
+      let className = "";
+      if (missing.has(index)) {
+        className = enteredAnswerClass;
+        if (enteredReviewStatus) {
+          const expectedPitch = q3EnteredPitch2015(expected[missingOrder]);
+          className = item.pitch === expectedPitch ? "q3-answer-correct" : "q3-answer-incorrect";
+        }
+        missingOrder += 1;
+      }
+      points[index] = q3DrawNote(svg, item, positions[index], top, { beamed: Boolean(beam), down: beam?.down, forcedEndY: beam && stem ? q3BeamY(stem.stemX, beam) : null, className });
+    });
+    groups.forEach(group => {
+      const groupNotes = notes.slice(group.start, group.end + 1);
+      if (!groupNotes.every(Boolean)) return;
+      const groupPositions = positions.slice(group.start, group.end + 1);
+      const beam = q3GetBeam(groupNotes, groupPositions, top);
+      q3BeamPolygon(svg, beam);
+      q3SecondarySegments(groupNotes).forEach(segment => {
+        const offset = beam.down ? -Q3_STAFF.gap * .85 : Q3_STAFF.gap * .85;
+        const lift = beam.down ? 2 : -2;
+        const stemX = localIndex => q3GetStem(groupPositions[localIndex], q3YForStep(groupNotes[localIndex].step, top), groupNotes[localIndex].step, beam.down).stemX;
+        const x1 = stemX(segment.start);
+        const x2 = segment.hook ? x1 + (segment.start > 0 ? -(Q3_STAFF.gap * .9 + 2) : Q3_STAFF.gap * .9 + 2) : stemX(segment.end);
+        q3BeamPolygon(svg, { start: { x: x1, y: q3BeamY(x1, beam) + offset + lift }, end: { x: x2, y: q3BeamY(x2, beam) + offset + lift } });
+      });
+    });
+    notes.forEach((item, index) => {
+      if (item?.tieToNext && points[index] && points[index + 1]) q3DrawTie(svg, points[index], points[index + 1]);
+    });
+    if (enteredReviewStatus && enteredReviewStatus !== "correct") {
+      Array.from(missing).forEach((noteIndex, index) => {
+        const enteredPitch = entered[index] && entered[index] !== "_" ? q3EnteredPitch2015(entered[index]) : "";
+        const expectedPitch = expected[index] ? q3EnteredPitch2015(expected[index]) : "";
+        if (!expectedPitch || enteredPitch === expectedPitch) return;
+        q3DrawNote(svg, { ...bar.notes[noteIndex], pitch: expectedPitch, step: Q3_PITCH_STEPS[expectedPitch] }, positions[noteIndex] + (enteredPitch ? 6 : 0), top, { className: "q3-answer-correction", opacity: .9 });
+      });
+    }
+  }
+
+  function q3Draw2015RhythmGuide(svg, bar, top) {
+    const positions = q3BarPositions(bar);
+    const indexes = bar.missingIndices || [];
+    const guideTop = top - 89;
+    const guideNotes = [
+      note("A4", "dottedQuaver"), note("A4", "semiquaver"), note("G4", "quaver"), note("G4", "quaver"),
+    ];
+    [[0, 1], [2, 3]].forEach(([start, end]) => {
+      const notes = guideNotes.slice(start, end + 1);
+      const xs = indexes.slice(start, end + 1).map(index => positions[index]);
+      const beam = q3GetBeam(notes, xs, guideTop);
+      notes.forEach((item, localIndex) => {
+        const stem = q3GetStem(xs[localIndex], q3YForStep(item.step, guideTop), item.step, beam.down);
+        q3DrawNote(svg, item, xs[localIndex], guideTop, { beamed: true, down: beam.down, forcedEndY: q3BeamY(stem.stemX, beam) });
+      });
+      q3BeamPolygon(svg, beam);
+      q3SecondarySegments(notes).forEach(segment => {
+        const offset = beam.down ? -Q3_STAFF.gap * .85 : Q3_STAFF.gap * .85;
+        const x1 = q3GetStem(xs[segment.start], q3YForStep(notes[segment.start].step, guideTop), notes[segment.start].step, beam.down).stemX;
+        const x2 = segment.hook ? x1 - Q3_STAFF.gap : q3GetStem(xs[segment.end], q3YForStep(notes[segment.end].step, guideTop), notes[segment.end].step, beam.down).stemX;
+        q3BeamPolygon(svg, { start: { x: x1, y: q3BeamY(x1, beam) + offset }, end: { x: x2, y: q3BeamY(x2, beam) + offset } });
+      });
+    });
+  }
+
+  function q3Add2015NoteEntryTargets(svg, answers, onAnswerChange) {
+    if (!onAnswerChange) return;
+    const bar = N5_2015_Q3_BARS[6];
+    const top = q3SystemTop(6);
+    const positions = q3BarPositions(bar);
+    const indexes = bar.missingIndices;
+    const targetLeft = positions[indexes[0]] - 22;
+    const targetRight = positions[indexes.at(-1)] + 22;
+    const targetTop = q3YForStep(10, top) - Q3_STAFF.gap * 2.5;
+    const targetBottom = q3YForStep(-2, top) + Q3_STAFF.gap * 2.5;
+    let dragging = null;
+    let previewGroup = null;
+
+    function noteFromEvent(event, lockedIndex = null) {
+      const local = q3LocalPoint(svg, event);
+      const slot = lockedIndex ?? indexes.reduce((closest, index) => Math.abs(local.x - positions[index]) < Math.abs(local.x - positions[closest]) ? index : closest, indexes[0]);
+      if (local.x < targetLeft || local.x > targetRight || local.y < targetTop || local.y > targetBottom) return null;
+      const step = Math.max(-2, Math.min(10, Math.round((top + Q3_STAFF.gap * 4 - local.y) / (Q3_STAFF.gap / 2))));
+      const pitch = step === 4 ? "Bb4" : Q3_PITCH_BY_STEP[step];
+      return pitch ? { slot, pitch } : null;
+    }
+    function showPreview(item, isDragging = false) {
+      previewGroup?.remove();
+      previewGroup = null;
+      if (!item) return;
+      previewGroup = svgElement("g", { class: `q3-note-preview ${isDragging ? "is-dragging" : ""}` });
+      const rhythm = bar.notes[item.slot].rhythm;
+      q3DrawNote(previewGroup, note(item.pitch, rhythm), positions[item.slot], top, { opacity: isDragging ? .72 : .48, scale: isDragging ? 1.6 : 1 });
+      svg.append(previewGroup);
+      svg.append(target);
+    }
+    function currentNotes() {
+      const questionCard = svg.closest(".question-card");
+      const value = questionCard?.dataset.q3CurrentNoteValue ?? String(answers.q3f || "");
+      const current = value.split(",").slice(0, indexes.length);
+      while (current.length < indexes.length) current.push("_");
+      return { questionCard, current };
+    }
+    function commitNote(item) {
+      if (!item) return;
+      const { questionCard, current } = currentNotes();
+      current[indexes.indexOf(item.slot)] = item.pitch;
+      const nextValue = current.join(",");
+      if (questionCard) questionCard.dataset.q3CurrentNoteValue = nextValue;
+      onAnswerChange("q3f", nextValue);
+    }
+    function removeNote(event) {
+      const { questionCard, current } = currentNotes();
+      const item = Number.isFinite(pointerEventCoordinates(event)?.clientX) ? noteFromEvent(pointerEventCoordinates(event)) : null;
+      let index = item ? indexes.indexOf(item.slot) : -1;
+      if (index < 0) {
+        for (let candidate = current.length - 1; candidate >= 0; candidate -= 1) {
+          if (current[candidate] && current[candidate] !== "_") { index = candidate; break; }
+        }
+      }
+      if (index < 0 || !current[index] || current[index] === "_") return;
+      current[index] = "_";
+      const nextValue = current.join(",");
+      if (questionCard) questionCard.dataset.q3CurrentNoteValue = nextValue;
+      onAnswerChange("q3f", nextValue);
+    }
+    const target = svgElement("rect", { x: targetLeft, y: targetTop, width: targetRight - targetLeft, height: targetBottom - targetTop, class: "q3-note-hit-area" });
+    target.addEventListener("pointermove", event => showPreview(noteFromEvent(event, dragging?.slot ?? null), Boolean(dragging)));
+    target.addEventListener("pointerleave", () => { if (!dragging) showPreview(null); });
+    target.addEventListener("pointerdown", event => {
+      const next = noteFromEvent(event);
+      if (!next) return;
+      event.preventDefault();
+      target.setPointerCapture?.(event.pointerId);
+      dragging = next;
+      showPreview(next, true);
+    });
+    target.addEventListener("pointerup", event => {
+      if (!dragging) return;
+      event.preventDefault();
+      target.releasePointerCapture?.(event.pointerId);
+      const finalNote = noteFromEvent(event, dragging.slot) || dragging;
+      dragging = null;
+      showPreview(null);
+      commitNote(finalNote);
+    });
+    target.addEventListener("pointercancel", () => { dragging = null; showPreview(null); });
+    target.setAttribute("tabindex", "0");
+    target.setAttribute("role", "button");
+    target.setAttribute("aria-label", "Missing notes in bar 7. Double-click, double-tap or right-click a note to remove it.");
+    target.setAttribute("aria-keyshortcuts", "Shift+Delete");
+    bindRemovalGesture(target, removeNote);
+    svg.append(target);
+  }
+
+  function q3ScoreSvg2015(answers, onAnswerChange, review = {}, question = null) {
+    const isReview = Object.values(review).some(Boolean);
+    const svg = svgElement("svg", { class: "q3-shared-score", viewBox: "0 0 920 540", role: "img", "aria-label": `${isReview ? "Marked" : "Interactive"} guide score for Question 3` });
+    const answerClass = id => review[id] === "correct" ? "q3-answer-correct" : ["incorrect", "partial"].includes(review[id]) ? "q3-answer-incorrect" : "";
+    const correctAnswer = (id, fallback) => question?.subquestions?.find(item => item.id === id)?.answer || fallback;
+    const q3aCorrection = review.q3a && review.q3a !== "correct";
+    [0, 1, 2, 3].forEach(systemIndex => {
+      const firstBar = systemIndex * Q3_BARS_PER_SYSTEM;
+      const top = q3SystemTop(firstBar);
+      for (let line = 0; line < 5; line += 1) svg.append(svgElement("line", { x1: Q3_STAFF.left, x2: Q3_STAFF.right, y1: top + line * Q3_STAFF.gap, y2: top + line * Q3_STAFF.gap, class: "q3-staff-line" }));
+      q3CalibratedSymbol(svg, "gClef", Q3_STAFF.left + 32, q3YForStep(2, top));
+      q3CalibratedSymbol(svg, "flatKeySignature", Q3_STAFF.left + 54, q3YForStep(4, top));
+      if (systemIndex === 0) {
+        q3DrawTimeSignature(svg, answers.q3a, top, answerClass("q3a"), q3aCorrection && answers.q3a ? -18 : 0);
+        if (q3aCorrection) q3DrawTimeSignature(svg, correctAnswer("q3a", "4/4"), top, "q3-answer-correction", answers.q3a ? -2 : 0);
+      }
+      for (let local = 0; local < Q3_BARS_PER_SYSTEM; local += 1) {
+        const barIndex = firstBar + local;
+        const item = N5_2015_Q3_BARS[barIndex];
+        const start = q3BarStart(barIndex);
+        const end = start + q3BarWidth(barIndex);
+        q3Text(svg, String(barIndex + 1), { x: local === 0 ? start - 15 : start + 5, y: top - 17, "text-anchor": "middle" }, "q3-bar-number");
+        q3Draw2015BarNotes(svg, item, top, barIndex === 6 ? answers.q3f : "", barIndex === 6 ? answerClass("q3f") : "", barIndex === 6 ? review.q3f : "", correctAnswer("q3f", "A4,A4,Bb4,C5"));
+        if (barIndex === 4) {
+          const positions = q3BarPositions(item);
+          q3Text(svg, "X", { x: positions.at(-1), y: q3YForStep(item.notes.at(-1).step, top) - 34, "text-anchor": "middle" }, "q3-note-label");
+        }
+        q3Text(svg, N5_2015_Q3_LYRICS[barIndex], { x: start + q3BarWidth(barIndex) / 2, y: top + Q3_STAFF.gap * 7.15, "text-anchor": "middle" }, "q3-score-lyrics");
+        svg.append(svgElement("line", { x1: end, x2: end, y1: top, y2: top + Q3_STAFF.gap * 4, class: "q3-barline" }));
+      }
+    });
+    const missingBar = N5_2015_Q3_BARS[6];
+    const missingPositions = q3BarPositions(missingBar);
+    const missingIndexes = missingBar.missingIndices;
+    const missingTop = q3SystemTop(6);
+    svg.append(svgElement("rect", {
+      x: missingPositions[missingIndexes[0]] - 24,
+      y: missingTop - 82,
+      width: missingPositions[missingIndexes.at(-1)] - missingPositions[missingIndexes[0]] + 48,
+      height: 166,
+      class: "q3-marking-box",
+    }));
+    q3Draw2015RhythmGuide(svg, missingBar, missingTop);
+    if (answers.q3b) {
+      const tempoX = q3BarStart(0) + 24;
+      const tempoY = q3SystemTop(0) - 25;
+      q3Text(svg, answers.q3b, { x: tempoX, y: tempoY, "text-anchor": "start" }, `q3-tempo-answer ${answerClass("q3b")}`.trim());
+      if (onAnswerChange) q3AddAppliedAnswerTarget(svg, { x: tempoX - 8, y: tempoY - 24, width: 120, height: 34 }, "Tempo marking", () => onAnswerChange("q3b", ""));
+    }
+    if (review.q3b && review.q3b !== "correct") {
+      q3Text(svg, correctAnswer("q3b", "Andante"), { x: q3BarStart(0) + 24 + (answers.q3b ? 118 : 0), y: q3SystemTop(0) - 25, "text-anchor": "start" }, "q3-tempo-answer q3-answer-correction");
+    }
+    if (answers.q3a && onAnswerChange) q3AddAppliedAnswerTarget(svg, { x: 185, y: 49, width: 45, height: 68 }, "Time signature", () => onAnswerChange("q3a", ""));
+    q3Add2015NoteEntryTargets(svg, answers, onAnswerChange);
+    return svg;
+  }
+
   function q3ScoreSvg(answers, onAnswerChange, review = {}, question = null) {
     const isReview = Object.values(review).some(Boolean);
     const svg = svgElement("svg", { class: "q3-shared-score", viewBox: "0 0 920 540", role: "img", "aria-label": `${isReview ? "Marked" : "Interactive"} music guide for Question 3` });
@@ -712,7 +980,10 @@
 
   function renderSharedScore(container, question, answers, onAnswerChange, review = {}) {
     container.innerHTML = `<div class="shared-notation-score-wrap"></div>`;
-    container.querySelector(".shared-notation-score-wrap").append(q3ScoreSvg(answers || {}, onAnswerChange, review, question));
+    const score = question?.score?.sharedNotation === "n5-2015-q3"
+      ? q3ScoreSvg2015(answers || {}, onAnswerChange, review, question)
+      : q3ScoreSvg(answers || {}, onAnswerChange, review, question);
+    container.querySelector(".shared-notation-score-wrap").append(score);
   }
 
   function renderSharedControls(container, subquestion, value, onChange) {

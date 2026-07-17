@@ -37,7 +37,8 @@
     const phrasedMatch = subquestion.allowAnswerInPhrase && expected.some(answer => phraseMatches(response, answer));
     const keywordMatch = (subquestion.acceptedKeywords || []).some(keyword => phraseMatches(response, keyword));
     const keywordGroupMatch = (subquestion.acceptedKeywordGroups || []).some(group => group.every(keyword => phraseMatches(response, keyword)));
-    const correct = exactMatch || phrasedMatch || keywordMatch || keywordGroupMatch;
+    const forbiddenMatch = (subquestion.forbiddenKeywordGroups || []).some(group => group.every(keyword => phraseMatches(response, keyword)));
+    const correct = !forbiddenMatch && (exactMatch || phrasedMatch || keywordMatch || keywordGroupMatch);
     return { marks: correct ? subquestion.marks : 0, status: correct ? "correct" : "incorrect" };
   }
 
@@ -109,6 +110,7 @@
     const matchedConcepts = {};
     const matchedEvidence = {};
     const validConceptCounts = {};
+    const creditedConceptIds = new Set();
     let marks = 0;
     for (const heading of subquestion.headings || []) {
       const concepts = heading.concepts || (heading.markingPoints || []).map(point => ({ label: point, answers: [point] }));
@@ -119,14 +121,22 @@
         const evidence = exactEvidence || (!blocked ? answers.map(answer => phraseEvidence(source, answer, concept.allowFuzzy !== false)).find(Boolean) : null);
         return evidence ? { concept, evidence } : null;
       }).filter(Boolean);
-      const banked = matches.slice(0, subquestion.maxMarksPerHeading || 2);
+      const eligible = matches.filter(match => !match.concept.creditId || !creditedConceptIds.has(match.concept.creditId));
+      const banked = eligible.slice(0, subquestion.maxMarksPerHeading || 2);
+      banked.forEach(match => {
+        if (match.concept.creditId) creditedConceptIds.add(match.concept.creditId);
+      });
       matchedConcepts[heading.id] = banked.map(match => match.concept.label);
       matchedEvidence[heading.id] = banked.map(match => ({ label: match.concept.label, ...match.evidence }));
       validConceptCounts[heading.id] = matches.length;
       marks += banked.length;
     }
     marks = Math.min(subquestion.marks, marks);
-    return { marks, status: marks === subquestion.marks ? "correct" : "incorrect", matchedConcepts, matchedEvidence, validConceptCounts };
+    const headingsCovered = Object.values(matchedConcepts).filter(items => items.length > 0).length;
+    if (subquestion.minHeadingsForFullMarks && marks === subquestion.marks && headingsCovered < subquestion.minHeadingsForFullMarks) {
+      marks = Math.max(0, subquestion.marks - 1);
+    }
+    return { marks, status: marks === subquestion.marks ? "correct" : marks > 0 ? "partial" : "incorrect", matchedConcepts, matchedEvidence, validConceptCounts, headingsCovered };
   }
 
   function suggestedReview(subquestion, value) {

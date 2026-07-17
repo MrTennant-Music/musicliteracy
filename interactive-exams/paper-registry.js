@@ -10,6 +10,14 @@
       year: 2014,
       dataFile: "papers/national5-2014.js?v=20260716-pizzicato-spellings",
     },
+    "national5-2015": {
+      id: "national5-2015",
+      title: "National 5 Music 2015",
+      level: "National 5",
+      levelCode: "N5",
+      year: 2015,
+      dataFile: "papers/national5-2015.js?v=20260717-source-audit",
+    },
   };
 
   root.InteractiveExamPaperRegistry = papers;
