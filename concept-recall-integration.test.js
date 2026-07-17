@@ -26,7 +26,7 @@ const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
   "TimerPauseOverlay",
   "ResultsPanel",
   "Play Again",
-  "Time taken",
+  "Time",
   "Medal",
   "aria-live=\"polite\"",
   "aria-live=\"assertive\"",
@@ -64,7 +64,7 @@ assert(page.includes('chime: "chime.mp3"') && page.includes("function playComple
 assert(!page.includes("StartCountdownOverlay") && !page.includes('setGameState("countdown")'), "Start should begin immediately without a countdown");
 assert(page.includes("function endGame()") && page.includes("finishGame(answeredRef.current, Date.now())"), "Ending early should finish the attempt and open its feedback");
 assert(page.includes('className="concept-results-panel mb-4 rounded-2xl') && page.includes('role="region"') && !page.includes('function ResultsDialog'), "Results feedback should appear in an inline container rather than a modal overlay");
-assert(page.includes("Time taken") && page.includes("formatElapsed(result.elapsedMs)"), "Results should show the time taken for the attempt");
+assert(page.includes("<span>Time</span>") && page.includes("formatElapsed(result.elapsedMs)"), "Results should show the time taken for the attempt");
 assert(page.includes("concept-results-medal") && page.includes("medal.label") && page.includes("medal.icon"), "Results should show the awarded medal in the fourth summary position");
 assert(!page.includes("Best category") && !page.includes("Worst category"), "Results should no longer show best or worst categories");
 assert(!page.includes("Category breakdown") && !page.includes("Review Answers"), "Results should omit the full category breakdown and Review Answers button");
@@ -176,9 +176,10 @@ assert(page.includes('const PLAYABLE_LEVELS = ["N5", "H", "AH"]'), "Concept Reca
 assert(page.includes('return PLAYABLE_LEVELS.includes(requested) ? requested : "N5";'), "National 5 should be the default Concept Recall level");
 const headerControls = page.slice(page.indexOf("function HeaderControls"), page.indexOf("function AnswerInput"));
 assert(headerControls.indexOf(">Timer</span>") < headerControls.indexOf(">Score</span>"), "Timer should appear before score in the header");
-assert(page.includes('bestTime != null && <span className="concept-stat-note tabular-nums">Best: {formatElapsed(bestTime)}</span>'), "The Timer card should show its saved best completion time with the Best: label only when one exists");
+assert(page.includes('bestCountdown != null && <span className="concept-stat-note tabular-nums">Best: {formatElapsed(bestCountdown)}</span>'), "The Timer card should show its saved best countdown value with the Best: label only when one exists");
 assert(page.includes("const bestScore = levelRecord?.bestScore > 0 ? levelRecord.bestScore : null;") && page.includes('bestScore != null && <span className="concept-stat-note relative z-10">Best: {bestScore}</span>'), "The Score card should show Best: followed by the saved score without a total");
-assert(page.includes('bestTime != null && <span') && page.includes('bestScore != null && <span'), "Timer and Score content should remain vertically centred until a Best record is present underneath");
+assert(page.includes("durationForQuestions(activeLevel, standardQuestions) - levelRecord.fastestCompletionMs"), "The Timer card Best value should represent the remaining countdown time at the user's best completion");
+assert(page.includes('bestCountdown != null && <span') && page.includes('bestScore != null && <span'), "Timer and Score content should remain vertically centred until a Best record is present underneath");
 assert(core.includes("function medalTimeLimits(level)") && page.includes("CORE.medalTimeLimits(activeLevel)"), "The medal drop-down and awards should share the same remaining-time thresholds");
 assert(page.includes("aria-expanded={medalEligible ? medalsOpen : undefined}") && page.includes("fixed-popover-button") && page.includes("thresholds.map"), "The Timer card should open a Rhythm Identification-style medal drop-down");
 assert(page.includes("medalEligible={standardGame}") && page.includes("Medals unavailable for custom games"), "The medal drop-down should be disabled for custom games");

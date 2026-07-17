@@ -149,6 +149,7 @@ assert.match(practiceSource, /STAFF\.gap \* 16 \+ worksheetAhChordGapExtension -
 assert.match(practiceSource, /const rowLabelGap = 57/, "Advanced Higher Chord and Position labels should sit a further twenty-five pixels left");
 assert.match(practiceSource, /EXTRA_SYSTEM_SPACING - worksheetSystemGapReduction \+ worksheetSystemGapIncrease/, "Practice worksheet stave positions should apply the compact gap and the Advanced Higher increase");
 assert.match(fs.readFileSync("worksheet-generic.jsx", "utf8"), /document\.fonts\?\.load\?\.\("32px Bravura"\)/, "Practice worksheet downloads should wait for the Bravura font fallback before capture");
+assert.match(fs.readFileSync("worksheet-generic.jsx", "utf8"), /page\.querySelectorAll\("img"\)/, "Downloaded worksheets should wait for all images, including worksheet app icons, before PDF capture");
 assert.doesNotMatch(practiceSource, /excludeRhythmIdentification: true/, "Written rhythm identification should remain available");
 assert.match(practiceSource, /question\.bars\.length/, "Practice worksheets should retain the activity's generated bar count");
 assert.match(practiceSource, /\["N3", "N4", "N5"\]\.includes\(level\) \? 8 : 16/, "Practice worksheets should require eight bars at National 3-5 and sixteen at Higher/Advanced Higher");
@@ -528,11 +529,15 @@ assert.match(intervalWorksheet, /setPreviewVisible\(false\)[\s\S]*window\.setTim
 assert.match(intervalWorksheet, /transition-opacity duration-300 \$\{previewVisible \? "opacity-100" : "opacity-0"\}/, "Intervals preview must use the shared fade timing");
 assert.match(conceptRecallSource, /activityId: "concept-recall"[\s\S]*categories: selectedCategories[\s\S]*concepts: configuredQuestions\.map/, "Concept Recall worksheets must carry over the current level, categories and concepts");
 assert.match(generic, /function ConceptRecallWorksheetApp\(\)/, "Concept Recall should use its dedicated category-based worksheet renderer");
+assert.match(generic, /const appIcon = <svg viewBox="0 0 128 128"[\s\S]*\{appIcon\}/, "Concept Recall worksheet headers should render the app icon inline so downloaded PDFs include it");
+assert.match(generic, /function conceptRecallTitleCaseCategory\(category\)[\s\S]*conceptRecallTitleCaseCategory\(group\.category\)/, "Concept Recall worksheet category headings should display in Title Case");
 assert.match(generic, /savedOptions\?\.tips \?\? false/, "Concept Recall worksheet tips should be optional and off by default");
+assert.match(generic, /savedOptions\?\.gridlines \?\? false/, "Concept Recall worksheet gridlines should be optional and off by default");
 assert.match(generic, /check\("Include Tips", includeTips, setIncludeTips\)/, "Concept Recall worksheets should offer a correctly capitalised Include Tips option");
 assert.match(generic, /answer-sheet-start-new[\s\S]*<ConceptRecallPage[\s\S]*answers/, "Concept Recall should generate a separate teacher answer sheet when requested");
 assert.match(generic, /grid min-h-0 flex-1 grid-cols-2/, "Concept Recall worksheet categories should use a clear two-column page layout");
 assert.match(generic, /savedOptions\?\.name \?\? true[\s\S]*savedOptions\?\.classField \?\? false[\s\S]*savedOptions\?\.date \?\? false/, "Concept Recall worksheets should default to Name only while still offering Class and Date fields");
 assert.match(generic, /check\("Gridlines", gridlines, setGridlines\)/, "Concept Recall worksheets should offer a Gridlines option");
-assert.match(generic, /data\.gridlines \? "border border-black" : ""/, "Concept Recall gridlines should control the printed category boxes");
+assert.match(generic, /className="overflow-hidden rounded-lg border border-black bg-white"/, "Concept Recall worksheet category boxes should remain visible when Gridlines are off");
+assert.match(generic, /data\.gridlines \? "border-b border-black last:border-b-0" : ""/, "Concept Recall gridlines should only control the black row separators between answer lines");
 console.log(`Worksheet rollout checks passed for ${eligible.length} activities.`);

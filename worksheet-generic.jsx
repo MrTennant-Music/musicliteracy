@@ -1214,7 +1214,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
   async function buildCapturedWorksheetPdf(pages) {
     await document.fonts?.load?.("32px Bravura");
     await document.fonts?.ready;
-    const worksheetImages=pages.flatMap(page=>[...page.querySelectorAll(".worksheet-qr img")]);
+    const worksheetImages=pages.flatMap(page=>[...page.querySelectorAll("img")]);
     await Promise.all(worksheetImages.map(image=>Promise.race([image.complete?(image.decode?image.decode().catch(()=>{}):Promise.resolve()):new Promise(resolve=>{image.addEventListener("load",resolve,{once:true});image.addEventListener("error",resolve,{once:true});}),new Promise(resolve=>setTimeout(resolve,8000))])));
     pages.forEach((page) => page.classList.add("pdf-capture"));
     try {
@@ -1289,6 +1289,11 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
       .sort((a, b) => a.category.localeCompare(b.category, "en-GB"));
   }
 
+  function conceptRecallTitleCaseCategory(category) {
+    if (category === "Serial music") return "Serial";
+    return category.split(" ").map((word) => word.charAt(0).toLocaleUpperCase("en-GB") + word.slice(1)).join(" ");
+  }
+
   function conceptRecallPageColumns(concepts, includeTips) {
     const capacity = 21;
     const pages = [];
@@ -1332,10 +1337,11 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
   }
 
   function ConceptRecallPage({ columns, data, answers = false, pageNumber, totalPages }) {
+    const appIcon = <svg viewBox="0 0 128 128" className="h-10 w-10 shrink-0" aria-hidden="true"><path fill="#ffffff" stroke="#e5e7eb" strokeWidth="1.5" d="M 34 6 L 94 6 C 109.463974 6 122 18.536026 122 34 L 122 94 C 122 109.463974 109.463974 122 94 122 L 34 122 C 18.536028 122 6 109.463974 6 94 L 6 34 C 6 18.536026 18.536028 6 34 6 Z"/><path fill="#000000" stroke="#111827" strokeWidth="3" strokeLinejoin="round" d="M 93 57 L 82 77 L 94 77 L 89 95 L 109 69 L 97 69 L 105 57 Z"/><path fill="none" stroke="#111827" strokeWidth="6" strokeLinecap="round" d="M 37 34 L 105 34 M 37 64.5 L 73.95652 64.5 M 37 95 L 66.565216 95"/><path fill="#000000" d="M 24.5 34 C 24.5 35.932999 22.932997 37.5 21 37.5 C 19.067003 37.5 17.5 35.932999 17.5 34 C 17.5 32.067001 19.067003 30.5 21 30.5 C 22.932997 30.5 24.5 32.067001 24.5 34 Z"/><path fill="#000000" d="M 24.5 64 C 24.5 65.932999 22.932997 67.5 21 67.5 C 19.067003 67.5 17.5 65.932999 17.5 64 C 17.5 62.067001 19.067003 60.5 21 60.5 C 22.932997 60.5 24.5 62.067001 24.5 64 Z"/><path fill="#000000" d="M 24.5 95 C 24.5 96.932999 22.932997 98.5 21 98.5 C 19.067003 98.5 17.5 96.932999 17.5 95 C 17.5 93.067001 19.067003 91.5 21 91.5 C 22.932997 91.5 24.5 93.067001 24.5 95 Z"/></svg>;
     return <article className="worksheet-page generic-page flex flex-col">
       {data.header ? <div className="worksheet-header-card mb-3 rounded-xl border border-black px-4 py-3">
         <div className="flex items-center gap-3">
-          <img src={DEF.icon} className="h-10 w-10 object-contain" alt="" />
+          {appIcon}
           <div className="min-w-0">
             <h1 className="worksheet-header-title text-lg font-bold leading-tight">{answers ? `${data.title} - Answers` : data.title}</h1>
             {!answers ? <p className="worksheet-header-instructions text-xs text-stone-700">{data.instructions}</p> : null}
@@ -1349,10 +1355,10 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
       </div> : null}
       <div className="grid min-h-0 flex-1 grid-cols-2 items-start gap-3">
         {columns.map((groups, columnIndex) => <div key={columnIndex} className="space-y-3">
-          {groups.map((group) => <section key={group.category} className={`overflow-hidden rounded-lg bg-white ${data.gridlines ? "border border-black" : ""}`}>
-            <h2 className={`${data.gridlines ? "border-b border-black" : ""} bg-stone-100 px-2.5 py-1.5 text-xs font-black`}>{group.category}{group.continued ? " (continued)" : ""} <span className="font-semibold text-stone-500">· {group.concepts.length}</span></h2>
+          {groups.map((group) => <section key={group.category} className="overflow-hidden rounded-lg border border-black bg-white">
+            <h2 className="border-b border-black bg-stone-100 px-2.5 py-1.5 text-xs font-black">{conceptRecallTitleCaseCategory(group.category)}{group.continued ? " (continued)" : ""} <span className="font-semibold text-stone-500">· {group.concepts.length}</span></h2>
             <div>
-              {group.concepts.map((concept, conceptIndex) => <div key={concept.id || `${group.category}-${concept.answer}`} className={`grid grid-cols-[18px_minmax(0,1fr)] gap-1.5 px-2.5 ${data.gridlines ? "border-b border-stone-200 last:border-b-0" : ""} ${data.includeTips ? "py-1.5" : "py-1"}`}>
+              {group.concepts.map((concept, conceptIndex) => <div key={concept.id || `${group.category}-${concept.answer}`} className={`grid grid-cols-[18px_minmax(0,1fr)] gap-1.5 px-2.5 ${data.gridlines ? "border-b border-black last:border-b-0" : ""} ${data.includeTips ? "py-1.5" : "py-1"}`}>
                 <span className="text-[10px] font-bold text-stone-500">{conceptIndex + 1}.</span>
                 <div className="min-w-0">
                   {answers ? <div className="text-xs font-bold leading-tight">{concept.answer}</div> : <div className="h-4 border-b border-black" />}
@@ -1378,7 +1384,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     const [name, setName] = useGenericState(savedOptions?.name ?? true);
     const [classField, setClassField] = useGenericState(savedOptions?.classField ?? false);
     const [date, setDate] = useGenericState(savedOptions?.date ?? false);
-    const [gridlines, setGridlines] = useGenericState(savedOptions?.gridlines ?? true);
+    const [gridlines, setGridlines] = useGenericState(savedOptions?.gridlines ?? false);
     const [includeTips, setIncludeTips] = useGenericState(savedOptions?.tips ?? false);
     const [answersOn, setAnswersOn] = useGenericState(savedOptions?.answers ?? false);
     const [preparingMode, setPreparingMode] = useGenericState(null);

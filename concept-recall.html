@@ -248,7 +248,7 @@ function questionsForSelectedCategories(level, selectedCategories) {
   return [...standardQuestions, ...supplementaryQuestions].filter((question) => selected.has(question.category));
 }
 
-function HeaderControls({ score, total, remainingMs, warning, activeLevel, medalEligible, bestTime, bestScore }) {
+function HeaderControls({ score, total, remainingMs, warning, activeLevel, medalEligible, bestCountdown, bestScore }) {
   const [medalsOpen, setMedalsOpen] = useState(false);
   const timerRef = useRef(null);
   const limits = CORE.medalTimeLimits(activeLevel);
@@ -282,7 +282,7 @@ function HeaderControls({ score, total, remainingMs, warning, activeLevel, medal
       tabIndex={medalEligible ? 0 : -1}
       aria-disabled={!medalEligible}
       aria-expanded={medalEligible ? medalsOpen : undefined}
-      aria-label={`${CORE.formatClock(remainingMs)} remaining${bestTime == null ? "" : `. Best time ${formatElapsed(bestTime)}`}${medalEligible ? ". Show medal times" : ". Medals unavailable for custom games"}`}
+      aria-label={`${CORE.formatClock(remainingMs)} remaining${bestCountdown == null ? "" : `. Best countdown ${formatElapsed(bestCountdown)}`}${medalEligible ? ". Show medal times" : ". Medals unavailable for custom games"}`}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={toggleMedals}
       onKeyDown={(event) => {
@@ -295,7 +295,7 @@ function HeaderControls({ score, total, remainingMs, warning, activeLevel, medal
       <div className="relative z-10 flex h-full flex-col items-center justify-center text-center">
         <span className={`concept-stat-label ${warning ? "text-red-700" : ""}`}>Timer</span>
         <span className={`concept-stat-value tabular-nums ${warning ? "text-red-700" : ""}`}>{CORE.formatClock(remainingMs)}</span>
-        {bestTime != null && <span className="concept-stat-note tabular-nums">Best: {formatElapsed(bestTime)}</span>}
+        {bestCountdown != null && <span className="concept-stat-note tabular-nums">Best: {formatElapsed(bestCountdown)}</span>}
       </div>
       {medalEligible && medalsOpen && <div
         className="fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 flex w-[190px] -translate-x-1/2 items-center justify-center rounded-xl border border-stone-200 bg-white px-2 py-3 text-[12px] leading-none text-stone-700 shadow-lg"
@@ -566,7 +566,7 @@ function ResultsPanel({ result, open, panelRef }) {
           <strong>{result.percentage}%</strong>
         </div>
         <div className="concept-results-stat" role="listitem">
-          <span>Time taken</span>
+          <span>Time</span>
           <strong className="tabular-nums">{formatElapsed(result.elapsedMs)}</strong>
         </div>
         <div className="concept-results-stat concept-results-medal" role="listitem">
@@ -655,7 +655,7 @@ function App() {
   const configuredQuestions = useMemo(() => questionsForSelectedCategories(activeLevel, selectedCategories), [activeLevel, selectedCategories]);
   const standardGame = selectedCategories.length === standardCategories.length && standardCategories.every((category) => selectedCategories.includes(category));
   const levelRecord = standardGame ? persistence.records[activeLevel] : null;
-  const bestTime = levelRecord?.fastestCompletionMs ?? null;
+  const bestCountdown = levelRecord?.fastestCompletionMs == null ? null : Math.max(0, durationForQuestions(activeLevel, standardQuestions) - levelRecord.fastestCompletionMs);
   const bestScore = levelRecord?.bestScore > 0 ? levelRecord.bestScore : null;
   const remainingMs = gameState === "ready" ? durationForQuestions(activeLevel, configuredQuestions) : CORE.remainingMilliseconds(timer, now);
   const timerWarning = gameState === "playing" && remainingMs > 0 && remainingMs <= 30000;
@@ -904,7 +904,7 @@ function App() {
         },
       })}
     >
-      <HeaderControls score={answeredIds.size} total={displayedTotal} remainingMs={remainingMs} warning={timerWarning} activeLevel={activeLevel} medalEligible={standardGame} bestTime={bestTime} bestScore={bestScore} />
+      <HeaderControls score={answeredIds.size} total={displayedTotal} remainingMs={remainingMs} warning={timerWarning} activeLevel={activeLevel} medalEligible={standardGame} bestCountdown={bestCountdown} bestScore={bestScore} />
     </window.MLH.AppHeader>
     <div className={window.MLH.shell.pageContentClass}>
       <main className={`${window.MLH.shell.mainShellClass} !min-h-[620px] pb-5`}>
