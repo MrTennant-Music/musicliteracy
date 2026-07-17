@@ -120,29 +120,20 @@ assert.equal(core.elapsedMilliseconds(runningTimer, 148500), 60500, "Elapsed tim
 assert.equal(core.remainingMilliseconds(runningTimer, 148500), 539500, "A delayed interval or background tab must not make the timer drift");
 const pausedTimer = { durationMs: 600000, accumulatedMs: 60500, startedAt: null, running: false };
 assert.equal(core.remainingMilliseconds(pausedTimer, 999999), 539500, "Paused time should remain frozen");
+const unlimitedTimer = { durationMs: 0, accumulatedMs: 12000, startedAt: 100000, running: true };
+assert.equal(core.elapsedMilliseconds(unlimitedTimer, 700000), 612000, "An unlimited timer should count up without being capped by a duration");
 assert.equal(core.formatClock(600000), "10:00");
-assert.equal(core.formatClock(29999), "00:30");
-assert.deepEqual(
-  [
-    core.scaledDurationMilliseconds(51, 51, 300000),
-    core.scaledDurationMilliseconds(57, 57, 360000),
-    core.scaledDurationMilliseconds(74, 74, 480000),
-  ],
-  [300000, 360000, 480000],
-  "Full level timers should retain their configured durations",
-);
-assert.equal(core.scaledDurationMilliseconds(17, 51, 300000), 100000, "A custom National 5 game should receive time proportional to its selected concepts");
+assert.equal(core.formatClock(29999), "00:29");
 
-assert.deepEqual(core.medalTimeLimits("N5"), { bronze: 0, silver: 120000, gold: 180000, diamond: 240000 });
-assert.deepEqual(core.medalTimeLimits("H"), { bronze: 0, silver: 120000, gold: 180000, diamond: 240000 });
-assert.deepEqual(core.medalTimeLimits("AH"), { bronze: 0, silver: 120000, gold: 240000, diamond: 360000 });
-assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: true, elapsedMs: 60000, durationMs: 300000 }), "diamond", "National 5 should award Diamond with exactly four minutes left");
-assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: true, elapsedMs: 60001, durationMs: 300000 }), "gold", "National 5 should award Gold below four minutes left");
-assert.equal(core.medalForCompletion({ level: "H", completed: true, standardGame: true, elapsedMs: 180000, durationMs: 360000 }), "gold", "Higher should award Gold with exactly three minutes left");
-assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 120000, durationMs: 480000 }), "diamond", "Advanced Higher should award Diamond with exactly six minutes left");
-assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 240000, durationMs: 480000 }), "gold", "Advanced Higher should award Gold with exactly four minutes left");
-assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 360000, durationMs: 480000 }), "silver", "Advanced Higher should award Silver with exactly two minutes left");
-assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 479999, durationMs: 480000 }), "bronze", "Any completed standard game before zero should award Bronze");
+assert.deepEqual(core.medalTimeLimits("N5"), { bronze: 360000, silver: 300000, gold: 240000, diamond: 180000 });
+assert.deepEqual(core.medalTimeLimits("H"), { bronze: 360000, silver: 300000, gold: 240000, diamond: 180000 });
+assert.deepEqual(core.medalTimeLimits("AH"), { bronze: 360000, silver: 300000, gold: 240000, diamond: 180000 });
+assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: true, elapsedMs: 180000, durationMs: 0 }), "diamond", "A standard game completed within three minutes should award Diamond");
+assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: true, elapsedMs: 180001, durationMs: 0 }), "gold", "A standard game completed after three minutes but within four should award Gold");
+assert.equal(core.medalForCompletion({ level: "H", completed: true, standardGame: true, elapsedMs: 240000, durationMs: 0 }), "gold", "A standard game completed within four minutes should award Gold");
+assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 300000, durationMs: 0 }), "silver", "A standard game completed within five minutes should award Silver");
+assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 360000, durationMs: 0 }), "bronze", "A standard game completed within six minutes should award Bronze");
+assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 360001, durationMs: 0 }), null, "A standard game completed after six minutes should not award a medal");
 assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: false, elapsedMs: 1000, durationMs: 300000 }), null, "Custom category games must not award medals");
 assert.equal(core.medalForCompletion({ level: "N5", completed: false, standardGame: true, elapsedMs: 300000, durationMs: 300000 }), null, "Incomplete games must not award medals");
 

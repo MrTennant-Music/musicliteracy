@@ -21,8 +21,6 @@ const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
   "onChange={(event) => setInput(event.target.value)}",
   "CORE.recognizeAnswer(value, activeQuestions, answeredRef.current)",
   "Date.now()",
-  "CORE.remainingMilliseconds(timerRef.current, currentTime)",
-  "30 seconds remaining.",
   "TimerPauseOverlay",
   "ResultsPanel",
   "Play Again",
@@ -56,7 +54,8 @@ assert(page.includes('const toolbarButtonLabel = gameState === "complete" ? "Pla
 assert(page.includes('const toolbarButtonAction = gameState === "complete" ? resetGame : gameState === "ready" ? startGame : pauseGame;'), "Play Again should reset the completed attempt to the ready screen");
 assert(page.includes('sm:w-[120px]'), "The shared Start and Pause button should use the wider desktop size");
 assert(!page.includes("concept-progress"), "The duplicate progress bar and score count should be removed");
-assert(page.includes('`${categoryCount} categories • ${levelQuestions.length} concepts • ${durationMinutes} minutes`'), "Level subtitles should show the default category count, concept count and available time");
+assert(page.includes('`${categoryCount} categories • ${levelQuestions.length} concepts`'), "Level subtitles should show the default category count and concept count");
+assert(!page.includes("durationMinutes") && !page.includes(" minutes`"), "Level subtitles should not show time limits");
 assert(!page.includes('label="Sound effects"'), "Sound effects should not appear as a customise option");
 assert(page.includes("window.MLH.playFeedbackSound?.(true, false, null)"), "Correct-answer sounds should remain enabled");
 assert(page.includes("window.MLH.playFeedbackSound?.(false, false, null)"), "Unrecognised-answer sounds should remain enabled");
@@ -66,6 +65,7 @@ assert(page.includes("function endGame()") && page.includes("finishGame(answered
 assert(page.includes('className="concept-results-panel mb-4 rounded-2xl') && page.includes('role="region"') && !page.includes('function ResultsDialog'), "Results feedback should appear in an inline container rather than a modal overlay");
 assert(page.includes("<span>Time</span>") && page.includes("formatElapsed(result.elapsedMs)"), "Results should show the time taken for the attempt");
 assert(page.includes("concept-results-medal") && page.includes("medal.label") && page.includes("medal.icon"), "Results should show the awarded medal in the fourth summary position");
+assert(page.includes(".concept-results-medal strong { display: flex; min-height:"), "The results medal value should reserve the same vertical space as other stat values so headings align");
 assert(!page.includes("Best category") && !page.includes("Worst category"), "Results should no longer show best or worst categories");
 assert(!page.includes("Category breakdown") && !page.includes("Review Answers"), "Results should omit the full category breakdown and Review Answers button");
 assert(page.includes("concept-results-score-pill") && page.includes(">Score</span>"), "Results should use the Interactive Papers-style Score pill");
@@ -90,8 +90,7 @@ assert(data.includes('hint: "Violin"') && data.includes('hint: "Trumpet"') && da
 assert(data.includes('answer: "Polyphonic or contrapuntal"') && data.includes('aliases: ["polyphonic", "polyphony", "contrapuntal"]'), "Equivalent texture terms should share one displayed answer and accept either word");
 assert(data.includes('answer: "Rallentando or ritardando"') && data.includes('answer: "Polytonality or bitonality"'), "Equivalent musical terms should be displayed together using or");
 assert(!page.includes("function TimerChoices"), "Customise should not offer timer choices");
-assert(page.includes("N5: 5 * 60 * 1000") && page.includes("H: 6 * 60 * 1000") && page.includes("AH: 8 * 60 * 1000"), "Full games should provide five minutes at National 5, six at Higher and eight at Advanced Higher");
-assert(page.includes("CORE.scaledDurationMilliseconds(questions.length, levelQuestionCount, LEVEL_DURATION_MS[level])"), "Custom game time should scale from the selected level's full duration");
+assert(!page.includes("LEVEL_DURATION_MS") && page.includes("durationMs: 0"), "Concept Recall should run with no time limit");
 assert(core.includes("function scaledDurationMilliseconds"), "Proportional timer calculation should be separate from rendering");
 assert(page.includes("function groupRowsByCategory(rows)"), "Concept rows should be grouped into category containers");
 assert(page.includes('className="concept-category-title"'), "Each category container should use the category as its heading");
@@ -156,7 +155,7 @@ assert(page.includes("function questionsForSelectedCategories(level, selectedCat
 assert(page.includes("selectedCategories.length === standardCategories.length"), "Supplementary groups should remain off by default and should not alter standard-game eligibility");
 assert(page.includes('N5: ["National 5 Styles"]') && page.includes('H: ["Higher Styles", "Orchestral families"]') && page.includes('AH: ["Advanced Higher Styles", "Concerto grosso", "Orchestral families"]'), "Each matching Styles category and the requested supplementary groups should start switched off");
 assert(page.includes('N5: "National 5 Styles"') && page.includes('H: "Higher Styles"') && page.includes('AH: "Advanced Higher Styles"') && page.includes("category === STYLE_CATEGORY_BY_LEVEL[level]"), "Customise should show only the Styles list matching the selected level");
-assert(page.includes("function standardQuestionsAtLevel(level)") && page.includes("standardQuestionsAtLevel(level).length"), "Default-off groups should remain available in Customise without shortening the standard level time");
+assert(page.includes("function standardQuestionsAtLevel(level)") && page.includes("function standardCategoriesAtLevel(level)"), "Default-off groups should remain available in Customise without changing standard-game eligibility");
 assert(page.includes('if (category === "Serial music") return "Serial";'), "Serial music should be displayed with the shorter Serial title");
 assert(page.includes('"Chords": "./chords-icon.svg"'), "The Chords category should use the existing Hub chords icon");
 assert(data.includes('answer: "Added 6th"') && data.includes('answer: "Diminished 7th"') && data.includes('answer: "Dominant 7th"'), "Higher should include the three requested chord types");
@@ -175,16 +174,17 @@ assert(page.includes("border-bottom: 1px solid #d6d3d1; color: #000;"), "All tab
 assert(page.includes('const PLAYABLE_LEVELS = ["N5", "H", "AH"]'), "Concept Recall should only offer National 5, Higher and Advanced Higher");
 assert(page.includes('return PLAYABLE_LEVELS.includes(requested) ? requested : "N5";'), "National 5 should be the default Concept Recall level");
 const headerControls = page.slice(page.indexOf("function HeaderControls"), page.indexOf("function AnswerInput"));
-assert(headerControls.indexOf(">Timer</span>") < headerControls.indexOf(">Score</span>"), "Timer should appear before score in the header");
-assert(page.includes('bestCountdown != null && <span className="concept-stat-note tabular-nums">Best: {formatElapsed(bestCountdown)}</span>'), "The Timer card should show its saved best countdown value with the Best: label only when one exists");
+assert(headerControls.indexOf(">Time</span>") < headerControls.indexOf(">Score</span>"), "Time should appear before score in the header");
+assert(page.includes('bestTime != null && <span className="concept-stat-note tabular-nums">Best: {formatElapsed(bestTime)}</span>'), "The Timer card should show its saved best time with the Best: label only when one exists");
 assert(page.includes("const bestScore = levelRecord?.bestScore > 0 ? levelRecord.bestScore : null;") && page.includes('bestScore != null && <span className="concept-stat-note relative z-10">Best: {bestScore}</span>'), "The Score card should show Best: followed by the saved score without a total");
-assert(page.includes("durationForQuestions(activeLevel, standardQuestions) - levelRecord.fastestCompletionMs"), "The Timer card Best value should represent the remaining countdown time at the user's best completion");
-assert(page.includes('bestCountdown != null && <span') && page.includes('bestScore != null && <span'), "Timer and Score content should remain vertically centred until a Best record is present underneath");
-assert(core.includes("function medalTimeLimits(level)") && page.includes("CORE.medalTimeLimits(activeLevel)"), "The medal drop-down and awards should share the same remaining-time thresholds");
+assert(page.includes('const elapsedMs = gameState === "ready" ? 0 : CORE.elapsedMilliseconds(timer, now);') && page.includes("{formatElapsed(elapsedMs)}</span>"), "The Time card should count up from zero using elapsed time");
+assert(page.includes('{ key: "diamond", label: "Diamond", value: limits.diamond') && page.includes('{ key: "bronze", label: "Bronze", value: limits.bronze'), "The medal drop-down should show the count-up medal time windows");
+assert(page.includes('bestTime != null && <span') && page.includes('bestScore != null && <span'), "Timer and Score content should remain vertically centred until a Best record is present underneath");
+assert(core.includes("function medalTimeLimits(level)") && page.includes("CORE.medalTimeLimits(activeLevel)"), "The medal drop-down and awards should share the same elapsed-time thresholds");
 assert(page.includes("aria-expanded={medalEligible ? medalsOpen : undefined}") && page.includes("fixed-popover-button") && page.includes("thresholds.map"), "The Timer card should open a Rhythm Identification-style medal drop-down");
 assert(page.includes("medalEligible={standardGame}") && page.includes("Medals unavailable for custom games"), "The medal drop-down should be disabled for custom games");
 assert(!page.includes('!active && !medalsOpen ? "opacity-45 grayscale"'), "The Timer card should not be greyed out before a standard game starts");
-assert(page.includes('${item.className}`}>before</span>') && page.indexOf(">before</span>") < page.indexOf("{formatElapsed(item.value)}</span>"), "Each medal should show a matching-colour lowercase before label with its threshold time underneath");
+assert(page.includes('${item.className}`}>within</span>') && page.indexOf(">within</span>") < page.indexOf("{formatElapsed(item.value)}</span>"), "Each medal should show a matching-colour lowercase within label with its threshold time underneath");
 assert(page.includes("const scoreProgress = total > 0") && page.includes("background: rgba(22,163,74,.38)") && page.includes('height: `${scoreProgress}%`'), "The Score card should fill from bottom to top using the same green as the Note Naming Accuracy card");
 assert(page.includes("Concept Recall could not load") && page.includes('id="concept-load-retry"') && page.includes("window.location.reload()"), "A friendly reload panel should appear if Concept Recall cannot load");
 assert(!page.includes("timerMinutes: 10, soundEffects: true, randomiseRows: false") && !page.includes("active={gameState !== \"ready\"}"), "Clearly unused legacy values should be removed from the Concept Recall page");

@@ -82,7 +82,7 @@
     .concept-results-stat + .concept-results-stat { border-left: 1px solid #e7e5e4; }
     .concept-results-stat > span { display: block; margin-bottom: 5px; color: #78716c; font-size: .72rem; font-weight: 500; line-height: 1.2; }
     .concept-results-stat strong { display: block; overflow-wrap: anywhere; color: #111; font-size: clamp(1.15rem, 2.4vw, 2rem); font-weight: 900; letter-spacing: -.035em; line-height: 1.08; }
-    .concept-results-medal strong { display: flex; align-items: center; justify-content: center; gap: 7px; font-size: clamp(.9rem, 1.4vw, 1.15rem); }
+    .concept-results-medal strong { display: flex; min-height: clamp(1.242rem, 2.592vw, 2.16rem); align-items: center; justify-content: center; gap: 7px; font-size: clamp(.9rem, 1.4vw, 1.15rem); }
     .concept-results-medal img { width: 30px; height: 30px; object-fit: contain; }
     .concept-results-score-pill { width: min(160px, calc(100% - 16px)); min-height: 62px; align-self: center; justify-self: center; border: 1px solid transparent; border-radius: 999px; padding: 7px 16px; }
     .concept-results-score-pill.is-score-low { border-color: #dc2626; background: #dc2626; }
@@ -172,11 +172,6 @@ const MEDALS = {
   diamond: { label: "Diamond", icon: ASSET.diamond, sound: "platinum", colour: "#0891b2", background: "rgba(34,211,238,.16)" },
 };
 const PLAYABLE_LEVELS = ["N5", "H", "AH"];
-const LEVEL_DURATION_MS = {
-  N5: 5 * 60 * 1000,
-  H: 6 * 60 * 1000,
-  AH: 8 * 60 * 1000,
-};
 const DEFAULT_OFF_CATEGORIES = {
   N5: ["National 5 Styles"],
   H: ["Higher Styles", "Orchestral families"],
@@ -191,11 +186,6 @@ const STYLE_CATEGORIES = new Set(Object.values(STYLE_CATEGORY_BY_LEVEL));
 
 function isStylesCategory(category) {
   return STYLE_CATEGORIES.has(category);
-}
-
-function durationForQuestions(level, questions) {
-  const levelQuestionCount = standardQuestionsAtLevel(level).length;
-  return CORE.scaledDurationMilliseconds(questions.length, levelQuestionCount, LEVEL_DURATION_MS[level]);
 }
 
 function requestedLevel() {
@@ -248,7 +238,7 @@ function questionsForSelectedCategories(level, selectedCategories) {
   return [...standardQuestions, ...supplementaryQuestions].filter((question) => selected.has(question.category));
 }
 
-function HeaderControls({ score, total, remainingMs, warning, activeLevel, medalEligible, bestCountdown, bestScore }) {
+function HeaderControls({ score, total, elapsedMs, warning, activeLevel, medalEligible, bestTime, bestScore }) {
   const [medalsOpen, setMedalsOpen] = useState(false);
   const timerRef = useRef(null);
   const limits = CORE.medalTimeLimits(activeLevel);
@@ -282,7 +272,7 @@ function HeaderControls({ score, total, remainingMs, warning, activeLevel, medal
       tabIndex={medalEligible ? 0 : -1}
       aria-disabled={!medalEligible}
       aria-expanded={medalEligible ? medalsOpen : undefined}
-      aria-label={`${CORE.formatClock(remainingMs)} remaining${bestCountdown == null ? "" : `. Best countdown ${formatElapsed(bestCountdown)}`}${medalEligible ? ". Show medal times" : ". Medals unavailable for custom games"}`}
+      aria-label={`${formatElapsed(elapsedMs)} elapsed${bestTime == null ? "" : `. Best time ${formatElapsed(bestTime)}`}${medalEligible ? ". Show medal times" : ". Medals unavailable for custom games"}`}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={toggleMedals}
       onKeyDown={(event) => {
@@ -293,9 +283,9 @@ function HeaderControls({ score, total, remainingMs, warning, activeLevel, medal
       className={`${window.MLH.shell.scoreTileClass} overflow-visible ${medalsOpen ? window.MLH.shell.scoreTileActiveClass : ""} ${!medalEligible ? "cursor-default opacity-45 grayscale" : "cursor-pointer"}`}
     >
       <div className="relative z-10 flex h-full flex-col items-center justify-center text-center">
-        <span className={`concept-stat-label ${warning ? "text-red-700" : ""}`}>Timer</span>
-        <span className={`concept-stat-value tabular-nums ${warning ? "text-red-700" : ""}`}>{CORE.formatClock(remainingMs)}</span>
-        {bestCountdown != null && <span className="concept-stat-note tabular-nums">Best: {formatElapsed(bestCountdown)}</span>}
+        <span className={`concept-stat-label ${warning ? "text-red-700" : ""}`}>Time</span>
+        <span className={`concept-stat-value tabular-nums ${warning ? "text-red-700" : ""}`}>{formatElapsed(elapsedMs)}</span>
+        {bestTime != null && <span className="concept-stat-note tabular-nums">Best: {formatElapsed(bestTime)}</span>}
       </div>
       {medalEligible && medalsOpen && <div
         className="fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 flex w-[190px] -translate-x-1/2 items-center justify-center rounded-xl border border-stone-200 bg-white px-2 py-3 text-[12px] leading-none text-stone-700 shadow-lg"
@@ -304,7 +294,7 @@ function HeaderControls({ score, total, remainingMs, warning, activeLevel, medal
         <div className="flex w-full items-end justify-center gap-3">
           {thresholds.map((item) => <div key={item.key} className="flex min-w-[34px] flex-col items-center justify-end">
             <img src={MEDALS[item.key].icon} alt="" aria-hidden="true" className="h-[20px] w-[20px] object-contain" />
-            <span className={`mt-1 text-[8px] font-semibold leading-none ${item.className}`}>before</span>
+            <span className={`mt-1 text-[8px] font-semibold leading-none ${item.className}`}>within</span>
             <span className={`mt-0.5 text-[10px] font-semibold leading-none ${item.className}`}>{formatElapsed(item.value)}</span>
           </div>)}
         </div>
@@ -636,7 +626,7 @@ function App() {
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const [timer, setTimer] = useState({ durationMs: durationForQuestions(initialLevel, standardQuestionsAtLevel(initialLevel)), accumulatedMs: 0, startedAt: null, running: false });
+  const [timer, setTimer] = useState({ durationMs: 0, accumulatedMs: 0, startedAt: null, running: false });
   const [timerAnnouncement, setTimerAnnouncement] = useState("");
   const inputRef = useRef(null);
   const levelRef = useRef(null);
@@ -654,11 +644,12 @@ function App() {
   const availableCategories = useMemo(() => customisableCategoriesAtLevel(activeLevel), [activeLevel]);
   const configuredQuestions = useMemo(() => questionsForSelectedCategories(activeLevel, selectedCategories), [activeLevel, selectedCategories]);
   const standardGame = selectedCategories.length === standardCategories.length && standardCategories.every((category) => selectedCategories.includes(category));
+  const standardQuestions = standardQuestionsAtLevel(activeLevel);
   const levelRecord = standardGame ? persistence.records[activeLevel] : null;
-  const bestCountdown = levelRecord?.fastestCompletionMs == null ? null : Math.max(0, durationForQuestions(activeLevel, standardQuestions) - levelRecord.fastestCompletionMs);
+  const bestTime = levelRecord?.fastestCompletionMs ?? null;
   const bestScore = levelRecord?.bestScore > 0 ? levelRecord.bestScore : null;
-  const remainingMs = gameState === "ready" ? durationForQuestions(activeLevel, configuredQuestions) : CORE.remainingMilliseconds(timer, now);
-  const timerWarning = gameState === "playing" && remainingMs > 0 && remainingMs <= 30000;
+  const elapsedMs = gameState === "ready" ? 0 : CORE.elapsedMilliseconds(timer, now);
+  const timerWarning = false;
   const hintsVisible = showHints;
 
   function commitTimer(nextTimer) {
@@ -682,7 +673,7 @@ function App() {
     warningAnnouncedRef.current = false;
     setTimerAnnouncement("");
     commitTimer({
-      durationMs: durationForQuestions(level, questions),
+      durationMs: 0,
       accumulatedMs: 0,
       startedAt: null,
       running: false,
@@ -748,7 +739,6 @@ function App() {
   function startGame() {
     const questions = configuredQuestions;
     const nextRows = [...questions];
-    const durationMs = durationForQuestions(activeLevel, questions);
     const startedAt = Date.now();
     const emptyAnswers = new Set();
     window.clearTimeout(shakeTimerRef.current);
@@ -763,7 +753,7 @@ function App() {
     finishLockRef.current = false;
     warningAnnouncedRef.current = false;
     setTimerAnnouncement("");
-    commitTimer({ durationMs, accumulatedMs: 0, startedAt, running: true });
+    commitTimer({ durationMs: 0, accumulatedMs: 0, startedAt, running: true });
     setNow(startedAt);
     setGameState("playing");
   }
@@ -843,14 +833,7 @@ function App() {
     if (gameState !== "playing") return undefined;
     inputRef.current?.focus({ preventScroll: true });
     const interval = window.setInterval(() => {
-      const currentTime = Date.now();
-      setNow(currentTime);
-      const remaining = CORE.remainingMilliseconds(timerRef.current, currentTime);
-      if (remaining <= 0) finishGame(answeredRef.current, currentTime);
-      else if (remaining <= 30000 && !warningAnnouncedRef.current) {
-        warningAnnouncedRef.current = true;
-        setTimerAnnouncement("30 seconds remaining.");
-      }
+      setNow(Date.now());
     }, 200);
     return () => window.clearInterval(interval);
   }, [gameState, activeQuestions, activeLevel, standardGame]);
@@ -882,8 +865,7 @@ function App() {
     const level = CORE.LEVELS[key];
     const levelQuestions = standardQuestionsAtLevel(key);
     const categoryCount = CORE.categoriesForQuestions(levelQuestions).length;
-    const durationMinutes = Math.round(LEVEL_DURATION_MS[key] / 60000);
-    return [key, { ...level, description: `${categoryCount} categories • ${levelQuestions.length} concepts • ${durationMinutes} minutes` }];
+    return [key, { ...level, description: `${categoryCount} categories • ${levelQuestions.length} concepts` }];
   }));
   const toolbarButtonLabel = gameState === "complete" ? "Play Again" : gameState === "ready" ? "Start" : "Pause";
   const toolbarButtonAction = gameState === "complete" ? resetGame : gameState === "ready" ? startGame : pauseGame;
@@ -904,7 +886,7 @@ function App() {
         },
       })}
     >
-      <HeaderControls score={answeredIds.size} total={displayedTotal} remainingMs={remainingMs} warning={timerWarning} activeLevel={activeLevel} medalEligible={standardGame} bestCountdown={bestCountdown} bestScore={bestScore} />
+      <HeaderControls score={answeredIds.size} total={displayedTotal} elapsedMs={elapsedMs} warning={timerWarning} activeLevel={activeLevel} medalEligible={standardGame} bestTime={bestTime} bestScore={bestScore} />
     </window.MLH.AppHeader>
     <div className={window.MLH.shell.pageContentClass}>
       <main className={`${window.MLH.shell.mainShellClass} !min-h-[620px] pb-5`}>

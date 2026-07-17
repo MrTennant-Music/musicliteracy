@@ -12,10 +12,10 @@
   });
   const STORAGE_KEY = "mlh-concept-recall-v1";
   const MEDAL_RANK = Object.freeze({ bronze: 1, silver: 2, gold: 3, diamond: 4 });
-  const MEDAL_REMAINING_MS = Object.freeze({
-    N5: Object.freeze({ bronze: 0, silver: 2 * 60 * 1000, gold: 3 * 60 * 1000, diamond: 4 * 60 * 1000 }),
-    H: Object.freeze({ bronze: 0, silver: 2 * 60 * 1000, gold: 3 * 60 * 1000, diamond: 4 * 60 * 1000 }),
-    AH: Object.freeze({ bronze: 0, silver: 2 * 60 * 1000, gold: 4 * 60 * 1000, diamond: 6 * 60 * 1000 }),
+  const MEDAL_TIME_LIMITS_MS = Object.freeze({
+    N5: Object.freeze({ bronze: 6 * 60 * 1000, silver: 5 * 60 * 1000, gold: 4 * 60 * 1000, diamond: 3 * 60 * 1000 }),
+    H: Object.freeze({ bronze: 6 * 60 * 1000, silver: 5 * 60 * 1000, gold: 4 * 60 * 1000, diamond: 3 * 60 * 1000 }),
+    AH: Object.freeze({ bronze: 6 * 60 * 1000, silver: 5 * 60 * 1000, gold: 4 * 60 * 1000, diamond: 3 * 60 * 1000 }),
   });
 
   function normalizeAnswer(value) {
@@ -96,7 +96,8 @@
     const durationMs = Math.max(0, Number(timer?.durationMs) || 0);
     const accumulatedMs = Math.max(0, Number(timer?.accumulatedMs) || 0);
     const activeMs = timer?.running && Number.isFinite(timer?.startedAt) ? Math.max(0, now - timer.startedAt) : 0;
-    return Math.min(durationMs, accumulatedMs + activeMs);
+    const elapsedMs = accumulatedMs + activeMs;
+    return durationMs > 0 ? Math.min(durationMs, elapsedMs) : elapsedMs;
   }
 
   function remainingMilliseconds(timer, now = Date.now()) {
@@ -104,7 +105,7 @@
   }
 
   function formatClock(milliseconds) {
-    const totalSeconds = Math.max(0, Math.ceil((Number(milliseconds) || 0) / 1000));
+    const totalSeconds = Math.max(0, Math.floor((Number(milliseconds) || 0) / 1000));
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
@@ -130,17 +131,18 @@
   }
 
   function medalTimeLimits(level) {
-    return { ...(MEDAL_REMAINING_MS[level] || MEDAL_REMAINING_MS.N5) };
+    return { ...(MEDAL_TIME_LIMITS_MS[level] || MEDAL_TIME_LIMITS_MS.N5) };
   }
 
   function medalForCompletion({ completed, standardGame, elapsedMs, durationMs, level }) {
-    if (!completed || !standardGame || !(durationMs > 0)) return null;
-    const remainingMs = Math.max(0, durationMs - Math.max(0, elapsedMs));
+    if (!completed || !standardGame) return null;
+    const timeMs = Math.max(0, elapsedMs);
     const limits = medalTimeLimits(level);
-    if (remainingMs >= limits.diamond) return "diamond";
-    if (remainingMs >= limits.gold) return "gold";
-    if (remainingMs >= limits.silver) return "silver";
-    return "bronze";
+    if (timeMs <= limits.diamond) return "diamond";
+    if (timeMs <= limits.gold) return "gold";
+    if (timeMs <= limits.silver) return "silver";
+    if (timeMs <= limits.bronze) return "bronze";
+    return null;
   }
 
   function createResult({ level, questions, answeredIds, elapsedMs, durationMs, standardGame, completedAt = Date.now() }) {
