@@ -49,6 +49,7 @@
   const Q3_STAFF = { left: 78, right: 842, topA: 72, gap: 11 };
   const Q3_BARS_PER_SYSTEM = 2;
   const Q3_SYSTEM_SPACING = 118;
+  const N5_2015_Q3_SYSTEM_SPACING = Q3_SYSTEM_SPACING + 20;
   const Q3_KEY_SIGNATURE_SPACING = 14;
   const Q3_PITCH_STEPS = { C4: -2, D4: -1, E4: 0, F4: 1, G4: 2, A4: 3, B4: 4, Bb4: 4, C5: 5, D5: 6, E5: 7, F5: 8, "F♯5": 8, G5: 9, A5: 10 };
   const Q3_PITCH_BY_STEP = Object.fromEntries(Object.entries(Q3_PITCH_STEPS).filter(([pitch]) => !["F♯5", "Bb4"].includes(pitch)).map(([pitch, step]) => [step, pitch]));
@@ -98,26 +99,33 @@
   // National 5 2015, Question 3: "I Dreamed a Dream". The musical
   // content is kept separate from the drawing code so each printed bar can
   // be checked directly against the source paper.
+  const N5_2015_Q3_BAR_5_NOTES = [
+    rest("dottedQuaverRest"), note("A4", "semiquaver"), note("A4", "dottedQuaver"), note("A4", "semiquaver"),
+    note("A4", "dottedQuaver"), note("G4", "semiquaver"), note("A4", "semiquaver"), note("Bb4", "dottedQuaver"),
+  ];
+  const N5_2015_Q3_BAR_7_NOTES = N5_2015_Q3_BAR_5_NOTES.map((item, index) => index >= 6 ? { ...item, rhythm: "quaver" } : item);
+  const N5_2015_Q3_REPEATED_BAR_BEAMS = [{ start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 7 }];
+
   const N5_2015_Q3_BARS = [
     bar([rest("dottedQuaverRest"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("E4", "semiquaver"), note("F4", "dottedQuaver"), note("G4", "semiquaver")], { beamGroups: [{ start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 7 }] }),
     bar([note("A4", "semibreve")]),
     bar([rest("dottedQuaverRest"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("G4", "dottedQuaver"), note("A4", "semiquaver")], { beamGroups: [{ start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 7 }] }),
     bar([note("D4", "quaver"), note("F4", "dottedCrotchet", { tieToNext: true }), note("F4", "minim", { tiedFromPrevious: true })]),
-    bar([rest("dottedQuaverRest"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("E4", "semiquaver"), note("A4", "semiquaver"), note("Bb4", "dottedQuaver")], { beamGroups: [{ start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 7 }] }),
-    bar([note("A4", "semibreve")]),
-    bar([rest("dottedQuaverRest"), note("F4", "semiquaver"), note("F4", "dottedQuaver"), note("F4", "semiquaver"), note("A4", "dottedQuaver"), note("A4", "semiquaver"), note("Bb4", "quaver"), note("C5", "quaver")], { missingIndices: [4, 5, 6, 7], beamGroups: [{ start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 7 }] }),
+    bar(N5_2015_Q3_BAR_5_NOTES, { beamGroups: N5_2015_Q3_REPEATED_BAR_BEAMS }),
+    bar([note("C5", "semibreve")]),
+    bar(N5_2015_Q3_BAR_7_NOTES, { missingIndices: [4, 5, 6, 7], beamGroups: N5_2015_Q3_REPEATED_BAR_BEAMS }),
     bar([note("D4", "quaver"), note("F4", "dottedCrotchet", { tieToNext: true }), note("F4", "minim", { tiedFromPrevious: true })]),
   ].map((item, barIndex) => ({ ...item, barIndex, totalBars: 8 }));
 
   const N5_2015_Q3_LYRICS = [
-    "I dreamed     a dream     in time     gone",
-    "by",
-    "When hope     was high     and life     worth",
-    "li-     ving.",
-    "I dreamed     that love     would ne - ver",
-    "die,",
-    "I dreamed that     God would be     for-",
-    "giv - ing.",
+    [null, "I", "dreamed", "a", "dream", "in", "time", "gone"],
+    ["by"],
+    [null, "When", "hope", "was", "high", "and", "life", "worth"],
+    ["li-", "ving.", null],
+    [null, "I", "dreamed", "that", "love", "would", "ne-", "ver"],
+    ["die,"],
+    [null, "I", "dreamed", "that", "God", "would", "be", "for-"],
+    ["giv-", "ing.", null],
   ];
 
   function q3Text(svg, text, attributes = {}, className = "") {
@@ -190,6 +198,10 @@
   }
   function q3SystemTop(barIndex) {
     return Q3_STAFF.topA + Math.floor(barIndex / Q3_BARS_PER_SYSTEM) * Q3_SYSTEM_SPACING;
+  }
+  function q3SystemTop2015(barIndex) {
+    const systemIndex = Math.floor(barIndex / Q3_BARS_PER_SYSTEM);
+    return Q3_STAFF.topA + systemIndex * N5_2015_Q3_SYSTEM_SPACING + (systemIndex >= 3 ? 30 : 0);
   }
   function q3PositionSpacing(notes, index) {
     const rhythm = notes[index]?.rhythm;
@@ -751,9 +763,9 @@
   function q3Draw2015RhythmGuide(svg, bar, top) {
     const positions = q3BarPositions(bar);
     const indexes = bar.missingIndices || [];
-    const guideTop = top - 89;
+    const guideTop = top - 59;
     const guideNotes = [
-      note("A4", "dottedQuaver"), note("A4", "semiquaver"), note("G4", "quaver"), note("G4", "quaver"),
+      note("A4", "dottedQuaver"), note("A4", "semiquaver"), note("A4", "quaver"), note("A4", "quaver"),
     ];
     [[0, 1], [2, 3]].forEach(([start, end]) => {
       const notes = guideNotes.slice(start, end + 1);
@@ -776,7 +788,7 @@
   function q3Add2015NoteEntryTargets(svg, answers, onAnswerChange) {
     if (!onAnswerChange) return;
     const bar = N5_2015_Q3_BARS[6];
-    const top = q3SystemTop(6);
+    const top = q3SystemTop2015(6);
     const positions = q3BarPositions(bar);
     const indexes = bar.missingIndices;
     const targetLeft = positions[indexes[0]] - 22;
@@ -865,13 +877,13 @@
 
   function q3ScoreSvg2015(answers, onAnswerChange, review = {}, question = null) {
     const isReview = Object.values(review).some(Boolean);
-    const svg = svgElement("svg", { class: "q3-shared-score", viewBox: "0 0 920 540", role: "img", "aria-label": `${isReview ? "Marked" : "Interactive"} guide score for Question 3` });
+    const svg = svgElement("svg", { class: "q3-shared-score", viewBox: "0 0 920 630", role: "img", "aria-label": `${isReview ? "Marked" : "Interactive"} guide score for Question 3` });
     const answerClass = id => review[id] === "correct" ? "q3-answer-correct" : ["incorrect", "partial"].includes(review[id]) ? "q3-answer-incorrect" : "";
     const correctAnswer = (id, fallback) => question?.subquestions?.find(item => item.id === id)?.answer || fallback;
     const q3aCorrection = review.q3a && review.q3a !== "correct";
     [0, 1, 2, 3].forEach(systemIndex => {
       const firstBar = systemIndex * Q3_BARS_PER_SYSTEM;
-      const top = q3SystemTop(firstBar);
+      const top = q3SystemTop2015(firstBar);
       for (let line = 0; line < 5; line += 1) svg.append(svgElement("line", { x1: Q3_STAFF.left, x2: Q3_STAFF.right, y1: top + line * Q3_STAFF.gap, y2: top + line * Q3_STAFF.gap, class: "q3-staff-line" }));
       q3CalibratedSymbol(svg, "gClef", Q3_STAFF.left + 32, q3YForStep(2, top));
       q3CalibratedSymbol(svg, "flatKeySignature", Q3_STAFF.left + 54, q3YForStep(4, top));
@@ -884,23 +896,26 @@
         const item = N5_2015_Q3_BARS[barIndex];
         const start = q3BarStart(barIndex);
         const end = start + q3BarWidth(barIndex);
+        const positions = q3BarPositions(item);
         q3Text(svg, String(barIndex + 1), { x: local === 0 ? start - 15 : start + 5, y: top - 17, "text-anchor": "middle" }, "q3-bar-number");
-        q3Draw2015BarNotes(svg, item, top, barIndex === 6 ? answers.q3f : "", barIndex === 6 ? answerClass("q3f") : "", barIndex === 6 ? review.q3f : "", correctAnswer("q3f", "A4,A4,Bb4,C5"));
+        q3Draw2015BarNotes(svg, item, top, barIndex === 6 ? answers.q3f : "", barIndex === 6 ? answerClass("q3f") : "", barIndex === 6 ? review.q3f : "", correctAnswer("q3f", "A4,G4,A4,Bb4"));
         if (barIndex === 4) {
-          const positions = q3BarPositions(item);
-          q3Text(svg, "X", { x: positions.at(-1), y: q3YForStep(item.notes.at(-1).step, top) - 34, "text-anchor": "middle" }, "q3-note-label");
+          q3Text(svg, "X", { x: positions.at(-1), y: q3YForStep(item.notes.at(-1).step, top) - 41, "text-anchor": "middle" }, "q3-note-label");
         }
-        q3Text(svg, N5_2015_Q3_LYRICS[barIndex], { x: start + q3BarWidth(barIndex) / 2, y: top + Q3_STAFF.gap * 7.15, "text-anchor": "middle" }, "q3-score-lyrics");
+        N5_2015_Q3_LYRICS[barIndex].forEach((syllable, noteIndex) => {
+          if (!syllable) return;
+          q3Text(svg, syllable, { x: positions[noteIndex], y: top + Q3_STAFF.gap * 7.15, "text-anchor": "middle" }, "q3-score-lyrics");
+        });
         svg.append(svgElement("line", { x1: end, x2: end, y1: top, y2: top + Q3_STAFF.gap * 4, class: "q3-barline" }));
       }
     });
     const missingBar = N5_2015_Q3_BARS[6];
     const missingPositions = q3BarPositions(missingBar);
     const missingIndexes = missingBar.missingIndices;
-    const missingTop = q3SystemTop(6);
+    const missingTop = q3SystemTop2015(6);
     svg.append(svgElement("rect", {
       x: missingPositions[missingIndexes[0]] - 24,
-      y: missingTop - 82,
+      y: missingTop - 72,
       width: missingPositions[missingIndexes.at(-1)] - missingPositions[missingIndexes[0]] + 48,
       height: 166,
       class: "q3-marking-box",
@@ -908,12 +923,12 @@
     q3Draw2015RhythmGuide(svg, missingBar, missingTop);
     if (answers.q3b) {
       const tempoX = q3BarStart(0) + 24;
-      const tempoY = q3SystemTop(0) - 25;
+      const tempoY = q3SystemTop2015(0) - 25;
       q3Text(svg, answers.q3b, { x: tempoX, y: tempoY, "text-anchor": "start" }, `q3-tempo-answer ${answerClass("q3b")}`.trim());
       if (onAnswerChange) q3AddAppliedAnswerTarget(svg, { x: tempoX - 8, y: tempoY - 24, width: 120, height: 34 }, "Tempo marking", () => onAnswerChange("q3b", ""));
     }
     if (review.q3b && review.q3b !== "correct") {
-      q3Text(svg, correctAnswer("q3b", "Andante"), { x: q3BarStart(0) + 24 + (answers.q3b ? 118 : 0), y: q3SystemTop(0) - 25, "text-anchor": "start" }, "q3-tempo-answer q3-answer-correction");
+      q3Text(svg, correctAnswer("q3b", "Andante"), { x: q3BarStart(0) + 24 + (answers.q3b ? 118 : 0), y: q3SystemTop2015(0) - 25, "text-anchor": "start" }, "q3-tempo-answer q3-answer-correction");
     }
     if (answers.q3a && onAnswerChange) q3AddAppliedAnswerTarget(svg, { x: 185, y: 49, width: 45, height: 68 }, "Time signature", () => onAnswerChange("q3a", ""));
     q3Add2015NoteEntryTargets(svg, answers, onAnswerChange);

@@ -21,6 +21,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     dynamics: { title: "Dynamics", subtitle: "Interpret and apply dynamics in the music.", icon: "dynamics-icon.svg", instructions: "Give the meaning or add the correct dynamic.", response: "mixed" },
     missingnotes: { title: "Melodic Dictation", subtitle: "Identify and complete melodic patterns.", icon: "insert-missing-notes-icon.svg", instructions: "Complete each musical pattern in the blank bar.", response: "stave", large: true },
     practicequestions: { title: "Practice Questions", subtitle: "Complete exam-style questions combining multiple music literacy concepts.", icon: "practice-app-icon.svg", instructions: "Complete the mixed music literacy questions below.", response: "mixed" },
+    "concept-recall": { title: "Concept Recall", subtitle: "Name as many musical concepts as you can under each category before time runs out.", icon: "concept-recall-icon.svg", instructions: "Write as many musical concepts as you can under each category.", response: "text" },
   };
   const DEF = DEFINITIONS[CONFIG.activityId];
   if (!DEF) return;
@@ -1276,7 +1277,162 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     return <div className={window.MLH.shell.pageShellClass}><window.MLH.AppHeader icon={DEF.icon} title="Create a worksheet" subtitle={CONFIG.subtitle||DEF.subtitle}/><div className={`${window.MLH.shell.pageContentClass} worksheet-page-content`}><main className={`${window.MLH.shell.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}><div className="no-print"><div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3"><h2 className="flex items-center gap-2 text-xl font-bold"><img src={DEF.icon} className="h-7 w-7 object-contain" alt=""/>{DEF.title} · {LEVEL_NAMES[level]||level}</h2><p className="mt-1 text-sm text-stone-600">Generate complete practice papers using the current activity settings.</p></div><div className="rounded-xl border border-stone-200 bg-white p-4"><h2 className="flex items-center gap-2 text-xl font-bold"><img src="customise.svg" className="h-6 w-6" alt=""/>Customise</h2><p className="text-sm text-stone-600">Adjust the worksheet content and layout.</p><div className="mt-4 space-y-4"><label className="block text-sm font-semibold">Title<input className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-normal" value={title} onChange={event=>setTitle(event.target.value)}/></label><label className="block text-sm font-semibold">Instructions<textarea ref={window.MLH.resizeWorksheetTextarea} rows="2" className="mt-1 min-h-16 w-full resize-none overflow-hidden rounded-lg border border-stone-300 px-3 py-2 font-normal" value={instructions} onChange={event=>{window.MLH.resizeWorksheetTextarea(event.currentTarget);setInstructions(event.target.value);}}/></label><div className="flex flex-wrap gap-7">{check("Header",header,changeHeader)}{check("Name",name,setName,!header)}{check("Class",classField,setClassField,!header)}{check("Date",date,setDate,!header)}</div><label className="flex items-center justify-between border-t border-stone-200 pt-4 text-sm font-semibold">Number of Questions<select className="w-32 rounded-lg border border-stone-300 px-3 py-2" value={count} onChange={event=>setCount(Number(event.target.value))}>{Array.from({length:20},(_,index)=>index+1).map(value=><option key={value}>{value}</option>)}</select></label><div className="flex items-center gap-7">{check("Gridlines",gridlines,setGridlines)}{check("Include Answers",answersOn,setAnswersOn)}</div><div className="grid grid-cols-3 gap-2 border-t border-stone-200 pt-4"><button onClick={refresh} className="flex h-11 items-center justify-center rounded-xl border border-stone-300 font-semibold">Refresh</button><button onClick={()=>outputPdf("download")} disabled={Boolean(preparingMode)} className="flex h-11 items-center justify-center rounded-xl bg-black font-bold text-white">{preparingMode==="download"?"Preparing…":"Download"}</button><button onClick={()=>outputPdf("print")} disabled={Boolean(preparingMode)} className="flex h-11 items-center justify-center rounded-xl bg-black font-bold text-white">{preparingMode==="print"?"Preparing…":"Print"}</button></div></div></div></div><section className="print-area worksheet-preview-panel"><div className="no-print mb-4"><h2 className="flex items-center gap-2 text-xl font-bold"><img src="worksheet.svg" className="h-6 w-6" alt=""/>Preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div><div className={`transition-opacity duration-300 ${previewVisible?"opacity-100":"opacity-0"}`}>{papers.flatMap((paper,index)=>renderPaperPages(paper,index))}{answersOn?<div className="answer-sheet-start-new">{papers.flatMap((paper,index)=>renderPaperPages(paper,index,true))}</div>:null}</div></section></main></div></div>;
   }
 
+  function conceptRecallGroups(concepts) {
+    const grouped = new Map();
+    concepts.forEach((concept) => {
+      if (!concept?.category || !concept?.answer) return;
+      if (!grouped.has(concept.category)) grouped.set(concept.category, []);
+      grouped.get(concept.category).push(concept);
+    });
+    return [...grouped.entries()]
+      .map(([category, items]) => ({ category, concepts: [...items].sort((a, b) => a.answer.localeCompare(b.answer, "en-GB", { numeric: true })) }))
+      .sort((a, b) => a.category.localeCompare(b.category, "en-GB"));
+  }
+
+  function conceptRecallPageColumns(concepts, includeTips) {
+    const capacity = 21;
+    const pages = [];
+    let columns = [[], []], columnIndex = 0, used = 0;
+    const advanceColumn = () => {
+      columnIndex += 1;
+      used = 0;
+      if (columnIndex > 1) {
+        pages.push(columns);
+        columns = [[], []];
+        columnIndex = 0;
+      }
+    };
+    const addGroup = (group, weight) => {
+      if (used > 0 && used + weight > capacity) {
+        advanceColumn();
+      }
+      columns[columnIndex].push(group);
+      used += weight;
+    };
+    conceptRecallGroups(concepts).forEach((group) => {
+      let chunk = [];
+      let chunkWeight = 1.4;
+      let continued = false;
+      group.concepts.forEach((concept) => {
+        const hintLines = Math.max(1, Math.ceil(String(concept.hint || "").length / 42));
+        const conceptWeight = includeTips ? 1.7 + (hintLines - 1) * 0.45 : 1;
+        if (chunk.length && chunkWeight + conceptWeight > capacity) {
+          addGroup({ category: group.category, concepts: chunk, continued }, chunkWeight);
+          chunk = [];
+          chunkWeight = 1.4;
+          continued = true;
+        }
+        chunk.push(concept);
+        chunkWeight += conceptWeight;
+      });
+      if (chunk.length) addGroup({ category: group.category, concepts: chunk, continued }, chunkWeight);
+    });
+    if (columns.some((column) => column.length)) pages.push(columns);
+    return pages;
+  }
+
+  function ConceptRecallPage({ columns, data, answers = false, pageNumber, totalPages }) {
+    return <article className="worksheet-page generic-page flex flex-col">
+      {data.header ? <div className="worksheet-header-card mb-3 rounded-xl border border-black px-4 py-3">
+        <div className="flex items-center gap-3">
+          <img src={DEF.icon} className="h-10 w-10 object-contain" alt="" />
+          <div className="min-w-0">
+            <h1 className="worksheet-header-title text-lg font-bold leading-tight">{answers ? `${data.title} - Answers` : data.title}</h1>
+            {!answers ? <p className="worksheet-header-instructions text-xs text-stone-700">{data.instructions}</p> : null}
+          </div>
+        </div>
+        {!answers && pageNumber === 1 ? <div className="mt-3 flex gap-5 text-xs">
+          {data.name ? <span className="flex min-w-0 flex-[2] items-end gap-2"><span>Name:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black" /></span> : null}
+          {data.classField ? <span className="flex min-w-0 flex-1 items-end gap-2"><span>Class:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black" /></span> : null}
+          {data.date ? <span className="flex min-w-0 flex-1 items-end gap-2"><span>Date:</span><span className="pupil-detail-line mb-[3px] h-px min-w-8 flex-1 bg-black" /></span> : null}
+        </div> : null}
+      </div> : null}
+      <div className="grid min-h-0 flex-1 grid-cols-2 items-start gap-3">
+        {columns.map((groups, columnIndex) => <div key={columnIndex} className="space-y-3">
+          {groups.map((group) => <section key={group.category} className={`overflow-hidden rounded-lg bg-white ${data.gridlines ? "border border-black" : ""}`}>
+            <h2 className={`${data.gridlines ? "border-b border-black" : ""} bg-stone-100 px-2.5 py-1.5 text-xs font-black`}>{group.category}{group.continued ? " (continued)" : ""} <span className="font-semibold text-stone-500">· {group.concepts.length}</span></h2>
+            <div>
+              {group.concepts.map((concept, conceptIndex) => <div key={concept.id || `${group.category}-${concept.answer}`} className={`grid grid-cols-[18px_minmax(0,1fr)] gap-1.5 px-2.5 ${data.gridlines ? "border-b border-stone-200 last:border-b-0" : ""} ${data.includeTips ? "py-1.5" : "py-1"}`}>
+                <span className="text-[10px] font-bold text-stone-500">{conceptIndex + 1}.</span>
+                <div className="min-w-0">
+                  {answers ? <div className="text-xs font-bold leading-tight">{concept.answer}</div> : <div className="h-4 border-b border-black" />}
+                  {data.includeTips ? <p className="mt-1 text-[9px] leading-[1.25] text-stone-500"><span className="font-bold">Tip:</span> {concept.hint}</p> : null}
+                </div>
+              </div>)}
+            </div>
+          </section>)}
+        </div>)}
+      </div>
+      <footer className="mt-2 flex justify-between text-[10px] text-stone-400"><span>The Music Literacy Hub</span><span>Page {pageNumber} of {totalPages}</span></footer>
+    </article>;
+  }
+
+  function ConceptRecallWorksheetApp() {
+    const concepts = Array.isArray(CONFIG.settings?.concepts) ? CONFIG.settings.concepts : [];
+    const editorState = window.MLH.readWorksheetEditorState?.(CONFIG.activityId);
+    const savedOptions = editorState?.conceptRecallLayoutVersion === 2 ? editorState : null;
+    const configFingerprint = window.MLH.worksheetSettingsFingerprint?.(CONFIG) || "";
+    const [title, setTitle] = useGenericState(editorState?.fingerprint === configFingerprint ? editorState.title || DEF.title : DEF.title);
+    const [instructions, setInstructions] = useGenericState(editorState?.instructions || DEF.instructions);
+    const [header, setHeader] = useGenericState(savedOptions?.header ?? true);
+    const [name, setName] = useGenericState(savedOptions?.name ?? true);
+    const [classField, setClassField] = useGenericState(savedOptions?.classField ?? false);
+    const [date, setDate] = useGenericState(savedOptions?.date ?? false);
+    const [gridlines, setGridlines] = useGenericState(savedOptions?.gridlines ?? true);
+    const [includeTips, setIncludeTips] = useGenericState(savedOptions?.tips ?? false);
+    const [answersOn, setAnswersOn] = useGenericState(savedOptions?.answers ?? false);
+    const [preparingMode, setPreparingMode] = useGenericState(null);
+    const pages = useGenericMemo(() => conceptRecallPageColumns(concepts, includeTips), [concepts, includeTips]);
+    const totalPages = pages.length * (answersOn ? 2 : 1);
+    const data = { title, instructions, header, name, classField, date, gridlines, includeTips };
+    const categoryCount = conceptRecallGroups(concepts).length;
+    const changeHeader = (enabled) => { setHeader(enabled); if (!enabled) { setName(false); setClassField(false); setDate(false); } };
+    const check = (label, value, setter, disabled = false) => <label className={`flex items-center gap-2 whitespace-nowrap text-sm ${disabled ? "text-stone-400 opacity-60" : ""}`}><input className="worksheet-checkbox" type="checkbox" checked={value} onChange={(event) => setter(event.target.checked)} disabled={disabled} />{label}</label>;
+    useGenericEffect(() => {
+      sessionStorage.setItem("worksheetEditorState", JSON.stringify({ activityId: CONFIG.activityId, fingerprint: configFingerprint, conceptRecallLayoutVersion: 2, title, instructions, header, name, classField, date, gridlines, tips: includeTips, answers: answersOn }));
+    }, [configFingerprint, title, instructions, header, name, classField, date, gridlines, includeTips, answersOn]);
+    async function outputPdf(mode) {
+      if (preparingMode) return;
+      setPreparingMode(mode);
+      try { await outputCapturedWorksheetPdf({ pages: [...document.querySelectorAll(".generic-page")], title, fallbackTitle: DEF.title, mode }); }
+      catch (error) { window.alert(error?.message || "The worksheet PDF could not be created. Please try again."); }
+      finally { setPreparingMode(null); }
+    }
+    window.MLH.worksheetHeaderMode = { title: DEF.title, subtitle: CONFIG.subtitle || DEF.subtitle, icon: DEF.icon, assets: {}, onExit: () => { const saved = sessionStorage.getItem("worksheetReturnUrl"); if (saved && history.length > 1) history.back(); else location.href = saved || CONFIG.sourceUrl || "index.html"; } };
+    if (!concepts.length) return <div className="p-8 text-center"><p className="font-semibold">No concepts were available for this worksheet. Return to Concept Recall and choose at least one category.</p></div>;
+    return <div className={window.MLH.shell.pageShellClass}>
+      <window.MLH.AppHeader icon={DEF.icon} title="Create a worksheet" subtitle={CONFIG.subtitle || DEF.subtitle} />
+      <div className={`${window.MLH.shell.pageContentClass} worksheet-page-content`}>
+        <main className={`${window.MLH.shell.mainShellClass} worksheet-builder h-auto min-h-0 p-4 md:p-6`}>
+          <div className="no-print">
+            <div className="mb-6 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3"><h2 className="flex items-center gap-2 text-xl font-bold"><img src={DEF.icon} className="h-7 w-7 object-contain" alt="" />{DEF.title} · {LEVEL_NAMES[level] || level}</h2><p className="mt-1 text-sm text-stone-600">{categoryCount} categories · {concepts.length} concepts</p></div>
+            <div className="rounded-xl border border-stone-200 bg-white p-4">
+              <h2 className="flex items-center gap-2 text-xl font-bold"><img src="customise.svg" className="h-6 w-6" alt="" />Customise</h2>
+              <p className="text-sm text-stone-600">Adjust the worksheet content and layout.</p>
+              <div className="mt-4 space-y-4">
+                <label className="block text-sm font-semibold">Title<input className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-normal" value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+                <label className="block text-sm font-semibold">Instructions<textarea ref={window.MLH.resizeWorksheetTextarea} rows="2" className="mt-1 min-h-16 w-full resize-none overflow-hidden rounded-lg border border-stone-300 px-3 py-2 font-normal" value={instructions} onChange={(event) => { window.MLH.resizeWorksheetTextarea(event.currentTarget); setInstructions(event.target.value); }} /></label>
+                <div className="flex flex-wrap gap-7">{check("Header", header, changeHeader)}{check("Name", name, setName, !header)}{check("Class", classField, setClassField, !header)}{check("Date", date, setDate, !header)}</div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-stone-200 pt-4">{check("Gridlines", gridlines, setGridlines)}{check("Include Tips", includeTips, setIncludeTips)}{check("Include Answers", answersOn, setAnswersOn)}</div>
+                <div className="grid grid-cols-2 gap-2 border-t border-stone-200 pt-4">
+                  <button onClick={() => outputPdf("download")} disabled={Boolean(preparingMode)} className="flex h-11 items-center justify-center rounded-xl bg-black font-bold text-white">{preparingMode === "download" ? "Preparing…" : "Download"}</button>
+                  <button onClick={() => outputPdf("print")} disabled={Boolean(preparingMode)} className="flex h-11 items-center justify-center rounded-xl bg-black font-bold text-white">{preparingMode === "print" ? "Preparing…" : "Print"}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <section className="print-area worksheet-preview-panel">
+            <div className="no-print mb-4"><h2 className="flex items-center gap-2 text-xl font-bold"><img src="worksheet.svg" className="h-6 w-6" alt="" />Preview</h2><p className="text-sm text-stone-600">Updates automatically as you change the options.</p></div>
+            {pages.map((columns, pageIndex) => <ConceptRecallPage key={`questions-${pageIndex}`} columns={columns} data={data} pageNumber={pageIndex + 1} totalPages={totalPages} />)}
+            {answersOn ? <div className="answer-sheet-start-new">{pages.map((columns, pageIndex) => <ConceptRecallPage key={`answers-${pageIndex}`} columns={columns} data={data} answers pageNumber={pages.length + pageIndex + 1} totalPages={totalPages} />)}</div> : null}
+          </section>
+        </main>
+      </div>
+    </div>;
+  }
+
   function GenericApp() {
+    if (CONFIG.activityId === "concept-recall") return <ConceptRecallWorksheetApp />;
     if (CONFIG.activityId === "practicequestions") return <PracticeWorksheetApp />;
     const editorState=window.MLH.readWorksheetEditorState?.(CONFIG.activityId), configFingerprint=window.MLH.worksheetSettingsFingerprint?.(CONFIG)||"";
     const initialCount=Number(editorState?.count)||(CONFIG.activityId==="rhythmsums"?15:10);

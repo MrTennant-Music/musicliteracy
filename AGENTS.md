@@ -59,6 +59,15 @@ Use the completed National 5 Music 2014 paper in `interactive-exams/` as the ref
 18. Do not add Clear or Undo buttons to ordinary paper questions. Allow an entered choice, typed answer or score item to be removed with double-click, double-tap or right-click while retaining keyboard-accessible removal. Notation-specific Clear controls remain governed by the notation decisions above.
 19. Before submission, keep answers visually neutral and do not expose correctness. Show marking feedback only after submission without substantially changing the paper layout.
 
+### Audio marker calibration
+
+Before importing National 5 Music 2016, read `interactive-exams/papers/national5-2015-review-notes.md` and apply its complete import checklist.
+
+1. When implementing a new Digital Past Paper, transcribe every official question audio track with a local Whisper speech-to-text model before setting section markers. Use the transcription to locate each spoken question, part and replay cue; do not estimate markers from track duration or visual waveform alone.
+2. Refine every transcribed cue against the waveform boundary and compare its optical and playback behaviour with the completed National 5 Music 2014 paper. Markers should land at the start of the relevant spoken cue, using the same small lead-in convention as the 2014 reference.
+3. Audit every marker across the complete paper after calibration. Confirm that all expected cues are present, chronological and inside the measured duration of their official audio track.
+4. Add regression tests containing the calibrated marker values, the total expected marker count, chronological-order checks and track-duration bounds so later edits cannot silently move or lose them.
+
 ### Audio, navigation and menus
 
 20. Keep the active question’s audio player in the main site header. During an active Exam Mode attempt, show the timer beside it. In “Show All”/“All Questions”, place each question’s audio with that question and leave no line, placeholder or other artefact in the header.

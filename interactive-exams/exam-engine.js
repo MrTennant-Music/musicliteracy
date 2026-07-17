@@ -162,7 +162,9 @@
       this.stopTimer();
       const restoredAttempt = deepCopy(attempt);
       if (!validateAttempt(this.paper, restoredAttempt, "submitted")) return false;
+      restoredAttempt.result = root.ExamMarking.markPaper(this.paper, restoredAttempt.answers);
       this.attempt = restoredAttempt;
+      root.ExamStorage.saveSubmitted(this.paper.id, this.attempt);
       this.notify("restore-submit");
       return true;
     }

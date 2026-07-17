@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Concept Recall</title>
+  <link rel="icon" type="image/svg+xml" href="./concept-recall-icon.svg" />
+  <link rel="apple-touch-icon" href="./concept-recall-icon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="./hub-mobile.js?v=20260629"></script>
+  <script src="./hub-audio.js?v=20260712-metronome-samples"></script>
+  <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
+  <script src="./concept-recall-data.js?v=20260717-styles"></script>
+  <script src="./concept-recall-core.js?v=20260717"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+    @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+    :root { color-scheme: light; }
+    body { margin: 0; background: #fafaf9; color: #111827; }
+    .concept-header-controls { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .concept-stat { position: relative; display: flex; height: 58px; min-width: 0; overflow: hidden; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #e7e5e4; border-radius: 12px; background: #fafaf9; box-shadow: 0 1px 2px rgba(0,0,0,.05); text-align: center; }
+    .concept-score-fill { position: absolute; inset: auto 0 0; background: rgba(22,163,74,.38); transition: height .32s cubic-bezier(.22,1,.36,1); }
+    .concept-stat-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; line-height: 1; text-transform: uppercase; }
+    .concept-stat-value { margin-top: 5px; font-size: 21px; font-weight: 900; letter-spacing: -.025em; line-height: 1; }
+    .concept-stat-note { margin-top: 4px; color: #a8a29e; font-size: 9px; font-weight: 600; line-height: 1; }
+    .concept-load-error { width: min(520px, calc(100% - 32px)); margin: 48px auto; border: 1px solid #e7e5e4; border-radius: 20px; background: white; padding: 28px; box-shadow: 0 12px 34px rgba(28,25,23,.1); text-align: center; }
+    .concept-load-error img { width: 64px; height: 64px; margin: 0 auto 14px; object-fit: contain; }
+    .concept-load-error h1 { margin: 0; color: #111; font-size: 1.4rem; font-weight: 900; line-height: 1.2; }
+    .concept-load-error p { margin: 10px auto 0; max-width: 390px; color: #57534e; font-size: .95rem; line-height: 1.5; }
+    .concept-load-error button { min-height: 44px; margin-top: 20px; border: 1px solid #111; border-radius: 12px; background: #111; padding: 0 22px; color: white; font: inherit; font-weight: 800; cursor: pointer; }
+    .concept-answer-input { width: 100%; min-width: 0; height: 44px; border: 1px solid #d6d3d1; border-radius: 12px; background: white; padding: 0 13px; font-size: 15px; font-weight: 400; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .concept-answer-input::placeholder { color: #78716c; font-weight: 300; opacity: 1; }
+    .concept-answer-wrap { width: clamp(110px, 30vw, 360px); margin: 0 auto; }
+    .concept-answer-reveal { width: calc(clamp(110px, 30vw, 360px) + 8px); margin: -4px; overflow: hidden; padding: 4px; animation: conceptAnswerReveal .38s cubic-bezier(.22,1,.36,1) both; }
+    .concept-answer-input:focus-visible { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.2); }
+    .concept-answer-input:disabled { border-color: #d6d3d1; background: #f5f5f4; color: #78716c; }
+    .concept-category-options { gap: 6px; }
+    .concept-category-options .hub-toggle-row { margin-bottom: 0; }
+    .concept-category-options .hub-toggle-label { min-width: 0; gap: 7px; }
+    .concept-category-menu-icon { box-sizing: border-box; display: inline-flex; width: 26px; height: 26px; flex: 0 0 26px; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: white; padding: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    .concept-category-menu-icon-reduced { padding: 5px; }
+    .concept-category-menu-icon-reduced-20 { padding: 4px; }
+    .concept-category-menu-icon-reduced-25 .concept-category-icon-image { transform: scale(.75); }
+    .concept-category-menu-icon-reduced-30 { padding: 5px; }
+    .concept-category-groups { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
+    .concept-category-card { position: relative; overflow: hidden; border: 1px solid #e7e5e4; border-radius: 16px; background: white; }
+    .concept-styles-columns { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .concept-category-card.is-celebrating { border-color: #22c55e; box-shadow: 0 9px 26px rgba(34,197,94,.2); animation: conceptCategoryComplete .52s cubic-bezier(.22,1,.36,1) both; }
+    .concept-category-card.is-celebrating .concept-category-title { border-bottom-color: #86efac; background: #dcfce7; }
+    .concept-category-title { display: flex; min-width: 0; align-items: center; gap: 8px; margin: 0; border-bottom: 1px solid #d6d3d1; background: #e7e5e4; padding: 8px 10px; color: #000; font-size: 15px; font-weight: 900; }
+    .concept-category-icon { box-sizing: border-box; display: inline-flex; width: 30px; height: 30px; flex: 0 0 30px; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #e5e7eb; border-radius: 9px; background: white; padding: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    .concept-category-icon-reduced { padding: 6px; }
+    .concept-category-icon-reduced-20 { padding: 5px; }
+    .concept-category-icon-reduced-25 .concept-category-icon-image { transform: scale(.75); }
+    .concept-category-icon-reduced-30 { padding: 6px; }
+    .concept-category-icon-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+    .concept-category-icon-image-cropped { transform: scale(1.14); transform-origin: center; }
+    .concept-category-bravura { position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 0; color: #020617; font-family: "Bravura", serif; font-size: 20px; font-weight: 400; line-height: 1; }
+    .concept-category-menu-icon.concept-category-bravura { padding: 0; font-size: 17px; }
+    .concept-category-bravura-ornaments .concept-category-bravura-glyph { position: absolute; left: 50%; top: 50%; line-height: 1; transform: translate(-50%, calc(-50% + 3px)); }
+    .concept-category-name { min-width: 0; line-height: 1.15; }
+    .concept-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+    .concept-table th { background: #f5f5f4; padding: 12px 14px; border-bottom: 1px solid #d6d3d1; color: #000; font-size: 12px; font-weight: 900; letter-spacing: .065em; text-align: left; text-transform: uppercase; }
+    .concept-table th, .concept-table td { width: 100%; }
+    .concept-table[data-hints="on"] th, .concept-table[data-hints="on"] td { width: 50%; }
+    .concept-table td { padding: 13px 14px; border-bottom: 1px solid #e7e5e4; color: #000; font-size: 14px; vertical-align: middle; }
+    .concept-table tbody tr:last-child td { border-bottom: 0; }
+    .concept-table tr.is-correct td { background: #f0fdf4; }
+    .concept-table tr.is-missed td { background: #fef2f2; }
+    .concept-answer-cell { min-width: 0; font-weight: 800; }
+    .concept-hint-cell { overflow-wrap: anywhere; color: rgba(0,0,0,.34) !important; font-size: 11px !important; font-weight: 500; line-height: 1.35; white-space: normal; animation: conceptHintIn .35s ease-out both; }
+    .concept-status-mark { display: inline-flex; width: 22px; height: 22px; flex: 0 0 auto; align-items: center; justify-content: center; border-radius: 50%; font-size: 13px; font-weight: 900; }
+    .concept-status-correct { background: #16a34a; color: white; }
+    .concept-status-missed { background: #dc2626; color: white; }
+    .concept-results-heading { margin: 0 0 14px; font-size: 1.15rem; font-weight: 900; line-height: 1.2; text-align: center; }
+    .concept-results-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; }
+    .concept-results-stat { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 16px; text-align: center; }
+    .concept-results-stat + .concept-results-stat { border-left: 1px solid #e7e5e4; }
+    .concept-results-stat > span { display: block; margin-bottom: 5px; color: #78716c; font-size: .72rem; font-weight: 500; line-height: 1.2; }
+    .concept-results-stat strong { display: block; overflow-wrap: anywhere; color: #111; font-size: clamp(1.15rem, 2.4vw, 2rem); font-weight: 900; letter-spacing: -.035em; line-height: 1.08; }
+    .concept-results-medal strong { display: flex; align-items: center; justify-content: center; gap: 7px; font-size: clamp(.9rem, 1.4vw, 1.15rem); }
+    .concept-results-medal img { width: 30px; height: 30px; object-fit: contain; }
+    .concept-results-score-pill { width: min(160px, calc(100% - 16px)); min-height: 62px; align-self: center; justify-self: center; border: 1px solid transparent; border-radius: 999px; padding: 7px 16px; }
+    .concept-results-score-pill.is-score-low { border-color: #dc2626; background: #dc2626; }
+    .concept-results-score-pill.is-score-middle { border-color: #facc15; background: #facc15; }
+    .concept-results-score-pill.is-score-high { border-color: #16a34a; background: #16a34a; }
+    .concept-results-score-pill.is-score-low > span,
+    .concept-results-score-pill.is-score-low strong,
+    .concept-results-score-pill.is-score-high > span,
+    .concept-results-score-pill.is-score-high strong { color: white; }
+    .concept-results-score-pill.is-score-middle > span,
+    .concept-results-score-pill.is-score-middle strong { color: #111; }
+    .concept-results-score-total { margin-left: 1px; font-size: .58em; font-weight: 700; letter-spacing: -.02em; }
+    .concept-answer-wrap.is-shaking { animation: conceptAnswerShake .36s ease-out both; }
+    .concept-confetti { pointer-events: none; position: fixed; inset: 0; z-index: 1200; overflow: hidden; }
+    .concept-confetti span { position: absolute; top: -18px; width: 9px; height: 16px; border-radius: 3px; animation: conceptConfettiFall 1.8s cubic-bezier(.15,.65,.4,1) forwards; }
+    .concept-overlay { position: fixed; inset: 0; z-index: 1150; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15,23,42,.72); backdrop-filter: blur(4px); }
+    .concept-dialog { width: min(680px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; border-radius: 24px; background: white; padding: 24px; box-shadow: 0 24px 70px rgba(0,0,0,.32); }
+    @keyframes conceptAnswerShake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+    @keyframes conceptCategoryComplete { 0% { transform: scale(1); } 42% { transform: scale(1.025); } 100% { transform: scale(1); } }
+    @keyframes conceptHintIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes conceptAnswerReveal { from { width: 0; margin-inline: 0; padding-inline: 0; opacity: 0; transform: translateX(14px); } to { width: calc(clamp(110px, 30vw, 360px) + 8px); margin-inline: -4px; padding-inline: 4px; opacity: 1; transform: translateX(0); } }
+    @keyframes conceptConfettiFall { 0% { opacity: 1; transform: translate3d(0,-5vh,0) rotate(0); } 100% { opacity: 0; transform: translate3d(var(--drift),105vh,0) rotate(680deg); } }
+    @media (min-width: 768px) {
+      .concept-header-controls { width: auto; grid-template-columns: 96px 96px; }
+      .concept-stat { height: 64px; }
+    }
+    @media (min-width: 640px) {
+      .concept-category-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .concept-category-card.is-styles { grid-column: span 2; }
+      .concept-styles-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .concept-styles-columns .concept-table + .concept-table { border-left: 1px solid #e7e5e4; }
+    }
+    @media (min-width: 1024px) {
+      .concept-category-groups { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 420px) {
+      .concept-header-controls { grid-template-columns: 66px 72px; gap: 6px; }
+      .concept-stat-label { font-size: 9px; }
+      .concept-stat-value { font-size: 18px; }
+      .concept-answer-input { padding: 0 9px; font-size: 14px; }
+    }
+    @media (max-width: 639px) {
+      .concept-results-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; }
+      .concept-results-stat:nth-child(3) { border-left: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+      .concept-confetti { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+  (() => {
+    const root = document.getElementById("root");
+    let ready = false;
+    function showLoadingError() {
+      if (ready || !root || root.childElementCount > 0) return;
+      root.innerHTML = '<section class="concept-load-error" role="alert" aria-labelledby="concept-load-error-title"><img src="./concept-recall-icon.svg" alt=""><h1 id="concept-load-error-title">Concept Recall could not load</h1><p>Reload the page to try again. If the problem continues, check your internet connection.</p><button type="button" id="concept-load-retry">Reload</button></section>';
+      document.getElementById("concept-load-retry")?.addEventListener("click", () => window.location.reload());
+    }
+    window.addEventListener("concept-recall-ready", () => { ready = true; });
+    window.addEventListener("error", () => window.setTimeout(showLoadingError, 1500));
+    window.setTimeout(showLoadingError, 8000);
+  })();
+</script>
+<script type="text/babel">
+const { useEffect, useLayoutEffect, useMemo, useRef, useState } = React;
+const CORE = window.CONCEPT_RECALL_CORE;
+const DATA = window.CONCEPT_RECALL_DATA;
+const ASSET = {
+  appIcon: "concept-recall-icon.svg",
+  levels: "levels.svg",
+  customise: "customise.svg",
+  hint: "guide.svg",
+  chime: "chime.mp3",
+  bronze: "bronze.svg",
+  silver: "silver.svg",
+  gold: "gold.svg",
+  diamond: "diamond.svg",
+};
+const MEDALS = {
+  bronze: { label: "Bronze", icon: ASSET.bronze, sound: "bronze", colour: "#b45309", background: "rgba(180,83,9,.14)" },
+  silver: { label: "Silver", icon: ASSET.silver, sound: "silver", colour: "#64748b", background: "rgba(203,213,225,.35)" },
+  gold: { label: "Gold", icon: ASSET.gold, sound: "gold", colour: "#ca8a04", background: "rgba(250,204,21,.18)" },
+  diamond: { label: "Diamond", icon: ASSET.diamond, sound: "platinum", colour: "#0891b2", background: "rgba(34,211,238,.16)" },
+};
+const PLAYABLE_LEVELS = ["N5", "H", "AH"];
+const LEVEL_DURATION_MS = {
+  N5: 5 * 60 * 1000,
+  H: 6 * 60 * 1000,
+  AH: 8 * 60 * 1000,
+};
+const DEFAULT_OFF_CATEGORIES = {
+  N5: ["National 5 Styles"],
+  H: ["Higher Styles", "Orchestral families"],
+  AH: ["Advanced Higher Styles", "Concerto grosso", "Orchestral families"],
+};
+const STYLE_CATEGORY_BY_LEVEL = {
+  N5: "National 5 Styles",
+  H: "Higher Styles",
+  AH: "Advanced Higher Styles",
+};
+const STYLE_CATEGORIES = new Set(Object.values(STYLE_CATEGORY_BY_LEVEL));
+
+function isStylesCategory(category) {
+  return STYLE_CATEGORIES.has(category);
+}
+
+function durationForQuestions(level, questions) {
+  const levelQuestionCount = standardQuestionsAtLevel(level).length;
+  return CORE.scaledDurationMilliseconds(questions.length, levelQuestionCount, LEVEL_DURATION_MS[level]);
+}
+
+function requestedLevel() {
+  const requested = new URLSearchParams(window.location.search).get("level")?.toUpperCase();
+  return PLAYABLE_LEVELS.includes(requested) ? requested : "N5";
+}
+
+function formatElapsed(milliseconds) {
+  const totalSeconds = Math.max(0, Math.round(milliseconds / 1000));
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+
+function playCompletionChime() {
+  try {
+    const audio = new Audio(ASSET.chime);
+    audio.volume = 0.7;
+    audio.play().catch(() => {});
+  } catch {}
+}
+
+function allCategoriesAtLevel(level) {
+  return CORE.categoriesForQuestions(CORE.questionsForLevel(DATA.QUESTIONS, level));
+}
+
+function standardCategoriesAtLevel(level) {
+  const defaultOff = new Set(DEFAULT_OFF_CATEGORIES[level] || []);
+  return allCategoriesAtLevel(level).filter((category) => !defaultOff.has(category));
+}
+
+function standardQuestionsAtLevel(level) {
+  return questionsForSelectedCategories(level, standardCategoriesAtLevel(level));
+}
+
+function customisableCategoriesAtLevel(level) {
+  const levelCategories = allCategoriesAtLevel(level);
+  const combinedCategories = level === "N5"
+    ? levelCategories
+    : [...new Set([...levelCategories, ...allCategoriesAtLevel("N5")])];
+  return combinedCategories
+    .filter((category) => !isStylesCategory(category) || category === STYLE_CATEGORY_BY_LEVEL[level])
+    .sort((a, b) => a.localeCompare(b, "en-GB"));
+}
+
+function questionsForSelectedCategories(level, selectedCategories) {
+  const selected = new Set(selectedCategories);
+  const standardQuestions = CORE.questionsForLevel(DATA.QUESTIONS, level);
+  const standardCategories = new Set(CORE.categoriesForQuestions(standardQuestions));
+  const supplementaryQuestions = level === "N5" ? [] : CORE.questionsForLevel(DATA.QUESTIONS, "N5")
+    .filter((question) => selected.has(question.category) && !standardCategories.has(question.category));
+  return [...standardQuestions, ...supplementaryQuestions].filter((question) => selected.has(question.category));
+}
+
+function HeaderControls({ score, total, remainingMs, warning, activeLevel, medalEligible, bestTime, bestScore }) {
+  const [medalsOpen, setMedalsOpen] = useState(false);
+  const timerRef = useRef(null);
+  const limits = CORE.medalTimeLimits(activeLevel);
+  const thresholds = [
+    { key: "bronze", label: "Bronze", value: limits.bronze, className: "text-amber-700" },
+    { key: "silver", label: "Silver", value: limits.silver, className: "text-slate-500" },
+    { key: "gold", label: "Gold", value: limits.gold, className: "text-yellow-500" },
+    { key: "diamond", label: "Diamond", value: limits.diamond, className: "text-cyan-500" },
+  ];
+
+  useEffect(() => {
+    const onPointerDown = (event) => {
+      if (timerRef.current && !timerRef.current.contains(event.target)) setMedalsOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, []);
+
+  useEffect(() => setMedalsOpen(false), [activeLevel, medalEligible]);
+
+  function toggleMedals() {
+    if (medalEligible) setMedalsOpen((open) => !open);
+  }
+
+  const scoreProgress = total > 0 ? Math.min(100, Math.max(0, (score / total) * 100)) : 0;
+
+  return <div className="concept-header-controls">
+    <section
+      ref={timerRef}
+      role="button"
+      tabIndex={medalEligible ? 0 : -1}
+      aria-disabled={!medalEligible}
+      aria-expanded={medalEligible ? medalsOpen : undefined}
+      aria-label={`${CORE.formatClock(remainingMs)} remaining${bestTime == null ? "" : `. Best time ${formatElapsed(bestTime)}`}${medalEligible ? ". Show medal times" : ". Medals unavailable for custom games"}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={toggleMedals}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggleMedals();
+      }}
+      className={`${window.MLH.shell.scoreTileClass} overflow-visible ${medalsOpen ? window.MLH.shell.scoreTileActiveClass : ""} ${!medalEligible ? "cursor-default opacity-45 grayscale" : "cursor-pointer"}`}
+    >
+      <div className="relative z-10 flex h-full flex-col items-center justify-center text-center">
+        <span className={`concept-stat-label ${warning ? "text-red-700" : ""}`}>Timer</span>
+        <span className={`concept-stat-value tabular-nums ${warning ? "text-red-700" : ""}`}>{CORE.formatClock(remainingMs)}</span>
+        {bestTime != null && <span className="concept-stat-note tabular-nums">Best: {formatElapsed(bestTime)}</span>}
+      </div>
+      {medalEligible && medalsOpen && <div
+        className="fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 flex w-[190px] -translate-x-1/2 items-center justify-center rounded-xl border border-stone-200 bg-white px-2 py-3 text-[12px] leading-none text-stone-700 shadow-lg"
+        style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
+      >
+        <div className="flex w-full items-end justify-center gap-3">
+          {thresholds.map((item) => <div key={item.key} className="flex min-w-[34px] flex-col items-center justify-end">
+            <img src={MEDALS[item.key].icon} alt="" aria-hidden="true" className="h-[20px] w-[20px] object-contain" />
+            <span className={`mt-1 text-[8px] font-semibold leading-none ${item.className}`}>before</span>
+            <span className={`mt-0.5 text-[10px] font-semibold leading-none ${item.className}`}>{formatElapsed(item.value)}</span>
+          </div>)}
+        </div>
+      </div>}
+    </section>
+    <div className="concept-stat" aria-label={`Score ${score} out of ${total}${bestScore == null ? "" : `. Best score ${bestScore} out of ${total}`}`}>
+      <div className="concept-score-fill" style={{ height: `${scoreProgress}%` }} aria-hidden="true" />
+      <span className="concept-stat-label relative z-10">Score</span>
+      <span className="concept-stat-value relative z-10">{score}/{total}</span>
+      {bestScore != null && <span className="concept-stat-note relative z-10">Best: {bestScore}</span>}
+    </div>
+  </div>;
+}
+
+function AnswerInput({ input, setInput, inputRef, playing, onKeyDown, shake }) {
+  return <div className={`concept-answer-wrap ${shake ? "is-shaking" : ""}`}>
+    <label className="block min-w-0">
+      <span className="sr-only">Type a musical concept</span>
+      <input
+        ref={inputRef}
+        className="concept-answer-input"
+        type="text"
+        value={input}
+        disabled={!playing}
+        onChange={(event) => setInput(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Type answer"
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck="false"
+        aria-describedby="concept-input-help"
+      />
+    </label>
+  </div>;
+}
+
+function CustomiseMenu({ categories, selectedCategories, toggleCategory, showHints, toggleHints, disabled }) {
+  return <>
+    <window.MLH.MenuSubheading>Help</window.MLH.MenuSubheading>
+    <div className="grid grid-cols-1 sm:grid-cols-2">
+      <window.MLH.MenuToggleRow
+        glyph={<img src={ASSET.hint} alt="" className="h-5 w-5" />}
+        label="Hints"
+        checked={showHints}
+        disabled={disabled}
+        onChange={toggleHints}
+      />
+    </div>
+    <window.MLH.MenuSubheading>Categories</window.MLH.MenuSubheading>
+    <div className="concept-category-options grid grid-cols-1 sm:grid-cols-2">
+      {categories.map((category) => <window.MLH.MenuToggleRow
+        key={category}
+        glyph={<CategoryIcon category={category} menu={true} />}
+        label={titleCaseCategory(category)}
+        labelWidthClass="min-w-0"
+        checked={selectedCategories.includes(category)}
+        disabled={disabled || (selectedCategories.length === 1 && selectedCategories.includes(category))}
+        onChange={() => toggleCategory(category)}
+      />)}
+    </div>
+  </>;
+}
+
+function groupRowsByCategory(rows) {
+  const groups = [];
+  const categoryGroups = new Map();
+  rows.forEach((question) => {
+    if (!categoryGroups.has(question.category)) {
+      const group = { category: question.category, questions: [] };
+      categoryGroups.set(question.category, group);
+      groups.push(group);
+    }
+    categoryGroups.get(question.category).questions.push(question);
+  });
+  groups.forEach((group) => group.questions.sort((a, b) => a.answer.localeCompare(b.answer, "en-GB", { numeric: true })));
+  return groups.sort((a, b) => a.category.localeCompare(b.category, "en-GB"));
+}
+
+function titleCaseCategory(category) {
+  if (category === "Serial music") return "Serial";
+  return category.split(" ").map((word) => word.charAt(0).toLocaleUpperCase("en-GB") + word.slice(1)).join(" ");
+}
+
+const CATEGORY_ICONS = {
+  "Bass lines": "./transposing-icon.svg",
+  "Cadences": "./cadences-icon.svg",
+  "Chords": "./chords-icon.svg",
+  "Concerto grosso": "./concept-recall-piano-icon.svg",
+  "Dynamics": "./dynamics-icon.svg",
+  "Fugue": "./concept-recall-fugue-icon.svg",
+  "National 5 Styles": "./notenaming-icon.svg",
+  "Higher Styles": "./notenaming-icon.svg",
+  "Advanced Higher Styles": "./notenaming-icon.svg",
+  "Instrumental style": "./practice-app-icon.svg",
+  "Key signatures": "./key-signatures-icon.svg",
+  "Orchestral families": "./concept-recall-violin-icon.svg",
+  "Playing techniques": "./articulation-markings-icon.svg",
+  "Scales": "./scale-degrees-icon.svg",
+  "Serial music": "./concept-recall-serial-icon.png",
+  "Tempo changes": "./tempo.svg",
+  "Tempo": "./tempo-icon.svg",
+  "Textures": "./chords-icon.svg",
+  "Tonalities": "./accidentals-icon.svg",
+  "Vocal style": "./audio-svgrepo-com.svg",
+  "Voice types": "./concept-recall-voice-icon.svg",
+  "Word setting": "./concept-recall-word-setting-icon.svg"
+};
+
+const CATEGORY_BRAVURA_GLYPHS = {
+  "Ornaments": "\uE566"
+};
+
+const CATEGORY_ICONS_WITH_FRAME = new Set([
+  "Bass lines",
+  "Cadences",
+  "Dynamics",
+  "Key signatures",
+  "Playing techniques",
+  "Scales",
+  "Tempo",
+  "Textures",
+  "Tonalities"
+]);
+
+function CategoryIcon({ category, menu = false }) {
+  const baseClass = menu ? "concept-category-menu-icon" : "concept-category-icon";
+  let reducedClass = "";
+  if (["Concerto grosso", "Orchestral families"].includes(category)) reducedClass = `${baseClass}-reduced`;
+  if (["Tempo changes", "Word setting"].includes(category)) reducedClass = `${baseClass}-reduced-20`;
+  if (category === "Fugue") reducedClass = `${baseClass}-reduced-25`;
+  if (category === "Voice types") reducedClass = `${baseClass}-reduced-30`;
+  const className = `${baseClass} ${reducedClass}`.trim();
+  if (CATEGORY_BRAVURA_GLYPHS[category]) {
+    const ornamentsClass = category === "Ornaments" ? "concept-category-bravura-ornaments" : "";
+    return <span className={`${className} concept-category-bravura ${ornamentsClass}`} aria-hidden="true"><span className="concept-category-bravura-glyph">{CATEGORY_BRAVURA_GLYPHS[category]}</span></span>;
+  }
+  const imageClass = `concept-category-icon-image${CATEGORY_ICONS_WITH_FRAME.has(category) ? " concept-category-icon-image-cropped" : ""}`;
+  return <span className={className} aria-hidden="true"><img className={imageClass} src={CATEGORY_ICONS[category] || "./concept-recall-icon.svg"} alt="" /></span>;
+}
+
+function ConceptCategoryTables({ rows, answeredIds, complete, showHints }) {
+  const groups = useMemo(() => groupRowsByCategory(rows), [rows]);
+  const [movedCategories, setMovedCategories] = useState(new Set());
+  const cardRefs = useRef(new Map());
+  const previousPositions = useRef(new Map());
+  const previousMovedCategories = useRef(new Set());
+  const completedCategories = useMemo(() => new Set(groups
+    .filter((group) => group.questions.every((question) => answeredIds.has(question.id)))
+    .map((group) => group.category)), [groups, answeredIds]);
+  const orderedGroups = useMemo(() => [...groups].sort((a, b) => {
+    const aStyles = isStylesCategory(a.category);
+    const bStyles = isStylesCategory(b.category);
+    if (aStyles !== bStyles) return aStyles ? 1 : -1;
+    const aMoved = completedCategories.has(a.category) && movedCategories.has(a.category);
+    const bMoved = completedCategories.has(b.category) && movedCategories.has(b.category);
+    if (aMoved !== bMoved) return aMoved ? 1 : -1;
+    return a.category.localeCompare(b.category, "en-GB");
+  }), [groups, completedCategories, movedCategories]);
+
+  useEffect(() => {
+    if (answeredIds.size === 0) {
+      setMovedCategories((current) => current.size ? new Set() : current);
+      return undefined;
+    }
+    const waitingCategories = [...completedCategories].filter((category) => !movedCategories.has(category));
+    if (!waitingCategories.length) return undefined;
+    const timer = window.setTimeout(() => setMovedCategories((current) => {
+      const next = new Set(current);
+      waitingCategories.forEach((category) => next.add(category));
+      return next;
+    }), 520);
+    return () => window.clearTimeout(timer);
+  }, [answeredIds, completedCategories, movedCategories]);
+
+  useLayoutEffect(() => {
+    const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const shouldAnimateReorder = [...movedCategories].some((category) => !previousMovedCategories.current.has(category));
+    const nextPositions = new Map();
+    cardRefs.current.forEach((element, category) => {
+      if (!element) return;
+      const nextPosition = element.getBoundingClientRect();
+      nextPositions.set(category, nextPosition);
+      const previousPosition = previousPositions.current.get(category);
+      if (!previousPosition || reduceMotion || !shouldAnimateReorder) return;
+      const x = previousPosition.left - nextPosition.left;
+      const y = previousPosition.top - nextPosition.top;
+      if (Math.abs(x) < 1 && Math.abs(y) < 1) return;
+      element.animate?.([
+        { transform: `translate(${x}px, ${y}px)`, zIndex: 2 },
+        { transform: "translate(0, 0)", zIndex: 2 },
+      ], { duration: 650, easing: "cubic-bezier(.22,1,.36,1)" });
+    });
+    previousPositions.current = nextPositions;
+    previousMovedCategories.current = new Set(movedCategories);
+  }, [orderedGroups, movedCategories]);
+
+  return <div className="concept-category-groups">
+    {orderedGroups.map((group, groupIndex) => {
+      const headingId = `concept-category-${groupIndex}`;
+      const celebrating = completedCategories.has(group.category) && !movedCategories.has(group.category);
+      const stylesCategory = isStylesCategory(group.category);
+      const groupShowsHints = showHints || stylesCategory;
+      const questionColumns = stylesCategory
+        ? [group.questions.slice(0, Math.ceil(group.questions.length / 2)), group.questions.slice(Math.ceil(group.questions.length / 2))]
+        : [group.questions];
+      return <section
+        key={group.category}
+        ref={(element) => { if (element) cardRefs.current.set(group.category, element); else cardRefs.current.delete(group.category); }}
+        className={`concept-category-card${stylesCategory ? " is-styles" : ""}${celebrating ? " is-celebrating" : ""}`}
+        aria-labelledby={headingId}
+      >
+        <h2 id={headingId} className="concept-category-title">
+          <CategoryIcon category={group.category} />
+          <span className="concept-category-name">{titleCaseCategory(group.category)}</span>
+        </h2>
+        <div className={stylesCategory ? "concept-styles-columns" : ""}>
+          {questionColumns.map((questions, columnIndex) => <table key={columnIndex} className="concept-table" data-hints={groupShowsHints ? "on" : "off"}>
+            <caption className="sr-only">{group.category} concept answers{groupShowsHints ? " and hints" : ""}{stylesCategory ? `, column ${columnIndex + 1}` : ""}</caption>
+            <tbody>
+            {questions.map((question) => {
+              const correct = answeredIds.has(question.id);
+              const missed = complete && !correct;
+              return <tr key={question.id} className={correct ? "is-correct" : missed ? "is-missed" : ""}>
+                <td className="concept-answer-cell">
+                  {correct && <span className="flex items-center gap-2 text-black"><span className="concept-status-mark concept-status-correct" aria-hidden="true">✓</span><span>{question.answer}</span><span className="sr-only">Correct</span></span>}
+                  {missed && <span className="flex items-center gap-2 text-red-700" aria-label={`Incorrect answer: ${question.answer}`}><span className="concept-status-mark concept-status-missed" aria-hidden="true">×</span><span aria-hidden="true">{question.answer}</span></span>}
+                  {!correct && !missed && <span aria-label="Unanswered">&nbsp;</span>}
+                </td>
+                {groupShowsHints && <td className="concept-hint-cell">{question.hint.replaceAll(".", "")}</td>}
+              </tr>;
+            })}
+            </tbody>
+          </table>)}
+        </div>
+      </section>;
+    })}
+  </div>;
+}
+
+function Confetti({ active }) {
+  if (!active) return null;
+  const colours = ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa", "#f97316"];
+  return <div className="concept-confetti" aria-hidden="true">{Array.from({ length: 56 }, (_, index) => <span key={index} style={{ left: `${(index * 37) % 100}%`, backgroundColor: colours[index % colours.length], animationDelay: `${(index % 12) * .045}s`, animationDuration: `${1.35 + (index % 7) * .13}s`, "--drift": `${((index * 29) % 180) - 90}px` }} />)}</div>;
+}
+
+function ResultsPanel({ result, open, panelRef }) {
+  if (!open || !result) return null;
+  const medal = result.medal ? MEDALS[result.medal] : null;
+  const scoreClass = result.percentage < 50 ? "is-score-low" : result.percentage < 75 ? "is-score-middle" : "is-score-high";
+  return <section ref={panelRef} role="region" aria-labelledby="results-title" className="concept-results-panel mb-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5" tabIndex="-1">
+      <h2 id="results-title" className="concept-results-heading">Results</h2>
+      <div className="concept-results-stats" role="list" aria-label="Attempt summary">
+        <div className={`concept-results-stat concept-results-score-pill ${scoreClass}`} role="listitem">
+          <span>Score</span>
+          <strong><span>{result.correct}</span><span className="concept-results-score-total">/{result.total}</span></strong>
+        </div>
+        <div className="concept-results-stat" role="listitem">
+          <span>Percentage</span>
+          <strong>{result.percentage}%</strong>
+        </div>
+        <div className="concept-results-stat" role="listitem">
+          <span>Time taken</span>
+          <strong className="tabular-nums">{formatElapsed(result.elapsedMs)}</strong>
+        </div>
+        <div className="concept-results-stat concept-results-medal" role="listitem">
+          <span>Medal</span>
+          {medal ? <strong><img src={medal.icon} alt="" /><span>{medal.label}</span></strong> : <strong>–</strong>}
+        </div>
+      </div>
+      {!result.standardGame && <p className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-center text-sm font-semibold text-blue-800">Custom category games are practice and do not award medals.</p>}
+  </section>;
+}
+
+function TimerPauseOverlay({ onResume, onEnd }) {
+  return <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-white/90 px-4 text-center backdrop-blur-sm">
+    <section role="dialog" aria-modal="true" aria-labelledby="pause-title" className="flex w-full max-w-sm flex-col items-center px-6 py-7">
+      <svg className="h-14 w-14 text-stone-950" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
+        <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
+      </svg>
+      <h2 id="pause-title" className="mt-3 text-3xl font-black leading-none tracking-tight text-stone-950">Paused</h2>
+      <div className="mt-6 grid w-full grid-cols-2 gap-2">
+        <button type="button" onClick={onEnd} className="flex h-11 items-center justify-center gap-2 rounded-xl border border-red-600 bg-red-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-red-700">
+          <span>End</span>
+        </button>
+        <button type="button" autoFocus onClick={onResume} className="flex h-11 items-center justify-center rounded-xl border border-black bg-black px-4 text-sm font-bold text-white shadow-sm hover:bg-stone-800">Resume</button>
+      </div>
+    </section>
+  </div>;
+}
+
+function SettingsChangeDialog({ onCancel, onConfirm }) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onCancel]);
+
+  return <div className="concept-overlay" style={{ zIndex: 2100 }} onPointerDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+    <section role="dialog" aria-modal="true" aria-labelledby="settings-change-title" aria-describedby="settings-change-description" className="concept-dialog max-w-md text-center">
+      <h2 id="settings-change-title" className="text-2xl font-black text-stone-900">Change settings?</h2>
+      <p id="settings-change-description" className="mt-3 text-stone-600">Changing this setting will end your current attempt and return you to Start.</p>
+      <div className="mt-6 grid grid-cols-2 gap-2">
+        <button type="button" autoFocus onClick={onCancel} className="min-h-12 rounded-xl border border-stone-300 bg-white px-4 font-black text-stone-800">Cancel</button>
+        <button type="button" onClick={onConfirm} className="min-h-12 rounded-xl bg-red-600 px-4 font-black text-white hover:bg-red-700">Confirm</button>
+      </div>
+    </section>
+  </div>;
+}
+
+function App() {
+  const initialLevel = requestedLevel();
+  const saved = useMemo(() => CORE.loadPersistence(window.localStorage), []);
+  const [activeLevel, setActiveLevel] = useState(initialLevel);
+  const [selectedCategories, setSelectedCategories] = useState(() => standardCategoriesAtLevel(initialLevel));
+  const [showHints, setShowHints] = useState(false);
+  const [persistence, setPersistence] = useState(saved);
+  const [gameState, setGameState] = useState("ready");
+  const [activeQuestions, setActiveQuestions] = useState(() => standardQuestionsAtLevel(initialLevel));
+  const [rows, setRows] = useState(() => standardQuestionsAtLevel(initialLevel));
+  const [answeredIds, setAnsweredIds] = useState(new Set());
+  const [answerInput, setAnswerInput] = useState("");
+  const [answerShake, setAnswerShake] = useState(false);
+  const [result, setResult] = useState(null);
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [pendingSettingChange, setPendingSettingChange] = useState(null);
+  const [levelOpen, setLevelOpen] = useState(false);
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const [timer, setTimer] = useState({ durationMs: durationForQuestions(initialLevel, standardQuestionsAtLevel(initialLevel)), accumulatedMs: 0, startedAt: null, running: false });
+  const [timerAnnouncement, setTimerAnnouncement] = useState("");
+  const inputRef = useRef(null);
+  const levelRef = useRef(null);
+  const customiseRef = useRef(null);
+  const resultsPanelRef = useRef(null);
+  const answeredRef = useRef(new Set());
+  const timerRef = useRef(timer);
+  const finishLockRef = useRef(false);
+  const warningAnnouncedRef = useRef(false);
+  const shakeTimerRef = useRef(null);
+
+  window.MLH.useClickOutside([levelRef, customiseRef], [() => setLevelOpen(false), () => setCustomiseOpen(false)]);
+
+  const standardCategories = useMemo(() => standardCategoriesAtLevel(activeLevel), [activeLevel]);
+  const availableCategories = useMemo(() => customisableCategoriesAtLevel(activeLevel), [activeLevel]);
+  const configuredQuestions = useMemo(() => questionsForSelectedCategories(activeLevel, selectedCategories), [activeLevel, selectedCategories]);
+  const standardGame = selectedCategories.length === standardCategories.length && standardCategories.every((category) => selectedCategories.includes(category));
+  const levelRecord = standardGame ? persistence.records[activeLevel] : null;
+  const bestTime = levelRecord?.fastestCompletionMs ?? null;
+  const bestScore = levelRecord?.bestScore > 0 ? levelRecord.bestScore : null;
+  const remainingMs = gameState === "ready" ? durationForQuestions(activeLevel, configuredQuestions) : CORE.remainingMilliseconds(timer, now);
+  const timerWarning = gameState === "playing" && remainingMs > 0 && remainingMs <= 30000;
+  const hintsVisible = showHints;
+
+  function commitTimer(nextTimer) {
+    timerRef.current = nextTimer;
+    setTimer(nextTimer);
+  }
+
+  function resetAttempt(questions = configuredQuestions, level = activeLevel) {
+    const emptyAnswers = new Set();
+    const resetAt = Date.now();
+    window.clearTimeout(shakeTimerRef.current);
+    answeredRef.current = emptyAnswers;
+    setAnsweredIds(emptyAnswers);
+    setActiveQuestions(questions);
+    setRows([...questions]);
+    setAnswerInput("");
+    setAnswerShake(false);
+    setResult(null);
+    setResultsOpen(false);
+    finishLockRef.current = false;
+    warningAnnouncedRef.current = false;
+    setTimerAnnouncement("");
+    commitTimer({
+      durationMs: durationForQuestions(level, questions),
+      accumulatedMs: 0,
+      startedAt: null,
+      running: false,
+    });
+    setNow(resetAt);
+    setGameState("ready");
+  }
+
+  function applyLevel(level) {
+    const categories = standardCategoriesAtLevel(level);
+    const questions = standardQuestionsAtLevel(level);
+    setActiveLevel(level);
+    setSelectedCategories(categories);
+    resetAttempt(questions, level);
+    setLevelOpen(false);
+    setCustomiseOpen(false);
+    const url = new URL(window.location.href);
+    url.searchParams.set("level", level);
+    window.history.replaceState(null, "", url.toString());
+  }
+
+  function toggleCategory(category) {
+    if (selectedCategories.includes(category) && selectedCategories.length === 1) return;
+    const nextCategories = selectedCategories.includes(category)
+      ? selectedCategories.filter((name) => name !== category)
+      : [...selectedCategories, category];
+    const questions = questionsForSelectedCategories(activeLevel, nextCategories);
+    setSelectedCategories(nextCategories);
+    resetAttempt(questions, activeLevel);
+  }
+
+  function applySettingChange(change, resetCurrentAttempt = false) {
+    if (change.type === "level") applyLevel(change.value);
+    if (change.type === "category") toggleCategory(change.value);
+    if (change.type === "hints") {
+      setShowHints((visible) => !visible);
+      if (resetCurrentAttempt) resetAttempt();
+    }
+  }
+
+  function requestSettingChange(change) {
+    if (gameState !== "playing") {
+      applySettingChange(change);
+      return;
+    }
+    pauseGame();
+    setPendingSettingChange(change);
+    setLevelOpen(false);
+    setCustomiseOpen(false);
+  }
+
+  function cancelSettingChange() {
+    setPendingSettingChange(null);
+    resumeGame();
+  }
+
+  function confirmSettingChange() {
+    const change = pendingSettingChange;
+    setPendingSettingChange(null);
+    if (change) applySettingChange(change, true);
+  }
+
+  function startGame() {
+    const questions = configuredQuestions;
+    const nextRows = [...questions];
+    const durationMs = durationForQuestions(activeLevel, questions);
+    const startedAt = Date.now();
+    const emptyAnswers = new Set();
+    window.clearTimeout(shakeTimerRef.current);
+    answeredRef.current = emptyAnswers;
+    setAnsweredIds(emptyAnswers);
+    setActiveQuestions(questions);
+    setRows(nextRows);
+    setAnswerInput("");
+    setAnswerShake(false);
+    setResult(null);
+    setResultsOpen(false);
+    finishLockRef.current = false;
+    warningAnnouncedRef.current = false;
+    setTimerAnnouncement("");
+    commitTimer({ durationMs, accumulatedMs: 0, startedAt, running: true });
+    setNow(startedAt);
+    setGameState("playing");
+  }
+
+  function resetGame() {
+    resetAttempt();
+  }
+
+  function endGame() {
+    finishGame(answeredRef.current, Date.now());
+  }
+
+  function finishGame(finalAnsweredIds = answeredRef.current, finishedAt = Date.now()) {
+    if (finishLockRef.current) return;
+    finishLockRef.current = true;
+    const elapsedMs = CORE.elapsedMilliseconds(timerRef.current, finishedAt);
+    const finishedTimer = { ...timerRef.current, accumulatedMs: elapsedMs, startedAt: null, running: false };
+    const finalResult = CORE.createResult({ level: activeLevel, questions: activeQuestions, answeredIds: finalAnsweredIds, elapsedMs, durationMs: timerRef.current.durationMs, standardGame, completedAt: finishedAt });
+    commitTimer(finishedTimer);
+    setResult(finalResult);
+    setGameState("complete");
+    setResultsOpen(true);
+    setAnswerInput("");
+    setPersistence((current) => CORE.savePersistence(window.localStorage, CORE.updatePersistence(current, finalResult)));
+    if (finalResult.completed) playCompletionChime();
+    if (finalResult.medal) window.setTimeout(() => window.MLH.playFeedbackSound?.(true, true, MEDALS[finalResult.medal].sound), 900);
+  }
+
+  function pauseGame() {
+    if (gameState !== "playing") return;
+    const pausedAt = Date.now();
+    const accumulatedMs = CORE.elapsedMilliseconds(timerRef.current, pausedAt);
+    commitTimer({ ...timerRef.current, accumulatedMs, startedAt: null, running: false });
+    setNow(pausedAt);
+    setGameState("paused");
+  }
+
+  function resumeGame() {
+    if (gameState !== "paused") return;
+    const resumedAt = Date.now();
+    commitTimer({ ...timerRef.current, startedAt: resumedAt, running: true });
+    setNow(resumedAt);
+    setGameState("playing");
+  }
+
+  function acceptTypedAnswer(value) {
+    setAnswerInput(value);
+    if (gameState !== "playing") return;
+    const match = CORE.recognizeAnswer(value, activeQuestions, answeredRef.current);
+    if (!match) return;
+    const nextAnswered = new Set(answeredRef.current);
+    nextAnswered.add(match.id);
+    answeredRef.current = nextAnswered;
+    setAnsweredIds(nextAnswered);
+    setAnswerInput("");
+    window.clearTimeout(shakeTimerRef.current);
+    setAnswerShake(false);
+    const completed = nextAnswered.size === activeQuestions.length;
+    if (!completed) window.MLH.playFeedbackSound?.(true, false, null);
+    if (completed) window.setTimeout(() => finishGame(nextAnswered, Date.now()), 0);
+  }
+
+  function handleAnswerKeyDown(event) {
+    if (event.key !== "Enter" || gameState !== "playing") return;
+    event.preventDefault();
+    if (CORE.recognizeAnswer(answerInput, activeQuestions, answeredRef.current) || !answerInput.trim()) return;
+    window.clearTimeout(shakeTimerRef.current);
+    setAnswerShake(false);
+    shakeTimerRef.current = window.setTimeout(() => {
+      setAnswerShake(true);
+      shakeTimerRef.current = window.setTimeout(() => setAnswerShake(false), 360);
+    }, 0);
+    window.MLH.playFeedbackSound?.(false, false, null);
+  }
+
+  useEffect(() => {
+    if (gameState !== "playing") return undefined;
+    inputRef.current?.focus({ preventScroll: true });
+    const interval = window.setInterval(() => {
+      const currentTime = Date.now();
+      setNow(currentTime);
+      const remaining = CORE.remainingMilliseconds(timerRef.current, currentTime);
+      if (remaining <= 0) finishGame(answeredRef.current, currentTime);
+      else if (remaining <= 30000 && !warningAnnouncedRef.current) {
+        warningAnnouncedRef.current = true;
+        setTimerAnnouncement("30 seconds remaining.");
+      }
+    }, 200);
+    return () => window.clearInterval(interval);
+  }, [gameState, activeQuestions, activeLevel, standardGame]);
+
+  useEffect(() => {
+    if (gameState === "playing") inputRef.current?.focus({ preventScroll: true });
+  }, [gameState, answeredIds]);
+
+  useEffect(() => {
+    if (gameState !== "ready") return;
+    setActiveQuestions(configuredQuestions);
+    setRows(configuredQuestions);
+    setAnsweredIds(new Set());
+    answeredRef.current = new Set();
+  }, [configuredQuestions, gameState]);
+
+  useEffect(() => {
+    if (resultsOpen) window.setTimeout(() => resultsPanelRef.current?.focus(), 0);
+  }, [resultsOpen]);
+
+  useEffect(() => () => {
+    window.clearTimeout(shakeTimerRef.current);
+    if (timerRef.current.running) timerRef.current = { ...timerRef.current, running: false, startedAt: null };
+  }, []);
+
+  const resultComplete = gameState === "complete";
+  const displayedTotal = gameState === "ready" ? configuredQuestions.length : activeQuestions.length;
+  const levelOptions = Object.fromEntries(PLAYABLE_LEVELS.map((key) => {
+    const level = CORE.LEVELS[key];
+    const levelQuestions = standardQuestionsAtLevel(key);
+    const categoryCount = CORE.categoriesForQuestions(levelQuestions).length;
+    const durationMinutes = Math.round(LEVEL_DURATION_MS[key] / 60000);
+    return [key, { ...level, description: `${categoryCount} categories • ${levelQuestions.length} concepts • ${durationMinutes} minutes` }];
+  }));
+  const toolbarButtonLabel = gameState === "complete" ? "Play Again" : gameState === "ready" ? "Start" : "Pause";
+  const toolbarButtonAction = gameState === "complete" ? resetGame : gameState === "ready" ? startGame : pauseGame;
+
+  return <div className={window.MLH.shell.pageShellClass}>
+    <window.MLH.AppHeader
+      icon={ASSET.appIcon}
+      title="Concept Recall"
+      subtitle="Name as many musical concepts as you can under each category before time runs out."
+      worksheetConfig={() => ({
+        version: 1,
+        activityId: "concept-recall",
+        sourceUrl: window.location.href,
+        settings: {
+          level: activeLevel,
+          categories: selectedCategories,
+          concepts: configuredQuestions.map(({ id, category, answer, hint }) => ({ id, category, answer, hint })),
+        },
+      })}
+    >
+      <HeaderControls score={answeredIds.size} total={displayedTotal} remainingMs={remainingMs} warning={timerWarning} activeLevel={activeLevel} medalEligible={standardGame} bestTime={bestTime} bestScore={bestScore} />
+    </window.MLH.AppHeader>
+    <div className={window.MLH.shell.pageContentClass}>
+      <main className={`${window.MLH.shell.mainShellClass} !min-h-[620px] pb-5`}>
+        <window.MLH.AppToolbar
+          className="!mb-[10px] md:!mb-[14px]"
+          left={<div className="flex items-center gap-2">
+            <div className="hub-menu-anchor relative" ref={levelRef}>
+              <window.MLH.LevelButton icon={<img src={ASSET.levels} alt="" className="h-[26px] w-[26px]" />} activeLevel={activeLevel} activeLabel={standardGame ? CORE.LEVELS[activeLevel].label : "Custom"} isCustom={!standardGame} onClick={() => { setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />
+              {levelOpen && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={activeLevel} onSelect={(level) => {
+                if (level === activeLevel && standardGame) { setLevelOpen(false); return; }
+                requestSettingChange({ type: "level", value: level });
+              }} levels={levelOptions} /></window.MLH.MenuPanel>}
+            </div>
+            <div className="hub-menu-anchor relative" ref={customiseRef}>
+              <window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" className="h-[26px] w-[26px]" />} onClick={() => { setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />
+              {customiseOpen && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}><CustomiseMenu categories={availableCategories} selectedCategories={selectedCategories} toggleCategory={(category) => requestSettingChange({ type: "category", value: category })} showHints={showHints} toggleHints={() => requestSettingChange({ type: "hints" })} disabled={false} /></window.MLH.MenuPanel>}
+            </div>
+          </div>}
+          feedback={null}
+          right={<div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label={toolbarButtonLabel}
+              onClick={toolbarButtonAction}
+              disabled={gameState === "paused"}
+              className="flex min-h-11 w-[88px] items-center justify-center gap-2 rounded-xl border border-black bg-black px-3 text-sm font-bold text-white shadow-sm transition hover:bg-stone-800 sm:w-[120px]"
+            >
+              {gameState === "playing" && <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" /><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" /></svg>}
+              <span>{toolbarButtonLabel}</span>
+            </button>
+            {(gameState === "playing" || gameState === "paused") && <div className="concept-answer-reveal"><AnswerInput input={answerInput} setInput={acceptTypedAnswer} inputRef={inputRef} playing={gameState === "playing"} onKeyDown={handleAnswerKeyDown} shake={answerShake} /></div>}
+          </div>}
+        />
+
+        <ResultsPanel result={result} open={resultsOpen} panelRef={resultsPanelRef} />
+
+        <p id="concept-input-help" className="sr-only">Correct answers are recognised automatically. Press Enter only to check an unrecognised entry.</p>
+        <div aria-live="polite" aria-atomic="true" className="sr-only">Score {answeredIds.size} out of {displayedTotal}.</div>
+        <div aria-live="assertive" aria-atomic="true" className="sr-only">{timerAnnouncement}</div>
+
+        <ConceptCategoryTables rows={rows} answeredIds={answeredIds} complete={resultComplete} showHints={hintsVisible} />
+      </main>
+    </div>
+
+    <Confetti active={Boolean(resultsOpen && result?.medal)} />
+    {gameState === "paused" && !pendingSettingChange && <TimerPauseOverlay onResume={resumeGame} onEnd={endGame} />}
+    {pendingSettingChange && <SettingsChangeDialog onCancel={cancelSettingChange} onConfirm={confirmSettingChange} />}
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+window.dispatchEvent(new Event("concept-recall-ready"));
+</script>
+<script src="./footer.js?v=20260629"></script>
+</body>
+</html>

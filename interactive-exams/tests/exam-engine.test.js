@@ -22,8 +22,11 @@ const examStyles = fs.readFileSync(require.resolve("../styles.css"), "utf8");
 
 assert.match(examStyles, /mask:\s*url\("\.\.\/prtick\.svg"\)/, "Selected paper answers should use the established prtick.svg tick.");
 assert.match(examStyles, /input:checked::after\s*\{[^}]*translate\(\.5px,\s*-1px\)/, "The selected-answer tick should retain its established half-pixel right adjustment.");
+assert.match(examStyles, /\.subquestion\.has-part-label > \.short-answer-line\s*\{[^}]*width:\s*min\(calc\(100% - 94px\),\s*calc\(46rem - 70px\)\)[^}]*margin-left:\s*44px/, "Standalone answer lines should retain their left edge and be shortened by fifty pixels from the right.");
 assert.match(examStyles, /\.result-footer-row\s*\{[^}]*gap:\s*16px/, "Feedback actions should have the same 16px space above them as below them.");
 assert.match(examHtml, /bravura-worksheet-outlines\.js/, "Feedback PDFs should load the same Bravura vector outlines as Practice Questions PDFs.");
+assert.match(examHtml, /<div class="automatic-marking-notice"><span>Marking is automated using the official marking instructions\./, "The automatic-marking notice should begin without a Notice label or bold text.");
+assert.match(examHtml, /If you believe something is wrong then please give feedback using the link below\./, "The automatic-marking notice should use the requested plain-language final sentence.");
 assert.match(examUiSource, /onclone:\s*outlineFeedbackBravuraGlyphs/, "Feedback PDF capture should replace Bravura font characters with vector paths.");
 assert.match(examUiSource, /symbolKey === "tie"[\s\S]*tiePath\.setAttribute\("d"/, "Feedback PDF capture should also replace tied-note font characters with a vector tie.");
 assert.match(examUiSource, /feedbackPdfBreakpoints/, "Feedback PDF generation should find safe page breaks within long questions.");
@@ -192,10 +195,12 @@ assert.equal(validateAttempt(paper, { ...savedSubmission, result: { ...savedSubm
 const malformedSubmission = JSON.parse(JSON.stringify(savedSubmission));
 malformedSubmission.result.questionBreakdown[0].parts[0].id = "unknown-part";
 assert.equal(validateAttempt(paper, malformedSubmission, "submitted"), false, "A submitted attempt containing an unknown part result must not be restored.");
+savedSubmission.result.legacyFeedback = true;
 let restoreReason = "";
 const restoredEngine = new ExamEngine(paper, (restoredAttempt, reason) => { restoreReason = reason; });
 assert.equal(restoredEngine.restoreSubmitted(savedSubmission), true, "A valid submitted attempt should be restorable after refresh.");
 assert.equal(restoredEngine.attempt.status, "submitted");
+assert.equal(restoredEngine.attempt.result.legacyFeedback, undefined, "Restored feedback should be recalculated using the current marking rules.");
 assert.equal(restoreReason, "restore-submit", "Restoring a submission should reopen the feedback screen.");
 storage.deleteSubmitted(paper.id);
 

@@ -37,7 +37,8 @@
     const phrasedMatch = subquestion.allowAnswerInPhrase && expected.some(answer => phraseMatches(response, answer));
     const keywordMatch = (subquestion.acceptedKeywords || []).some(keyword => phraseMatches(response, keyword));
     const keywordGroupMatch = (subquestion.acceptedKeywordGroups || []).some(group => group.every(keyword => phraseMatches(response, keyword)));
-    const forbiddenMatch = (subquestion.forbiddenKeywordGroups || []).some(group => group.every(keyword => phraseMatches(response, keyword)));
+    const forbiddenException = (subquestion.forbiddenExceptions || []).some(phrase => phraseMatches(response, phrase, false));
+    const forbiddenMatch = !forbiddenException && (subquestion.forbiddenKeywordGroups || []).some(group => group.every(keyword => phraseMatches(response, keyword)));
     const correct = !forbiddenMatch && (exactMatch || phrasedMatch || keywordMatch || keywordGroupMatch);
     return { marks: correct ? subquestion.marks : 0, status: correct ? "correct" : "incorrect" };
   }
@@ -122,7 +123,8 @@
         return evidence ? { concept, evidence } : null;
       }).filter(Boolean);
       const eligible = matches.filter(match => !match.concept.creditId || !creditedConceptIds.has(match.concept.creditId));
-      const banked = eligible.slice(0, subquestion.maxMarksPerHeading || 2);
+      const remainingMarks = Math.max(0, subquestion.marks - marks);
+      const banked = eligible.slice(0, Math.min(subquestion.maxMarksPerHeading || 2, remainingMarks));
       banked.forEach(match => {
         if (match.concept.creditId) creditedConceptIds.add(match.concept.creditId);
       });
@@ -131,7 +133,6 @@
       validConceptCounts[heading.id] = matches.length;
       marks += banked.length;
     }
-    marks = Math.min(subquestion.marks, marks);
     const headingsCovered = Object.values(matchedConcepts).filter(items => items.length > 0).length;
     if (subquestion.minHeadingsForFullMarks && marks === subquestion.marks && headingsCovered < subquestion.minHeadingsForFullMarks) {
       marks = Math.max(0, subquestion.marks - 1);

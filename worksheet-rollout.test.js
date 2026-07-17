@@ -20,6 +20,7 @@ assert.doesNotMatch(fs.readFileSync("rhythmmatch.html", "utf8"), /worksheetConfi
 
 const generic = fs.readFileSync("worksheet-generic.jsx", "utf8");
 const hubShell = fs.readFileSync("hub-shell.js", "utf8");
+const conceptRecallSource = fs.readFileSync("concept-recall.html", "utf8");
 const timeSignaturesActivity = fs.readFileSync("timesig.html", "utf8");
 assert.match(timeSignaturesActivity, /const \{ useEffect, useMemo, useRef, useState \} = React;/, "Time Signatures must import every React hook it uses so the activity can render");
 const outlineContext = { window: {} };
@@ -29,14 +30,16 @@ for (const symbol of ["brace", "gClef", "fClef", "noteheadBlack", "augmentationD
   assert.ok(worksheetOutlines[symbol]?.path, `Worksheet PDFs need a vector outline for ${symbol}`);
 }
 for (const { file } of eligible.filter(({ file }) => file !== "intervals.html")) {
-  assert.match(generic, new RegExp(`${file.replace(".html", "")}:\\s*\\{`), `${file} needs a generator definition`);
+  const escapedFileId = file.replace(".html", "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  assert.match(generic, new RegExp(`["']?${escapedFileId}["']?\\s*:\\s*\\{`), `${file} needs a generator definition`);
   const source = fs.readFileSync(file, "utf8");
   const header = source.match(/<(?:window\.MLH\.)?AppHeader[\s\S]*?title="([^"]+)"[\s\S]*?subtitle="([^"]+)"[\s\S]*?worksheetConfig=/);
   const activityId = source.match(/activityId:\s*"([^"]+)"/)?.[1];
   assert.ok(header && activityId, `${file} must expose its pupil-facing header to worksheet mode`);
   const escapedTitle = header[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const escapedSubtitle = header[2].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  assert.match(generic, new RegExp(`${activityId}: \\{ title: "${escapedTitle}", subtitle: "${escapedSubtitle}"`), `${file} worksheet fallback must match its normal pupil-facing subtitle`);
+  const escapedActivityId = activityId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  assert.match(generic, new RegExp(`["']?${escapedActivityId}["']?: \\{ title: "${escapedTitle}", subtitle: "${escapedSubtitle}"`), `${file} worksheet fallback must match its normal pupil-facing subtitle`);
 }
 const chordsSource = fs.readFileSync("chords.html", "utf8");
 assert.match(chordsSource, /activeLevel==="N5"\|\|\(activeLevel==="AH"&&\(ahCustomise\.insertPosition\|\|ahCustomise\.createBassLine\)\)/, "Chords worksheets must stay disabled at Higher and when no written Advanced Higher type is enabled");
@@ -109,7 +112,7 @@ const practiceSource = fs.readFileSync("practicequestions.html", "utf8");
 const hubShellSource = fs.readFileSync("hub-shell.js", "utf8");
 assert.doesNotMatch(hubShellSource, /worksheetControlsMode|mlh-worksheet-controls-height|mlh-worksheet-source-config/, "Activities should not expose embedded Level or Customise controls in worksheet mode");
 assert.doesNotMatch(fs.readFileSync("worksheet-generator.html", "utf8"), /WorksheetSourceControls|worksheet-source-controls/, "The worksheet generator should use its original layout without embedded activity controls");
-assert.match(fs.readFileSync("worksheet-generator.html", "utf8"), /worksheet-generic\.jsx\?v=20260714-controls-removed/, "Browsers must fetch the worksheet renderer version that matches the controls-free generator");
+assert.match(fs.readFileSync("worksheet-generator.html", "utf8"), /worksheet-generic\.jsx\?v=20260717-concept-recall-options/, "Browsers must fetch the worksheet renderer version that includes Concept Recall");
 assert.match(practiceSource, /PRACTICE_WORKSHEET_PAPER_COUNT = 20/, "Mixed Practice Questions should prepare twenty complete paper choices");
 assert.match(practiceSource, /new Set\(\["missing", "rhythmicDictation", "tempoQuestion", "cadence", "repeatSigns", "chord", "accidentals"\]\)/, "Mixed Practice Questions should exclude listening-dependent cadence, repeat-sign, chord and accidental questions");
 assert.match(practiceSource, /enabledQuestionTypes\.worksheetWrittenOnly[\s\S]*randomItem\(\["dynamicName", "hairpinName"\]\)/, "Printed Practice Questions should use only dynamics that can be answered from the score");
@@ -523,4 +526,13 @@ assert.match(generic, /setPreviewVisible\(false\)[\s\S]*setTimeout\([\s\S]*setPr
 assert.match(generic, /transition-opacity duration-300 \$\{previewVisible\?"opacity-100":"opacity-0"\}/, "Generic worksheet previews must fade like pupil activity questions");
 assert.match(intervalWorksheet, /setPreviewVisible\(false\)[\s\S]*window\.setTimeout\([\s\S]*setPreviewVisible\(true\)[\s\S]*260/, "Intervals Refresh must use the same activity-style preview transition");
 assert.match(intervalWorksheet, /transition-opacity duration-300 \$\{previewVisible \? "opacity-100" : "opacity-0"\}/, "Intervals preview must use the shared fade timing");
+assert.match(conceptRecallSource, /activityId: "concept-recall"[\s\S]*categories: selectedCategories[\s\S]*concepts: configuredQuestions\.map/, "Concept Recall worksheets must carry over the current level, categories and concepts");
+assert.match(generic, /function ConceptRecallWorksheetApp\(\)/, "Concept Recall should use its dedicated category-based worksheet renderer");
+assert.match(generic, /savedOptions\?\.tips \?\? false/, "Concept Recall worksheet tips should be optional and off by default");
+assert.match(generic, /check\("Include Tips", includeTips, setIncludeTips\)/, "Concept Recall worksheets should offer a correctly capitalised Include Tips option");
+assert.match(generic, /answer-sheet-start-new[\s\S]*<ConceptRecallPage[\s\S]*answers/, "Concept Recall should generate a separate teacher answer sheet when requested");
+assert.match(generic, /grid min-h-0 flex-1 grid-cols-2/, "Concept Recall worksheet categories should use a clear two-column page layout");
+assert.match(generic, /savedOptions\?\.name \?\? true[\s\S]*savedOptions\?\.classField \?\? false[\s\S]*savedOptions\?\.date \?\? false/, "Concept Recall worksheets should default to Name only while still offering Class and Date fields");
+assert.match(generic, /check\("Gridlines", gridlines, setGridlines\)/, "Concept Recall worksheets should offer a Gridlines option");
+assert.match(generic, /data\.gridlines \? "border border-black" : ""/, "Concept Recall gridlines should control the printed category boxes");
 console.log(`Worksheet rollout checks passed for ${eligible.length} activities.`);

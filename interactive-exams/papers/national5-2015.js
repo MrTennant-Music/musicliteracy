@@ -24,14 +24,14 @@
     q3c: "F major has one flat in its key signature: B flat.",
     q3d: "An imperfect cadence ends on chord V and sounds unfinished.",
     q3e: "B flat is the note B lowered by one semitone.",
-    q3f: "The missing pitches are A, A, B flat and C, using the printed rhythm.",
+    q3f: "The missing pitches are A, G, A and B flat, using the printed rhythm.",
     q4a: "Music in which the parts move together rhythmically.",
     q4b: "Popular vocal music with religious lyrics.",
     q4c: "A male singer with a range between tenor and bass.",
     q4d: "A second melody played or sung at the same time as the main melody.",
     q4e: "The chord sequence is I–V–VI–IV: F–C–Dm–B flat.",
     q4f: "An aria is a solo song in an opera or oratorio. Melismatic word setting gives several notes to one syllable.",
-    q4g: "A soprano is the highest common female singing voice.",
+    q4g: "Soprano and mezzo-soprano are both accepted here. A mezzo-soprano has a lower vocal range than a soprano.",
     q5a: "Baroque music dates approximately from 1600 to 1750.",
     q5b: "Allegro means fast and lively.",
     q5c: "Contrapuntal music combines independent melodic lines.",
@@ -61,8 +61,8 @@
     questions: [
       {
         id: "q1", number: "1", marks: 6, topic: "Scottish music", audio: { clips: [audio(2, [
-          { label: "(a)", time: 6 }, { label: "(b)", time: 49 }, { label: "(c)", time: 91 },
-          { label: "(d)", time: 135 }, { label: "(e)", time: 205 }, { label: "(f)", time: 254 },
+          { label: "(a)", time: 6.54 }, { label: "(b)", time: 50.32 }, { label: "(c)", time: 93.56 },
+          { label: "(d)", time: 149.76 }, { label: "(e)", time: 221.68 }, { label: "(f)", time: 257.9 },
         ])] },
         intro: "This question is based on Scottish music.",
         subquestions: [
@@ -76,7 +76,7 @@
       },
       {
         id: "q2", number: "2", marks: 4, topic: "Musical concepts", audio: { clips: [audio(3, [
-          { label: "1st", time: 101 }, { label: "2nd", time: 204 }, { label: "3rd", time: 307 },
+          { label: "1st", time: 99.46 }, { label: "2nd", time: 178.94 }, { label: "3rd", time: 259 },
         ])] },
         intro: [
           "In this question you will hear an excerpt of vocal music.",
@@ -98,7 +98,7 @@
       },
       {
         id: "q3", number: "3", marks: 6, topic: "Music notation", audio: { clips: [audio(4, [
-          { label: "Preview", time: 14 }, { label: "1st", time: 96 }, { label: "2nd", time: 181 }, { label: "3rd", time: 266 },
+          { label: "Preview", time: 13.94 }, { label: "1st", time: 66.7 }, { label: "2nd", time: 130.66 }, { label: "3rd", time: 194.48 },
         ])] },
         intro: [
           "You now have to answer questions relating to the guide score printed below.",
@@ -113,13 +113,13 @@
           { id: "q3c", label: "(c)", marks: 1, type: "short-text", capitaliseAnswer: true, prompt: "Name the key of this excerpt.", inlineAnswer: { before: "Name the key of this excerpt.", after: "" }, acceptedAnswers: ["f", "f major", "f maj", "f majer", "f majour"], answerDisplay: "F major" },
           { id: "q3d", label: "(d)", marks: 1, type: "short-text", capitaliseAnswer: true, prompt: "Name the cadence at bar 4.", inlineAnswer: { before: "Name the cadence at bar 4.", after: "" }, acceptedAnswers: ["imperfect", "imperfect cadence", "i v", "i to v", "1 5", "1 to 5", "imperfct", "imperfect cadance"], answerDisplay: "Imperfect (I–V)" },
           { id: "q3e", label: "(e)", marks: 1, type: "short-text", capitaliseAnswer: true, prompt: "Name the note marked X in bar 5.", inlineAnswer: { before: "Name the note marked X in bar 5.", after: "" }, acceptedAnswers: ["b flat", "bb", "b♭", "bflat"], answerDisplay: "B flat" },
-          { id: "q3f", label: "(f)", marks: 1, type: "notation-choice", sharedScore: true, notationTool: "note-entry", prompt: "Complete bar 7 by inserting the missing notes. The rhythm is given above the bar.", scoreHint: "Use the score above to enter your answer.", options: [], noteSlots: 4, answer: "A4,A4,Bb4,C5", answerDisplay: "A dotted quaver, A semiquaver, B flat quaver and C quaver" },
+          { id: "q3f", label: "(f)", marks: 1, type: "notation-choice", sharedScore: true, notationTool: "note-entry", prompt: "Complete bar 7 by inserting the missing notes. The rhythm is given above the bar.", scoreHint: "Use the score above to enter your answer.", options: [], noteSlots: 4, answer: "A4,G4,A4,Bb4", answerDisplay: "A dotted quaver, G semiquaver, A quaver and B flat quaver" },
         ],
       },
       {
         id: "q4", number: "4", marks: 8, topic: "Vocal music", audio: { clips: [audio(5, [
-          { label: "(a)", time: 6 }, { label: "(b)", time: 54 }, { label: "(c)", time: 99 }, { label: "(d)", time: 145 },
-          { label: "(e)", time: 206 }, { label: "(f)", time: 295 }, { label: "(g)", time: 350 },
+          { label: "(a)", time: 5.74 }, { label: "(b)", time: 42.96 }, { label: "(c)", time: 79.52 }, { label: "(d)", time: 142.6 },
+          { label: "(e)", time: 198.06 }, { label: "(f)", time: 288.88 }, { label: "(g)", time: 338.86 },
         ])] },
         intro: "This question features vocal music.",
         subquestions: [
@@ -138,7 +138,7 @@
       },
       {
         id: "q5", number: "5", marks: 4, topic: "Musical concepts", audio: { clips: [audio(6, [
-          { label: "1st", time: 82 }, { label: "2nd", time: 132 }, { label: "3rd", time: 182 },
+          { label: "1st", time: 85.38 }, { label: "2nd", time: 139.7 }, { label: "3rd", time: 194.32 },
         ])] },
         intro: [
           "In this question you will hear an excerpt of instrumental music which will be played three times.",
@@ -159,7 +159,7 @@
       },
       {
         id: "q6", number: "6", marks: 3, topic: "Musical concepts", audio: { clips: [audio(7, [
-          { label: "1st", time: 56 }, { label: "2nd", time: 145 },
+          { label: "1st", time: 57.8 }, { label: "2nd", time: 155.92 },
         ])] },
         intro: [
           "In this question, you are asked to describe music you hear by inserting the appropriate concepts in the text below.",
@@ -179,20 +179,20 @@
       },
       {
         id: "q7", number: "7", marks: 4, topic: "Styles and justification", audio: { clips: [audio(8, [
-          { label: "(a)", time: 6 }, { label: "(b)", time: 89 },
+          { label: "(a)", time: 6.28 }, { label: "(b)", time: 85.72 },
         ])] },
         intro: "This question features instrumental music.",
         layout: "style-reason-groups",
         subquestions: [
           { id: "q7a1", label: "(i)", marks: 1, type: "radio", groupStart: { label: "(a)", prompt: "As you listen to the excerpt:" }, prompt: "tick one box to describe the style of music, and", boldPhrases: ["one"], instructionLines: ["There will be a pause of 20 seconds before the next question starts.", "Here is the music."], options: ["Baroque", "Concerto", "Minimalist", "Symphony"].map(x => option(x)), answer: "Symphony" },
-          { id: "q7a2", label: "(ii)", marks: 1, type: "short-text", answerStyle: "reason", prompt: "in the space below, give a reason to support your answer.", allowAnswerInPhrase: true, acceptedAnswers: ["orchestra", "orchestral", "full orchestra"], acceptedKeywords: ["orchestra", "orchestral"], forbiddenKeywordGroups: [["solo", "orchestra"], ["soloist", "orchestra"]], answerDisplay: "Full orchestra, orchestra or orchestral" },
+          { id: "q7a2", label: "(ii)", marks: 1, type: "short-text", answerStyle: "reason", prompt: "in the space below, give a reason to support your answer.", allowAnswerInPhrase: true, acceptedAnswers: ["orchestra", "orchestral", "full orchestra"], acceptedKeywords: ["orchestra", "orchestral"], forbiddenKeywordGroups: [["solo", "orchestra"], ["soloist", "orchestra"]], forbiddenExceptions: ["no solo instrument", "no soloist", "not a solo instrument", "not a soloist", "without a solo instrument", "without a soloist", "solo instrument is not present", "soloist is not present", "solo instrument does not play", "soloist does not play", "isnt a solo instrument", "isnt a soloist"], answerDisplay: "Full orchestra, orchestra or orchestral" },
           { id: "q7b1", label: "(i)", marks: 1, type: "radio", groupStart: { label: "(b)", prompt: "As you listen to a different excerpt:" }, prompt: "tick one box to describe the style of music, and", boldPhrases: ["one"], instructionLines: ["There will be a pause of 20 seconds before the next question starts.", "Here is the music."], options: ["African music", "Indian", "Latin American", "Ragtime"].map(x => option(x)), answer: "Indian" },
           { id: "q7b2", label: "(ii)", marks: 1, type: "short-text", answerStyle: "reason", prompt: "in the space below, give a reason to support your answer.", allowAnswerInPhrase: true, acceptedAnswers: ["sitar", "tabla", "sitar and tabla", "tabla and sitar"], acceptedKeywords: ["sitar", "tabla"], answerDisplay: "Sitar and/or tabla" },
         ],
       },
       {
         id: "q8", number: "8", marks: 5, topic: "Listening analysis", audio: { clips: [audio(9, [
-          { label: "1st", time: 47 }, { label: "2nd", time: 145 }, { label: "3rd", time: 243 },
+          { label: "1st", time: 46.86 }, { label: "2nd", time: 119.22 }, { label: "3rd", time: 192.1 },
         ])] },
         intro: [
           "As you listen to this excerpt you are asked to identify the prominent features of the music.",
@@ -204,9 +204,11 @@
         ],
         introBoldPhrases: ["at least three", "Rhythm/tempo", "Melody/harmony", "Instruments/voices", "Dynamics (Italian terms)", "final answer must be written on the opposite page"],
         introBulletRange: [2, 5],
+        introTotalMarks: 5,
+        introTotalMarksIndex: 10,
         showPartMarks: false,
         subquestions: [
-          { id: "q8a", label: "Final answer", marks: 5, type: "structured-review", autoMark: true, maxMarksPerHeading: 2, minHeadingsForFullMarks: 3, roughWork: true, finalAnswerField: true, finalAnswerMarks: 5, finalAnswerQuestionId: "q8", continuationBefore: true, prompt: "Final answer", headings: [
+          { id: "q8a", label: "Final answer", marks: 5, type: "structured-review", autoMark: true, maxMarksPerHeading: 2, minHeadingsForFullMarks: 3, roughWork: true, finalAnswerField: true, continuationBefore: true, prompt: "Final answer", headings: [
             { id: "rhythm", label: "Rhythm/tempo", concepts: [
               { label: "2 or 4 beats / 2/4 / 4/4 / simple time", answers: ["2 beats", "two beats", "2 beats in the bar", "2 beats in a bar", "2 beats per bar", "two beats in the bar", "two beats in a bar", "two beats per bar", "4 beats", "four beats", "4 beats in the bar", "4 beats in a bar", "4 beats per bar", "four beats in the bar", "four beats in a bar", "four beats per bar", "2/4", "4/4", "simple time"] },
               { label: "Repetition", answers: ["repetition", "repeated"], creditId: "repetition" },
