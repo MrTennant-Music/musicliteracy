@@ -1,24 +1,34 @@
-const { useEffect, useId, useMemo, useRef, useState } = React;
+const { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } = React;
 const CORE = window.MILLIONAIRE_CORE;
 const QUESTION_BANK = window.MILLIONAIRE_QUESTION_BANK || [];
 
-// Replace these null paths when final, licensed audio is supplied. The generated
-// hooks below keep the prototype responsive and never prevent gameplay.
+const MILLIONAIRE_SOUND_PATH = "./soundsmillionaire/";
 window.MILLIONAIRE_SOUND_CONFIG = {
-  openingTheme: null,
-  backgroundSuspense: null,
-  earlyQuestionMusic: null,
-  middleQuestionMusic: null,
-  lateQuestionMusic: null,
-  question15Music: null,
-  answerSelected: null,
-  finalAnswerLocked: null,
-  correctAnswer: null,
-  incorrectAnswer: null,
-  milestone: null,
-  lifeline: null,
-  millionVictory: null,
+  opening: `${MILLIONAIRE_SOUND_PATH}opening menu.ogg`,
+  start: `${MILLIONAIRE_SOUND_PATH}start.ogg`,
+  lifeline: `${MILLIONAIRE_SOUND_PATH}lifeline.ogg`,
+  earlyQuestion: `${MILLIONAIRE_SOUND_PATH}11 $100-$1,000 Questions.ogg`,
+  earlyFinalAnswer: `${MILLIONAIRE_SOUND_PATH}final answer 1-5.ogg`,
+  earlyCorrect: `${MILLIONAIRE_SOUND_PATH}correct 1-5.ogg`,
+  earlyIncorrect: `${MILLIONAIRE_SOUND_PATH}incorrect 1-5.ogg`,
+  thousandWin: `${MILLIONAIRE_SOUND_PATH}12 Win $1,000.ogg`,
+  stages: {
+    6: ["13 Let's Play $2,000.ogg", "14 $2,000 Question.ogg", "15 $2,000 Final Answer-.ogg", "16 $2,000 Lose.ogg", "17 $2,000 Win.ogg"],
+    7: ["18 Let's Play $4,000.ogg", "19 $4,000 Question.ogg", "20 $4,000 Final Answer-.ogg", "21 $4,000 Lose.ogg", "22 $4,000 Win.ogg"],
+    8: ["23 Let's Play $8,000.ogg", "24 $8,000 Question.ogg", "25 $8,000 Final Answer-.ogg", "26 $8,000 Lose.ogg", "27 $8,000 Win.ogg"],
+    9: ["28 Let's Play $16,000.ogg", "29 $16,000 Question.ogg", "30 $16,000 Final Answer-.ogg", "31 $16,000 Lose.ogg", "32 $16,000 Win.ogg"],
+    10: ["33 Let's Play $32,000.ogg", "34 $32,000 Question.ogg", "35 $32,000 Final Answer-.ogg", "36 $32,000 Lose.ogg", "37 $32,000 Win.ogg"],
+    11: ["38 Let's Play $64,000.ogg", "39 $64,000 Question.ogg", "40 $64,000 Final Answer-.ogg", "41 $64,000 Lose.ogg", "42 $64,000 Win.ogg"],
+    12: ["43 Let's Play $125,000.ogg", "44 $125,000 Question.ogg", "45 $125,000 Final Answer-.ogg", "46 $125,000 Lose.ogg", "47 $125,000 Win.ogg"],
+    13: ["48 Let's Play $250,000.ogg", "49 $250,000 Question.ogg", "50 $250,000 Final Answer-.ogg", "51 $250,000 Lose.ogg", "52 $250,000 Win.ogg"],
+    14: ["53 Let's Play $500,000.ogg", "54 $500,000 Question.ogg", "55 $500,000 Final Answer-.ogg", "56 $500,000 Lose.ogg", "57 $500,000 Win.ogg"],
+    15: ["58 Let's Play $1,000,000.ogg", "59 $1,000,000 Question.ogg", "60 $1,000,000 Final Answer-.ogg", "61 $1,000,000 Lose.ogg", "62 $1,000,000 Win.ogg"],
+  },
 };
+
+Object.values(window.MILLIONAIRE_SOUND_CONFIG.stages).forEach((files) => {
+  files.forEach((file, index) => { files[index] = `${MILLIONAIRE_SOUND_PATH}${file}`; });
+});
 
 const SETTINGS_KEY = "mlh-millionaire-settings-v3";
 const HISTORY_KEY = "mlh-millionaire-recent-games-v1";
@@ -37,10 +47,10 @@ const MILLIONAIRE_LEVELS = {
 const CATEGORY_LABELS = { listening: "Listening", literacy: "Music literacy", concepts: "Musical concepts" };
 const OUTCOME_LABELS = { incorrect: "Incorrect answer", won: "Won £1 million" };
 const QUESTION_REWARDS = {
-  5: { glyph: "🥉", label: "Bronze medal" },
-  8: { glyph: "🥈", label: "Silver medal" },
-  12: { glyph: "🥇", label: "Gold medal" },
-  15: { glyph: "💎", label: "Diamond" },
+  5: { icon: "bronze.svg", label: "Bronze medal", tier: "bronze" },
+  8: { icon: "silver.svg", label: "Silver medal", tier: "silver" },
+  12: { icon: "gold.svg", label: "Gold medal", tier: "gold" },
+  15: { icon: "diamond.svg", label: "Diamond", tier: "diamond" },
 };
 
 function safeRead(key, fallback) {
@@ -70,13 +80,36 @@ function midiFrequency(midi) {
   return 440 * (2 ** ((midi - 69) / 12));
 }
 
+function finalAnswerDelay(stage) {
+  if (stage <= 5) return 2000;
+  if (stage <= 8) return 3000;
+  if (stage <= 12) return 4000;
+  return 5000;
+}
+
 class AudioDirector {
   constructor() {
     this.context = null;
-    this.background = null;
-    this.backgroundGain = null;
+    this.music = null;
+    this.musicIncoming = null;
+    this.introMusic = null;
+    this.earlyStartTimer = null;
+    this.musicLoopTimer = null;
+    this.musicFadeTimer = null;
+    this.earlyStartRemaining = null;
+    this.earlyStartBeganAt = null;
+    this.effectAudio = null;
+    this.effectResolve = null;
+    this.effectFadeStartTimer = null;
+    this.effectFadeTimer = null;
+    this.effectStopTimer = null;
+    this.desiredMusic = null;
+    this.musicSequence = 0;
+    this.effectSequence = 0;
+    this.unlockHandler = null;
     this.excerptNodes = [];
     this.excerptTimer = null;
+    this.excerptFadeTimer = null;
     this.musicEnabled = false;
     this.effectsEnabled = true;
     this.stage = 1;
@@ -94,134 +127,463 @@ class AudioDirector {
   configure(settings) {
     this.musicEnabled = Boolean(settings.backgroundMusic);
     this.effectsEnabled = Boolean(settings.soundEffects);
-    if (!this.musicEnabled) this.stopBackground();
-    else if (!this.excerptPlaying) this.startBackground(this.stage);
+    if (!this.musicEnabled) this.stopMusic(false);
+    else if (!this.excerptPlaying) this.resumeMusic();
+    if (!this.effectsEnabled) this.stopEffect();
   }
 
-  effect(name) {
-    if (!this.effectsEnabled) return;
-    const context = this.ensureContext();
-    if (!context) return;
-    const patterns = {
-      openingTheme: [[392, 0, .12], [523.25, .13, .16], [659.25, .29, .34]],
-      answerSelected: [[520, 0, .1]],
-      finalAnswerLocked: [[220, 0, .18], [196, .2, .22]],
-      correctAnswer: [[659.25, 0, .13], [783.99, .12, .13], [987.77, .24, .34]],
-      incorrectAnswer: [[196, 0, .5], [146.83, .18, .58]],
-      milestone: [[523.25, 0, .14], [659.25, .13, .14], [783.99, .26, .14], [1046.5, .4, .55]],
-      lifeline: [[880, 0, .1], [660, .11, .16]],
-      millionVictory: [[523.25, 0, .16], [659.25, .14, .16], [783.99, .28, .16], [1046.5, .42, .7]],
+  makeAudio(path, loop = false) {
+    const audio = new Audio(path);
+    audio.loop = loop;
+    audio.preload = "auto";
+    return audio;
+  }
+
+  safelyPlay(audio) {
+    if (!audio) return;
+    audio.play().then(() => this.removeUnlockListeners()).catch(() => this.addUnlockListeners());
+  }
+
+  addUnlockListeners() {
+    if (this.unlockHandler) return;
+    this.unlockHandler = () => {
+      this.removeUnlockListeners();
+      if (this.musicEnabled && !this.excerptPlaying) this.resumeMusic();
     };
-    const now = context.currentTime + .01;
-    (patterns[name] || []).forEach(([frequency, offset, duration]) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = name === "incorrectAnswer" ? "sawtooth" : "triangle";
-      oscillator.frequency.setValueAtTime(frequency, now + offset);
-      gain.gain.setValueAtTime(.0001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(.055, now + offset + .012);
-      gain.gain.exponentialRampToValueAtTime(.0001, now + offset + duration);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(now + offset);
-      oscillator.stop(now + offset + duration + .03);
+    document.addEventListener("pointerdown", this.unlockHandler, { once: true, capture: true });
+    document.addEventListener("keydown", this.unlockHandler, { once: true, capture: true });
+  }
+
+  removeUnlockListeners() {
+    if (!this.unlockHandler) return;
+    document.removeEventListener("pointerdown", this.unlockHandler, true);
+    document.removeEventListener("keydown", this.unlockHandler, true);
+    this.unlockHandler = null;
+  }
+
+  setMusic(path, loop = true) {
+    this.stopMusic(false);
+    this.desiredMusic = { path, loop };
+    if (!this.musicEnabled || this.excerptPlaying || !path) return;
+    this.music = this.makeAudio(path, loop);
+    this.safelyPlay(this.music);
+  }
+
+  playMusicSequence(firstPath, nextPath, nextLoops = true, crossfadeSeconds = 0) {
+    this.stopMusic(false);
+    this.desiredMusic = crossfadeSeconds > 0
+      ? { path: nextPath, loop: false, crossfadeSeconds, waitForIntro: true }
+      : { path: nextPath, loop: nextLoops };
+    const sequence = this.musicSequence;
+    if (!this.musicEnabled || this.excerptPlaying) return;
+    const first = this.makeAudio(firstPath, false);
+    if (crossfadeSeconds > 0) this.introMusic = first;
+    else this.music = first;
+    first.addEventListener("ended", () => {
+      if (sequence !== this.musicSequence) return;
+      if (this.introMusic === first) this.introMusic = null;
+      if (crossfadeSeconds > 0) {
+        this.desiredMusic.waitForIntro = false;
+        this.startEarlyQuestionLoop(nextPath, sequence);
+      } else {
+        this.setMusic(nextPath, nextLoops);
+      }
+    }, { once: true });
+    this.safelyPlay(first);
+  }
+
+  playOpening() {
+    const path = window.MILLIONAIRE_SOUND_CONFIG.opening;
+    if (this.desiredMusic?.path === path && this.music) {
+      this.resumeMusic();
+      return;
+    }
+    this.setMusic(path, true);
+  }
+
+  startGame() {
+    this.stage = 1;
+    this.stopMusic(false);
+    const questionPath = window.MILLIONAIRE_SOUND_CONFIG.earlyQuestion;
+    this.desiredMusic = { path: questionPath, loop: false, crossfadeSeconds: 5 };
+    const sequence = this.musicSequence;
+    if (!this.musicEnabled || this.excerptPlaying) return;
+    const intro = this.makeAudio(window.MILLIONAIRE_SOUND_CONFIG.start, false);
+    this.introMusic = intro;
+    intro.addEventListener("ended", () => {
+      if (sequence === this.musicSequence && this.introMusic === intro) this.introMusic = null;
+    }, { once: true });
+    this.safelyPlay(intro);
+    this.scheduleEarlyStart(8000, questionPath, sequence);
+  }
+
+  playQuestion(stage) {
+    this.stage = stage;
+    if (stage <= 5) {
+      this.startEarlyQuestionLoop(window.MILLIONAIRE_SOUND_CONFIG.earlyQuestion);
+      return;
+    }
+    const stageFiles = window.MILLIONAIRE_SOUND_CONFIG.stages[stage];
+    if (stageFiles) this.playMusicSequence(stageFiles[0], stageFiles[1], false, 5);
+  }
+
+  pauseMusic() {
+    if (this.earlyStartTimer) {
+      const elapsed = Date.now() - this.earlyStartBeganAt;
+      this.earlyStartRemaining = Math.max(0, this.earlyStartRemaining - elapsed);
+    }
+    window.clearTimeout(this.earlyStartTimer);
+    window.clearTimeout(this.musicLoopTimer);
+    window.clearInterval(this.musicFadeTimer);
+    this.earlyStartTimer = null;
+    this.musicLoopTimer = null;
+    this.musicFadeTimer = null;
+    if (this.musicIncoming) {
+      const keepIncoming = this.musicIncoming.volume >= (this.music?.volume ?? 0);
+      const keep = keepIncoming ? this.musicIncoming : this.music;
+      const discard = keepIncoming ? this.music : this.musicIncoming;
+      discard?.pause();
+      this.music = keep;
+      this.musicIncoming = null;
+      if (this.music) this.music.volume = 1;
+    }
+    this.music?.pause();
+    this.introMusic?.pause();
+  }
+
+  resumeMusic() {
+    if (!this.musicEnabled || this.excerptPlaying || !this.desiredMusic) return;
+    if (this.desiredMusic.crossfadeSeconds) {
+      if (this.introMusic) {
+        this.safelyPlay(this.introMusic);
+        if (this.desiredMusic.waitForIntro) return;
+      }
+      if (this.music?.src) {
+        this.safelyPlay(this.music);
+        this.scheduleEarlyCrossfade(this.music, this.desiredMusic.path, this.musicSequence);
+      } else if (this.earlyStartRemaining != null) {
+        this.scheduleEarlyStart(this.earlyStartRemaining, this.desiredMusic.path, this.musicSequence);
+      } else {
+        this.startEarlyQuestionLoop(this.desiredMusic.path, this.musicSequence);
+      }
+      return;
+    }
+    if (this.music?.src) {
+      this.safelyPlay(this.music);
+      return;
+    }
+    this.setMusic(this.desiredMusic.path, this.desiredMusic.loop);
+  }
+
+  stopMusic(clearDesired = true) {
+    this.musicSequence += 1;
+    window.clearTimeout(this.earlyStartTimer);
+    window.clearTimeout(this.musicLoopTimer);
+    window.clearInterval(this.musicFadeTimer);
+    this.music?.pause();
+    this.musicIncoming?.pause();
+    this.introMusic?.pause();
+    this.music = null;
+    this.musicIncoming = null;
+    this.introMusic = null;
+    this.earlyStartTimer = null;
+    this.musicLoopTimer = null;
+    this.musicFadeTimer = null;
+    this.earlyStartRemaining = null;
+    this.earlyStartBeganAt = null;
+    if (clearDesired) this.desiredMusic = null;
+  }
+
+  scheduleEarlyStart(delay, path, sequence) {
+    window.clearTimeout(this.earlyStartTimer);
+    this.earlyStartRemaining = Math.max(0, delay);
+    this.earlyStartBeganAt = Date.now();
+    this.earlyStartTimer = window.setTimeout(() => {
+      this.earlyStartTimer = null;
+      this.earlyStartRemaining = null;
+      this.earlyStartBeganAt = null;
+      this.startEarlyQuestionLoop(path, sequence);
+    }, this.earlyStartRemaining);
+  }
+
+  startEarlyQuestionLoop(path, expectedSequence = null) {
+    let sequence = expectedSequence;
+    if (sequence == null) {
+      this.stopMusic(false);
+      this.desiredMusic = { path, loop: false, crossfadeSeconds: 5 };
+      sequence = this.musicSequence;
+    }
+    if (sequence !== this.musicSequence || !this.musicEnabled || this.excerptPlaying) return;
+    const audio = this.makeAudio(path, false);
+    audio.volume = 1;
+    this.music = audio;
+    this.safelyPlay(audio);
+    this.scheduleEarlyCrossfade(audio, path, sequence);
+  }
+
+  scheduleEarlyCrossfade(audio, path, sequence) {
+    const schedule = () => {
+      if (sequence !== this.musicSequence || !Number.isFinite(audio.duration)) return;
+      const fadeSeconds = 5;
+      const delay = Math.max(0, audio.duration - audio.currentTime - fadeSeconds) * 1000;
+      window.clearTimeout(this.musicLoopTimer);
+      this.musicLoopTimer = window.setTimeout(() => this.beginEarlyCrossfade(audio, path, sequence, fadeSeconds), delay);
+    };
+    if (audio.readyState >= 1) schedule();
+    else audio.addEventListener("loadedmetadata", schedule, { once: true });
+  }
+
+  beginEarlyCrossfade(outgoing, path, sequence, fadeSeconds) {
+    if (sequence !== this.musicSequence || !this.musicEnabled || this.excerptPlaying) return;
+    const incoming = this.makeAudio(path, false);
+    incoming.volume = 0;
+    this.musicIncoming = incoming;
+    this.safelyPlay(incoming);
+    this.scheduleEarlyCrossfade(incoming, path, sequence);
+    const startedAt = Date.now();
+    window.clearInterval(this.musicFadeTimer);
+    this.musicFadeTimer = window.setInterval(() => {
+      if (sequence !== this.musicSequence) return;
+      const progress = Math.min(1, (Date.now() - startedAt) / (fadeSeconds * 1000));
+      outgoing.volume = 1 - progress;
+      incoming.volume = progress;
+      if (progress < 1) return;
+      window.clearInterval(this.musicFadeTimer);
+      this.musicFadeTimer = null;
+      outgoing.pause();
+      if (this.music === outgoing) this.music = incoming;
+      if (this.musicIncoming === incoming) this.musicIncoming = null;
+    }, 50);
+  }
+
+  clearEffectFadeTimers() {
+    window.clearTimeout(this.effectFadeStartTimer);
+    window.clearInterval(this.effectFadeTimer);
+    window.clearTimeout(this.effectStopTimer);
+    this.effectFadeStartTimer = null;
+    this.effectFadeTimer = null;
+    this.effectStopTimer = null;
+  }
+
+  stopEffect() {
+    this.clearEffectFadeTimers();
+    this.effectSequence += 1;
+    this.effectAudio?.pause();
+    this.effectAudio = null;
+    const resolve = this.effectResolve;
+    this.effectResolve = null;
+    resolve?.();
+  }
+
+  scheduleEffectFade(audio, sequence, shortenBy, fadeSeconds) {
+    const schedule = () => {
+      if (sequence !== this.effectSequence || !Number.isFinite(audio.duration)) return;
+      const stopAt = Math.max(0, audio.duration - shortenBy);
+      const fadeAt = Math.max(0, stopAt - fadeSeconds);
+      const fadeDelay = Math.max(0, fadeAt - audio.currentTime) * 1000;
+      const stopDelay = Math.max(0, stopAt - audio.currentTime) * 1000;
+      this.effectFadeStartTimer = window.setTimeout(() => {
+        if (sequence !== this.effectSequence) return;
+        const startedAt = Date.now();
+        const startingVolume = audio.volume;
+        this.effectFadeTimer = window.setInterval(() => {
+          if (sequence !== this.effectSequence) return;
+          const progress = Math.min(1, (Date.now() - startedAt) / (fadeSeconds * 1000));
+          audio.volume = startingVolume * (1 - progress);
+        }, 50);
+      }, fadeDelay);
+      this.effectStopTimer = window.setTimeout(() => {
+        if (sequence === this.effectSequence) this.stopEffect();
+      }, stopDelay);
+    };
+    if (audio.readyState >= 1) schedule();
+    else audio.addEventListener("loadedmetadata", schedule, { once: true });
+  }
+
+  playEffect(path, { shortenBy = 0, fadeSeconds = 0 } = {}) {
+    if (!this.effectsEnabled || !path) return Promise.resolve();
+    this.stopEffect();
+    const sequence = this.effectSequence;
+    const audio = this.makeAudio(path, false);
+    this.effectAudio = audio;
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (sequence === this.effectSequence) {
+          this.clearEffectFadeTimers();
+          this.effectAudio = null;
+          this.effectResolve = null;
+        }
+        resolve();
+      };
+      this.effectResolve = finish;
+      audio.addEventListener("ended", finish, { once: true });
+      audio.addEventListener("error", finish, { once: true });
+      audio.play().catch(finish);
+      if (shortenBy > 0 && fadeSeconds > 0) this.scheduleEffectFade(audio, sequence, shortenBy, fadeSeconds);
     });
   }
 
-  startBackground(stage = 1) {
-    this.stage = stage;
-    if (!this.musicEnabled || this.excerptPlaying) return;
-    const context = this.ensureContext();
-    if (!context) return;
-    if (!this.background || !this.backgroundGain) {
-      this.background = context.createOscillator();
-      this.backgroundGain = context.createGain();
-      this.background.type = "sine";
-      this.backgroundGain.gain.value = .0001;
-      this.background.connect(this.backgroundGain).connect(context.destination);
-      this.background.start();
+  playFinalAnswer(stage) {
+    this.stopMusic();
+    const path = stage <= 5
+      ? window.MILLIONAIRE_SOUND_CONFIG.earlyFinalAnswer
+      : window.MILLIONAIRE_SOUND_CONFIG.stages[stage]?.[2];
+    if (!this.effectsEnabled || !path) return Promise.resolve();
+    this.playEffect(path);
+    return new Promise((resolve) => {
+      window.setTimeout(() => {
+        this.stopEffect();
+        resolve();
+      }, finalAnswerDelay(stage));
+    });
+  }
+
+  playOutcome(stage, correct) {
+    let path;
+    if (stage <= 5) {
+      path = correct
+        ? (stage === 5 ? window.MILLIONAIRE_SOUND_CONFIG.thousandWin : window.MILLIONAIRE_SOUND_CONFIG.earlyCorrect)
+        : window.MILLIONAIRE_SOUND_CONFIG.earlyIncorrect;
+    } else {
+      path = window.MILLIONAIRE_SOUND_CONFIG.stages[stage]?.[correct ? 4 : 3];
     }
-    const frequency = stage >= 15 ? 82.41 : stage >= 11 ? 98 : stage >= 6 ? 110 : 130.81;
-    this.background.frequency.setTargetAtTime(frequency, context.currentTime, .25);
-    this.backgroundGain.gain.cancelScheduledValues(context.currentTime);
-    this.backgroundGain.gain.setTargetAtTime(.018, context.currentTime, .35);
+    const shortenEarlyCorrect = path === window.MILLIONAIRE_SOUND_CONFIG.earlyCorrect;
+    return this.playEffect(path, shortenEarlyCorrect ? { shortenBy: 3, fadeSeconds: 1 } : undefined);
   }
 
-  pauseBackground() {
-    if (!this.backgroundGain || !this.context) return;
-    this.backgroundGain.gain.cancelScheduledValues(this.context.currentTime);
-    this.backgroundGain.gain.setTargetAtTime(.0001, this.context.currentTime, .08);
+  playLifeline() {
+    return this.playEffect(window.MILLIONAIRE_SOUND_CONFIG.lifeline);
   }
 
-  resumeBackground() {
-    if (this.musicEnabled && !this.excerptPlaying) this.startBackground(this.stage);
+  clearExcerptFade() {
+    window.clearInterval(this.excerptFadeTimer);
+    this.excerptFadeTimer = null;
   }
 
-  stopBackground() {
-    if (this.background) {
-      try { this.background.stop(); } catch {}
+  fadeOutMusicForExcerpt(seconds, onComplete) {
+    this.clearExcerptFade();
+    if (this.earlyStartTimer) {
+      const elapsed = Date.now() - this.earlyStartBeganAt;
+      this.earlyStartRemaining = Math.max(0, this.earlyStartRemaining - elapsed);
     }
-    this.background = null;
-    this.backgroundGain = null;
+    window.clearTimeout(this.earlyStartTimer);
+    window.clearTimeout(this.musicLoopTimer);
+    window.clearInterval(this.musicFadeTimer);
+    this.earlyStartTimer = null;
+    this.musicLoopTimer = null;
+    this.musicFadeTimer = null;
+    if (this.musicIncoming) {
+      const keepIncoming = this.musicIncoming.volume >= (this.music?.volume ?? 0);
+      const keep = keepIncoming ? this.musicIncoming : this.music;
+      const discard = keepIncoming ? this.music : this.musicIncoming;
+      discard?.pause();
+      this.music = keep;
+      this.musicIncoming = null;
+    }
+    const sources = [this.music, this.introMusic].filter((audio) => audio && !audio.paused);
+    if (!this.musicEnabled || sources.length === 0) {
+      this.pauseMusic();
+      onComplete();
+      return;
+    }
+    const startingVolumes = sources.map((audio) => audio.volume);
+    const startedAt = Date.now();
+    this.excerptFadeTimer = window.setInterval(() => {
+      const progress = Math.min(1, (Date.now() - startedAt) / (seconds * 1000));
+      sources.forEach((audio, index) => { audio.volume = startingVolumes[index] * (1 - progress); });
+      if (progress < 1) return;
+      this.clearExcerptFade();
+      sources.forEach((audio) => audio.pause());
+      onComplete();
+    }, 25);
   }
 
-  stopExcerpt() {
+  fadeInMusicAfterExcerpt(seconds) {
+    this.clearExcerptFade();
+    if (!this.musicEnabled || !this.desiredMusic) return;
+    const sources = [this.music, this.introMusic].filter(Boolean);
+    sources.forEach((audio) => { audio.volume = 0; });
+    this.resumeMusic();
+    const playingSources = [this.music, this.introMusic].filter(Boolean);
+    if (playingSources.length === 0) return;
+    const startedAt = Date.now();
+    this.excerptFadeTimer = window.setInterval(() => {
+      const progress = Math.min(1, (Date.now() - startedAt) / (seconds * 1000));
+      playingSources.forEach((audio) => { audio.volume = progress; });
+      if (progress >= 1) this.clearExcerptFade();
+    }, 25);
+  }
+
+  stopExcerpt(resume = true) {
     window.clearTimeout(this.excerptTimer);
+    this.clearExcerptFade();
     this.excerptNodes.forEach((node) => { try { node.stop(); } catch {} });
     this.excerptNodes = [];
     this.excerptPlaying = false;
-    this.resumeBackground();
+    if (resume) this.resumeMusic();
   }
 
   playGenerated(generator, onEnded) {
     const context = this.ensureContext();
     if (!context || !generator) return null;
-    this.stopExcerpt();
+    this.stopExcerpt(false);
     this.excerptPlaying = true;
-    this.pauseBackground();
     const bpm = generator.bpm || 96;
     const beatSeconds = 60 / bpm;
-    const start = context.currentTime + .05;
     const voices = generator.voices || [{
       notes: generator.notes || [], beats: generator.beats || [], gains: generator.gains,
       gain: generator.gain, gate: generator.gate, waveform: generator.waveform,
     }];
     let totalDuration = 0;
     voices.forEach((voice) => {
-      let cursor = 0;
-      (voice.notes || []).forEach((midi, index) => {
-        const beats = voice.beats?.[index] || 1;
-        const noteStart = start + cursor * beatSeconds;
-        const noteDuration = beats * beatSeconds;
-        const gate = voice.gate ?? generator.gate ?? .82;
-        const peak = voice.gains?.[index] ?? voice.gain ?? generator.gains?.[index] ?? generator.gain ?? .14;
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        oscillator.type = voice.waveform || generator.waveform || "triangle";
-        oscillator.frequency.setValueAtTime(midiFrequency(midi), noteStart);
-        gain.gain.setValueAtTime(.0001, noteStart);
-        gain.gain.exponentialRampToValueAtTime(Math.max(.002, peak), noteStart + .012);
-        gain.gain.setValueAtTime(Math.max(.002, peak * .72), noteStart + Math.max(.02, noteDuration * gate * .7));
-        gain.gain.exponentialRampToValueAtTime(.0001, noteStart + Math.max(.04, noteDuration * gate));
-        oscillator.connect(gain).connect(context.destination);
-        oscillator.start(noteStart);
-        oscillator.stop(noteStart + Math.max(.06, noteDuration * gate) + .03);
-        this.excerptNodes.push(oscillator);
-        cursor += beats;
-      });
-      totalDuration = Math.max(totalDuration, cursor * beatSeconds);
+      const totalBeats = (voice.notes || []).reduce((sum, note, index) => sum + (voice.beats?.[index] || 1), 0);
+      totalDuration = Math.max(totalDuration, totalBeats * beatSeconds);
     });
-    this.excerptTimer = window.setTimeout(() => {
-      this.excerptNodes = [];
-      this.excerptPlaying = false;
-      this.resumeBackground();
-      onEnded?.();
-    }, (totalDuration + .12) * 1000);
-    return totalDuration + .12;
+    const startExcerpt = () => {
+      if (!this.excerptPlaying) return;
+      const start = context.currentTime + .05;
+      voices.forEach((voice) => {
+        let cursor = 0;
+        (voice.notes || []).forEach((midi, index) => {
+          const beats = voice.beats?.[index] || 1;
+          const noteStart = start + cursor * beatSeconds;
+          const noteDuration = beats * beatSeconds;
+          const gate = voice.gate ?? generator.gate ?? .82;
+          const peak = voice.gains?.[index] ?? voice.gain ?? generator.gains?.[index] ?? generator.gain ?? .14;
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          oscillator.type = voice.waveform || generator.waveform || "triangle";
+          oscillator.frequency.setValueAtTime(midiFrequency(midi), noteStart);
+          gain.gain.setValueAtTime(.0001, noteStart);
+          gain.gain.exponentialRampToValueAtTime(Math.max(.002, peak), noteStart + .012);
+          gain.gain.setValueAtTime(Math.max(.002, peak * .72), noteStart + Math.max(.02, noteDuration * gate * .7));
+          gain.gain.exponentialRampToValueAtTime(.0001, noteStart + Math.max(.04, noteDuration * gate));
+          oscillator.connect(gain).connect(context.destination);
+          oscillator.start(noteStart);
+          oscillator.stop(noteStart + Math.max(.06, noteDuration * gate) + .03);
+          this.excerptNodes.push(oscillator);
+          cursor += beats;
+        });
+      });
+      this.excerptTimer = window.setTimeout(() => {
+        this.excerptNodes = [];
+        this.excerptPlaying = false;
+        this.fadeInMusicAfterExcerpt(.5);
+        onEnded?.();
+      }, (totalDuration + .12) * 1000);
+    };
+    this.fadeOutMusicForExcerpt(.5, startExcerpt);
+    return totalDuration + .62;
   }
 
   destroy() {
-    this.stopExcerpt();
-    this.stopBackground();
+    this.removeUnlockListeners();
+    this.stopExcerpt(false);
+    this.stopMusic();
+    this.stopEffect();
     try { this.context?.close(); } catch {}
   }
 }
@@ -273,6 +635,35 @@ function CustomiseMenu({ settings, updateSetting }) {
     <ToggleRow label="Sound Effects" glyph={<img src="audio-svgrepo-com.svg" alt="" className="h-[36px] w-[36px] object-contain" />} checked={settings.soundEffects} onChange={() => updateSetting("soundEffects", !settings.soundEffects)} />
     <ToggleRow label="Background Music" glyph="♫" checked={settings.backgroundMusic} onChange={() => updateSetting("backgroundMusic", !settings.backgroundMusic)} />
   </div>;
+}
+
+function AutoFitAnswer({ answer }) {
+  const contentRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content) return undefined;
+
+    function fitText() {
+      content.style.fontSize = "";
+      let fontSize = parseFloat(window.getComputedStyle(content).fontSize) || 31;
+      while (fontSize > 16 && content.scrollWidth > content.clientWidth) {
+        fontSize -= .5;
+        content.style.fontSize = `${fontSize}px`;
+      }
+    }
+
+    fitText();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(fitText) : null;
+    observer?.observe(content);
+    window.addEventListener("resize", fitText);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", fitText);
+    };
+  }, [answer.letter, answer.text]);
+
+  return <span ref={contentRef} className="millionaire-answer-content"><span className="millionaire-answer-diamond" aria-hidden="true">◆</span><span className="millionaire-answer-letter">{answer.letter}:</span>{" "}<span className="millionaire-answer-text">{answer.text}</span></span>;
 }
 
 const GLYPHS = {
@@ -348,7 +739,7 @@ function PrizeLadder({ currentIndex, correctCount, controls }) {
       if (stage === currentIndex + 1) classes.push("is-current");
       if (stage <= correctCount) classes.push("is-complete");
       const prizeLabel = value === 1000000 ? "£1 MILLION" : CORE.formatPrize(value);
-      return <div key={stage} className={classes.join(" ")} aria-current={stage === currentIndex + 1 ? "step" : undefined}><span className="millionaire-prize-number">{stage}</span><span className="millionaire-prize-diamond" aria-hidden="true">◆</span><span className="millionaire-prize-value">{prizeLabel}</span>{reward && <span className="millionaire-prize-reward" role="img" aria-label={reward.label}>{reward.glyph}</span>}</div>;
+      return <div key={stage} className={classes.join(" ")} aria-current={stage === currentIndex + 1 ? "step" : undefined}><span className="millionaire-prize-number">{stage}</span><span className="millionaire-prize-diamond" aria-hidden="true">◆</span><span className="millionaire-prize-value-wrap"><span className="millionaire-prize-value">{prizeLabel}</span>{reward && <img className="millionaire-prize-reward" src={reward.icon} alt={reward.label} />}</span></div>;
     })}
   </aside>;
 }
@@ -370,6 +761,7 @@ function App() {
   const [locked, setLocked] = useState(false);
   const [revealed, setRevealed] = useState(null);
   const [removedLetters, setRemovedLetters] = useState([]);
+  const [hintVisible, setHintVisible] = useState(false);
   const [playsUsed, setPlaysUsed] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
@@ -385,6 +777,7 @@ function App() {
   const [announcement, setAnnouncement] = useState("Welcome to Who Wants to Be a Millionaire.");
   const [pendingNavigation, setPendingNavigation] = useState(null);
   const [transitioning, setTransitioning] = useState(false);
+  const [correctRevealSkippable, setCorrectRevealSkippable] = useState(false);
   const levelRef = useRef(null);
   const customiseRef = useRef(null);
   const lifelineRef = useRef(null);
@@ -420,10 +813,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    audioDirector.current.stage = currentIndex + 1;
-    if (screen === "game") audioDirector.current.startBackground(currentIndex + 1);
-    else audioDirector.current.pauseBackground();
-  }, [currentIndex, screen]);
+    if (screen === "title" || screen === "rules") audioDirector.current.playOpening();
+    else if (screen !== "game") audioDirector.current.pauseMusic();
+  }, [screen]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -478,10 +870,12 @@ function App() {
     setLocked(false);
     setRevealed(null);
     setRemovedLetters([]);
+    setHintVisible(false);
     setPlaysUsed(0);
     setAudioPlaying(false);
     setAudioProgress(0);
     setTransitioning(false);
+    setCorrectRevealSkippable(false);
   }
 
   function startGame() {
@@ -503,15 +897,15 @@ function App() {
     setFinishedAt(null);
     setMilestone(null);
     resetQuestionState();
+    audioDirector.current.startGame();
     setScreen("game");
     setAnnouncement("Question 1 for £100.");
-    audioDirector.current.effect("openingTheme");
-    audioDirector.current.startBackground(1);
   }
 
-  function quitGame() {
+  function resetGame() {
     resetQuestionState();
-    audioDirector.current.stopBackground();
+    audioDirector.current.stopMusic();
+    audioDirector.current.stopEffect();
     setDialog(null);
     setPendingNavigation(null);
     setScreen("title");
@@ -521,7 +915,6 @@ function App() {
     if (locked || transitioning || removedLetters.includes(letter) || !question?.answers.some((answer) => answer.letter === letter)) return;
     setSelectedLetter(letter);
     setAnnouncement(`Answer ${letter} selected. Press Final Answer to lock it in.`);
-    audioDirector.current.effect("answerSelected");
   }
 
   function currentRecord(isCorrect) {
@@ -540,58 +933,53 @@ function App() {
     };
   }
 
-  function lockAnswer() {
+  async function lockAnswer() {
     if (!selectedLetter || locked || transitioning || !question) return;
+    setHintVisible(false);
     setLocked(true);
     setTransitioning(true);
     setAnnouncement(`Answer ${selectedLetter} locked.`);
-    audioDirector.current.effect("finalAnswerLocked");
-    const delay = settings.reducedMotion ? 80 : 850;
-    window.setTimeout(() => {
-      const isCorrect = selectedLetter === question.correctLetter;
-      const record = currentRecord(isCorrect);
-      setRecords((current) => [...current, record]);
-      setRevealed(isCorrect ? "correct" : "incorrect");
-      setTransitioning(false);
-      if (isCorrect) handleCorrectAnswer(record);
-      else handleIncorrectAnswer(record);
-    }, delay);
+    await audioDirector.current.playFinalAnswer(currentIndex + 1);
+    const isCorrect = selectedLetter === question.correctLetter;
+    const record = currentRecord(isCorrect);
+    setRecords((current) => [...current, record]);
+    setRevealed(isCorrect ? "correct" : "incorrect");
+    setTransitioning(false);
+    if (isCorrect) await handleCorrectAnswer(record);
+    else await handleIncorrectAnswer(record);
   }
 
-  function handleCorrectAnswer(record) {
+  async function handleCorrectAnswer(record) {
     const nextCorrect = correctCount + 1;
     setCorrectCount(nextCorrect);
     setAnnouncement(`Correct. You have won ${CORE.formatPrize(CORE.PRIZE_LADDER[currentIndex])}.`);
-    audioDirector.current.effect("correctAnswer");
-    const delay = settings.reducedMotion ? 140 : 1050;
-    window.setTimeout(() => {
-      if (currentIndex === 14) {
-        setOutcome("won");
-        setFinalPrize(1000000);
-        setHighestReached(15);
-        setMilestone({ stage: 15, prize: 1000000, victory: true });
-        setScreen("milestone");
-        audioDirector.current.effect("millionVictory");
-      } else if (nextCorrect === 5 || nextCorrect === 10) {
-        const prize = CORE.PRIZE_LADDER[nextCorrect - 1];
-        setMilestone({ stage: nextCorrect, prize, victory: false });
-        setScreen("milestone");
-        setAnnouncement(`Milestone reached: ${CORE.formatPrize(prize)}.`);
-        audioDirector.current.effect("milestone");
-      } else {
-        goToQuestion(currentIndex + 1);
-      }
-    }, delay);
+    setCorrectRevealSkippable(true);
+    await audioDirector.current.playOutcome(currentIndex + 1, true);
+    setCorrectRevealSkippable(false);
+    if (currentIndex === 14) {
+      setOutcome("won");
+      setFinalPrize(1000000);
+      setHighestReached(15);
+      setMilestone({ stage: 15, prize: 1000000, victory: true });
+      setScreen("milestone");
+    } else {
+      goToQuestion(currentIndex + 1);
+    }
   }
 
-  function handleIncorrectAnswer() {
+  async function handleIncorrectAnswer() {
     const prize = CORE.guaranteedPrize(correctCount);
     setOutcome("incorrect");
     setFinalPrize(prize);
     setHighestReached(currentIndex + 1);
     setAnnouncement(`Incorrect. The correct answer is ${question.correctLetter}.`);
-    audioDirector.current.effect("incorrectAnswer");
-    audioDirector.current.pauseBackground();
+    await audioDirector.current.playOutcome(currentIndex + 1, false);
+  }
+
+  function skipCorrectReveal() {
+    if (!correctRevealSkippable) return;
+    setCorrectRevealSkippable(false);
+    audioDirector.current.stopEffect();
   }
 
   function goToQuestion(index) {
@@ -600,11 +988,11 @@ function App() {
     setHighestReached(index + 1);
     setScreen("game");
     setAnnouncement(`Question ${index + 1} for ${CORE.formatPrize(CORE.PRIZE_LADDER[index])}.`);
+    audioDirector.current.playQuestion(index + 1);
   }
 
   function continueMilestone() {
-    if (milestone?.victory) finishGame("won", 1000000);
-    else goToQuestion(currentIndex + 1);
+    finishGame("won", 1000000);
   }
 
   function saveCompletedGame() {
@@ -617,7 +1005,8 @@ function App() {
 
   function finishGame(finalOutcome = outcome, prize = finalPrize) {
     audioDirector.current.stopExcerpt();
-    audioDirector.current.stopBackground();
+    audioDirector.current.stopMusic();
+    audioDirector.current.stopEffect();
     const now = Date.now();
     setOutcome(finalOutcome);
     setFinalPrize(prize);
@@ -635,15 +1024,15 @@ function App() {
     if (removed.includes(selectedLetter)) setSelectedLetter(null);
     setLifelines((current) => ({ ...current, fifty: false }));
     setAnnouncement(`50:50 used. Answers ${removed.join(" and ")} removed.`);
-    audioDirector.current.effect("lifeline");
+    audioDirector.current.playLifeline();
   }
 
   function useHint() {
     if (!lifelines.hint || locked || transitioning || !question) return;
     setLifelines((current) => ({ ...current, hint: false }));
-    setDialog({ type: "hint" });
-    setAnnouncement("Hint lifeline opened.");
-    audioDirector.current.effect("lifeline");
+    setHintVisible(true);
+    setAnnouncement(`Hint: ${question.tip}`);
+    audioDirector.current.playLifeline();
   }
 
   function useSwitch() {
@@ -657,7 +1046,7 @@ function App() {
     setQuestions((current) => current.map((item, index) => index === currentIndex ? replacement : item));
     setLifelines((current) => ({ ...current, switch: false }));
     setAnnouncement(`Switch used. A replacement question has been selected for question ${currentIndex + 1}.`);
-    audioDirector.current.effect("lifeline");
+    audioDirector.current.playLifeline();
   }
 
   function playQuestionAudio(learning = false) {
@@ -691,7 +1080,6 @@ function App() {
   }
 
   const elapsedMs = Math.max(0, (finishedAt || Date.now()) - (startedAt || Date.now()));
-  const misses = records.filter((record) => !record.correct).map((record) => record.concept);
   const lifelinesUsed = Object.values(lifelines).filter((available) => !available).length;
 
   function renderQuestionMedia(recordQuestion = question, learning = false) {
@@ -710,10 +1098,10 @@ function App() {
 
   function TitleScreen() {
     return <section className="millionaire-screen">
-      <img className="millionaire-opening-logo" src="millionairelogo.svg" alt="Who Wants to Be a Millionaire" />
+      <span className="millionaire-opening-logo-shine"><img className="millionaire-opening-logo" src="millionairelogo.svg" alt="Who Wants to Be a Millionaire" /></span>
       <p className="millionaire-screen-copy millionaire-opening-copy">Test your musical knowledge and climb the prize ladder to £1 million.</p>
       <div className="millionaire-opening-actions">
-        <button type="button" className="millionaire-secondary millionaire-play millionaire-opening-play" onClick={() => setScreen("rules")}><span className="millionaire-opening-play-label">Rules</span></button>
+        <button type="button" className="millionaire-secondary millionaire-play millionaire-opening-play" onClick={() => setScreen("rules")}><span className="millionaire-opening-play-label">How to Play</span></button>
         <button type="button" className="millionaire-primary millionaire-play millionaire-opening-play" onClick={startGame}><span className="millionaire-opening-play-label">Start</span></button>
       </div>
     </section>;
@@ -721,32 +1109,32 @@ function App() {
 
   function RulesScreen() {
     return <section className="millionaire-screen"><div className="millionaire-setup-card millionaire-rules-card">
-      <h2>RULES</h2>
+      <h2>How to Play</h2>
       <div className="millionaire-rules-grid">
         <section className="millionaire-rules-section" aria-labelledby="millionaire-rules-gameplay">
           <h3 id="millionaire-rules-gameplay">Playing the game</h3>
           <div className="millionaire-game-rules-copy">
             <p>Answer 15 music questions which progressively get more challenging.</p>
             <p>Each question is multiple choice with four possible answers.</p>
-            <p>Earn medals for reaching question milestones.</p>
+            <p>Earn medals for correctly answering the following questions:</p>
           </div>
-          <h4 className="millionaire-rewards-heading">Rewards</h4>
           <ul className="millionaire-rewards-list">
-            {[15, 12, 8, 5].map((stage) => <li key={stage}><span>Question {stage}</span><span className="millionaire-reward-glyph" role="img" aria-label={QUESTION_REWARDS[stage].label}>{QUESTION_REWARDS[stage].glyph}</span></li>)}
+            {[15, 12, 8, 5].map((stage) => <li key={stage}><img className="millionaire-reward-icon" src={QUESTION_REWARDS[stage].icon} alt={QUESTION_REWARDS[stage].label} /><span className={`millionaire-reward-label is-${QUESTION_REWARDS[stage].tier}`}>Question {stage}</span></li>)}
           </ul>
         </section>
         <section className="millionaire-rules-section millionaire-lifeline-rules-section" aria-labelledby="millionaire-rules-lifelines">
           <h3 id="millionaire-rules-lifelines">Lifelines</h3>
+          <div className="millionaire-game-rules-copy millionaire-lifeline-intro"><p>If you get stuck on a question, you can use a lifeline:</p></div>
           <ul className="millionaire-lifeline-rules">
             <li><span className="millionaire-lifeline-badge millionaire-lifeline-rule-badge"><img className="millionaire-lifeline-rule-icon" src="50.50.svg" alt="" /></span><strong>50:50</strong><span>Removes two incorrect answers</span></li>
-            <li><span className="millionaire-lifeline-badge millionaire-lifeline-rule-badge"><img className="millionaire-lifeline-rule-icon" src="hint.svg" alt="" /></span><strong>Hint</strong><span>Gives you a clue about the question</span></li>
-            <li><span className="millionaire-lifeline-badge millionaire-lifeline-rule-badge"><img className="millionaire-lifeline-rule-icon" src="switch.svg" alt="" /></span><strong>Switch</strong><span>Replaces the current question with another of the same difficulty</span></li>
+            <li><span className="millionaire-lifeline-badge millionaire-lifeline-rule-badge"><img className="millionaire-lifeline-rule-icon" src="hint.svg" alt="" /></span><strong>Hint</strong><span>Guides you towards the correct answer with some helpful tips</span></li>
+            <li><span className="millionaire-lifeline-badge millionaire-lifeline-rule-badge"><img className="millionaire-lifeline-rule-icon" src="switch.svg" alt="" /></span><strong>Switch</strong><span>Switch your current question to a different question</span></li>
           </ul>
-          <p className="millionaire-rules-note">Each lifeline can be used once during the game.</p>
+          <p className="millionaire-rules-note">Each lifeline can only be used once during a game.</p>
         </section>
       </div>
       <div className="millionaire-rules-actions">
-        <button type="button" className="millionaire-secondary millionaire-play millionaire-back-button" aria-label="Back" onClick={() => setScreen("title")}><img className="millionaire-back-icon" src="next.svg" alt="" /></button>
+        <button type="button" className="millionaire-secondary millionaire-play millionaire-back-button" onClick={() => setScreen("title")}><span className="millionaire-back-button-label">Back</span></button>
       </div>
     </div></section>;
   }
@@ -756,6 +1144,7 @@ function App() {
     return <div className="millionaire-game-grid">
       <section className="millionaire-play-area">
         <div className="millionaire-question-panel">
+          {hintVisible && <div className="millionaire-inline-hint" role="note"><strong>Hint</strong><span>{question.tip}</span></div>}
           <div className="millionaire-question-media">{renderQuestionMedia(question, outcome === "incorrect")}</div>
           <div className="millionaire-question-rail"><div className="millionaire-question-bar"><h2>{question.question}</h2></div></div>
         </div>
@@ -766,21 +1155,21 @@ function App() {
             const isIncorrect = revealed === "incorrect" && answer.letter === selectedLetter;
             const classes = ["millionaire-answer"];
             if (selectedLetter === answer.letter && !revealed) classes.push(locked ? "is-locked" : "is-selected");
-            if (isCorrect) classes.push("is-correct");
+            if (isCorrect) classes.push("is-correct", revealed === "correct" ? "is-correct-selection" : "is-correct-reveal");
             if (isIncorrect) classes.push("is-incorrect");
             if (removed) classes.push("is-removed");
-            const status = isCorrect ? "✓" : isIncorrect ? "✕" : selectedLetter === answer.letter ? "Selected" : "";
-            return <button key={answer.letter} type="button" className={classes.join(" ")} disabled={locked || transitioning || removed} tabIndex={removed ? -1 : undefined} aria-hidden={removed || undefined} aria-pressed={selectedLetter === answer.letter} onClick={() => selectAnswer(answer.letter)}>
-              <span className="millionaire-answer-content"><span className="millionaire-answer-diamond" aria-hidden="true">◆</span><span className="millionaire-answer-letter">{answer.letter}:</span>{" "}<span className="millionaire-answer-text">{answer.text}</span></span><span className="millionaire-answer-status" aria-label={status || undefined}>{status}</span>
+            const answerDisabled = locked || transitioning || removed;
+            const status = isCorrect ? "Correct answer" : isIncorrect ? "Incorrect answer" : "";
+            return <button key={answer.letter} type="button" className={classes.join(" ")} disabled={answerDisabled} tabIndex={removed ? -1 : undefined} aria-hidden={removed || undefined} aria-pressed={selectedLetter === answer.letter} onClick={() => selectAnswer(answer.letter)}>
+              <AutoFitAnswer answer={answer} /><span className="millionaire-answer-status">{status}</span>
             </button>;
           })}</div>)}
         </div>
         {revealed === "incorrect" ? <>
           <div className="millionaire-explanation"><strong>Incorrect answer</strong>{question.explanation}</div>
-          <div className="millionaire-actions"><button type="button" className="millionaire-secondary millionaire-quit" aria-label="Quit game and return to start" onClick={quitGame}>QUIT</button><button type="button" className="millionaire-primary" onClick={() => finishGame("incorrect", finalPrize)}>Continue to results</button></div>
-        </> : <div className="millionaire-actions">
-          <button type="button" className="millionaire-secondary millionaire-quit" aria-label="Quit game and return to start" onClick={quitGame}>QUIT</button>
-          <button type="button" className="millionaire-primary millionaire-final-answer" disabled={!selectedLetter || locked || transitioning} onClick={lockAnswer}><span className="millionaire-final-answer-label">FINAL ANSWER</span></button>
+          <div className="millionaire-actions"><button type="button" className="millionaire-primary millionaire-final-answer" onClick={() => finishGame("incorrect", finalPrize)}><span className="millionaire-final-answer-label">Review</span></button></div>
+        </> : <div className="millionaire-actions millionaire-final-answer-actions">
+          <button type="button" className="millionaire-primary millionaire-final-answer" disabled={!selectedLetter || locked || transitioning} onClick={lockAnswer}><span className="millionaire-final-answer-label">Final Answer</span></button>
         </div>}
       </section>
       <PrizeLadder currentIndex={currentIndex} correctCount={correctCount} controls={<div className="millionaire-lifelines millionaire-ladder-lifelines" ref={lifelineRef} aria-label="Lifelines">
@@ -794,15 +1183,15 @@ function App() {
   function MilestoneScreen() {
     return <section className="millionaire-screen millionaire-celebration">
       <div className="millionaire-celebration-ring"><img src="./millionaire-icon.svg" alt="" /></div>
-      <h2>{milestone?.victory ? "You win £1 million!" : "Congratulations!"}</h2>
-      <p className="millionaire-celebration-prize">{milestone?.victory ? "You answered all 15 questions correctly." : `You have reached the ${CORE.formatPrize(milestone?.prize)} milestone.`}</p>
-      <button type="button" className="millionaire-primary" onClick={continueMilestone}>{milestone?.victory ? "View results" : "Continue"}</button>
+      <h2>You win £1 million!</h2>
+      <p className="millionaire-celebration-prize">You answered all 15 questions correctly.</p>
+      <button type="button" className="millionaire-primary" onClick={continueMilestone}>View results</button>
     </section>;
   }
 
   function ResultsScreen() {
     return <section className="millionaire-screen millionaire-results">
-      <h2>Results</h2><div className="millionaire-result-prize">{CORE.formatPrize(finalPrize)}</div>
+      <h2>Review</h2><div className="millionaire-result-prize">{CORE.formatPrize(finalPrize)}</div>
       <div className="millionaire-results-grid">
         <ResultStat label="Outcome">{OUTCOME_LABELS[outcome]}</ResultStat>
         <ResultStat label="Highest question">{highestReached} of 15</ResultStat>
@@ -814,8 +1203,7 @@ function App() {
         <ResultStat label="Lifelines used">{lifelinesUsed} of 3</ResultStat>
         <ResultStat label="Total time">{formatTime(elapsedMs)}</ResultStat>
       </div>
-      <div className="millionaire-concept-misses"><strong>Concepts answered incorrectly:</strong> {misses.length ? misses.map((item) => item.replaceAll("-", " ")).join(", ") : "None"}</div>
-      <div className="millionaire-result-actions"><button type="button" className="millionaire-primary" onClick={startGame}>Play Again</button></div>
+      <div className="millionaire-result-actions"><button type="button" className="millionaire-primary millionaire-final-answer" onClick={resetGame}><span className="millionaire-final-answer-label">Exit</span></button></div>
     </section>;
   }
 
@@ -851,14 +1239,14 @@ function App() {
           {levelOpen && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel="N3" onSelect={() => setLevelOpen(false)} levels={MILLIONAIRE_LEVELS} /></window.MLH.MenuPanel>}
         </div>
         <div className="hub-menu-anchor relative" ref={customiseRef}><window.MLH.CustomiseButton icon={<img src="customise.svg" alt="" className="h-[26px] w-[26px]" />} onClick={() => { setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />{customiseOpen && <window.MLH.MenuPanel title="Customise" position="left-0" variant="customise" dataMenuPanel={true}><CustomiseMenu settings={settings} updateSetting={updateSetting} /></window.MLH.MenuPanel>}</div>
-      </div>} feedback={null} right={null} /></div>
+      </div>} feedback={null} right={<button type="button" className="millionaire-toolbar-reset flex h-10 w-[58px] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5" aria-label="Reset game and return to opening screen" disabled={screen !== "game"} onClick={resetGame}><img src="restart.svg" alt="" className="h-[16px] w-[16px]" /><span className="hidden sm:inline">Reset</span></button>} /></div>
       <div className="millionaire-scroll"><div className="millionaire-stage"><div className="millionaire-board"><CurrentScreen /></div></div></div>
     </main></div>
     <div className="millionaire-legal-attribution">Unofficial educational classroom resource. Not affiliated with or endorsed by the owners of <em>Who Wants to Be a Millionaire?</em></div>
     <div className="millionaire-live-region" aria-live="polite" aria-atomic="true">{announcement}</div>
+    {correctRevealSkippable && <button type="button" className="millionaire-skip-correct-overlay" aria-label="Skip correct answer animation" onClick={skipCorrectReveal} />}
 
     {helpOpen && <Dialog title="Help and keyboard shortcuts" onClose={() => setHelpOpen(false)} actions={<button type="button" className="millionaire-primary" onClick={() => setHelpOpen(false)}>Close</button>}><dl className="millionaire-shortcuts"><dt>A–D or 1–4</dt><dd>Select an answer</dd><dt>Enter</dt><dd>Final Answer</dd><dt>Space</dt><dd>Play a listening excerpt</dd><dt>L</dt><dd>Focus the lifelines</dd><dt>Escape</dt><dd>Close an open pop-up</dd></dl><p>Choose an answer first, then press Final Answer. Each lifeline can be used once.</p></Dialog>}
-    {dialog?.type === "hint" && <Dialog title="Hint" onClose={() => setDialog(null)} actions={<button type="button" className="millionaire-primary" onClick={() => setDialog(null)}>Return to question</button>}><p>{question?.tip}</p></Dialog>}
     {dialog?.type === "leave" && <Dialog title="Leave game?" onClose={() => { setDialog(null); setPendingNavigation(null); }} actions={<><button type="button" className="millionaire-secondary" onClick={() => { setDialog(null); setPendingNavigation(null); }}>Stay</button><button type="button" className="millionaire-danger" onClick={confirmLeave}>Leave game</button></>}><p>Are you sure you want to leave? Your current game will be lost.</p></Dialog>}
     {dialog?.type === "error" && <Dialog title="Game unavailable" onClose={() => setDialog(null)} actions={<button type="button" className="millionaire-primary" onClick={() => setDialog(null)}>Close</button>}><p>{dialog.message}</p></Dialog>}
   </div>;
