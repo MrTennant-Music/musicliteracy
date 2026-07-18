@@ -299,12 +299,15 @@
       { className: "flex w-full min-w-0 flex-col gap-2" },
       Object.entries(levels).map(([key, level]) => {
         const active = activeLevel === key;
+        const unavailable = Boolean(level.disabled);
         return e(
           "button",
           {
             key,
             type: "button",
+            disabled: unavailable,
             onClick: () => {
+              if (unavailable) return;
               const url = new URL(window.location.href);
               url.searchParams.set("level", key);
               url.searchParams.delete("profile");
@@ -313,7 +316,7 @@
               MLH.profileSettings?.clear();
               onSelect(key);
             },
-            className: `w-full rounded-xl border px-3 py-2 text-left transition sm:px-4 ${active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`,
+            className: `w-full rounded-xl border px-3 py-2 text-left transition sm:px-4 ${unavailable ? "cursor-not-allowed border-stone-200 bg-stone-100 opacity-50" : active ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`,
           },
           e(
             "div",
