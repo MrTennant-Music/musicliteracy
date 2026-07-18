@@ -13,9 +13,9 @@
   const STORAGE_KEY = "mlh-concept-recall-v1";
   const MEDAL_RANK = Object.freeze({ bronze: 1, silver: 2, gold: 3, diamond: 4 });
   const MEDAL_TIME_LIMITS_MS = Object.freeze({
-    N5: Object.freeze({ bronze: 6 * 60 * 1000, silver: 5 * 60 * 1000, gold: 4 * 60 * 1000, diamond: 3 * 60 * 1000 }),
-    H: Object.freeze({ bronze: 6 * 60 * 1000, silver: 5 * 60 * 1000, gold: 4 * 60 * 1000, diamond: 3 * 60 * 1000 }),
-    AH: Object.freeze({ bronze: 6 * 60 * 1000, silver: 5 * 60 * 1000, gold: 4 * 60 * 1000, diamond: 3 * 60 * 1000 }),
+    N5: Object.freeze({ bronze: 345000, silver: 300000, gold: 240000, diamond: 195000 }),
+    H: Object.freeze({ bronze: 390000, silver: 345000, gold: 285000, diamond: 225000 }),
+    AH: Object.freeze({ bronze: 465000, silver: 405000, gold: 330000, diamond: 270000 }),
   });
 
   function normalizeAnswer(value) {
@@ -63,24 +63,37 @@
       .filter(Boolean);
   }
 
+  function multiAnswerAliases(question) {
+    return (Array.isArray(question?.multiAnswerAliases) ? question.multiAnswerAliases : [])
+      .map(normalizeAnswer)
+      .filter(Boolean);
+  }
+
   function answerCollisions(questions) {
     const owners = new Map();
     const collisions = [];
     completeQuestions(questions).forEach((question) => {
       acceptedAnswers(question).forEach((answer) => {
         const owner = owners.get(answer);
-        if (owner && owner !== question.id) collisions.push({ answer, firstId: owner, secondId: question.id });
-        else owners.set(answer, question.id);
+        const deliberatelyShared = owner && multiAnswerAliases(owner).includes(answer) && multiAnswerAliases(question).includes(answer);
+        if (owner && owner.id !== question.id && !deliberatelyShared) collisions.push({ answer, firstId: owner.id, secondId: question.id });
+        else if (!owner) owners.set(answer, question);
       });
     });
     return collisions;
   }
 
-  function recognizeAnswer(input, questions, answeredIds = new Set()) {
+  function recognizeAnswers(input, questions, answeredIds = new Set()) {
     const normalized = normalizeAnswer(input);
-    if (!normalized) return null;
+    if (!normalized) return [];
     const answered = answeredIds instanceof Set ? answeredIds : new Set(answeredIds || []);
-    return completeQuestions(questions).find((question) => !answered.has(question.id) && acceptedAnswers(question).includes(normalized)) || null;
+    const matches = completeQuestions(questions).filter((question) => !answered.has(question.id) && acceptedAnswers(question).includes(normalized));
+    if (matches.length <= 1) return matches;
+    return matches.every((question) => multiAnswerAliases(question).includes(normalized)) ? matches : matches.slice(0, 1);
+  }
+
+  function recognizeAnswer(input, questions, answeredIds = new Set()) {
+    return recognizeAnswers(input, questions, answeredIds)[0] || null;
   }
 
   function shuffleQuestions(questions, random = Math.random) {
@@ -145,7 +158,7 @@
     return null;
   }
 
-  function createResult({ level, questions, answeredIds, elapsedMs, durationMs, standardGame, completedAt = Date.now() }) {
+  function createResult({ level, questions, answeredIds, elapsedMs, durationMs, standardGame, medalEligible = standardGame, completedAt = Date.now() }) {
     const answered = answeredIds instanceof Set ? answeredIds : new Set(answeredIds || []);
     const total = completeQuestions(questions).length;
     const correct = completeQuestions(questions).filter((question) => answered.has(question.id)).length;
@@ -159,8 +172,9 @@
       elapsedMs: Math.max(0, Math.round(elapsedMs || 0)),
       durationMs: Math.max(0, Math.round(durationMs || 0)),
       standardGame: Boolean(standardGame),
+      medalEligible: Boolean(medalEligible),
       completed,
-      medal: medalForCompletion({ completed, standardGame, elapsedMs, durationMs, level }),
+      medal: medalForCompletion({ completed, standardGame: medalEligible, elapsedMs, durationMs, level }),
       completedAt,
       categoryBreakdown: categoryBreakdown(questions, answered),
     };
@@ -208,7 +222,7 @@
     const next = sanitizePersistence(current);
     next.preferences = { ...next.preferences, ...preferences };
     next.recentResult = result;
-    if (result?.standardGame && LEVELS[result.level]) {
+    if (result?.standardGame && result?.medalEligible !== false && LEVELS[result.level]) {
       const previous = next.records[result.level] || { bestScore: 0, questionTotal: 0, fastestCompletionMs: null, bestMedal: null };
       const fastestCompletionMs = result.completed
         ? previous.fastestCompletionMs ? Math.min(previous.fastestCompletionMs, result.elapsedMs) : result.elapsedMs
@@ -240,7 +254,9 @@
     categoriesForQuestions,
     questionsForSetup,
     acceptedAnswers,
+    multiAnswerAliases,
     answerCollisions,
+    recognizeAnswers,
     recognizeAnswer,
     shuffleQuestions,
     elapsedMilliseconds,

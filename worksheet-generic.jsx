@@ -1297,24 +1297,35 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
   function conceptRecallPageColumns(concepts, includeTips) {
     const capacity = 21;
     const pages = [];
-    let columns = [[], []], columnIndex = 0, used = 0;
-    const advanceColumn = () => {
-      columnIndex += 1;
-      used = 0;
-      if (columnIndex > 1) {
-        pages.push(columns);
-        columns = [[], []];
-        columnIndex = 0;
-      }
+    let columns = [[], []];
+    let used = [0, 0];
+    const startNewPage = () => {
+      pages.push(columns);
+      columns = [[], []];
+      used = [0, 0];
     };
     const addGroup = (group, weight) => {
-      if (used > 0 && used + weight > capacity) {
-        advanceColumn();
+      const columnIndex = used[0] <= used[1] ? 0 : 1;
+      const alternateIndex = columnIndex === 0 ? 1 : 0;
+      let targetIndex = columnIndex;
+      if (used[targetIndex] > 0 && used[targetIndex] + weight > capacity && used[alternateIndex] + weight <= capacity) {
+        targetIndex = alternateIndex;
       }
-      columns[columnIndex].push(group);
-      used += weight;
+      if (used[targetIndex] > 0 && used[targetIndex] + weight > capacity) {
+        startNewPage();
+        targetIndex = 0;
+      }
+      columns[targetIndex].push(group);
+      used[targetIndex] += weight;
     };
-    conceptRecallGroups(concepts).forEach((group) => {
+    const weightedGroups = conceptRecallGroups(concepts).map((group) => {
+      const estimatedWeight = 1.4 + group.concepts.reduce((total, concept) => {
+        const hintLines = Math.max(1, Math.ceil(String(concept.hint || "").length / 42));
+        return total + (includeTips ? 1.7 + (hintLines - 1) * 0.45 : 1);
+      }, 0);
+      return { ...group, estimatedWeight };
+    }).sort((a, b) => b.estimatedWeight - a.estimatedWeight || a.category.localeCompare(b.category, "en-GB"));
+    weightedGroups.forEach((group) => {
       let chunk = [];
       let chunkWeight = 1.4;
       let continued = false;
@@ -1404,7 +1415,27 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
       catch (error) { window.alert(error?.message || "The worksheet PDF could not be created. Please try again."); }
       finally { setPreparingMode(null); }
     }
-    window.MLH.worksheetHeaderMode = { title: DEF.title, subtitle: CONFIG.subtitle || DEF.subtitle, icon: DEF.icon, assets: {}, onExit: () => { const saved = sessionStorage.getItem("worksheetReturnUrl"); if (saved && history.length > 1) history.back(); else location.href = saved || CONFIG.sourceUrl || "index.html"; } };
+    window.MLH.worksheetHeaderMode = {
+      title: DEF.title,
+      subtitle: CONFIG.subtitle || DEF.subtitle,
+      icon: DEF.icon,
+      assets: {},
+      children: () => <div className="pointer-events-none grid grid-cols-2 gap-2 opacity-40 grayscale" aria-disabled="true" inert="">
+        <section className={window.MLH.shell.scoreTileClass}>
+          <div className="relative z-10 flex h-full flex-col items-center justify-center text-center">
+            <span className="text-[11px] font-extrabold uppercase leading-none tracking-[.08em]">Time</span>
+            <span className="mt-[5px] text-[21px] font-black leading-none tracking-[-.025em] tabular-nums">0:00</span>
+          </div>
+        </section>
+        <section className={window.MLH.shell.scoreTileClass}>
+          <div className="relative z-10 flex h-full flex-col items-center justify-center text-center">
+            <span className="text-[11px] font-extrabold uppercase leading-none tracking-[.08em]">Score</span>
+            <span className="mt-[5px] text-[21px] font-black leading-none tracking-[-.025em]">0/{concepts.length}</span>
+          </div>
+        </section>
+      </div>,
+      onExit: () => { const saved = sessionStorage.getItem("worksheetReturnUrl"); if (saved && history.length > 1) history.back(); else location.href = saved || CONFIG.sourceUrl || "index.html"; }
+    };
     if (!concepts.length) return <div className="p-8 text-center"><p className="font-semibold">No concepts were available for this worksheet. Return to Concept Recall and choose at least one category.</p></div>;
     return <div className={window.MLH.shell.pageShellClass}>
       <window.MLH.AppHeader icon={DEF.icon} title="Create a worksheet" subtitle={CONFIG.subtitle || DEF.subtitle} />

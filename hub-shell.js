@@ -178,7 +178,7 @@
     return ({ N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher" })[level] || "Custom";
   }
 
-  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, worksheetConfig, worksheetMode = false }) {
+  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, profileUsesSharedSettings = true, worksheetConfig, worksheetMode = false }) {
     const [qrOpen, setQrOpen] = React.useState(false);
     const [worksheetOpening, setWorksheetOpening] = React.useState(false);
     const [, setProfileRevision] = React.useState(0);
@@ -188,17 +188,20 @@
     const displayedSubtitle = activeWorksheetMode && worksheetHeader?.subtitle ? worksheetHeader.subtitle : subtitle;
     const displayedIcon = activeWorksheetMode && worksheetHeader?.icon ? worksheetHeader.icon : icon;
     const activityTitle = profileTitle || (typeof displayedTitle === "string" ? displayedTitle : "Activity");
-    const hasSharedSettings = MLH.profileSettings.hasCustomSettings();
+    const hasSharedSettings = profileUsesSharedSettings && MLH.profileSettings.hasCustomSettings();
     const shareLabel = hasSharedSettings ? "Custom" : (profileLabel || defaultProfileLabel());
     const shareUrlObject = new URL(profileShareUrl || defaultProfileShareUrl());
     if (hasSharedSettings) shareUrlObject.searchParams.set("settings", MLH.profileSettings.encoded());
     else shareUrlObject.searchParams.delete("settings");
     const shareUrl = shareUrlObject.toString();
     const worksheetEnabled = activeWorksheetMode || typeof worksheetConfig === "function";
-    const displayedChildren = activeWorksheetMode && !children && worksheetHeader?.assets
-      ? React.createElement("div", { className: "pointer-events-none opacity-40 grayscale", "aria-disabled": "true", inert: "" },
+    const worksheetHeaderChildren = typeof worksheetHeader?.children === "function" ? worksheetHeader.children() : worksheetHeader?.children;
+    const displayedChildren = activeWorksheetMode && !children && worksheetHeaderChildren
+      ? worksheetHeaderChildren
+      : activeWorksheetMode && !children && worksheetHeader?.assets
+        ? React.createElement("div", { className: "pointer-events-none opacity-40 grayscale", "aria-disabled": "true", inert: "" },
           React.createElement(ScoreStreakPanel, { assets: worksheetHeader.assets, correct: 0, attempted: 0, accuracy: 0, streak: 0, bestStreak: 0, resetScore: () => {}, confettiKey: 0, medalEligible: true }))
-      : children;
+        : children;
     async function createWorksheet() {
       if (!worksheetEnabled || worksheetOpening) return;
       setWorksheetOpening(true);

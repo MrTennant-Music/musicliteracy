@@ -2,10 +2,10 @@ const assert = require("node:assert/strict");
 const core = require("./concept-recall-core.js");
 const data = require("./concept-recall-data.js");
 
-assert.equal(data.QUESTIONS.length, 122, "The pupil question set should contain 122 complete questions");
+assert.equal(data.QUESTIONS.length, 123, "The pupil question set should contain 123 complete questions");
 assert.equal(data.INCOMPLETE_QUESTIONS.length, 7, "All seven teacher placeholders should remain available");
-assert.equal(core.completeQuestions([...data.QUESTIONS, ...data.INCOMPLETE_QUESTIONS]).length, 122, "Incomplete placeholders must never enter the pupil question set");
-assert.deepEqual(Object.fromEntries(Object.keys(core.LEVELS).map((level) => [level, core.questionsForLevel(data.QUESTIONS, level).length])), { N3: 7, N4: 16, N5: 63, H: 69, AH: 88 }, "Each playable level should include its own complete optional SQA Styles list");
+assert.equal(core.completeQuestions([...data.QUESTIONS, ...data.INCOMPLETE_QUESTIONS]).length, 123, "Incomplete placeholders must never enter the pupil question set");
+assert.deepEqual(Object.fromEntries(Object.keys(core.LEVELS).map((level) => [level, core.questionsForLevel(data.QUESTIONS, level).length])), { N3: 7, N4: 16, N5: 64, H: 70, AH: 89 }, "Each playable level should include its own complete optional SQA Styles list");
 assert.deepEqual(
   Object.fromEntries(["N5", "H", "AH"].map((level) => [level, core.questionsForLevel(data.QUESTIONS, level).filter((question) => question.category.endsWith("Styles")).length])),
   { N5: 12, H: 12, AH: 14 },
@@ -52,6 +52,8 @@ assert.equal(core.recognizeAnswer("chromatic", allQuestions)?.answer, "Chromatic
 assert.equal(core.recognizeAnswer("pentatonic", allQuestions)?.answer, "Pentatonic scale", "Pentatonic should be accepted without the word scale");
 assert.equal(core.recognizeAnswer("penta-tonic", allQuestions)?.answer, "Pentatonic scale", "Penta-tonic should be accepted without the word scale");
 assert.equal(core.recognizeAnswer("penta tonic", allQuestions)?.answer, "Pentatonic scale", "Penta tonic should be accepted without the word scale");
+assert.equal(core.recognizeAnswer("major scale", national5Questions)?.answer, "Major scale", "Major scale should appear from National 5 onwards");
+assert.deepEqual(core.recognizeAnswers("major", national5Questions).map((question) => question.id).sort(), ["scale-major", "tonality-major"], "Typing Major should complete both the Major scale and Major tonality concepts");
 assert.equal(core.recognizeAnswer("em", allQuestions)?.answer, "E minor", "Em should be accepted for E minor");
 assert.equal(core.recognizeAnswer("dm", allQuestions)?.answer, "D minor", "Dm should be accepted for D minor");
 assert.equal(core.recognizeAnswer("am", allQuestions)?.answer, "A minor", "Am should be accepted for A minor");
@@ -125,15 +127,15 @@ assert.equal(core.elapsedMilliseconds(unlimitedTimer, 700000), 612000, "An unlim
 assert.equal(core.formatClock(600000), "10:00");
 assert.equal(core.formatClock(29999), "00:29");
 
-assert.deepEqual(core.medalTimeLimits("N5"), { bronze: 360000, silver: 300000, gold: 240000, diamond: 180000 });
-assert.deepEqual(core.medalTimeLimits("H"), { bronze: 360000, silver: 300000, gold: 240000, diamond: 180000 });
-assert.deepEqual(core.medalTimeLimits("AH"), { bronze: 360000, silver: 300000, gold: 240000, diamond: 180000 });
-assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: true, elapsedMs: 180000, durationMs: 0 }), "diamond", "A standard game completed within three minutes should award Diamond");
-assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: true, elapsedMs: 180001, durationMs: 0 }), "gold", "A standard game completed after three minutes but within four should award Gold");
-assert.equal(core.medalForCompletion({ level: "H", completed: true, standardGame: true, elapsedMs: 240000, durationMs: 0 }), "gold", "A standard game completed within four minutes should award Gold");
-assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 300000, durationMs: 0 }), "silver", "A standard game completed within five minutes should award Silver");
-assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 360000, durationMs: 0 }), "bronze", "A standard game completed within six minutes should award Bronze");
-assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 360001, durationMs: 0 }), null, "A standard game completed after six minutes should not award a medal");
+assert.deepEqual(core.medalTimeLimits("N5"), { bronze: 345000, silver: 300000, gold: 240000, diamond: 195000 });
+assert.deepEqual(core.medalTimeLimits("H"), { bronze: 390000, silver: 345000, gold: 285000, diamond: 225000 });
+assert.deepEqual(core.medalTimeLimits("AH"), { bronze: 465000, silver: 405000, gold: 330000, diamond: 270000 });
+assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: true, elapsedMs: 195000, durationMs: 0 }), "diamond", "A National 5 standard game completed within 3:15 should award Diamond");
+assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: true, elapsedMs: 195001, durationMs: 0 }), "gold", "A National 5 standard game completed after 3:15 but within 4:00 should award Gold");
+assert.equal(core.medalForCompletion({ level: "H", completed: true, standardGame: true, elapsedMs: 285000, durationMs: 0 }), "gold", "A Higher standard game completed within 4:45 should award Gold");
+assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 405000, durationMs: 0 }), "silver", "An Advanced Higher standard game completed within 6:45 should award Silver");
+assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 465000, durationMs: 0 }), "bronze", "An Advanced Higher standard game completed within 7:45 should award Bronze");
+assert.equal(core.medalForCompletion({ level: "AH", completed: true, standardGame: true, elapsedMs: 465001, durationMs: 0 }), null, "An Advanced Higher standard game completed after 7:45 should not award a medal");
 assert.equal(core.medalForCompletion({ level: "N5", completed: true, standardGame: false, elapsedMs: 1000, durationMs: 300000 }), null, "Custom category games must not award medals");
 assert.equal(core.medalForCompletion({ level: "N5", completed: false, standardGame: true, elapsedMs: 300000, durationMs: 300000 }), null, "Incomplete games must not award medals");
 
@@ -172,6 +174,21 @@ assert.equal(persisted.records.N3.fastestCompletionMs, 100000);
 assert.equal(persisted.records.N3.bestMedal, "diamond");
 assert.equal(persisted.preferences.timerMinutes, 5);
 assert.equal(persisted.preferences.soundEffects, false);
+
+const hintedResult = core.createResult({
+  level: "N3",
+  questions: core.questionsForLevel(data.QUESTIONS, "N3"),
+  answeredIds: new Set(core.questionsForLevel(data.QUESTIONS, "N3").map((question) => question.id)),
+  elapsedMs: 50000,
+  durationMs: 0,
+  standardGame: true,
+  medalEligible: false,
+});
+assert.equal(hintedResult.medal, null, "A game completed with hints must not award a medal");
+assert.equal(hintedResult.standardGame, true, "Using hints must not relabel a standard category game as custom");
+assert.equal(hintedResult.medalEligible, false, "A result completed with hints should record that medals were disabled");
+const afterHinted = core.updatePersistence(persisted, hintedResult);
+assert.deepEqual(afterHinted.records.N3, persisted.records.N3, "A hinted result must not replace an unaided best score, time or medal");
 
 const changedQuestionSet = core.sanitizePersistence({ ...persisted, records: { N3: { ...persisted.records.N3, questionTotal: 999 } } });
 assert.equal(changedQuestionSet.records.N3.questionTotal, 999, "A changed question count should remain readable rather than crashing storage");

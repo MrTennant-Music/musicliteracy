@@ -31,7 +31,7 @@
     { id: "dynamics-crescendo", hint: "Gradually getting louder.", answer: "Crescendo", aliases: ["cres", "cresc"], category: "Dynamics", introducedAt: "N3", levels: ["N5"] },
     { id: "dynamics-diminuendo", hint: "Gradually getting quieter.", answer: "Diminuendo", aliases: ["dim"], category: "Dynamics", introducedAt: "N3", levels: ["N5"] },
 
-    { id: "tonality-major", hint: "Often sounds bright, happy or uplifting.", answer: "Major", aliases: ["major tonality"], category: "Tonalities", introducedAt: "N4" },
+    { id: "tonality-major", hint: "Often sounds bright, happy or uplifting.", answer: "Major", aliases: ["major tonality"], multiAnswerAliases: ["major"], category: "Tonalities", introducedAt: "N4" },
     { id: "tonality-minor", hint: "Often sounds dark, sad or serious.", answer: "Minor", aliases: ["minor tonality"], category: "Tonalities", introducedAt: "N4" },
     { id: "tonality-atonal", hint: "Music without a tonal centre or home key.", answer: "Atonal", aliases: ["atonality"], category: "Tonalities", introducedAt: "N5" },
     { id: "tonality-modal", hint: "Music based on a mode rather than a major or minor key.", answer: "Modal", aliases: ["mode"], category: "Tonalities", introducedAt: "H" },
@@ -77,6 +77,7 @@
 
     { id: "scale-melodic-minor", hint: "Minor scale with raised sixth and seventh notes ascending, restored descending.", answer: "Melodic minor", aliases: ["melodic minor scale"], category: "Scales", introducedAt: "H" },
     { id: "scale-harmonic-minor", hint: "Minor scale with a raised seventh note.", answer: "Harmonic minor", aliases: ["harmonic minor scale"], category: "Scales", introducedAt: "H" },
+    { id: "scale-major", hint: "A seven-note scale with semitones between the third and fourth, and seventh and eighth notes.", answer: "Major scale", aliases: ["major"], multiAnswerAliases: ["major"], category: "Scales", introducedAt: "N5" },
     { id: "scale-whole-tone", hint: "Scale made entirely of whole tones.", answer: "Whole-tone scale", aliases: ["whole tone scale", "wholetone scale", "whole tone", "wholetone"], category: "Scales", introducedAt: "N5" },
     { id: "scale-chromatic", hint: "Scale made entirely of semitones.", answer: "Chromatic scale", aliases: ["chromatic"], category: "Scales", introducedAt: "N5" },
     { id: "scale-pentatonic", hint: "A five-note scale.", answer: "Pentatonic scale", aliases: ["pentatonic", "penta-tonic", "penta tonic"], category: "Scales", introducedAt: "N4" },
