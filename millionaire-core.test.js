@@ -55,6 +55,30 @@ test("200 generated games meet composition and difficulty rules", () => {
   }
 });
 
+test("single question-type games use all 15 questions once from easiest to hardest", () => {
+  for (const category of CORE.CATEGORIES) {
+    const game = CORE.composeGame(BANK, [], seeded(300 + CORE.CATEGORIES.indexOf(category)), { categories: [category] });
+    assert.equal(game.length, 15);
+    assert.equal(new Set(game.map((question) => question.id)).size, 15);
+    assert.ok(game.every((question) => question.category === category));
+    const difficultyOrder = game.map((question) => question.difficultyMin + question.difficultyMax);
+    assert.deepEqual(difficultyOrder, difficultyOrder.slice().sort((a, b) => a - b));
+  }
+});
+
+test("two enabled question types create a balanced unique game", () => {
+  const enabled = ["listening", "concepts"];
+  for (let seed = 1; seed <= 50; seed += 1) {
+    const game = CORE.composeGame(BANK, [], seeded(400 + seed), { categories: enabled });
+    assert.equal(game.length, 15);
+    assert.equal(new Set(game.map((question) => question.id)).size, 15);
+    assert.ok(game.every((question) => enabled.includes(question.category)));
+    const counts = enabled.map((category) => game.filter((question) => question.category === category).length).sort((a, b) => a - b);
+    assert.deepEqual(counts, [7, 8]);
+    game.forEach((question, index) => assert.ok(question.difficultyMin <= index + 1 && question.difficultyMax >= index + 1));
+  }
+});
+
 test("recent questions are minimised when eligibility requires gradual reuse", () => {
   const first = CORE.composeGame(BANK, [], seeded(101));
   const second = CORE.composeGame(BANK, [first.map((question) => question.id)], seeded(202));
@@ -91,6 +115,18 @@ test("Switch replaces the current question with an unused question valid for the
   assert.equal(replacement.level, "N3");
   assert.equal(replacement.answers.length, 4);
   assert.equal(replacement.answers.find((answer) => answer.letter === replacement.correctLetter).originalId, replacement.correctAnswer);
+});
+
+test("Switch may temporarily reuse a question in a single-type game", () => {
+  const category = "literacy";
+  const categoryBank = BANK.filter((question) => question.category === category);
+  const game = CORE.composeGame(categoryBank, [], seeded(500), { categories: [category] });
+  const stage = 15;
+  const replacement = CORE.switchQuestion(categoryBank, game, stage, "N3", seeded(501), { allowRepeats: true });
+  assert.ok(replacement);
+  assert.equal(replacement.category, category);
+  assert.notEqual(replacement.id, game[stage - 1].id);
+  assert.ok(game.some((question) => question.id === replacement.id));
 });
 
 test("audience percentages total 100 and respect 50:50 removals", () => {
@@ -176,33 +212,49 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('<span className="millionaire-opening-play-label">Start</span>'), "The opening button should read Start.");
   assert.ok(script.indexOf('>Rules</span>') < script.indexOf('>Start</span>'), "Rules should appear to the left of Start.");
   assert.ok(script.includes('onClick={startGame}><span className="millionaire-opening-play-label">Start</span>'), "Start should begin the game immediately.");
-  assert.ok(script.includes('if (screen === "rules") return <RulesScreen />;'), "Rules should open in a separate panel.");
+  assert.ok(script.includes('if (screen === "rules") return RulesScreen();'), "Rules should open in a separate panel without remounting the active screen renderer.");
   assert.ok(!script.includes('screen === "setup"'), "The old setup step should be removed.");
   assert.ok(!script.includes('<span className="millionaire-setup-badge">National 3 prototype</span>'), "The rules panel should not show the prototype label.");
   assert.ok(!script.includes('<span className="millionaire-setup-badge">Game rules</span>'), "The rules panel should not show a Game rules badge.");
   assert.ok(script.includes("<h2>How to Play</h2>"), "The instructions panel heading should match the How to Play button.");
+  assert.ok(script.includes('className="millionaire-screen millionaire-rules-screen"'), "The How to Play screen should have a dedicated fixed-height layout class.");
+  assert.match(css, /\.millionaire-rules-screen\s*\{[^}]*height:\s*670px;[^}]*max-height:\s*670px;/s, "The How to Play screen should not make the game container taller.");
   assert.ok(!script.includes("Answer 15 increasingly challenging questions to climb the prize ladder and win £1 million."), "The rules panel should not repeat the game objective.");
   assert.ok(!script.includes("millionaire-setup-grid"), "The question-type breakdown should be removed.");
   ["Answer 15 music questions which progressively get more challenging.", "Each question is multiple choice with four possible answers."].forEach((rule) => assert.ok(script.includes(rule), `Missing rules guidance: ${rule}`));
   assert.ok(script.includes('<div className="millionaire-game-rules-copy millionaire-lifeline-intro"><p>If you get stuck on a question, you can use a lifeline:</p></div>'), "The Lifelines introduction should lead into the choices with a colon.");
   ["Choose and confirm:", "Milestones:", "Listening questions:"].forEach((oldRule) => assert.ok(!script.includes(oldRule), `Old rules guidance should be removed: ${oldRule}`));
   ['icon: "bronze.svg", label: "Bronze medal", tier: "bronze"', 'icon: "silver.svg", label: "Silver medal", tier: "silver"', 'icon: "gold.svg", label: "Gold medal", tier: "gold"', 'icon: "diamond.svg", label: "Diamond", tier: "diamond"'].forEach((reward) => assert.ok(script.includes(reward), `Missing reward details: ${reward}`));
-  assert.ok(script.includes("[15, 12, 8, 5].map"), "Rules should list rewards for questions 15, 12, 8 and 5.");
+  ["bronzehighres.svg", "silverhighres.svg", "goldhighres.svg", "diamondhighres.svg"].forEach((icon) => assert.ok(script.includes(`celebrationIcon: "${icon}"`), `Missing high-resolution celebration medal: ${icon}`));
+  assert.ok(script.includes('className="millionaire-milestone-medal" src={reward.celebrationIcon}'), "The centre celebration should use the high-resolution medal artwork.");
+  assert.ok(script.includes('className="millionaire-milestone-shine"') && script.includes('"--millionaire-medal-mask"'), "Every high-resolution milestone medal should receive a masked shine overlay.");
+  assert.match(css, /\.millionaire-milestone-shine::after\s*\{[^}]*millionaireLifelineShine 3\.8s/s, "Milestone medals should use the same repeating shine animation as lifelines.");
+  assert.ok(script.includes("[15, 12, 10, 5].map"), "Rules should list rewards for questions 15, 12, 10 and 5.");
   assert.ok(script.includes('className="millionaire-reward-icon" src={QUESTION_REWARDS[stage].icon}'), "Rules rewards should use the supplied SVG medal artwork.");
   assert.ok(script.includes('className={`millionaire-reward-label is-${QUESTION_REWARDS[stage].tier}`}>Question {stage}</span>'), "Reward rows should show each medal directly beside its full Question label.");
   assert.ok(!script.includes('millionaire-reward-diamond'), "Reward rows should not include a diamond between the medal and Question label.");
   assert.ok(script.includes('className="millionaire-prize-reward" src={reward.icon} alt={reward.label}'), "Reward SVGs should appear beside their prize values on the ladder.");
+  assert.ok(script.includes('earnedReward ? <MilestoneCelebration reward={earnedReward} />'), "A correctly earned milestone should replace the question media with its medal celebration.");
+  assert.ok(script.includes('className="millionaire-milestone-amount"'), "A correctly earned milestone should show its prize with a diamond on either side in the question bar.");
+  assert.match(css, /\.millionaire-milestone-amount\s*\{[^}]*font-size:\s*clamp\(32px, 3\.2vw, 42px\);[^}]*line-height:\s*1;/s, "The milestone amount should be larger while remaining centred in the question bar.");
+  assert.ok(script.includes('className={earnedReward ? "is-milestone-amount" : undefined}'), "Only earned milestone headings should receive the special money styling.");
+  assert.match(css, /\.millionaire-question-bar h2\.is-milestone-amount\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*none;[^}]*font-family:\s*"Copperplate Gothic Std ExtraBold", serif;/s, "Milestone money should be precisely centred and use the prize-ladder Gothic font.");
+  assert.match(css, /\.millionaire-milestone-amount\s*\{[^}]*display:\s*flex;[^}]*width:\s*100%;[^}]*justify-content:\s*center;/s, "The complete milestone amount and both diamonds should be centred as one group.");
+  assert.ok(script.includes("if (screen === \"game\") return GameScreen();") && script.includes("{CurrentScreen()}"), "State updates should preserve the active screen so milestone animations run once.");
+  assert.ok(!script.includes("<CurrentScreen />"), "The active screen should not remount on every state update.");
+  assert.match(css, /\.millionaire-confetti-piece\s*\{[^}]*millionaireConfettiBurst 1\.65s/s, "Milestone medals should trigger the confetti animation.");
+  assert.match(css, /@keyframes millionaireMilestoneMedal/, "Milestone medals should animate into the question media area.");
   ['src="50.50.svg"', 'src="hint.svg"', 'src="switch.svg"'].forEach((icon) => assert.ok(script.includes(icon), `Missing lifeline rules icon: ${icon}`));
   assert.equal((script.match(/className="millionaire-lifeline-icon"/g) || []).length, 3, "All three in-game lifelines should use SVG icons.");
-  ["Removes two incorrect answers.", "Guides you towards the correct answer with some helpful tips.", "Switch your current question to a different question."].forEach((sentence) => assert.ok(!script.includes(sentence), `Lifeline guidance should not end with a full stop: ${sentence}`));
-  assert.ok(script.includes("Guides you towards the correct answer with some helpful tips"), "The Hint rules should use the requested wording.");
+  ["Removes two incorrect answers.", "Guides you towards the correct answer with a hint.", "Switch your current question to a different question."].forEach((sentence) => assert.ok(!script.includes(sentence), `Lifeline guidance should not end with a full stop: ${sentence}`));
+  assert.ok(script.includes("Guides you towards the correct answer with a hint"), "The Hint rules should use the requested wording.");
   assert.ok(!script.includes('className="millionaire-primary millionaire-play" onClick={startGame}>Start game</button>'), "The rules panel should not include a Start Game button.");
-  assert.ok(script.includes('src="audio-svgrepo-com.svg"'), "The Sound effects setting should use the requested audio icon.");
-  assert.ok(script.includes('className="h-[36px] w-[36px] object-contain"'), "The Sound Effects icon should be doubled to 36px.");
-  assert.ok(script.includes('label="Sound Effects"'), "The Sound Effects label should use title case.");
+  assert.ok(script.includes('className="millionaire-audio-toggle"'), "The game board should include the combined audio control.");
+  assert.ok(script.includes('<img src="audio-svgrepo-com.svg" alt="" aria-hidden="true" />'), "The combined audio control should use the requested audio icon.");
+  assert.match(css, /\.millionaire-audio-toggle img\s*\{[^}]*filter:\s*brightness\(0\) invert\(1\);/s, "The combined audio icon should be white.");
+  assert.ok(script.includes('return { ...current, backgroundMusic: !enabled, soundEffects: !enabled };'), "The combined audio control should toggle music and effects together.");
   assert.ok(script.includes('const SETTINGS_KEY = "mlh-millionaire-settings-v3";'), "The settings version should apply the new defaults once.");
   assert.match(script, /const DEFAULT_SETTINGS = \{[^}]*soundEffects:\s*true,[^}]*backgroundMusic:\s*true,/s, "Sound Effects and Background Music should both default to on.");
-  assert.ok(script.includes('label="Background Music"'), "The Background Music label should use title case.");
   assert.ok(script.includes("Test your musical knowledge and climb the prize ladder to £1 million."), "The opening screen should repeat the page subtitle.");
   assert.match(css, /\.millionaire-opening-copy\s*\{[^}]*font-size:\s*24px;[^}]*white-space:\s*nowrap;/s, "The opening subtitle should be 24px and remain on one line.");
   assert.match(css, /\.millionaire-opening-play\s*\{[^}]*font-size:\s*30px;[^}]*line-height:\s*1;[^}]*text-transform:\s*none;/s, "Opening Rules and Start should use title case and fill their button height.");
@@ -226,9 +278,9 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes("Each lifeline can only be used once during a game.</p>"), "The one-use note should use the requested wording.");
   assert.match(css, /\.millionaire-rewards-list li\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;[^}]*gap:\s*\.25em;/s, "Reward medals and Question labels should share one centred row with one text-space between them.");
   [["diamond", "#06b6d4"], ["gold", "#eab308"], ["silver", "#64748b"], ["bronze", "#b45309"]].forEach(([tier, colour]) => assert.match(css, new RegExp(`\\.millionaire-reward-label\\.is-${tier}\\s*\\{[^}]*color:\\s*${colour};`), `${tier} reward text should use the shared medal colour.`));
-  assert.match(css, /\.millionaire-rewards-list\s*\{[^}]*color:\s*#dbeafe;[^}]*font-family:\s*Arial, sans-serif;[^}]*font-size:\s*15px;[^}]*font-weight:\s*400;[^}]*line-height:\s*1\.3;/s, "Reward labels should match the 15px gameplay sentence.");
-  assert.match(css, /\.millionaire-reward-icon\s*\{[^}]*width:\s*15px;[^}]*height:\s*15px;[^}]*object-fit:\s*contain;/s, "Reward SVGs should match the 15px label size and align with their text.");
-  assert.match(css, /\.millionaire-reward-label\s*\{[^}]*width:\s*84px;[^}]*white-space:\s*nowrap;/s, "Each reward Question label should remain on one line.");
+  assert.match(css, /\.millionaire-rewards-list\s*\{[^}]*color:\s*#dbeafe;[^}]*font-family:\s*inherit;[^}]*font-size:\s*19px;[^}]*font-weight:\s*700;[^}]*line-height:\s*1\.3;/s, "Reward labels should use the heading font in bold at 19px.");
+  assert.match(css, /\.millionaire-reward-icon\s*\{[^}]*width:\s*19px;[^}]*height:\s*19px;[^}]*object-fit:\s*contain;[^}]*translateY\(-2\.5px\);/s, "Reward SVGs should match the label size and sit 2.5px higher for optical alignment.");
+  assert.match(css, /\.millionaire-reward-label\s*\{[^}]*width:\s*112px;[^}]*white-space:\s*nowrap;/s, "Each enlarged reward Question label should remain on one line.");
   assert.match(css, /\.millionaire-game-rules-copy\s*\{[^}]*font-weight:\s*400;/s, "The gameplay description should use regular text.");
   assert.match(css, /\.millionaire-lifeline-rules strong\s*\{[^}]*font-size:\s*16px;/s, "The lifeline names should be larger.");
   assert.match(css, /\.millionaire-lifeline-rules span\s*\{[^}]*font-weight:\s*400;/s, "The lifeline descriptions should use regular text.");
@@ -237,6 +289,10 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('className="millionaire-prize-diamond"'), "Prize rows should include a completion diamond.");
   assert.match(css, /\.millionaire-prize-row\.is-complete \.millionaire-prize-diamond, \.millionaire-prize-row\.is-current \.millionaire-prize-diamond\s*\{[^}]*opacity:\s*1;/s, "Diamonds should show for completed and current questions only.");
   assert.match(css, /\.millionaire-prize-row\.is-current\s*\{[^}]*clip-path:\s*polygon\([^}]*filter:\s*drop-shadow/s, "The current question should use a glowing orange pointed bar.");
+  assert.match(css, /\.millionaire-prize-row\.is-current \.millionaire-prize-number\s*\{[^}]*color:\s*#07123d;/s, "The current prize number should use dark blue on the orange bar.");
+  assert.match(css, /\.millionaire-prize-row\.is-current \.millionaire-prize-value-wrap\s*\{[^}]*color:\s*#07123d;/s, "The current prize amount should use dark blue on the orange bar.");
+  assert.match(css, /\.millionaire-prize-diamond\s*\{[^}]*color:\s*#fff;/s, "Visible prize diamonds should always be white.");
+  assert.match(css, /\.millionaire-prize-row\.is-current \.millionaire-prize-diamond\s*\{[^}]*color:\s*#fff;/s, "The current prize diamond should remain white on the orange bar.");
   assert.match(css, /\.millionaire-primary\s*\{[^}]*background:\s*linear-gradient\(#ffe9a5, #e9a832\);/s, "Primary Start and Final Answer buttons should retain their original gold gradient.");
   assert.match(css, /\.millionaire-answer-letter\s*\{[^}]*color:\s*#f6c453;/s, "Answer letters should use the original gold.");
   assert.match(css, /\.millionaire-prize-row\s*\{[^}]*color:\s*#f6c453;/s, "Standard prize-ladder numbers and amounts should use the original gold.");
@@ -250,15 +306,42 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(!script.includes("millionaire-question-number"), "The question counter should not be shown above the game.");
   assert.ok(!script.includes("millionaire-current-value"), "The current prize label should not be shown above the game.");
   assert.ok(!script.includes("millionaire-category-chip"), "The category and concept label should not appear above questions.");
-  assert.ok(script.includes('<span className="millionaire-final-answer-label">Final Answer</span>'), "The Final Answer label should use title case.");
+  assert.ok(script.includes('waitingForMilestoneContinue ? "Continue" : "Final Answer"'), "The answer action should use title-case Final Answer and Continue labels.");
   assert.ok(script.includes('onClick={resetGame}><span className="millionaire-final-answer-label">Exit</span>'), "The Review screen should offer an Exit button matching the Review action and returning to the opening screen.");
   assert.ok(!script.includes("Concepts answered incorrectly:") && !script.includes("millionaire-concept-misses"), "The Review screen should not show a separate incorrectly answered concepts panel.");
+  assert.ok(!script.includes('<ResultStat label="Outcome">') && !script.includes('<ResultStat label="Correct answers">') && !script.includes('<ResultStat label="Attempted">'), "The Review summary should omit Outcome, Correct Answers and Attempted cards.");
+  assert.ok(script.includes('<ResultStat label="Audio questions">') && script.includes('<ResultStat label="Music literacy questions">') && script.includes('<ResultStat label="Musical concept questions">'), "The Review category cards should use sentence-case question labels.");
+  assert.ok(script.includes("categorySummary.listening.attempted") && script.includes("categorySummary.literacy.attempted") && script.includes("categorySummary.concepts.attempted"), "Question-type cards should show how many questions were asked rather than a correct/attempted fraction.");
+  assert.doesNotMatch(script, /categorySummary\.(listening|literacy|concepts)\.correct\}\//, "Question-type cards should not display the number answered correctly.");
+  assert.ok(script.includes('settings.questionTypes.includes("listening") && <ResultStat') && script.includes('settings.questionTypes.includes("literacy") && <ResultStat') && script.includes('settings.questionTypes.includes("concepts") && <ResultStat'), "Question-type cards should be hidden when that type was disabled.");
+  assert.ok(script.includes('className="millionaire-result-lifelines"') && script.includes('usedLifelines.map(({ key, icon, label }) => <img'), "The Review summary should show the actual icons for used lifelines.");
+  assert.ok(script.includes('label="Lifelines used"'), "The Lifelines used heading should use sentence case.");
+  assert.ok(script.includes('const earnedMedalStage = [15, 12, 10, 5].find((stage) => stage <= correctCount);') && script.includes('label="Medal achieved"'), "The Review summary should identify the highest milestone medal actually earned.");
+  assert.ok(script.includes('<img src={earnedMedal.icon} alt={earnedMedal.label} /> : "None"'), "The Medal Achieved card should show the earned medal glyph or None before the first milestone.");
+  assert.match(css, /\.millionaire-results-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s, "The six Review cards should use a balanced three-column layout.");
+  assert.match(css, /\.millionaire-result-lifelines img\s*\{[^}]*width:\s*60px;[^}]*height:\s*40px;/s, "Used lifeline icons should be clearly visible in the Review summary.");
+  assert.ok(script.includes('aria-label={`Question ${highestReached}, ${reviewPrize}`}') && script.includes('className="millionaire-result-prize-diamond"'), "The Review prize should show the highest question, a diamond and the current value.");
+  assert.ok(script.includes('const reviewPrizeValue = CORE.PRIZE_LADDER[highestReached - 1] || 0;'), "The Review screen should show the monetary value of the highest question reached.");
+  assert.ok(script.includes('const reviewPrize = reviewPrizeValue === 1000000 ? "£1 MILLION" : CORE.formatPrize(reviewPrizeValue);'), "The Review question value should capitalise MILLION at the top prize.");
+  assert.match(css, /\.millionaire-result-prize\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);[^}]*font-family:\s*"Copperplate Gothic Std ExtraBold", serif;/s, "The Review prize should use balanced columns that centre its diamond exactly.");
+  assert.match(css, /\.millionaire-result-prize > span:first-child\s*\{[^}]*justify-self:\s*end;/s, "The Review question number should sit immediately left of the centred diamond.");
+  assert.match(css, /\.millionaire-result-prize > span:last-child\s*\{[^}]*justify-self:\s*start;/s, "The Review question value should sit immediately right of the centred diamond.");
+  assert.match(css, /\.millionaire-result-prize-diamond\s*\{[^}]*color:\s*#fff;/s, "The Review prize separator should use a white diamond.");
+  assert.match(script, /<ResultStat label="Medal achieved">[\s\S]*<ResultStat label="Lifelines used">[\s\S]*<ResultStat label="Time">[\s\S]*<ResultStat label="Audio questions">[\s\S]*<ResultStat label="Music literacy questions">[\s\S]*<ResultStat label="Musical concept questions">/, "Enabled question-type cards should follow the general game statistics.");
+  assert.match(css, /\.millionaire-result-medal img\s*\{[^}]*width:\s*36px;[^}]*height:\s*36px;/s, "The highest earned medal glyph should use the requested smaller Review size.");
+  assert.match(css, /\.millionaire-result-actions\s*\{[^}]*margin-top:\s*auto;[^}]*padding-top:\s*20px;/s, "The Review Exit button should remain anchored to the bottom of the game container.");
+  assert.match(css, /\.millionaire-result-stat > span\s*\{[^}]*color:\s*#f6c453;[^}]*font-family:\s*inherit;[^}]*font-size:\s*21px;[^}]*font-weight:\s*700;[^}]*letter-spacing:\s*normal;[^}]*text-transform:\s*none;/s, "Review card headings should match the gold 21px rules-panel headings without uppercase styling.");
   assert.match(css, /\.millionaire-final-answer\s*\{[^}]*min-width:\s*220px;[^}]*font-size:\s*26px;[^}]*line-height:\s*1;/s, "The Final Answer label should fill its button.");
+  assert.match(css, /\.millionaire-final-answer\.millionaire-audio-button\s*\{[^}]*min-width:\s*0;[^}]*gap:\s*8px;/s, "The Play and Stop button should override the Final Answer width and fit its contents.");
+  assert.match(css, /\.millionaire-audio-glyph\s*\{[^}]*translateY\(3px\);/s, "The Play and Stop glyph should be optically centred with its label.");
+  assert.match(css, /\.millionaire-audio-glyph\.is-stop\s*\{[^}]*font-size:\s*28px;/s, "The square Stop glyph should be large enough to balance the Play glyph.");
+  assert.ok(script.includes('<span className="millionaire-audio-count">Remaining: {remaining}</span>'), "The listening counter should use the concise Remaining label.");
+  assert.match(css, /\.millionaire-audio-button:disabled \.millionaire-audio-glyph\s*\{[^}]*color:\s*#6b7280;/s, "The expired Play glyph should use the same grey as its disabled label.");
   assert.ok(script.includes('className="millionaire-actions millionaire-final-answer-actions"'), "The Final Answer row should have dedicated spacing.");
   assert.match(css, /\.millionaire-final-answer-actions\s*\{[^}]*padding-top:\s*14px;/s, "The existing 14px grid gap plus 14px top padding should create 28px above Final Answer.");
   assert.match(css, /\.millionaire-final-answer-label\s*\{[^}]*translateY\(3px\);/s, "The Final Answer label should be optically centred.");
   assert.ok(script.includes('aria-label="Reset game and return to opening screen" disabled={screen !== "game"} onClick={resetGame}'), "Reset should remain visible but be disabled outside the active question screen.");
-  assert.ok(script.includes('src="restart.svg" alt="" className="h-[16px] w-[16px]"') && script.includes('>Reset</span>'), "Reset should use a small 16px restart icon and title-case label.");
+  assert.ok(script.includes('src="restart.svg" alt="" className="h-[20px] w-[20px]"') && script.includes('>Reset</span>'), "Reset should use a balanced 20px restart icon and title-case label.");
   assert.match(css, /\.millionaire-toolbar-reset:disabled\s*\{[^}]*cursor:\s*not-allowed;[^}]*filter:\s*grayscale\(1\);[^}]*opacity:\s*\.42;/s, "Unavailable Reset buttons should appear greyed out.");
   assert.match(script, /function resetGame\(\)\s*\{[^}]*setScreen\("title"\);/s, "Reset should return directly to the opening screen.");
   assert.ok(!script.includes("millionaire-quit") && !script.includes(">QUIT</button>"), "The old bottom-left Quit button should be removed.");
@@ -291,9 +374,17 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes("this.fadeOutMusicForExcerpt(.5, startExcerpt)"), "Question music should fade out for half a second before an excerpt begins.");
   assert.ok(script.includes("this.fadeInMusicAfterExcerpt(.5)"), "Question music should fade back in for half a second after an excerpt ends.");
   assert.ok(script.includes("return totalDuration + .62"), "Excerpt progress should include the half-second fade before playback.");
-  assert.doesNotMatch(script, /nextCorrect === 5 \|\| nextCorrect === 10/, "The £1,000 and £32,000 milestones should not interrupt the question sequence.");
-  assert.match(script, /if \(currentIndex === 14\)[\s\S]*setScreen\("milestone"\);[\s\S]*else \{\s*goToQuestion\(currentIndex \+ 1\);/, "Only the £1 million win should open the celebration screen.");
-  assert.ok(script.includes("<h2>You win £1 million!</h2>") && !script.includes("<h2>{milestone?.victory"), "The remaining celebration screen should be exclusively for the £1 million win.");
+  assert.match(script, /else if \(QUESTION_REWARDS\[stage\]\) \{[\s\S]*setMilestone\(\{ stage, prize: CORE\.PRIZE_LADDER\[currentIndex\], nextIndex: currentIndex \+ 1 \}\);/, "Questions 5, 10 and 12 should pause on their earned medal celebration.");
+  assert.ok(script.includes('waitingForMilestoneContinue ? "Continue" : "Final Answer"'), "The Final Answer button should become Continue while an intermediate milestone waits.");
+  assert.match(script, /function continueMilestone\(\) \{[\s\S]*goToQuestion\(nextIndex\);/, "Continue should advance from an intermediate milestone to the next question.");
+  assert.match(script, /if \(currentIndex === 14\)[\s\S]*setScreen\("milestone"\);/, "The £1 million win should open its dedicated celebration screen.");
+  assert.ok(script.includes('<MilestoneCelebration reward={QUESTION_REWARDS[15]} showBurst={false} />'), "The £1 million screen should show the high-resolution diamond without the small burst confetti.");
+  assert.ok(script.includes('<FinalConfetti />') && script.includes('Array.from({ length: 60 }'), "The £1 million screen should pour confetti across its full width.");
+  assert.match(css, /\.millionaire-final-confetti-piece\s*\{[^}]*millionaireConfettiFall[^}]*infinite;/s, "Final-screen confetti should fall continuously.");
+  assert.ok(script.includes('<h2>£1 MILLION</h2>'), "The final celebration heading should use the requested £1 MILLION wording.");
+  assert.ok(!script.includes("You answered all 15 questions correctly."), "The final celebration should not show the removed explanatory sentence.");
+  assert.match(css, /\.millionaire-celebration h2\s*\{[^}]*font-family:\s*"Copperplate Gothic Std ExtraBold", serif;/s, "The £1 MILLION heading should use the Gothic prize-ladder font.");
+  assert.ok(script.includes('onClick={() => finishGame("won", 1000000)}><span className="millionaire-final-answer-label">Review</span>'), "The £1 million screen should offer Review after the diamond celebration.");
   assert.match(script, /function finalAnswerDelay\(stage\)\s*\{\s*if \(stage <= 5\) return 2000;\s*if \(stage <= 8\) return 3000;\s*if \(stage <= 12\) return 4000;\s*return 5000;\s*\}/s, "Final Answer reveals should use the confirmed 2, 3, 4 and 5 second question bands.");
   assert.match(script, /playFinalAnswer\(stage\)\s*\{[^}]*this\.playEffect\(path\);[^}]*window\.setTimeout\(\(\) => \{\s*this\.stopEffect\(\);\s*resolve\(\);\s*\}, finalAnswerDelay\(stage\)\);/s, "The Final Answer audio should be stopped at the fixed reveal delay instead of playing to completion.");
   assert.ok(script.includes('path === window.MILLIONAIRE_SOUND_CONFIG.earlyCorrect') && script.includes('shortenEarlyCorrect ? { shortenBy: 3, fadeSeconds: 1 } : undefined'), "Only correct 1-5.ogg should fade for one second and stop three seconds early.");
@@ -304,15 +395,19 @@ test("interface includes the required screens, controls and protections", () => 
   assert.match(css, /\.millionaire-prize-number\s*\{[^}]*text-align:\s*right;[^}]*translateX\(5px\);/s, "Prize question numbers should be optically spaced equally from the diamond and amount.");
   assert.match(css, /\.millionaire-prize-value-wrap\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*gap:\s*6px;/s, "Reward SVGs should sit immediately beside their prize values.");
   assert.match(css, /\.millionaire-prize-diamond\s*\{[^}]*display:\s*grid;[^}]*width:\s*100%;[^}]*height:\s*100%;[^}]*place-items:\s*center;[^}]*align-self:\s*center;[^}]*justify-self:\s*center;[^}]*font-size:\s*11px;/s, "Current and completed question diamonds should be larger and centred in both directions.");
-  assert.match(css, /\.millionaire-prize-diamond\s*\{[^}]*transform:\s*translateX\(1px\);/s, "Every prize-ladder diamond should include the additional half-pixel right shift.");
+  assert.match(css, /\.millionaire-prize-diamond\s*\{[^}]*transform:\s*translateX\(2px\);/s, "Every prize-ladder diamond should sit 2px to the right for optical alignment.");
   assert.ok(script.includes('<AutoFitAnswer answer={answer} />'), "Each answer should use automatic single-line text fitting.");
   assert.match(css, /\.millionaire-answer\.is-removed\s*\{[^}]*pointer-events:\s*none;[^}]*\}/s, "50:50 removed choices should retain their answer containers but remain non-interactive.");
   assert.match(css, /\.millionaire-answer\.is-removed \.millionaire-answer-content, \.millionaire-answer\.is-removed \.millionaire-answer-status\s*\{[^}]*visibility:\s*hidden;/s, "50:50 should hide only the removed choice's diamond and text.");
-  assert.ok(script.includes("content.scrollWidth > content.clientWidth") && script.includes("fontSize -= .5"), "Long answers should reduce in size until they fit.");
+  assert.ok(script.includes("text.scrollWidth > text.clientWidth") && script.includes("text.style.fontSize") && script.includes("fontSize -= .5"), "Only long white answer wording should reduce in size until it fits.");
+  assert.ok(script.includes('text.classList.remove("is-wrapped")') && script.includes('if (fontSize <= 16 || text.scrollWidth > text.clientWidth) text.classList.add("is-wrapped")'), "White answer wording should always wrap after reaching its minimum fitted size, even when flex sizing masks the overflow.");
   assert.ok(script.includes('className="millionaire-answer-diamond"'), "Each answer should begin with a diamond.");
   assert.match(css, /\.millionaire-answer\s*\{[^}]*height:\s*48px;[^}]*min-height:\s*48px;/s, "Answer boxes should be two-thirds of the 72px question-box height.");
-  assert.match(css, /\.millionaire-answer-content\s*\{[^}]*font-size:\s*clamp\(18px, 1\.75vw, 24px\);[^}]*line-height:\s*1;/s, "Answer text should fit cleanly inside the half-height boxes.");
+  assert.match(css, /\.millionaire-answer-content\s*\{[^}]*display:\s*flex;[^}]*font-size:\s*clamp\(18px, 1\.75vw, 24px\);[^}]*line-height:\s*1;/s, "Answer content should fit cleanly inside the half-height boxes.");
   assert.match(css, /\.millionaire-answer-content\s*\{[^}]*translateY\(2px\);/s, "Answer text should remain optically centred in the shorter boxes.");
+  assert.match(css, /\.millionaire-answer-letter\s*\{[^}]*flex:\s*0 0 auto;[^}]*font-size:\s*inherit;/s, "Answer letters should remain at the full standard size when wording shrinks.");
+  assert.match(css, /\.millionaire-answer-text\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 auto;[^}]*overflow:\s*hidden;/s, "Only the white answer wording should occupy the flexible resizable space.");
+  assert.match(css, /\.millionaire-answer-text\.is-wrapped\s*\{[^}]*overflow:\s*visible;[^}]*line-height:\s*1\.05;[^}]*white-space:\s*normal;/s, "Long white answer wording should use a second line instead of being cut off.");
   assert.match(css, /\.millionaire-answer-diamond\s*\{[^}]*font-size:\s*\.62em;[^}]*vertical-align:\s*middle;[^}]*\}/s, "Answer diamonds should be larger and vertically centred with the shifted text.");
   assert.doesNotMatch(css, /\.millionaire-answer-diamond\s*\{[^}]*translateY\(-/s, "Answer diamonds should no longer be shifted upward.");
   assert.match(css, /\.millionaire-answer-status\s*\{[^}]*position:\s*absolute;[^}]*width:\s*1px;[^}]*height:\s*1px;[^}]*overflow:\s*hidden;/s, "Correct and incorrect answer status should remain available to assistive technology without showing a tick or cross.");
@@ -330,6 +425,12 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(!script.includes("beforeunload"), "Browser refresh should not be blocked during an active game.");
   assert.ok(!script.includes("Ask the Audience"), "Ask the Audience should be replaced by Switch.");
   assert.ok(script.includes('src="50.50.svg"') && script.includes('src="hint.svg"') && script.includes('src="switch.svg"'), "The three lifelines should use the supplied SVG icons.");
-  assert.match(script, /function useSwitch\(\)\s*\{[^}]*CORE\.switchQuestion\(QUESTION_BANK, questions, currentIndex \+ 1, question\.level\)/s, "Switch should request a replacement for the current difficulty stage.");
+  assert.ok(script.includes("<window.MLH.CustomiseButton") && script.includes("<window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>"), "Customise should use the shared Hub menu and Question Types heading.");
+  ["Music Literacy", "Audio", "Musical Concepts"].forEach((label) => assert.ok(script.includes(`label: "${label}"`), `Customise should include ${label}.`));
+  assert.ok(script.includes("if (enabled && current.questionTypes.length === 1) return current;"), "At least one question type should always remain enabled.");
+  assert.ok(script.includes('disabled={settings.questionTypes.includes(option.id) && settings.questionTypes.length === 1}'), "The final enabled question-type toggle should be visibly unavailable.");
+  assert.ok(script.includes('const customiseUnavailable = screen === "game" || screen === "milestone";') && script.includes("<fieldset disabled={customiseUnavailable}"), "Customise should be unavailable while a game is active.");
+  assert.ok(script.includes('categories: settings.questionTypes'), "The next game should use the selected question types.");
+  assert.match(script, /function useSwitch\(\)\s*\{[\s\S]*CORE\.switchQuestion\(enabledQuestionBank, questions, currentIndex \+ 1, question\.level, Math\.random, \{ allowRepeats: settings\.questionTypes\.length === 1 \}\)/, "Switch should stay within the enabled types and temporarily allow repeats in single-type games.");
   assert.ok(script.includes("Switch your current question to a different question"), "The rules should explain the Switch lifeline.");
 });

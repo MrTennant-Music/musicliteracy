@@ -79,21 +79,35 @@
     return errors;
   }
 
-  function buildCategorySchedule(rng = Math.random) {
-    const targets = { ...CATEGORY_TARGETS };
+  function normaliseCategories(categories) {
+    const requested = Array.isArray(categories) ? categories.filter((category) => CATEGORIES.includes(category)) : CATEGORIES;
+    const unique = [...new Set(requested)];
+    return unique.length ? unique : CATEGORIES.slice();
+  }
+
+  function buildCategorySchedule(rng = Math.random, categories = CATEGORIES) {
+    const enabled = normaliseCategories(categories);
+    const usesStandardMix = enabled.length === CATEGORIES.length && CATEGORIES.every((category) => enabled.includes(category));
+    const targets = Object.fromEntries(CATEGORIES.map((category) => [category, 0]));
+    if (usesStandardMix) Object.assign(targets, CATEGORY_TARGETS);
+    else {
+      const ordered = shuffle(enabled, rng);
+      const base = Math.floor(15 / ordered.length);
+      ordered.forEach((category, index) => { targets[category] = base + (index < 15 % ordered.length ? 1 : 0); });
+    }
+    const requiredLateCategories = usesStandardMix ? ["listening", "literacy"] : enabled;
     const schedule = [];
 
     function canUse(category, stage) {
       if (targets[category] <= 0) return false;
-      if (schedule.length >= 2 && schedule.at(-1) === category && schedule.at(-2) === category) return false;
+      if (enabled.length > 1 && schedule.length >= 2 && schedule.at(-1) === category && schedule.at(-2) === category) return false;
       const remainingSlots = 15 - stage;
       const nextTargets = { ...targets, [category]: targets[category] - 1 };
       if (Object.values(nextTargets).some((count) => count > remainingSlots)) return false;
       if (stage > 10) {
         const lastFive = schedule.slice(10).concat(category);
         const slotsAfter = 15 - stage;
-        if (!lastFive.includes("listening") && slotsAfter === 0) return false;
-        if (!lastFive.includes("literacy") && slotsAfter === 0) return false;
+        if (requiredLateCategories.some((required) => !lastFive.includes(required)) && slotsAfter === 0) return false;
       }
       return true;
     }
@@ -101,9 +115,9 @@
     function fill(stage) {
       if (stage === 16) {
         const lastFive = schedule.slice(10);
-        return lastFive.includes("listening") && lastFive.includes("literacy");
+        return requiredLateCategories.every((category) => lastFive.includes(category));
       }
-      const weighted = shuffle(CATEGORIES.flatMap((category) => Array(Math.max(0, targets[category])).fill(category)), rng);
+      const weighted = shuffle(enabled.flatMap((category) => Array(Math.max(0, targets[category])).fill(category)), rng);
       const candidates = [...new Set(weighted)];
       for (const category of candidates) {
         if (!canUse(category, stage)) continue;
@@ -168,6 +182,18 @@
     return selected;
   }
 
+  function selectSingleCategory(validQuestions, category, rng) {
+    const candidates = shuffle(validQuestions.filter((question) => question.category === category), rng)
+      .sort((a, b) => (a.difficultyMin + a.difficultyMax) - (b.difficultyMin + b.difficultyMax));
+    if (candidates.length < 15) return null;
+    if (candidates.length === 15) return candidates;
+    const selected = [];
+    for (let index = 0; index < 15; index += 1) {
+      selected.push(candidates[Math.round(index * (candidates.length - 1) / 14)]);
+    }
+    return selected;
+  }
+
   function composeGame(questionBank, recentGames = [], rng = Math.random, options = {}) {
     const invalidIds = new Set();
     const seen = new Set();
@@ -176,15 +202,22 @@
       if (question?.id) seen.add(question.id);
     });
     const requestedLevel = options.level || (questionBank || []).find((question) => !invalidIds.has(question?.id))?.level || "N3";
-    const validQuestions = (questionBank || []).filter((question) => !invalidIds.has(question.id) && question.level === requestedLevel);
+    const enabledCategories = normaliseCategories(options.categories);
+    const validQuestions = (questionBank || []).filter((question) => !invalidIds.has(question.id) && question.level === requestedLevel && enabledCategories.includes(question.category));
     const history = recentSets(recentGames);
     const recentlyUsed = new Set(history.flatMap((set) => [...set]));
+    if (enabledCategories.length === 1) {
+      const singleCategorySelection = selectSingleCategory(validQuestions, enabledCategories[0], rng);
+      if (!singleCategorySelection) throw new Error("The selected question type does not contain 15 valid questions.");
+      const letters = answerLetterPlan(rng);
+      return singleCategorySelection.map((question, index) => shuffledQuestion(question, letters[index], rng));
+    }
     for (let retainedGames = history.length; retainedGames >= 0; retainedGames -= 1) {
       const excluded = new Set(history.slice(history.length - retainedGames).flatMap((set) => [...set]));
       let bestSelection = null;
       let fewestRecentRepeats = Infinity;
       for (let attempt = 0; attempt < 500; attempt += 1) {
-        const schedule = buildCategorySchedule(rng);
+        const schedule = buildCategorySchedule(rng, enabledCategories);
         const selected = selectForSchedule(validQuestions, schedule, excluded, recentlyUsed, rng);
         if (!selected) continue;
         const recentRepeats = selected.filter((question) => recentlyUsed.has(question.id)).length;
@@ -209,15 +242,25 @@
     return incorrect.filter((answer) => answer.letter !== retainedDistractor.letter).map((answer) => answer.letter);
   }
 
-  function switchQuestion(questionBank, currentQuestions, stage, level = "N3", rng = Math.random) {
+  function switchQuestion(questionBank, currentQuestions, stage, level = "N3", rng = Math.random, options = {}) {
     const usedIds = new Set((currentQuestions || []).map((question) => question.id));
     const currentQuestion = (currentQuestions || [])[stage - 1];
-    const eligible = (questionBank || []).filter((question) => question.level === level
-      && !validateQuestion(question).length
-      && question.difficultyMin <= stage && question.difficultyMax >= stage
+    const validAtLevel = (questionBank || []).filter((question) => question.level === level
+      && !validateQuestion(question).length);
+    const eligible = validAtLevel.filter((question) => question.difficultyMin <= stage && question.difficultyMax >= stage
       && !usedIds.has(question.id));
     const sameCategory = eligible.filter((question) => question.category === currentQuestion?.category);
-    const candidates = sameCategory.length ? sameCategory : eligible;
+    let candidates = sameCategory.length ? sameCategory : eligible;
+    if (!candidates.length && options.allowRepeats) {
+      const sameCategoryPool = validAtLevel.filter((question) => question.category === currentQuestion?.category && question.id !== currentQuestion?.id);
+      const exactStage = sameCategoryPool.filter((question) => question.difficultyMin <= stage && question.difficultyMax >= stage);
+      if (exactStage.length) candidates = exactStage;
+      else if (sameCategoryPool.length) {
+        const distance = (question) => stage < question.difficultyMin ? question.difficultyMin - stage : stage > question.difficultyMax ? stage - question.difficultyMax : 0;
+        const closestDistance = Math.min(...sameCategoryPool.map(distance));
+        candidates = sameCategoryPool.filter((question) => distance(question) === closestDistance);
+      }
+    }
     if (!candidates.length) return null;
     const replacement = candidates[randomInt(candidates.length, rng)];
     const correctLetter = LETTERS[randomInt(LETTERS.length, rng)];
