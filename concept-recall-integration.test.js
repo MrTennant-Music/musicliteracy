@@ -229,6 +229,6 @@ assert(index.includes('"Concept Recall": "concept-recall-icon.svg"'), "The Conce
 assert(index.includes('href: "concept-recall.html"'), "The Concept Recall card is missing from index.html");
 assert(index.includes('{ category: "Other", apps: ['), "The Other heading is missing from index.html");
 assert(index.indexOf('{ category: "Other", apps: [') > index.indexOf('{ category: "Practice", apps: ['), "Other must appear below Practice");
-assert(index.includes('title: "Concept Recall", desc: "Race against the clock to recall musical concepts from written hints.", keywords: "concept recall revision timed quiz terminology definitions hints", audio: false, disabled: ["N3", "N4"]'), "The Hub should disable National 3 and National 4 for Concept Recall");
+assert(index.includes('title: "Concept Recall", desc: "Name as many musical concepts as you can under each category before time runs out.", keywords: "concept recall revision timed quiz terminology definitions hints", audio: false, disabled: ["N3", "N4"]'), "The Hub should disable National 3 and National 4 for Concept Recall");
 
 console.log("Concept Recall integration checks passed.");

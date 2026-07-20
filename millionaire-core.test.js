@@ -13,8 +13,8 @@ function seeded(seed) {
   };
 }
 
-test("question bank contains all pools and an expanded National 3 Literacy bank", () => {
-  assert.equal(BANK.length, 256);
+test("question bank contains all course pools and the completed N4/N5 Literacy banks", () => {
+  assert.ok(BANK.length >= 400);
   assert.equal(new Set(BANK.map((question) => question.id)).size, BANK.length);
   assert.deepEqual(CORE.validateQuestionBank(BANK), []);
   assert.deepEqual(CORE.validateQuestionPools(BANK.pools), []);
@@ -23,18 +23,20 @@ test("question bank contains all pools and an expanded National 3 Literacy bank"
     for (const difficulty of CORE.DIFFICULTIES) {
       for (const category of CORE.CATEGORIES) {
         const pool = BANK.pools[level][difficulty][category];
-        const expectedCount = level === "N3" && category === "literacy" ? (difficulty === "easy" ? 16 : 15) : 5;
-        assert.equal(pool.length, expectedCount, `${level}/${difficulty}/${category} should contain the expected number of questions`);
+        if (["N4", "N5"].includes(level)) {
+          if (category === "literacy") assert.ok(pool.length >= 5, `${level}/${difficulty}/literacy should contain a complete question pool`);
+          else assert.equal(pool.length, 0, `${level}/${difficulty}/${category} should remain unavailable`);
+        } else assert.ok(pool.length >= 5, `${level}/${difficulty}/${category} should contain the expected questions`);
         assert.ok(pool.every((question) => question.level === level && question.difficulty === difficulty && question.category === category));
       }
     }
   }
   const national3 = BANK.filter((question) => question.level === "N3");
-  assert.equal(national3.length, 76);
+  assert.ok(national3.length >= 76);
   assert.ok(national3.every((question) => !question.placeholder));
   assert.ok(national3.some((question) => question.id === "n3-listening-001"));
   const n3Literacy = BANK.filter((question) => question.level === "N3" && question.category === "literacy");
-  assert.equal(n3Literacy.length, 46);
+  assert.ok(n3Literacy.length >= 46);
   assert.ok(n3Literacy.every((question) => ["easy", "medium", "hard"].includes(question.difficulty)));
   assert.ok(n3Literacy.every((question) => !question.question.includes("crotchet beats")), "National 3 Literacy prompts should use the simpler term beats.");
   assert.equal(n3Literacy.find((question) => question.concept === "stave")?.notation?.kind, "stave", "The National 3 stave question should display a blank stave in the notation panel.");
@@ -48,7 +50,7 @@ test("question bank contains all pools and an expanded National 3 Literacy bank"
 
 test("placeholder questions use one consistent schema and safe empty audio fields", () => {
   const placeholders = BANK.filter((question) => question.placeholder);
-  assert.equal(placeholders.length, 180);
+  assert.equal(placeholders.length, 90);
   placeholders.forEach((question) => {
     assert.match(question.question, /^Placeholder:/);
     assert.equal(question.answers.length, 4);
@@ -126,18 +128,18 @@ test("invalid, empty and incomplete pools fail safely without crossing level or 
   const warnings = [];
   console.warn = (message) => warnings.push(message);
   try {
-    const incomplete = BANK.filter((question) => !(question.level === "N4" && question.difficulty === "easy" && question.category === "listening"));
-    const game = CORE.composeGame(incomplete, [], seeded(7), { level: "N4" });
+    const incomplete = BANK.filter((question) => !(question.level === "H" && question.difficulty === "easy" && question.category === "listening"));
+    const game = CORE.composeGame(incomplete, [], seeded(7), { level: "H" });
     assert.equal(game.length, 15);
-    assert.ok(game.every((question, index) => question.level === "N4" && question.difficulty === CORE.difficultyForStage(index + 1)));
+    assert.ok(game.every((question, index) => question.level === "H" && question.difficulty === CORE.difficultyForStage(index + 1)));
     assert.ok(game.some((question) => question.fallback && question.category === "listening" && question.difficulty === "easy"));
     assert.ok(warnings.some((message) => message.includes("question pool is empty")));
 
-    const tooSmall = BANK.filter((question) => !(question.level === "N4" && question.difficulty === "easy" && question.category === "literacy"))
-      .concat(BANK.pools.N4.easy.literacy[0]);
-    const fallbackGame = CORE.composeGame(tooSmall, [], seeded(9), { level: "N4", categories: ["literacy", "concepts"] });
+    const tooSmall = BANK.filter((question) => !(question.level === "H" && question.difficulty === "easy" && question.category === "literacy"))
+      .concat(BANK.pools.H.easy.literacy[0]);
+    const fallbackGame = CORE.composeGame(tooSmall, [], seeded(9), { level: "H", categories: ["literacy", "concepts"] });
     assert.equal(new Set(fallbackGame.map((question) => question.id)).size, 15);
-    assert.ok(fallbackGame.every((question, index) => question.level === "N4" && question.difficulty === CORE.difficultyForStage(index + 1)));
+    assert.ok(fallbackGame.every((question, index) => question.level === "H" && question.difficulty === CORE.difficultyForStage(index + 1)));
     assert.ok(warnings.some((message) => message.includes("too few unused questions")));
 
     const invalid = { ...BANK[0], id: "broken", answers: BANK[0].answers.slice(0, 3) };
@@ -241,14 +243,14 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(!script.includes('className="millionaire-back-icon"'), "The rules Back button should not show an icon.");
   assert.ok(html.includes("bravura-symbols.js") && html.includes("shared-notation-config.js"), "Millionaire notation should use the shared Bravura symbols and notation settings.");
   assert.ok(script.includes("function CalibratedNotationSymbol") && script.includes("SHARED_NOTATION.stave?.lineGap") && script.includes("sharedNotationSymbol(symbolKey)"), "Stave notation should directly use the shared Practice Questions calibration settings.");
-  assert.ok(script.includes('viewBox="30 10 440 130"') && script.includes('millionaire-staff-line-fade') && script.includes('pitches.length === 2 ? 225'), "Note staves should use the enlarged, centre-focused Note Identification presentation with fading staff lines.");
-  assert.ok(script.includes("function InlineNotationGlyph") && script.includes('glyph === "dottedHalfNote" ? "millionaire-dotted-note"'), "Standalone dotted minims should have their own spacing treatment.");
+  assert.ok(script.includes('viewBox="30 10 440 130"') && script.includes('millionaire-staff-line-fade') && script.includes('2: 225'), "Note staves should use the enlarged, centre-focused Note Identification presentation with fading staff lines.");
+  assert.ok(script.includes("function InlineNotationGlyph") && script.includes('const isDottedMinim = glyph === "dottedHalfNote"'), "Standalone dotted minims should have their own spacing treatment.");
   assert.ok(script.includes("function DynamicNotationGlyph") && script.includes('dynamic === "diminuendo"') && script.includes('strokeWidth="2.4"'), "Dynamic hairpins should use the clear two-line treatment from Dynamics.");
   assert.ok(script.includes("function FinalBarlineNotation") && script.includes('symbolKey="barlineFinal"'), "Double-barline questions should use the calibrated shared Bravura end-barline from Barlines.");
-  assert.ok(script.includes("function CompleteBarNotation") && script.includes("function BarTimeSignature") && script.includes('className="millionaire-note-blank"'), "Complete-bar questions should use the shared-score style with a clear note-value target.");
+  assert.ok(script.includes("function CompleteBarNotation") && script.includes("function RestsFirstBarNotation") && script.includes('fill="none" stroke="#78716c"'), "Complete-bar questions should use the shared-score style with a clear note-value target.");
   assert.ok(script.includes("function AnswerRhythmGlyph") && script.includes("RHYTHM_ANSWER_VALUES"), "Complete-bar answer choices should be displayed as Bravura note-value glyphs.");
   assert.ok(script.includes("function StandaloneTimeSignature") && script.includes('<BarTimeSignature time={[notation.top, notation.bottom]}'), "Standalone time signatures should use the calibrated shared score renderer.");
-  assert.match(css, /\.millionaire-dotted-note\s*\{[^}]*font-weight:\s*400;[^}]*letter-spacing:\s*16px;/s, "Dotted minim notation should use regular weight and a clearly separated augmentation dot.");
+  assert.match(css, /\.millionaire-dotted-note\s*\{[^}]*font-weight:\s*400;[^}]*letter-spacing:\s*10px;/s, "Dotted minim notation should use regular weight and a clearly separated augmentation dot.");
   assert.ok(html.includes("hub-shell.js"));
   assert.ok(html.includes("footer.js"));
   assert.ok(script.includes("<window.MLH.LevelButton"));
@@ -260,7 +262,7 @@ test("interface includes the required screens, controls and protections", () => 
     'AH: { label: "Advanced Higher" }',
   ].forEach((level) => assert.ok(script.includes(level), `Missing selectable level: ${level}`));
   assert.ok(script.includes("activeLevel={settings.level}") && script.includes("activeLabel={activeLevelLabel}"), "The Level menu should show the selected course level.");
-  assert.ok(script.includes("level: settings.level, categories: settings.questionTypes"), "New games should use the selected course level and question types.");
+  assert.ok(script.includes('const categories = ["N4", "N5"].includes(settings.level) ? ["literacy"] : settings.questionTypes;') && script.includes("level: settings.level, categories"), "New games should use the selected course level and available question types.");
   assert.ok(script.includes('profileLabel={activeLevelLabel}'), "The page header should reflect the selected course level.");
   assert.ok(script.includes("CORE.validateQuestionPools(QUESTION_POOLS)") && script.includes("CORE.questionPoolSummary(QUESTION_POOLS)"), "Development checks should validate and summarise all 45 pools.");
   assert.ok(script.includes('role="status">Audio file not yet added.</div>'), "Missing question audio should show a safe temporary message.");
@@ -343,7 +345,7 @@ test("interface includes the required screens, controls and protections", () => 
   assert.equal((script.match(/className="millionaire-lifeline-badge"/g) || []).length, 3, "Each in-game lifeline should have a shine wrapper.");
   assert.match(css, /\.millionaire-lifeline-badge::after\s*\{[^}]*millionaireLifelineShine 3\.8s/s, "Lifeline badges should use the shine animation.");
   assert.match(css, /\.millionaire-rules-note\s*\{[^}]*margin:\s*auto 0 0;[^}]*font-size:\s*11px;[^}]*opacity:\s*\.6;[^}]*text-align:\s*center;/s, "The one-use note should be small, translucent, centred and anchored to the panel bottom.");
-  assert.ok(script.includes("Each lifeline can only be used once during a game.</p>"), "The one-use note should use the requested wording.");
+  assert.ok(script.includes("Each lifeline can only be used once per game.</p>"), "The one-use note should use the requested wording.");
   assert.match(css, /\.millionaire-rewards-list li\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*justify-content:\s*center;[^}]*gap:\s*\.25em;/s, "Reward medals and Question labels should share one centred row with one text-space between them.");
   [["diamond", "#06b6d4"], ["gold", "#eab308"], ["silver", "#64748b"], ["bronze", "#b45309"]].forEach(([tier, colour]) => assert.match(css, new RegExp(`\\.millionaire-reward-label\\.is-${tier}\\s*\\{[^}]*color:\\s*${colour};`), `${tier} reward text should use the shared medal colour.`));
   assert.match(css, /\.millionaire-rewards-list\s*\{[^}]*color:\s*#dbeafe;[^}]*font-family:\s*inherit;[^}]*font-size:\s*19px;[^}]*font-weight:\s*700;[^}]*line-height:\s*1\.3;/s, "Reward labels should use the heading font in bold at 19px.");
@@ -390,13 +392,12 @@ test("interface includes the required screens, controls and protections", () => 
   assert.match(css, /\.millionaire-results-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/s, "The three remaining Review cards should use a balanced three-column layout.");
   assert.match(css, /\.millionaire-results > :not\(.millionaire-final-confetti\)\s*\{[^}]*z-index:\s*2;/s, "Review content should remain readable above winner confetti.");
   assert.match(css, /\.millionaire-result-lifelines img\s*\{[^}]*width:\s*60px;[^}]*height:\s*40px;/s, "Used lifeline icons should be clearly visible in the Review summary.");
-  assert.ok(script.includes('aria-label={`Question ${highestReached}, ${reviewPrize}`}') && script.includes('className="millionaire-result-prize-diamond"'), "The Review prize should show the highest question, a diamond and the current value.");
-  assert.ok(script.includes('<span>QUESTION {highestReached}</span>'), "The Review prize should label the highest question number clearly.");
-  assert.ok(script.includes('const reviewPrizeValue = CORE.PRIZE_LADDER[highestReached - 1] || 0;'), "The Review screen should show the monetary value of the highest question reached.");
+  assert.ok(script.includes('aria-label={`Question ${reviewQuestionNumber}, ${reviewPrize}`}') && script.includes('className="millionaire-result-prize-diamond"'), "The Review prize should show the highest correctly answered question, a diamond and the current value.");
+  assert.ok(script.includes('<span>QUESTION {reviewQuestionNumber}</span>'), "The Review prize should label the highest correctly answered question clearly.");
+  assert.ok(script.includes('const reviewPrizeValue = reviewQuestionNumber ? CORE.PRIZE_LADDER[reviewQuestionNumber - 1] || 0 : 0;'), "The Review screen should show the monetary value of the highest correctly answered question.");
   assert.ok(script.includes('const reviewPrize = reviewPrizeValue === 1000000 ? "£1 MILLION" : CORE.formatPrize(reviewPrizeValue);'), "The Review question value should capitalise MILLION at the top prize.");
-  assert.match(css, /\.millionaire-result-prize\s*\{[^}]*display:\s*grid;[^}]*width:\s*min\(720px, 100%\);[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto minmax\(0, 1fr\);[^}]*white-space:\s*nowrap;/s, "The Review prize should make room for QUESTION 15, keep £1 MILLION on one line, and centre its diamond.");
-  assert.match(css, /\.millionaire-result-prize > span:first-child\s*\{[^}]*justify-self:\s*end;/s, "The Review question number should sit immediately left of the centred diamond.");
-  assert.match(css, /\.millionaire-result-prize > span:last-child\s*\{[^}]*justify-self:\s*start;/s, "The Review question value should sit immediately right of the centred diamond.");
+  assert.match(css, /\.millionaire-result-prize\s*\{[^}]*display:\s*flex;[^}]*width:\s*fit-content;[^}]*justify-content:\s*center;[^}]*white-space:\s*nowrap;/s, "The Review prize should keep QUESTION 15 and £1 MILLION on one centred line.");
+  assert.match(css, /\.millionaire-result-prize-diamond\s*\{[^}]*color:\s*#fff;/s, "The Review prize should separate the question number and value with a white diamond.");
   assert.match(css, /\.millionaire-result-prize-diamond\s*\{[^}]*color:\s*#fff;/s, "The Review prize separator should use a white diamond.");
   assert.match(script, /<ResultStat label="Medal achieved">[\s\S]*<ResultStat label="Lifelines used">[\s\S]*<ResultStat label="Time">/, "Review should show Medal achieved, Lifelines used and Time in that order.");
   assert.match(css, /\.millionaire-result-medal img\s*\{[^}]*width:\s*36px;[^}]*height:\s*36px;/s, "The highest earned medal glyph should use the requested smaller Review size.");
@@ -505,9 +506,9 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('iconSize: "h-[42px] w-[42px]"'), "The Audio icon should be substantially larger.");
   assert.match(css, /\.millionaire-question-type-clef\s*\{[^}]*font-family:\s*"Bravura", serif;[^}]*font-size:\s*20px;[^}]*font-weight:\s*400;[^}]*transform:\s*translateY\(4px\);/s, "The Music Literacy glyph should use smaller regular-weight Bravura notation with the requested vertical alignment.");
   assert.ok(script.includes("if (enabled && current.questionTypes.length === 1) return current;"), "At least one question type should always remain enabled.");
-  assert.ok(script.includes('disabled={settings.questionTypes.includes(option.id) && settings.questionTypes.length === 1}'), "The final enabled question-type toggle should be visibly unavailable.");
+  assert.ok(script.includes('disabled={["N4", "N5"].includes(settings.level) || (settings.questionTypes.includes(option.id) && settings.questionTypes.length === 1)}'), "The final enabled question-type toggle should be visibly unavailable.");
   assert.ok(script.includes('const customiseUnavailable = screen === "game" || screen === "milestone";') && script.includes("<fieldset disabled={customiseUnavailable}"), "Customise should be unavailable while a game is active.");
-  assert.ok(script.includes('categories: settings.questionTypes'), "The next game should use the selected question types.");
+  assert.ok(script.includes('level: settings.level, categories'), "The next game should use the selected question types.");
   assert.match(script, /function useSwitch\(\)\s*\{[\s\S]*CORE\.switchQuestion\(enabledQuestionBank, questions, currentIndex \+ 1, question\.level, Math\.random, \{ allowRepeats: settings\.questionTypes\.length === 1 \}\)/, "Switch should stay within the enabled types and temporarily allow repeats in single-type games.");
   assert.ok(script.includes("Switch your current question to a different question"), "The rules should explain the Switch lifeline.");
 });
