@@ -8,7 +8,14 @@
   const LETTERS = ["A", "B", "C", "D"];
   const CATEGORIES = ["listening", "literacy", "concepts"];
   const SUPPORTED_LEVELS = ["N3", "N4", "N5", "H", "AH"];
-  const CATEGORY_TARGETS = { listening: 6, literacy: 4, concepts: 5 };
+  const DIFFICULTIES = ["easy", "medium", "hard"];
+  const DIFFICULTY_RANGES = {
+    easy: { min: 1, max: 5 },
+    medium: { min: 6, max: 10 },
+    hard: { min: 11, max: 15 },
+  };
+  const LEVEL_LABELS = { N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher" };
+  const CATEGORY_LABELS = { listening: "Audio", literacy: "Literacy", concepts: "Concepts" };
   const PRIZE_LADDER = [
     100, 200, 300, 500, 1000,
     2000, 4000, 8000, 16000, 32000,
@@ -45,6 +52,7 @@
     if (!question.id || typeof question.id !== "string") errors.push("A stable string ID is required.");
     if (!SUPPORTED_LEVELS.includes(question.level)) errors.push("Level must be N3, N4, N5, H or AH.");
     if (!CATEGORIES.includes(question.category)) errors.push("Category must be listening, literacy or concepts.");
+    if (!DIFFICULTIES.includes(question.difficulty)) errors.push("Difficulty must be easy, medium or hard.");
     if (!question.concept || typeof question.concept !== "string") errors.push("A concept is required.");
     if (!question.question || typeof question.question !== "string") errors.push("Question wording is required.");
     if (!Array.isArray(question.answers) || question.answers.length !== 4) errors.push("Exactly four answers are required.");
@@ -56,6 +64,12 @@
     if (!Number.isInteger(question.difficultyMin) || !Number.isInteger(question.difficultyMax)
       || question.difficultyMin < 1 || question.difficultyMax > 15
       || question.difficultyMin > question.difficultyMax) errors.push("Difficulty range must use valid stages from 1 to 15.");
+    const expectedRange = DIFFICULTY_RANGES[question.difficulty];
+    if (expectedRange && (question.difficultyMin !== expectedRange.min || question.difficultyMax !== expectedRange.max)) {
+      errors.push(`Difficulty ${question.difficulty} must use stages ${expectedRange.min} to ${expectedRange.max}.`);
+    }
+    if (typeof question.audioSrc !== "string") errors.push("An audioSrc field is required, even when it is empty.");
+    if (!("notationData" in question)) errors.push("A notationData field is required, even when it is null.");
     const type = question.type || "text";
     const validTypes = ["text", "audio", "notation", "image", "text-notation", "text-audio"];
     if (!validTypes.includes(type)) errors.push("Question type is not supported.");
@@ -79,58 +93,77 @@
     return errors;
   }
 
+  function validateQuestionPools(questionPools) {
+    const errors = [];
+    const allQuestions = [];
+    SUPPORTED_LEVELS.forEach((level) => {
+      DIFFICULTIES.forEach((difficulty) => {
+        CATEGORIES.forEach((category) => {
+          const pool = questionPools?.[level]?.[difficulty]?.[category];
+          const label = `${LEVEL_LABELS[level]} / ${difficulty} / ${CATEGORY_LABELS[category]}`;
+          if (!Array.isArray(pool)) {
+            errors.push(`${label}: Required question pool is missing.`);
+            return;
+          }
+          pool.forEach((question) => {
+            allQuestions.push(question);
+            if (question?.level !== level) errors.push(`${question?.id || label}: Level does not match its pool (${level}).`);
+            if (question?.difficulty !== difficulty) errors.push(`${question?.id || label}: Difficulty does not match its pool (${difficulty}).`);
+            if (question?.category !== category) errors.push(`${question?.id || label}: Category does not match its pool (${category}).`);
+          });
+        });
+      });
+    });
+    return errors.concat(validateQuestionBank(allQuestions));
+  }
+
+  function questionPoolSummary(questionPools) {
+    return SUPPORTED_LEVELS.flatMap((level) => DIFFICULTIES.flatMap((difficulty) => CATEGORIES.map((category) => {
+      const count = questionPools?.[level]?.[difficulty]?.[category]?.length || 0;
+      const difficultyLabel = difficulty[0].toUpperCase() + difficulty.slice(1);
+      return `${LEVEL_LABELS[level]} / ${difficultyLabel} / ${CATEGORY_LABELS[category]}: ${count} questions`;
+    })));
+  }
+
   function normaliseCategories(categories) {
     const requested = Array.isArray(categories) ? categories.filter((category) => CATEGORIES.includes(category)) : CATEGORIES;
     const unique = [...new Set(requested)];
     return unique.length ? unique : CATEGORIES.slice();
   }
 
-  function buildCategorySchedule(rng = Math.random, categories = CATEGORIES) {
+  // Build one independently shuffled five-question plan. Passing the previous
+  // block prevents three matching categories at a difficulty boundary.
+  function buildBlockCategoryPlan(rng = Math.random, categories = CATEGORIES, previousCategories = []) {
     const enabled = normaliseCategories(categories);
-    const usesStandardMix = enabled.length === CATEGORIES.length && CATEGORIES.every((category) => enabled.includes(category));
-    const targets = Object.fromEntries(CATEGORIES.map((category) => [category, 0]));
-    if (usesStandardMix) Object.assign(targets, CATEGORY_TARGETS);
-    else {
-      const ordered = shuffle(enabled, rng);
-      const base = Math.floor(15 / ordered.length);
-      ordered.forEach((category, index) => { targets[category] = base + (index < 15 % ordered.length ? 1 : 0); });
-    }
-    const requiredLateCategories = usesStandardMix ? ["listening", "literacy"] : enabled;
-    const schedule = [];
+    if (enabled.length === 1) return Array(5).fill(enabled[0]);
 
-    function canUse(category, stage) {
-      if (targets[category] <= 0) return false;
-      if (enabled.length > 1 && schedule.length >= 2 && schedule.at(-1) === category && schedule.at(-2) === category) return false;
-      const remainingSlots = 15 - stage;
-      const nextTargets = { ...targets, [category]: targets[category] - 1 };
-      if (Object.values(nextTargets).some((count) => count > remainingSlots)) return false;
-      if (stage > 10) {
-        const lastFive = schedule.slice(10).concat(category);
-        const slotsAfter = 15 - stage;
-        if (requiredLateCategories.some((required) => !lastFive.includes(required)) && slotsAfter === 0) return false;
-      }
-      return true;
-    }
+    const distributionOrder = shuffle(enabled, rng);
+    const counts = Object.fromEntries(enabled.map((category) => [category, Math.floor(5 / enabled.length)]));
+    for (let index = 0; index < 5 % enabled.length; index += 1) counts[distributionOrder[index]] += 1;
+    const plan = [];
 
-    function fill(stage) {
-      if (stage === 16) {
-        const lastFive = schedule.slice(10);
-        return requiredLateCategories.every((category) => lastFive.includes(category));
-      }
-      const weighted = shuffle(enabled.flatMap((category) => Array(Math.max(0, targets[category])).fill(category)), rng);
-      const candidates = [...new Set(weighted)];
+    function fill() {
+      if (plan.length === 5) return true;
+      const candidates = shuffle(enabled.filter((category) => counts[category] > 0), rng);
       for (const category of candidates) {
-        if (!canUse(category, stage)) continue;
-        schedule.push(category);
-        targets[category] -= 1;
-        if (fill(stage + 1)) return true;
-        targets[category] += 1;
-        schedule.pop();
+        const recent = previousCategories.concat(plan).slice(-2);
+        if (recent.length === 2 && recent.every((item) => item === category)) continue;
+        plan.push(category);
+        counts[category] -= 1;
+        if (fill()) return true;
+        counts[category] += 1;
+        plan.pop();
       }
       return false;
     }
 
-    if (!fill(1)) throw new Error("Could not create a valid category schedule.");
+    if (!fill()) throw new Error("Could not create a valid five-question type plan.");
+    return plan;
+  }
+
+  function buildCategorySchedule(rng = Math.random, categories = CATEGORIES) {
+    const schedule = [];
+    DIFFICULTIES.forEach(() => schedule.push(...buildBlockCategoryPlan(rng, categories, schedule)));
     return schedule;
   }
 
@@ -164,32 +197,72 @@
       .map((game) => new Set(Array.isArray(game) ? game : []));
   }
 
-  function selectForSchedule(validQuestions, schedule, excluded, recentlyUsed, rng) {
+  function difficultyForStage(stage) {
+    if (stage <= 5) return "easy";
+    if (stage <= 10) return "medium";
+    return "hard";
+  }
+
+  function createFallbackQuestion(level, difficulty, category, stage) {
+    const levelLabel = LEVEL_LABELS[level] || level;
+    const categoryLabel = CATEGORY_LABELS[category] || category;
+    const range = DIFFICULTY_RANGES[difficulty];
+    return {
+      id: `fallback-${level}-${difficulty}-${category}-${String(stage).padStart(2, "0")}`,
+      level,
+      difficulty,
+      category,
+      concept: "fallback-placeholder",
+      question: `Fallback placeholder: ${levelLabel} ${difficulty} ${categoryLabel} question`,
+      prompt: `Fallback placeholder: ${levelLabel} ${difficulty} ${categoryLabel} question`,
+      answers: ["Answer A", "Answer B", "Answer C", "Answer D"].map((text, index) => ({ id: "abcd"[index], text })),
+      correctAnswer: "a",
+      explanation: "This fallback appears because the requested question pool is incomplete.",
+      tip: "Development fallback question.",
+      difficultyMin: range.min,
+      difficultyMax: range.max,
+      type: category === "listening" ? "audio" : "text",
+      audio: category === "listening" ? { src: "", generator: null, placeholder: true } : undefined,
+      audioSrc: "",
+      notationData: null,
+      placeholder: true,
+      fallback: true,
+    };
+  }
+
+  // Selection may change category only when a pool is too small. It never
+  // crosses the selected course level or the current difficulty block.
+  function selectForSchedule(validQuestions, schedule, recentlyUsed, rng, level, enabledCategories) {
     const used = new Set();
     const selected = [];
     for (let stage = 1; stage <= 15; stage += 1) {
       const category = schedule[stage - 1];
-      const eligible = validQuestions.filter((question) => question.category === category
-        && question.difficultyMin <= stage && question.difficultyMax >= stage
-        && !used.has(question.id) && !excluded.has(question.id));
-      if (!eligible.length) return null;
-      const fresh = eligible.filter((question) => !recentlyUsed.has(question.id));
-      const preferred = fresh.length ? fresh : eligible;
+      const difficulty = difficultyForStage(stage);
+      const requestedPool = validQuestions.filter((question) => question.category === category && question.difficulty === difficulty);
+      if (!requestedPool.length) {
+        console.warn(`Millionaire question pool is empty: ${level} / ${difficulty} / ${category}. Using a fallback placeholder.`);
+        const fallback = createFallbackQuestion(level, difficulty, category, stage);
+        selected.push(fallback);
+        used.add(fallback.id);
+        continue;
+      }
+      const unusedRequested = requestedPool.filter((question) => !used.has(question.id));
+      const unusedSameDifficulty = validQuestions.filter((question) => question.difficulty === difficulty
+        && enabledCategories.includes(question.category) && !used.has(question.id));
+      let candidates = unusedRequested;
+      if (!candidates.length && unusedSameDifficulty.length) {
+        console.warn(`Millionaire question pool has too few unused questions: ${level} / ${difficulty} / ${category}. Using another type at the same level and difficulty.`);
+        candidates = unusedSameDifficulty;
+      }
+      if (!candidates.length) {
+        console.warn(`Millionaire question pools are exhausted: ${level} / ${difficulty}. Reusing a question as the final fallback.`);
+        candidates = requestedPool;
+      }
+      const fresh = candidates.filter((question) => !recentlyUsed.has(question.id));
+      const preferred = fresh.length ? fresh : candidates;
       const choice = preferred[randomInt(preferred.length, rng)];
       selected.push(choice);
       used.add(choice.id);
-    }
-    return selected;
-  }
-
-  function selectSingleCategory(validQuestions, category, rng) {
-    const candidates = shuffle(validQuestions.filter((question) => question.category === category), rng)
-      .sort((a, b) => (a.difficultyMin + a.difficultyMax) - (b.difficultyMin + b.difficultyMax));
-    if (candidates.length < 15) return null;
-    if (candidates.length === 15) return candidates;
-    const selected = [];
-    for (let index = 0; index < 15; index += 1) {
-      selected.push(candidates[Math.round(index * (candidates.length - 1) / 14)]);
     }
     return selected;
   }
@@ -206,33 +279,10 @@
     const validQuestions = (questionBank || []).filter((question) => !invalidIds.has(question.id) && question.level === requestedLevel && enabledCategories.includes(question.category));
     const history = recentSets(recentGames);
     const recentlyUsed = new Set(history.flatMap((set) => [...set]));
-    if (enabledCategories.length === 1) {
-      const singleCategorySelection = selectSingleCategory(validQuestions, enabledCategories[0], rng);
-      if (!singleCategorySelection) throw new Error("The selected question type does not contain 15 valid questions.");
-      const letters = answerLetterPlan(rng);
-      return singleCategorySelection.map((question, index) => shuffledQuestion(question, letters[index], rng));
-    }
-    for (let retainedGames = history.length; retainedGames >= 0; retainedGames -= 1) {
-      const excluded = new Set(history.slice(history.length - retainedGames).flatMap((set) => [...set]));
-      let bestSelection = null;
-      let fewestRecentRepeats = Infinity;
-      for (let attempt = 0; attempt < 500; attempt += 1) {
-        const schedule = buildCategorySchedule(rng, enabledCategories);
-        const selected = selectForSchedule(validQuestions, schedule, excluded, recentlyUsed, rng);
-        if (!selected) continue;
-        const recentRepeats = selected.filter((question) => recentlyUsed.has(question.id)).length;
-        if (recentRepeats < fewestRecentRepeats) {
-          bestSelection = selected;
-          fewestRecentRepeats = recentRepeats;
-          if (recentRepeats === 0) break;
-        }
-      }
-      if (bestSelection) {
-        const letters = answerLetterPlan(rng);
-        return bestSelection.map((question, index) => shuffledQuestion(question, letters[index], rng));
-      }
-    }
-    throw new Error("The National 3 question bank cannot create a valid 15-question game.");
+    const schedule = buildCategorySchedule(rng, enabledCategories);
+    const selected = selectForSchedule(validQuestions, schedule, recentlyUsed, rng, requestedLevel, enabledCategories);
+    const letters = answerLetterPlan(rng);
+    return selected.map((question, index) => shuffledQuestion(question, letters[index], rng));
   }
 
   function fiftyFifty(question, rng = Math.random) {
@@ -247,19 +297,14 @@
     const currentQuestion = (currentQuestions || [])[stage - 1];
     const validAtLevel = (questionBank || []).filter((question) => question.level === level
       && !validateQuestion(question).length);
-    const eligible = validAtLevel.filter((question) => question.difficultyMin <= stage && question.difficultyMax >= stage
+    const difficulty = difficultyForStage(stage);
+    const eligible = validAtLevel.filter((question) => question.difficulty === difficulty
       && !usedIds.has(question.id));
     const sameCategory = eligible.filter((question) => question.category === currentQuestion?.category);
     let candidates = sameCategory.length ? sameCategory : eligible;
     if (!candidates.length && options.allowRepeats) {
       const sameCategoryPool = validAtLevel.filter((question) => question.category === currentQuestion?.category && question.id !== currentQuestion?.id);
-      const exactStage = sameCategoryPool.filter((question) => question.difficultyMin <= stage && question.difficultyMax >= stage);
-      if (exactStage.length) candidates = exactStage;
-      else if (sameCategoryPool.length) {
-        const distance = (question) => stage < question.difficultyMin ? question.difficultyMin - stage : stage > question.difficultyMax ? stage - question.difficultyMax : 0;
-        const closestDistance = Math.min(...sameCategoryPool.map(distance));
-        candidates = sameCategoryPool.filter((question) => distance(question) === closestDistance);
-      }
+      candidates = sameCategoryPool.filter((question) => question.difficulty === difficulty);
     }
     if (!candidates.length) return null;
     const replacement = candidates[randomInt(candidates.length, rng)];
@@ -312,7 +357,8 @@
     LETTERS,
     CATEGORIES,
     SUPPORTED_LEVELS,
-    CATEGORY_TARGETS,
+    DIFFICULTIES,
+    DIFFICULTY_RANGES,
     PRIZE_LADDER,
     MILESTONES,
     shuffle,
@@ -320,7 +366,11 @@
     guaranteedPrize,
     validateQuestion,
     validateQuestionBank,
+    validateQuestionPools,
+    questionPoolSummary,
+    buildBlockCategoryPlan,
     buildCategorySchedule,
+    difficultyForStage,
     answerLetterPlan,
     shuffledQuestion,
     composeGame,

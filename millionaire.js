@@ -1,6 +1,7 @@
 const { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } = React;
 const CORE = window.MILLIONAIRE_CORE;
 const QUESTION_BANK = window.MILLIONAIRE_QUESTION_BANK || [];
+const QUESTION_POOLS = window.MILLIONAIRE_QUESTION_POOLS || {};
 
 const MILLIONAIRE_SOUND_PATH = "./soundsmillionaire/";
 window.MILLIONAIRE_SOUND_CONFIG = {
@@ -37,19 +38,20 @@ const DEFAULT_SETTINGS = {
   backgroundMusic: true,
   reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false,
   questionTypes: ["literacy", "listening", "concepts"],
+  level: "N3",
 };
 const MILLIONAIRE_LEVELS = {
   N3: { label: "National 3" },
-  N4: { label: "National 4", disabled: true },
-  N5: { label: "National 5", disabled: true },
-  H: { label: "Higher", disabled: true },
-  AH: { label: "Advanced Higher", disabled: true },
+  N4: { label: "National 4" },
+  N5: { label: "National 5" },
+  H: { label: "Higher" },
+  AH: { label: "Advanced Higher" },
 };
-const CATEGORY_LABELS = { listening: "Listening", literacy: "Music literacy", concepts: "Musical concepts" };
+const CATEGORY_LABELS = { listening: "Listening", literacy: "Music literacy", concepts: "Music concepts" };
 const QUESTION_TYPE_OPTIONS = [
-  { id: "literacy", label: "Music Literacy", glyph: "ABC" },
-  { id: "listening", label: "Audio", icon: "audio-svgrepo-com.svg" },
-  { id: "concepts", label: "Musical Concepts", glyph: "?" },
+  { id: "literacy", label: "Music Literacy", glyph: "\uE050", notationGlyph: true },
+  { id: "concepts", label: "Music Concepts", icon: "worksheet.svg", iconSize: "h-[26px] w-[26px]" },
+  { id: "listening", label: "Audio", icon: "audio-svgrepo-com.svg", iconSize: "h-[42px] w-[42px]" },
 ];
 const LIFELINE_RESULTS = [
   { key: "fifty", icon: "50.50.svg", label: "50:50" },
@@ -57,9 +59,9 @@ const LIFELINE_RESULTS = [
   { key: "switch", icon: "switch.svg", label: "Switch" },
 ];
 const QUESTION_REWARDS = {
-  5: { icon: "bronze.svg", label: "Bronze medal", tier: "bronze", celebrationIcon: "bronzehighres.svg" },
-  10: { icon: "silver.svg", label: "Silver medal", tier: "silver", celebrationIcon: "silverhighres.svg" },
-  12: { icon: "gold.svg", label: "Gold medal", tier: "gold", celebrationIcon: "goldhighres.svg" },
+  3: { icon: "bronze.svg", label: "Bronze medal", tier: "bronze", celebrationIcon: "bronzehighres.svg" },
+  5: { icon: "silver.svg", label: "Silver medal", tier: "silver", celebrationIcon: "silverhighres.svg" },
+  10: { icon: "gold.svg", label: "Gold medal", tier: "gold", celebrationIcon: "goldhighres.svg" },
   15: { icon: "diamond.svg", label: "Diamond", tier: "diamond", celebrationIcon: "diamondhighres.svg" },
 };
 
@@ -120,6 +122,7 @@ class AudioDirector {
     this.effectSequence = 0;
     this.unlockHandler = null;
     this.excerptNodes = [];
+    this.excerptAudio = null;
     this.excerptTimer = null;
     this.excerptFadeTimer = null;
     this.musicEnabled = false;
@@ -412,7 +415,7 @@ class AudioDirector {
     else audio.addEventListener("loadedmetadata", schedule, { once: true });
   }
 
-  playEffect(path, { shortenBy = 0, fadeSeconds = 0 } = {}) {
+  playEffect(path, { shortenBy = 0, fadeSeconds = 0, stopAfterSeconds = 0 } = {}) {
     if (!this.effectsEnabled || !path) return Promise.resolve();
     this.stopEffect();
     const sequence = this.effectSequence;
@@ -433,7 +436,13 @@ class AudioDirector {
       this.effectResolve = finish;
       audio.addEventListener("ended", finish, { once: true });
       audio.addEventListener("error", finish, { once: true });
-      audio.play().catch(finish);
+      audio.play().then(() => {
+        if (stopAfterSeconds > 0) {
+          this.effectStopTimer = window.setTimeout(() => {
+            if (sequence === this.effectSequence) this.stopEffect();
+          }, stopAfterSeconds * 1000);
+        }
+      }).catch(finish);
       if (shortenBy > 0 && fadeSeconds > 0) this.scheduleEffectFade(audio, sequence, shortenBy, fadeSeconds);
     });
   }
@@ -453,7 +462,7 @@ class AudioDirector {
     });
   }
 
-  playOutcome(stage, correct) {
+  playOutcome(stage, correct, { finishNaturally = false, stopAfterSeconds = 0 } = {}) {
     let path;
     if (stage <= 5) {
       path = correct
@@ -465,8 +474,8 @@ class AudioDirector {
     if (!this.effectsEnabled || !path) {
       return new Promise((resolve) => window.setTimeout(resolve, ANSWER_FLASH_DURATION_MS));
     }
-    const shortenEarlyCorrect = path === window.MILLIONAIRE_SOUND_CONFIG.earlyCorrect;
-    return this.playEffect(path, shortenEarlyCorrect ? { shortenBy: 3, fadeSeconds: 1 } : undefined);
+    const shortenEarlyCorrect = path === window.MILLIONAIRE_SOUND_CONFIG.earlyCorrect && !finishNaturally;
+    return this.playEffect(path, shortenEarlyCorrect ? { shortenBy: 3, fadeSeconds: 1 } : stopAfterSeconds > 0 ? { stopAfterSeconds } : undefined);
   }
 
   playLifeline() {
@@ -537,8 +546,29 @@ class AudioDirector {
     this.clearExcerptFade();
     this.excerptNodes.forEach((node) => { try { node.stop(); } catch {} });
     this.excerptNodes = [];
+    this.excerptAudio?.pause();
+    this.excerptAudio = null;
     this.excerptPlaying = false;
     if (resume) this.resumeMusic();
+  }
+
+  playFileExcerpt(src, onEnded) {
+    if (!src) return null;
+    this.stopExcerpt(false);
+    const audio = this.makeAudio(src, false);
+    this.excerptAudio = audio;
+    this.excerptPlaying = true;
+    const finish = () => {
+      if (this.excerptAudio !== audio) return;
+      this.excerptAudio = null;
+      this.excerptPlaying = false;
+      this.fadeInMusicAfterExcerpt(.5);
+      onEnded?.();
+    };
+    audio.addEventListener("ended", finish, { once: true });
+    audio.addEventListener("error", finish, { once: true });
+    this.fadeOutMusicForExcerpt(.5, () => audio.play().catch(finish));
+    return true;
   }
 
   playGenerated(generator, onEnded) {
@@ -638,14 +668,15 @@ function Dialog({ title, onClose, children, actions, wide = false }) {
   </div>;
 }
 
-function AutoFitAnswer({ answer }) {
+function AutoFitAnswer({ answer, question }) {
   const contentRef = useRef(null);
   const textRef = useRef(null);
+  const rhythm = question?.notation?.kind === "bar" ? RHYTHM_ANSWER_VALUES[answer.text] : null;
 
   useLayoutEffect(() => {
     const content = contentRef.current;
     const text = textRef.current;
-    if (!content || !text) return undefined;
+    if (!content || !text || rhythm) return undefined;
 
     function fitText() {
       text.classList.remove("is-wrapped");
@@ -666,51 +697,196 @@ function AutoFitAnswer({ answer }) {
       observer?.disconnect();
       window.removeEventListener("resize", fitText);
     };
-  }, [answer.letter, answer.text]);
+  }, [answer.letter, answer.text, rhythm]);
 
-  return <span ref={contentRef} className="millionaire-answer-content"><span className="millionaire-answer-diamond" aria-hidden="true">◆</span><span className="millionaire-answer-letter">{answer.letter}:</span><span ref={textRef} className="millionaire-answer-text">{answer.text}</span></span>;
+  return <span ref={contentRef} className="millionaire-answer-content"><span className="millionaire-answer-diamond" aria-hidden="true">◆</span><span className="millionaire-answer-letter">{answer.letter}:</span>{rhythm ? <AnswerRhythmGlyph rhythm={rhythm} label={answer.text} /> : <span ref={textRef} className="millionaire-answer-text">{answer.text}</span>}</span>;
 }
 
+// Use the same shared Bravura symbol catalogue and notation calibration as
+// Practice Questions. Fallback values keep the game readable if that file has
+// not loaded yet.
+const SHARED_BRAVURA_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
+const SHARED_NOTATION = window.SHARED_NOTATION_CONFIG ?? { drawing: {}, symbols: {} };
+const bravuraSymbol = (key, fallback) => SHARED_BRAVURA_SYMBOLS[key] || fallback;
 const GLYPHS = {
-  quarterNote: "\uE1D5",
-  halfNote: "\uE1D3",
-  wholeNote: "\uE1D2",
-  dottedHalfNote: "\uE1D3\uE1E7",
-  dynamicForte: "\uE522",
-  dynamicPiano: "\uE520",
-  barlineDouble: "\uE031",
-  repeatRight: "\uE041",
+  trebleClef: bravuraSymbol("gClef", "\uE050"),
+  quarterNote: bravuraSymbol("quarterNoteStemUp", "\uE1D5"),
+  halfNote: bravuraSymbol("halfNoteStemUp", "\uE1D3"),
+  wholeNote: bravuraSymbol("wholeNote", "\uE1D2"),
+  dottedHalfNote: `${bravuraSymbol("halfNoteStemUp", "\uE1D3")}${bravuraSymbol("augmentationDot", "\uE1E7")}`,
+  dynamicForte: bravuraSymbol("forte", "\uE522"),
+  dynamicPiano: bravuraSymbol("piano", "\uE520"),
+  crescendo: bravuraSymbol("crescendo", "\uE53E"),
+  diminuendo: bravuraSymbol("diminuendo", "\uE53F"),
+  barlineFinal: bravuraSymbol("barlineFinal", "\uE032"),
+  repeatRight: bravuraSymbol("repeatRight", "\uE041"),
 };
-const TIME_DIGITS = ["\uE080", "\uE081", "\uE082", "\uE083", "\uE084", "\uE085", "\uE086", "\uE087", "\uE088", "\uE089"];
+const TIME_DIGITS = ["\uE080", bravuraSymbol("timeSig1", "\uE081"), bravuraSymbol("timeSig2", "\uE082"), bravuraSymbol("timeSig3", "\uE083"), bravuraSymbol("timeSig4", "\uE084"), bravuraSymbol("timeSig5", "\uE085"), bravuraSymbol("timeSig6", "\uE086"), "\uE087", bravuraSymbol("timeSig8", "\uE088"), bravuraSymbol("timeSig9", "\uE089")];
 const PITCH_INDEX = { C4: 0, D4: 1, E4: 2, F4: 3, G4: 4, A4: 5, B4: 6, C5: 7, D5: 8, E5: 9, F5: 10 };
+const NOTATION_FALLBACKS = { gClef: "\uE050", quarterNoteStemUp: "\uE1D5", halfNoteStemUp: "\uE1D3", wholeNote: "\uE1D2" };
+
+function sharedNotationSymbol(symbolKey) {
+  const settings = SHARED_NOTATION.symbols?.[symbolKey] ?? {};
+  return {
+    fontSizeScale: Number(settings.fontSizeScale || 3.4),
+    xOffsetScale: Number(settings.xOffsetScale || 0),
+    yOffsetScale: Number(settings.yOffsetScale || 0),
+    widthScale: Number(settings.widthScale || 1),
+    heightScale: Number(settings.heightScale || 1),
+    opticalXOffset: Number(settings.opticalXOffset || 0),
+    opticalYOffset: Number(settings.opticalYOffset || 0),
+  };
+}
+
+// This is the same calibrated Bravura-symbol approach used by Practice
+// Questions, kept small here because Millionaire only needs a single stave.
+function CalibratedNotationSymbol({ symbolKey, x, y, gap, settingOverrides = {} }) {
+  const settings = { ...sharedNotationSymbol(symbolKey), ...settingOverrides };
+  const adjustedX = x + gap * settings.xOffsetScale + settings.opticalXOffset;
+  const adjustedY = y + gap * settings.yOffsetScale + settings.opticalYOffset;
+  const transform = `translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale} ${settings.heightScale}) translate(${-adjustedX} ${-adjustedY})`;
+  return <text className="millionaire-music-symbol" x={adjustedX} y={adjustedY} fontSize={gap * settings.fontSizeScale} textAnchor="middle" transform={transform}>{bravuraSymbol(symbolKey, NOTATION_FALLBACKS[symbolKey] || "?")}</text>;
+}
 
 function StaffNotation({ notation }) {
   const pitches = notation.kind === "note" ? [notation.pitch] : notation.pitches || [];
-  const xStart = pitches.length === 1 ? 215 : 140;
-  const gap = pitches.length > 1 ? Math.min(64, 245 / Math.max(1, pitches.length - 1)) : 0;
-  return <div className="millionaire-staff" aria-hidden="true">
-    <div className="millionaire-staff-lines" />
-    <span className="millionaire-clef">{"\uE050"}</span>
-    {notation.time && <span className="millionaire-ts-on-staff"><span>{TIME_DIGITS[notation.time[0]]}</span><span>{TIME_DIGITS[notation.time[1]]}</span></span>}
+  const staffGap = Math.max(10, Number(SHARED_NOTATION.stave?.lineGap || 14));
+  const left = 52;
+  const right = 462;
+  const top = 36;
+  const bottom = top + staffGap * 4;
+  const noteStart = pitches.length === 1 ? 280 : pitches.length === 2 ? 225 : 174;
+  const noteSpacing = pitches.length > 1 ? Math.min(62, 196 / Math.max(1, pitches.length - 1)) : 0;
+  return <svg className="millionaire-staff" viewBox="30 10 440 130" aria-hidden="true">
+    <defs><linearGradient id="millionaire-staff-line-fade" x1={left} y1="0" x2={right} y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor="currentColor" stopOpacity="1" /><stop offset="84%" stopColor="currentColor" stopOpacity="1" /><stop offset="100%" stopColor="currentColor" stopOpacity="0" /></linearGradient></defs>
+    {Array.from({ length: 5 }, (_, index) => <line key={index} className="millionaire-staff-line" x1={left} x2={right} y1={top + index * staffGap} y2={top + index * staffGap} />)}
+    {notation.showClef !== false && <CalibratedNotationSymbol symbolKey="gClef" x={94} y={bottom - staffGap} gap={staffGap} />}
     {pitches.map((pitch, index) => {
-      const y = 95 - (PITCH_INDEX[pitch] ?? 4) * 7;
-      const x = xStart + index * gap;
+      const position = PITCH_INDEX[pitch] ?? 4;
+      const y = bottom - (position - 2) * staffGap / 2;
+      const x = noteStart + index * noteSpacing;
       return <React.Fragment key={`${pitch}-${index}`}>
-        {y >= 94 && <span className="millionaire-ledger" style={{ left: x, top: 95 }} />}
-        <span className="millionaire-staff-note" style={{ left: x, top: y }}>{GLYPHS.quarterNote}</span>
+        {position < 2 && <line className="millionaire-ledger" x1={x - staffGap * Number(SHARED_NOTATION.drawing?.ledgerLineWidthScale || 2.4) / 2} x2={x + staffGap * Number(SHARED_NOTATION.drawing?.ledgerLineWidthScale || 2.4) / 2} y1={y} y2={y} />}
+        <CalibratedNotationSymbol symbolKey="quarterNoteStemUp" x={x} y={y} gap={staffGap} />
       </React.Fragment>;
     })}
-    <span className="millionaire-barline" />
+  </svg>;
+}
+
+const RHYTHM_SUM_SYMBOL_KEYS = { quarterNote: "quarterNoteStemUp", halfNote: "halfNoteStemUp", dottedHalfNote: "halfNoteStemUp", wholeNote: "wholeNote" };
+const BAR_NOTE_SYMBOL_KEYS = { quarterNote: "quarterNoteStemUp", halfNote: "halfNoteStemUp", dottedHalfNote: "halfNoteStemUp", wholeNote: "wholeNote" };
+const RHYTHM_ANSWER_VALUES = { Crotchet: "quarterNote", Minim: "halfNote", "Dotted minim": "dottedHalfNote", Semibreve: "wholeNote" };
+
+function RhythmSumTerm({ rhythm }) {
+  const symbolKey = RHYTHM_SUM_SYMBOL_KEYS[rhythm] || "quarterNoteStemUp";
+  return <svg className="millionaire-rhythm-sum-term" viewBox="0 0 90 90" aria-hidden="true">
+    <g transform="translate(45 70) scale(.86) translate(-42 -50)">
+      <CalibratedNotationSymbol symbolKey={symbolKey} x={42} y={40} gap={10} />
+      {rhythm === "dottedHalfNote" && <CalibratedNotationSymbol symbolKey="augmentationDot" x={55} y={37.5} gap={10} />}
+    </g>
+  </svg>;
+}
+
+function AnswerRhythmGlyph({ rhythm, label }) {
+  const symbolKey = BAR_NOTE_SYMBOL_KEYS[rhythm] || "quarterNoteStemUp";
+  return <span className="millionaire-answer-rhythm" role="img" aria-label={label}><svg viewBox="0 0 64 70" aria-hidden="true"><CalibratedNotationSymbol symbolKey={symbolKey} x={30} y={43} gap={10} />{rhythm === "dottedHalfNote" && <CalibratedNotationSymbol symbolKey="augmentationDotLine" x={43} y={40.5} gap={10} />}</svg></span>;
+}
+
+function RhythmSumNotation({ notation }) {
+  return <div className="millionaire-rhythm-sum">
+    {(notation.terms || []).map((term, index) => <React.Fragment key={`${term}-${index}`}>
+      <RhythmSumTerm rhythm={term} />
+      {notation.operators?.[index] && <span className="millionaire-rhythm-sum-operator" aria-hidden="true">{notation.operators[index]}</span>}
+    </React.Fragment>)}
   </div>;
+}
+
+// Match the presentation in Dynamics: hairpins are drawn as two clean lines,
+// while letter dynamics use the shared Bravura calibration.
+const DYNAMIC_SYMBOL_KEYS = { pp: "pianissimo", p: "piano", mp: "mezzoPiano", mf: "mezzoForte", f: "forte", ff: "fortissimo", sfz: "sforzato" };
+
+function DynamicNotationGlyph({ dynamic, x = 80, y = 50 }) {
+  if (dynamic === "crescendo") return <g fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d={`M ${x - 32} ${y - 2} L ${x + 32} ${y - 12}`} /><path d={`M ${x - 32} ${y - 2} L ${x + 32} ${y + 8}`} /></g>;
+  if (dynamic === "diminuendo") return <g fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d={`M ${x - 32} ${y - 12} L ${x + 32} ${y - 2}`} /><path d={`M ${x - 32} ${y + 8} L ${x + 32} ${y - 2}`} /></g>;
+  const symbolKey = DYNAMIC_SYMBOL_KEYS[dynamic];
+  return symbolKey ? <CalibratedNotationSymbol symbolKey={symbolKey} x={x} y={y + 4} gap={14} settingOverrides={{ fontSizeScale: 3.65 }} /> : null;
+}
+
+function DynamicNotation({ notation }) {
+  return <svg className="millionaire-dynamic-notation" viewBox="0 0 160 88" aria-hidden="true"><DynamicNotationGlyph dynamic={notation.dynamic} /></svg>;
+}
+
+// This is the calibrated Bravura end-barline from Barlines, rather than two
+// ordinary text strokes. It includes the correct thin and thick lines.
+function FinalBarlineNotation() {
+  return <svg className="millionaire-final-barline-notation" viewBox="0 0 160 110" aria-hidden="true"><CalibratedNotationSymbol symbolKey="barlineFinal" x={80} y={50} gap={14} /></svg>;
+}
+
+function BarTimeSignature({ time, x, top, gap }) {
+  if (!time) return null;
+  const [upper, lower] = time;
+  const symbolKey = `timeSig${upper}${lower}`;
+  const settings = sharedNotationSymbol(symbolKey);
+  const anchorY = top + gap * 1.35;
+  const adjustedX = x + gap * settings.xOffsetScale + settings.opticalXOffset;
+  const adjustedY = anchorY + gap * settings.yOffsetScale + settings.opticalYOffset;
+  const transform = `translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale} ${settings.heightScale}) translate(${-adjustedX} ${-adjustedY})`;
+  const fontSize = gap * settings.fontSizeScale;
+  return <g className="millionaire-music-symbol" transform={transform}>
+    <text x={adjustedX} y={adjustedY - fontSize * .14} fontSize={fontSize} textAnchor="middle">{bravuraSymbol(`timeSig${upper}`, TIME_DIGITS[upper])}</text>
+    <text x={adjustedX} y={adjustedY + fontSize * .43} fontSize={fontSize} textAnchor="middle">{bravuraSymbol(`timeSig${lower}`, TIME_DIGITS[lower])}</text>
+  </g>;
+}
+
+function StandaloneTimeSignature({ notation }) {
+  return <svg className="millionaire-time-signature-notation" viewBox="0 0 220 160" aria-hidden="true"><BarTimeSignature time={[notation.top, notation.bottom]} x={145} top={42} gap={24} /></svg>;
+}
+
+// A compact version of the score in Rests. The blank stays a static target
+// because Millionaire answers are chosen below the question, not placed on it.
+function CompleteBarNotation({ notation }) {
+  const gap = Math.max(10, Number(SHARED_NOTATION.stave?.lineGap || 14));
+  const top = 50;
+  const bottom = top + gap * 4;
+  const staffLeft = 28;
+  const staffRight = 492;
+  const barStart = notation.time ? 174 : 116;
+  const barEnd = 466;
+  const glyphs = notation.glyphs || [];
+  const usableWidth = barEnd - barStart - 84;
+  const positions = glyphs.map((_, index) => glyphs.length === 1 ? barStart + (barEnd - barStart) / 2 : barStart + 42 + usableWidth * index / (glyphs.length - 1));
+  const noteY = bottom - gap;
+  return <svg className="millionaire-complete-bar" viewBox="0 0 520 160" aria-hidden="true">
+    {Array.from({ length: 5 }, (_, index) => <line key={index} className="millionaire-complete-bar-line" x1={staffLeft} x2={staffRight} y1={top + index * gap} y2={top + index * gap} />)}
+    <CalibratedNotationSymbol symbolKey="gClef" x={78} y={bottom - gap} gap={gap} />
+    <BarTimeSignature time={notation.time} x={130} top={top} gap={gap} />
+    <line className="millionaire-complete-barline" x1={barStart} x2={barStart} y1={top} y2={bottom} />
+    {glyphs.map((glyph, index) => {
+      const x = positions[index];
+      if (glyph === "blank") return <g key={`${glyph}-${index}`}><rect className="millionaire-note-blank" x={x - 27} y={top - 9} width="54" height={gap * 4 + 18} rx="7" /><text className="millionaire-note-blank-mark" x={x} y={top + gap * 2.75} textAnchor="middle">?</text></g>;
+      const symbolKey = BAR_NOTE_SYMBOL_KEYS[glyph] || "quarterNoteStemUp";
+      return <g key={`${glyph}-${index}`}><CalibratedNotationSymbol symbolKey={symbolKey} x={x} y={noteY} gap={gap} />{glyph === "dottedHalfNote" && <CalibratedNotationSymbol symbolKey="augmentationDotLine" x={x + gap * 1.3} y={noteY - gap * .25} gap={gap} />}</g>;
+    })}
+    <CalibratedNotationSymbol symbolKey="barlineFinal" x={barEnd} y={top + gap * 2} gap={gap} />
+  </svg>;
+}
+
+function InlineNotationGlyph({ glyph, index }) {
+  if (glyph === "blank") return <span className="millionaire-glyph-blank" key={index}>?</span>;
+  return <span className={glyph === "dottedHalfNote" ? "millionaire-dotted-note" : ""} key={index}>{GLYPHS[glyph] || "?"}</span>;
 }
 
 function NotationView({ notation }) {
   if (!notation) return null;
   let content = null;
   if (notation.kind === "note" || notation.kind === "melody") content = <StaffNotation notation={notation} />;
-  else if (notation.kind === "timeSignature") content = <span className="millionaire-time-signature"><span>{TIME_DIGITS[notation.top]}</span><span>{TIME_DIGITS[notation.bottom]}</span></span>;
-  else if (notation.kind === "bar") content = <div style={{ display: "flex", alignItems: "center", gap: 24 }}><StaffNotation notation={{ kind: "melody", pitches: ["E4", "E4"], time: notation.time }} /><span className="millionaire-glyph-blank">?</span></div>;
-  else content = <div className="millionaire-glyphs">{(notation.glyphs || []).map((glyph, index) => glyph === "blank" ? <span className="millionaire-glyph-blank" key={index}>?</span> : <span key={index}>{GLYPHS[glyph] || "?"}</span>)}</div>;
+  else if (notation.kind === "stave") content = <StaffNotation notation={{ ...notation, showClef: false, showBarline: false }} />;
+  else if (notation.kind === "rhythmSum") content = <RhythmSumNotation notation={notation} />;
+  else if (notation.kind === "dynamic") content = <DynamicNotation notation={notation} />;
+  else if (notation.kind === "barline") content = <FinalBarlineNotation />;
+  else if (notation.kind === "timeSignature") content = <StandaloneTimeSignature notation={notation} />;
+  else if (notation.kind === "bar") content = <CompleteBarNotation notation={notation} />;
+  else content = <div className="millionaire-glyphs">{(notation.glyphs || []).map((glyph, index) => <InlineNotationGlyph glyph={glyph} index={index} />)}</div>;
   return <div className="millionaire-notation" role="img" aria-label={notation.label || "Music notation"}>{content}</div>;
 }
 
@@ -772,7 +948,7 @@ function PrizeLadder({ currentIndex, correctCount, controls }) {
     {[...CORE.PRIZE_LADDER].map((value, index) => ({ value, stage: index + 1 })).reverse().map(({ value, stage }) => {
       const classes = ["millionaire-prize-row"];
       const reward = QUESTION_REWARDS[stage];
-      if (reward) classes.push("is-reward");
+      if (reward && stage !== 3) classes.push("is-reward");
       if (stage === currentIndex + 1) classes.push("is-current");
       if (stage <= correctCount) classes.push("is-complete");
       const prizeLabel = value === 1000000 ? "£1 MILLION" : CORE.formatPrize(value);
@@ -787,8 +963,12 @@ function ResultStat({ label, children }) {
 
 function QuestionTypeGlyph({ option }) {
   return <span className="flex h-[22px] w-[28px] items-center justify-center overflow-visible text-stone-900">{option.icon
-    ? <img src={option.icon} alt="" aria-hidden="true" className="h-[21px] w-[21px] object-contain" />
-    : <span className="text-[13px] font-black leading-none tracking-tight">{option.glyph}</span>}</span>;
+    ? <img src={option.icon} alt="" aria-hidden="true" className={`${option.iconSize || "h-[21px] w-[21px]"} object-contain`} />
+    : <span className={option.notationGlyph ? "millionaire-question-type-clef" : "text-[13px] font-black leading-none tracking-tight"}>{option.glyph}</span>}</span>;
+}
+
+function hasQuestionAudio(question) {
+  return Boolean(question?.audio?.generator || question?.audioSrc);
 }
 
 function App() {
@@ -796,7 +976,10 @@ function App() {
   const [settings, setSettings] = useState(() => {
     const saved = safeRead(SETTINGS_KEY, {});
     const savedTypes = Array.isArray(saved.questionTypes) ? saved.questionTypes.filter((category) => CORE.CATEGORIES.includes(category)) : [];
-    return { ...DEFAULT_SETTINGS, ...saved, questionTypes: savedTypes.length ? [...new Set(savedTypes)] : DEFAULT_SETTINGS.questionTypes.slice() };
+    const queryLevel = new URLSearchParams(window.location.search).get("level");
+    const level = CORE.SUPPORTED_LEVELS.includes(queryLevel) ? queryLevel
+      : CORE.SUPPORTED_LEVELS.includes(saved.level) ? saved.level : DEFAULT_SETTINGS.level;
+    return { ...DEFAULT_SETTINGS, ...saved, level, questionTypes: savedTypes.length ? [...new Set(savedTypes)] : DEFAULT_SETTINGS.questionTypes.slice() };
   });
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
@@ -830,17 +1013,17 @@ function App() {
   const gameSaved = useRef(false);
 
   const question = questions[currentIndex];
-  const categorySummary = useMemo(() => CORE.categoryResults(records), [records]);
-
   window.MLH.useClickOutside(
     [levelRef, customiseRef],
     [() => setLevelOpen(false), () => setCustomiseOpen(false)],
   );
 
   useEffect(() => {
-    const errors = CORE.validateQuestionBank(QUESTION_BANK);
+    const errors = CORE.validateQuestionPools(QUESTION_POOLS);
     if (errors.length) console.error("Millionaire question-bank validation errors:", errors);
-    else console.info(`Millionaire question bank validated: ${QUESTION_BANK.length} National 3 prototype questions.`);
+    else console.info(`Millionaire question bank validated: ${QUESTION_BANK.length} questions across 45 pools.`);
+    const isDevelopment = window.location.protocol === "file:" || ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    if (isDevelopment) console.info(`Millionaire question-bank summary:\n${CORE.questionPoolSummary(QUESTION_POOLS).join("\n")}`);
   }, []);
 
   useEffect(() => {
@@ -854,7 +1037,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (screen === "title" || screen === "rules") audioDirector.current.playOpening();
+    if (["title", "rules", "results"].includes(screen)) audioDirector.current.playOpening();
     else if (screen !== "game") audioDirector.current.pauseMusic();
   }, [screen]);
 
@@ -870,7 +1053,7 @@ function App() {
       const answerMap = { a: "A", "1": "A", b: "B", "2": "B", c: "C", "3": "C", d: "D", "4": "D" };
       if (answerMap[key]) { event.preventDefault(); selectAnswer(answerMap[key]); }
       else if (event.key === "Enter") { event.preventDefault(); lockAnswer(); }
-      else if (event.code === "Space" && question?.audio) { event.preventDefault(); playQuestionAudio(false); }
+      else if (event.code === "Space" && hasQuestionAudio(question)) { event.preventDefault(); playQuestionAudio(false); }
       else if (key === "l") { event.preventDefault(); lifelineRef.current?.querySelector("button:not(:disabled)")?.focus(); }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -895,7 +1078,7 @@ function App() {
   function createQuestions() {
     const recentGames = safeRead(HISTORY_KEY, []);
     try {
-      return CORE.composeGame(QUESTION_BANK, recentGames, Math.random, { level: "N3", categories: settings.questionTypes });
+      return CORE.composeGame(QUESTION_BANK, recentGames, Math.random, { level: settings.level, categories: settings.questionTypes });
     } catch (error) {
       console.error("Millionaire game composition failed.", error);
       return null;
@@ -918,7 +1101,7 @@ function App() {
   function startGame() {
     const nextQuestions = createQuestions();
     if (!nextQuestions) {
-      setDialog({ type: "error", message: "A complete National 3 game could not be prepared. Please reload and try again." });
+      setDialog({ type: "error", message: `A complete ${MILLIONAIRE_LEVELS[settings.level].label} game could not be prepared. Please reload and try again.` });
       return;
     }
     gameSaved.current = false;
@@ -945,6 +1128,7 @@ function App() {
     audioDirector.current.stopMusic();
     audioDirector.current.stopEffect();
     setDialog(null);
+    setMilestone(null);
     setScreen("title");
   }
 
@@ -993,21 +1177,28 @@ function App() {
     const nextCorrect = correctCount + 1;
     setCorrectCount(nextCorrect);
     setAnnouncement(`Correct. You have won ${CORE.formatPrize(CORE.PRIZE_LADDER[currentIndex])}.`);
-    setCorrectRevealSkippable(true);
-    await audioDirector.current.playOutcome(currentIndex + 1, true);
-    setCorrectRevealSkippable(false);
-    if (currentIndex === 14) {
+    if (stage === 15) {
       setOutcome("won");
       setFinalPrize(1000000);
       setHighestReached(15);
       setMilestone({ stage: 15, prize: 1000000, victory: true });
       setScreen("milestone");
-    } else if (QUESTION_REWARDS[stage]) {
-      setMilestone({ stage, prize: CORE.PRIZE_LADDER[currentIndex], nextIndex: currentIndex + 1 });
-      setAnnouncement(`Milestone reached. You have won ${CORE.formatPrize(CORE.PRIZE_LADDER[currentIndex])}. Press Continue to keep playing.`);
-    } else {
-      goToQuestion(currentIndex + 1);
+      audioDirector.current.playOutcome(15, true, { finishNaturally: true });
+      return;
     }
+    if (QUESTION_REWARDS[stage]) {
+      setMilestone({ stage, prize: CORE.PRIZE_LADDER[currentIndex], nextIndex: currentIndex + 1, autoAdvance: true });
+      setAnnouncement(`Milestone reached. You have won ${CORE.formatPrize(CORE.PRIZE_LADDER[currentIndex])}. Moving to Question ${stage + 1} when the correct-answer audio finishes.`);
+      const stopAfterSeconds = stage === 5 ? 7 : stage === 10 ? 8 : 0;
+      await audioDirector.current.playOutcome(stage, true, { finishNaturally: stage !== 3, stopAfterSeconds });
+      setMilestone(null);
+      goToQuestion(currentIndex + 1);
+      return;
+    }
+    setCorrectRevealSkippable(true);
+    await audioDirector.current.playOutcome(stage, true);
+    setCorrectRevealSkippable(false);
+    goToQuestion(currentIndex + 1);
   }
 
   async function handleIncorrectAnswer() {
@@ -1032,13 +1223,6 @@ function App() {
     setScreen("game");
     setAnnouncement(`Question ${index + 1} for ${CORE.formatPrize(CORE.PRIZE_LADDER[index])}.`);
     audioDirector.current.playQuestion(index + 1);
-  }
-
-  function continueMilestone() {
-    if (!milestone || milestone.victory) return;
-    const nextIndex = milestone.nextIndex;
-    setMilestone(null);
-    goToQuestion(nextIndex);
   }
 
   function saveCompletedGame() {
@@ -1096,9 +1280,18 @@ function App() {
     audioDirector.current.playLifeline();
   }
 
+  function playQuestionExcerpt(targetQuestion, onEnded) {
+    if (targetQuestion?.audio?.generator) return audioDirector.current.playGenerated(targetQuestion.audio.generator, onEnded);
+    return audioDirector.current.playFileExcerpt(targetQuestion?.audioSrc || targetQuestion?.audio?.src, onEnded);
+  }
+
   function playQuestionAudio(learning = false) {
-    if (!question?.audio || audioPlaying || (!learning && playsUsed >= 3)) return;
-    const duration = audioDirector.current.playGenerated(question.audio.generator, () => {
+    if (!hasQuestionAudio(question)) {
+      setAnnouncement("Audio file not yet added.");
+      return;
+    }
+    if (audioPlaying || (!learning && playsUsed >= 3)) return;
+    const duration = playQuestionExcerpt(question, () => {
       setAudioPlaying(false);
     });
     if (!duration) {
@@ -1122,10 +1315,11 @@ function App() {
     return <>
       {(recordQuestion.type === "notation" || recordQuestion.type === "text-notation") && <NotationView notation={recordQuestion.notation} />}
       {recordQuestion.type === "image" && <QuestionImage image={recordQuestion.image} />}
-      {recordQuestion.audio && <AudioCard playsUsed={recordQuestion === question ? playsUsed : 0} playing={recordQuestion === question ? audioPlaying : false} onPlay={() => {
+      {recordQuestion.category === "listening" && !hasQuestionAudio(recordQuestion) && <div className="millionaire-placeholder-note" role="status">Audio file not yet added.</div>}
+      {hasQuestionAudio(recordQuestion) && <AudioCard playsUsed={recordQuestion === question ? playsUsed : 0} playing={recordQuestion === question ? audioPlaying : false} onPlay={() => {
         if (recordQuestion === question) playQuestionAudio(learning);
         else {
-          const duration = audioDirector.current.playGenerated(recordQuestion.audio.generator, () => {});
+          const duration = playQuestionExcerpt(recordQuestion, () => {});
           if (!duration) setAnnouncement("The listening excerpt is unavailable.");
         }
       }} onStop={stopQuestionAudio} learning={learning} />}
@@ -1155,7 +1349,7 @@ function App() {
             <p>Earn medals for correctly answering the following questions:</p>
           </div>
           <ul className="millionaire-rewards-list">
-            {[15, 12, 10, 5].map((stage) => <li key={stage}><img className="millionaire-reward-icon" src={QUESTION_REWARDS[stage].icon} alt={QUESTION_REWARDS[stage].label} /><span className={`millionaire-reward-label is-${QUESTION_REWARDS[stage].tier}`}>Question {stage}</span></li>)}
+            {[15, 10, 5, 3].map((stage) => <li key={stage}><img className="millionaire-reward-icon" src={QUESTION_REWARDS[stage].icon} alt={QUESTION_REWARDS[stage].label} /><span className={`millionaire-reward-label is-${QUESTION_REWARDS[stage].tier}`}>Question {stage}</span></li>)}
           </ul>
         </section>
         <section className="millionaire-rules-section millionaire-lifeline-rules-section" aria-labelledby="millionaire-rules-lifelines">
@@ -1178,14 +1372,16 @@ function App() {
   function GameScreen() {
     if (!question) return null;
     const earnedReward = revealed === "correct" && currentIndex < 14 ? QUESTION_REWARDS[currentIndex + 1] : null;
-    const waitingForMilestoneContinue = Boolean(earnedReward && milestone?.stage === currentIndex + 1);
+    const milestoneIsShowing = Boolean(earnedReward && milestone?.stage === currentIndex + 1);
+    const autoAdvancingMilestone = Boolean(milestoneIsShowing && milestone?.autoAdvance);
     const earnedPrize = CORE.PRIZE_LADDER[currentIndex] === 1000000 ? "£1 MILLION" : CORE.formatPrize(CORE.PRIZE_LADDER[currentIndex]);
+    const showWonAmount = revealed === "correct";
     return <div className="millionaire-game-grid">
       <section className="millionaire-play-area">
         <div className="millionaire-question-panel">
           {hintVisible && <div className="millionaire-inline-hint" role="note"><strong>Hint</strong><span>{question.tip}</span></div>}
           <div className="millionaire-question-media">{earnedReward ? <MilestoneCelebration reward={earnedReward} /> : renderQuestionMedia(question, outcome === "incorrect")}</div>
-          <div className="millionaire-question-rail"><div className="millionaire-question-bar"><h2 className={earnedReward ? "is-milestone-amount" : undefined}>{earnedReward ? <span className="millionaire-milestone-amount" aria-label={earnedPrize}><span aria-hidden="true">◆</span><span>{earnedPrize}</span><span aria-hidden="true">◆</span></span> : question.question}</h2></div></div>
+          <div className="millionaire-question-rail"><div className="millionaire-question-bar"><h2 className={showWonAmount ? "is-milestone-amount" : undefined}>{showWonAmount ? <span className="millionaire-milestone-amount" aria-label={earnedPrize}><span aria-hidden="true">◆</span><span>{earnedPrize}</span><span aria-hidden="true">◆</span></span> : question.question}</h2></div></div>
         </div>
         <div className="millionaire-answers" role="group" aria-label="Answer choices">
           {[question.answers.slice(0, 2), question.answers.slice(2, 4)].map((answerRow, rowIndex) => <div className="millionaire-answer-row" role="presentation" key={rowIndex}>{answerRow.map((answer) => {
@@ -1199,8 +1395,8 @@ function App() {
             if (removed) classes.push("is-removed");
             const answerDisabled = locked || transitioning || removed;
             const status = isCorrect ? "Correct answer" : isIncorrect ? "Incorrect answer" : "";
-            return <button key={answer.letter} type="button" className={classes.join(" ")} disabled={answerDisabled} tabIndex={removed ? -1 : undefined} aria-hidden={removed || undefined} aria-pressed={selectedLetter === answer.letter} onClick={() => selectAnswer(answer.letter)}>
-              <AutoFitAnswer answer={answer} /><span className="millionaire-answer-status">{status}</span>
+            return <button key={answer.letter} type="button" className={classes.join(" ")} disabled={answerDisabled} tabIndex={removed ? -1 : undefined} aria-hidden={removed || undefined} aria-label={`${answer.letter}: ${answer.text}`} aria-pressed={selectedLetter === answer.letter} onClick={() => selectAnswer(answer.letter)}>
+              <AutoFitAnswer answer={answer} question={question} /><span className="millionaire-answer-status">{status}</span>
             </button>;
           })}</div>)}
         </div>
@@ -1208,7 +1404,7 @@ function App() {
           <div className="millionaire-explanation"><strong>Incorrect answer</strong>{question.explanation}</div>
           <div className="millionaire-actions"><button type="button" className="millionaire-primary millionaire-final-answer" onClick={() => finishGame("incorrect", finalPrize)}><span className="millionaire-final-answer-label">Review</span></button></div>
         </> : <div className="millionaire-actions millionaire-final-answer-actions">
-          <button type="button" className="millionaire-primary millionaire-final-answer" disabled={!waitingForMilestoneContinue && (!selectedLetter || locked || transitioning)} onClick={waitingForMilestoneContinue ? continueMilestone : lockAnswer}><span className="millionaire-final-answer-label">{waitingForMilestoneContinue ? "Continue" : "Final Answer"}</span></button>
+          <button type="button" className="millionaire-primary millionaire-final-answer" disabled={autoAdvancingMilestone || !selectedLetter || locked || transitioning} onClick={lockAnswer}><span className="millionaire-final-answer-label">Final Answer</span></button>
         </div>}
       </section>
       <PrizeLadder currentIndex={currentIndex} correctCount={correctCount} controls={<div className="millionaire-lifelines millionaire-ladder-lifelines" ref={lifelineRef} aria-label="Lifelines">
@@ -1225,6 +1421,7 @@ function App() {
       <div className="millionaire-celebration-centre">
         <MilestoneCelebration reward={QUESTION_REWARDS[15]} showBurst={false} />
         <h2>£1 MILLION</h2>
+        <p className="millionaire-celebration-message">Congratulations!</p>
       </div>
       <button type="button" className="millionaire-primary millionaire-final-answer" onClick={() => finishGame("won", 1000000)}><span className="millionaire-final-answer-label">Review</span></button>
     </section>;
@@ -1233,17 +1430,15 @@ function App() {
   function ResultsScreen() {
     const reviewPrizeValue = CORE.PRIZE_LADDER[highestReached - 1] || 0;
     const reviewPrize = reviewPrizeValue === 1000000 ? "£1 MILLION" : CORE.formatPrize(reviewPrizeValue);
-    const earnedMedalStage = [15, 12, 10, 5].find((stage) => stage <= correctCount);
+    const earnedMedalStage = [15, 10, 5, 3].find((stage) => stage <= correctCount);
     const earnedMedal = earnedMedalStage ? QUESTION_REWARDS[earnedMedalStage] : null;
     return <section className="millionaire-screen millionaire-results">
-      <h2>Review</h2><div className="millionaire-result-prize" aria-label={`Question ${highestReached}, ${reviewPrize}`}><span>{highestReached}</span><span className="millionaire-result-prize-diamond" aria-hidden="true">◆</span><span>{reviewPrize}</span></div>
+      {outcome === "won" && <FinalConfetti />}
+      <h2>Review</h2><div className="millionaire-result-prize" aria-label={`Question ${highestReached}, ${reviewPrize}`}><span>QUESTION {highestReached}</span><span className="millionaire-result-prize-diamond" aria-hidden="true">◆</span><span>{reviewPrize}</span></div>
       <div className="millionaire-results-grid">
-        <ResultStat label="Medal achieved"><span className="millionaire-result-medal">{earnedMedal ? <img src={earnedMedal.icon} alt={earnedMedal.label} /> : "None"}</span></ResultStat>
-        <ResultStat label="Lifelines used"><span className="millionaire-result-lifelines">{usedLifelines.length ? usedLifelines.map(({ key, icon, label }) => <img key={key} src={icon} alt={label} />) : "None"}</span></ResultStat>
+        <ResultStat label="Medal achieved"><span className="millionaire-result-medal">{earnedMedal ? <img src={earnedMedal.icon} alt={earnedMedal.label} /> : "-"}</span></ResultStat>
+        <ResultStat label="Lifelines used"><span className="millionaire-result-lifelines">{usedLifelines.length ? usedLifelines.map(({ key, icon, label }) => <img key={key} src={icon} alt={label} />) : "-"}</span></ResultStat>
         <ResultStat label="Time">{formatTime(elapsedMs)}</ResultStat>
-        {settings.questionTypes.includes("listening") && <ResultStat label="Audio questions">{categorySummary.listening.attempted}</ResultStat>}
-        {settings.questionTypes.includes("literacy") && <ResultStat label="Music literacy questions">{categorySummary.literacy.attempted}</ResultStat>}
-        {settings.questionTypes.includes("concepts") && <ResultStat label="Musical concept questions">{categorySummary.concepts.attempted}</ResultStat>}
       </div>
       <div className="millionaire-result-actions"><button type="button" className="millionaire-primary millionaire-final-answer" onClick={resetGame}><span className="millionaire-final-answer-label">Exit</span></button></div>
     </section>;
@@ -1258,7 +1453,8 @@ function App() {
         {(record.question.notation || record.question.image) && <div>{record.question.notation ? <NotationView notation={record.question.notation} /> : <QuestionImage image={record.question.image} />}</div>}
         <ul className="millionaire-review-options">{record.question.answers.map((answer) => <li key={answer.letter} className={`millionaire-review-option ${answer.letter === record.pupilLetter ? "is-pupil" : ""} ${answer.letter === record.correctLetter ? "is-right" : ""}`}>{answer.letter}: {answer.text}{answer.letter === record.pupilLetter ? " — your answer" : ""}{answer.letter === record.correctLetter ? " — correct" : ""}</li>)}</ul>
         <p className="millionaire-review-explanation"><strong>{record.correct ? "Correct." : "Incorrect."}</strong> {record.question.explanation}</p>
-        {record.question.audio && <div className="millionaire-review-audio"><button type="button" className="millionaire-secondary" onClick={() => audioDirector.current.playGenerated(record.question.audio.generator, () => {})}>Replay excerpt</button></div>}
+        {record.question.category === "listening" && !hasQuestionAudio(record.question) && <div className="millionaire-placeholder-note" role="status">Audio file not yet added.</div>}
+        {hasQuestionAudio(record.question) && <div className="millionaire-review-audio"><button type="button" className="millionaire-secondary" onClick={() => playQuestionExcerpt(record.question, () => {})}>Replay excerpt</button></div>}
       </article>)}</div>
     </section>;
   }
@@ -1273,15 +1469,18 @@ function App() {
   }
 
   const customiseUnavailable = screen === "game" || screen === "milestone";
+  const activeLevelLabel = MILLIONAIRE_LEVELS[settings.level]?.label || "National 3";
 
   return <div className={window.MLH.shell.pageShellClass} style={{ overflowX: "clip" }}>
-    <window.MLH.AppHeader icon="millionaire-icon.svg" title="Who Wants to Be a Millionaire?" subtitle="Test your musical knowledge and climb the prize ladder to £1 million." profileLabel="National 3" profileUsesSharedSettings={false} />
+    <window.MLH.AppHeader icon="millionaire-icon.svg" title="Who Wants to Be a Millionaire?" subtitle="Test your musical knowledge and climb the prize ladder to £1 million." profileLabel={activeLevelLabel} profileUsesSharedSettings={false} />
     <div className="millionaire-page-content"><main className="millionaire-main-shell">
       <div className="millionaire-toolbar-wrap"><window.MLH.AppToolbar left={<div className="flex items-center gap-2">
-        <div className="hub-menu-anchor relative" ref={levelRef}>
-          <window.MLH.LevelButton icon={<img src="levels.svg" alt="" className="h-[26px] w-[26px]" />} activeLevel="N3" activeLabel="National 3" onClick={() => { setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />
-          {levelOpen && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel="N3" onSelect={() => setLevelOpen(false)} levels={MILLIONAIRE_LEVELS} /></window.MLH.MenuPanel>}
-        </div>
+        <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
+          <div className="hub-menu-anchor relative" ref={levelRef}>
+            <window.MLH.LevelButton icon={<img src="levels.svg" alt="" className="h-[26px] w-[26px]" />} activeLevel={settings.level} activeLabel={activeLevelLabel} onClick={() => { setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />
+            {levelOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={settings.level} onSelect={(level) => { setSettings((current) => ({ ...current, level })); setLevelOpen(false); }} levels={MILLIONAIRE_LEVELS} /></window.MLH.MenuPanel>}
+          </div>
+        </fieldset>
         <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
           <div className="hub-menu-anchor relative" ref={customiseRef}>
             <window.MLH.CustomiseButton icon={<img src="customise.svg" alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} onClick={() => { setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />
