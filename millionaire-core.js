@@ -36,6 +36,166 @@
     return copy;
   }
 
+  const TWO_BAR_MELODY_PITCHES = ["E4", "F4", "G4", "A4", "B4", "C5", "D5", "E5", "F5"];
+  const TWO_BAR_MELODY_CONCEPTS = new Set(["two-bar-repetition", "two-bar-sequence", "two-bar-near-sequence"]);
+  const BAR_RHYTHM_VALUES = {
+    sixteenthNote: { beats: .25, spacing: .72 },
+    eighthNote: { beats: .5, spacing: 1.15 },
+    quarterNote: { beats: 1, spacing: 2.2 },
+    halfNote: { beats: 2, spacing: 4 },
+    dottedHalfNote: { beats: 3, spacing: 6 },
+    wholeNote: { beats: 4, spacing: 8 },
+  };
+  const BAR_RHYTHM_PATTERNS = {
+    pairedEighthNotes: ["eighthNote", "eighthNote"],
+    fourSixteenthNotes: ["sixteenthNote", "sixteenthNote", "sixteenthNote", "sixteenthNote"],
+    quaverTwoSemiquavers: ["eighthNote", "sixteenthNote", "sixteenthNote"],
+    twoSemiquaversQuaver: ["sixteenthNote", "sixteenthNote", "eighthNote"],
+    semiquaverQuaverSemiquaver: ["sixteenthNote", "eighthNote", "sixteenthNote"],
+  };
+
+  function barSpacingForBeats(beats) {
+    const matchingValue = Object.values(BAR_RHYTHM_VALUES).find((value) => Math.abs(value.beats - beats) < .001);
+    return matchingValue?.spacing || Math.max(.72, beats * 2.2);
+  }
+
+  function completeBarLayout(glyphs = [], time = null, startX = 0, endX = 1) {
+    const shownBeats = glyphs.reduce((total, glyph) => {
+      if (glyph === "blank") return total;
+      const pattern = BAR_RHYTHM_PATTERNS[glyph];
+      if (pattern) return total + pattern.reduce((sum, rhythm) => sum + BAR_RHYTHM_VALUES[rhythm].beats, 0);
+      return total + Number(BAR_RHYTHM_VALUES[glyph]?.beats || 0);
+    }, 0);
+    const barBeats = Array.isArray(time) && time.length === 2 ? Number(time[0]) * 4 / Number(time[1]) : shownBeats;
+    const missingBeats = Math.max(.25, barBeats - shownBeats);
+    const unitGroups = glyphs.map((glyph) => {
+      if (glyph === "blank") return [barSpacingForBeats(missingBeats)];
+      const pattern = BAR_RHYTHM_PATTERNS[glyph];
+      if (pattern) return pattern.map((rhythm) => BAR_RHYTHM_VALUES[rhythm].spacing);
+      return [Number(BAR_RHYTHM_VALUES[glyph]?.spacing || 2.2)];
+    });
+    const totalUnits = unitGroups.flat().reduce((total, units) => total + units, 0);
+    const unitWidth = Math.max(1, endX - startX) / Math.max(1, totalUnits);
+    let cursor = startX + unitWidth * .35;
+    return unitGroups.map((units) => {
+      const notePositions = units.map((unit, index) => {
+        const position = cursor;
+        cursor += unit * unitWidth;
+        return position;
+      });
+      return {
+        x: (notePositions[0] + notePositions.at(-1)) / 2,
+        steps: notePositions.slice(1).map((position, index) => position - notePositions[index]),
+      };
+    });
+  }
+
+  function twoBarFirstBar(direction, rng) {
+    const lowestIndex = direction < 0 ? 1 : 0;
+    const highestIndex = TWO_BAR_MELODY_PITCHES.length - 1 - (direction > 0 ? 1 : 0);
+    const movementChoices = [-2, -1, -1, 0, 0, 1, 1, 2];
+    const indices = [lowestIndex + randomInt(highestIndex - lowestIndex + 1, rng)];
+    while (indices.length < 4) {
+      const previous = indices.at(-1);
+      const validMovements = movementChoices.filter((movement) => previous + movement >= lowestIndex && previous + movement <= highestIndex);
+      indices.push(previous + validMovements[randomInt(validMovements.length, rng)]);
+    }
+    if (indices.every((value) => value === indices[0])) {
+      const alternatives = [-1, 1].filter((movement) => indices[0] + movement >= lowestIndex && indices[0] + movement <= highestIndex);
+      indices[3] += alternatives[randomInt(alternatives.length, rng)];
+    }
+    return indices;
+  }
+
+  function twoBarMelodyCandidate(concept, rng) {
+    if (!TWO_BAR_MELODY_CONCEPTS.has(concept)) return null;
+    if (concept === "two-bar-repetition") {
+      const firstIndices = twoBarFirstBar(0, rng);
+      return [firstIndices, firstIndices.slice()];
+    }
+    const direction = rng() < .5 ? -1 : 1;
+    const firstIndices = twoBarFirstBar(direction, rng);
+    const secondIndices = firstIndices.map((pitchIndex) => pitchIndex + direction);
+    if (concept === "two-bar-near-sequence") {
+      const changedIndex = randomInt(secondIndices.length, rng);
+      const validChanges = [-1, 1].filter((movement) => {
+        const changedPitch = secondIndices[changedIndex] + movement;
+        return changedPitch >= 0 && changedPitch < TWO_BAR_MELODY_PITCHES.length;
+      });
+      secondIndices[changedIndex] += validChanges[randomInt(validChanges.length, rng)];
+    }
+    return [firstIndices, secondIndices];
+  }
+
+  function twoBarFallbackCandidates(concept) {
+    if (concept === "two-bar-repetition") return [
+      [[0, 1, 2, 1], [0, 1, 2, 1]],
+      [[1, 2, 1, 0], [1, 2, 1, 0]],
+    ];
+    if (concept === "two-bar-sequence") return [
+      [[1, 2, 3, 2], [2, 3, 4, 3]],
+      [[3, 2, 1, 2], [2, 1, 0, 1]],
+    ];
+    return [
+      [[1, 2, 3, 2], [2, 3, 4, 4]],
+      [[3, 2, 1, 2], [2, 1, 0, 0]],
+    ];
+  }
+
+  function generateTwoBarMelody(concept, rng = Math.random, previousSignature = "") {
+    if (!TWO_BAR_MELODY_CONCEPTS.has(concept)) return null;
+    let candidate = null;
+    let signature = "";
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      candidate = twoBarMelodyCandidate(concept, rng);
+      signature = candidate.flat().join("|");
+      if (signature !== previousSignature) break;
+    }
+    if (signature === previousSignature) {
+      candidate = twoBarFallbackCandidates(concept).find((bars) => bars.flat().join("|") !== previousSignature);
+      signature = candidate.flat().join("|");
+    }
+    return {
+      bars: candidate.map((bar) => bar.map((pitchIndex) => TWO_BAR_MELODY_PITCHES[pitchIndex])),
+      signature,
+      direction: concept === "two-bar-sequence" ? Math.sign(candidate[1][0] - candidate[0][0]) : 0,
+    };
+  }
+
+  function applyGeneratedTwoBarMelody(question, generated) {
+    if (!generated) return question;
+    const updatedNotation = { ...question.notation, bars: generated.bars };
+    let correctText;
+    let explanation = question.explanation;
+    let label = question.notation?.label;
+    if (question.concept === "two-bar-repetition") {
+      correctText = "Repetition";
+      explanation = "The second bar repeats exactly the same notes as the first bar.";
+      label = "Two bars showing exact melodic repetition.";
+    } else if (question.concept === "two-bar-near-sequence") {
+      correctText = "None of these";
+      explanation = "One note is a step away from the expected pattern, so the bars show neither an exact sequence nor repetition.";
+      label = "Two related bars with one altered note, showing neither sequence nor exact repetition.";
+    } else if (question.concept === "two-bar-sequence") {
+      const directionWord = generated.direction > 0 ? "higher" : "lower";
+      correctText = `Sequence ${directionWord}`;
+      explanation = `Every note in the second bar is one step ${directionWord}, so this is a sequence ${directionWord}.`;
+      label = `Two bars showing a melodic sequence one step ${directionWord}.`;
+    } else {
+      return { ...question, notation: updatedNotation };
+    }
+    const correctAnswer = question.answers.find((answer) => answer.text === correctText);
+    if (!correctAnswer) return { ...question, notation: updatedNotation };
+
+    return {
+      ...question,
+      notation: { ...updatedNotation, label },
+      correctAnswer: correctAnswer.originalId || correctAnswer.id,
+      correctLetter: correctAnswer.letter,
+      explanation,
+    };
+  }
+
   function formatPrize(value) {
     return value === 1000000 ? "£1 Million" : `£${Number(value || 0).toLocaleString("en-GB")}`;
   }
@@ -373,6 +533,9 @@
     difficultyForStage,
     answerLetterPlan,
     shuffledQuestion,
+    generateTwoBarMelody,
+    applyGeneratedTwoBarMelody,
+    completeBarLayout,
     composeGame,
     fiftyFifty,
     switchQuestion,
