@@ -745,7 +745,7 @@ const TIMESIG_PREVIEW = {
   noteRx: 6.3,
   stemLength: 32,
   clefX: 32,
-  firstBarStart: 138.25,
+  firstBarStart: 117.44,
   firstBarEnd: 348.5,
 };
 
@@ -1102,7 +1102,7 @@ function RestsPreviewBeam({ beamData, groupItems, groupPositions }) {
       const x1 = stemX(segment.startIndex) - secondaryWidthAdjust;
       const y1 = timeSigBeamLineYAtX(x1, beamData.start, beamData.end) + secondaryOffset;
       const x2 = segment.hook ? x1 + (segment.startIndex > 0 ? -14 : 14) : stemX(segment.endIndex) + secondaryWidthAdjust;
-      const y2 = segment.hook ? y1 : timeSigBeamLineYAtX(x2, beamData.start, beamData.end) + secondaryOffset;
+      const y2 = timeSigBeamLineYAtX(x2, beamData.start, beamData.end) + secondaryOffset;
       return <polygon key={index} points={polygon(x1, y1, x2, y2)} fill="currentColor" />;
     })}
   </g>;
@@ -1124,7 +1124,7 @@ function RestsFirstBarNotation({ notation, selectedRhythm = null }) {
         const outlineWidth = Math.max(40, Math.min(58, item.units * 8));
         const selectedItem = selectedRhythm ? { rhythm: selectedRhythm === "dottedHalfNote" ? "dotted-minim" : selectedRhythm === "wholeNote" ? "semibreve" : selectedRhythm === "halfNote" ? "minim" : selectedRhythm === "eighthNote" ? "quaver" : selectedRhythm === "sixteenthNote" ? "semiquaver" : "crotchet", pitch: { step: 3 } } : null;
         return <g key={index}>
-          <rect x={positions[index] - outlineWidth / 2} y={RESTS_PREVIEW.systemTop - 9} width={outlineWidth} height={RESTS_PREVIEW.lineGap * 4 + 17} rx="7" ry="7" fill="none" stroke="#78716c" strokeWidth="1.6" />
+          <rect x={positions[index] - outlineWidth / 2 + 4} y={RESTS_PREVIEW.systemTop - 9} width={outlineWidth} height={RESTS_PREVIEW.lineGap * 4 + 17} rx="7" ry="7" fill="none" stroke="#78716c" strokeWidth="1.6" />
           {selectedItem && <RestsPreviewNote item={selectedItem} x={positions[index]} />}
         </g>;
       }
@@ -1141,8 +1141,7 @@ function RestsFirstBarNotation({ notation, selectedRhythm = null }) {
       const groupPositions = positions.slice(group.start, group.end + 1);
       return <RestsPreviewBeam key={index} beamData={restsBeamData(groupItems, groupPositions)} groupItems={groupItems} groupPositions={groupPositions} />;
     })}
-    <line x1={RESTS_PREVIEW.barEnd - 5} x2={RESTS_PREVIEW.barEnd - 5} y1={RESTS_PREVIEW.systemTop} y2={RESTS_PREVIEW.systemTop + RESTS_PREVIEW.lineGap * 4} stroke="currentColor" strokeWidth="1.4" />
-    <line x1={RESTS_PREVIEW.barEnd} x2={RESTS_PREVIEW.barEnd} y1={RESTS_PREVIEW.systemTop - .75} y2={RESTS_PREVIEW.systemTop + RESTS_PREVIEW.lineGap * 4 + .75} stroke="currentColor" strokeWidth="4" />
+    <line x1={RESTS_PREVIEW.barEnd} x2={RESTS_PREVIEW.barEnd} y1={RESTS_PREVIEW.systemTop} y2={RESTS_PREVIEW.systemTop + RESTS_PREVIEW.lineGap * 4} stroke="currentColor" strokeWidth="1.4" />
     <rect x={fadeStart} y="94" width={550 - fadeStart} height="116" fill="url(#millionaire-rests-bar-fade)" />
   </svg>;
 }
@@ -1261,7 +1260,7 @@ function sharedRhythmLayout(pattern, compact = false, positionSteps = null) {
   return {
     values, positions, stemXs, noteY,
     start: { x: stemXs[0], y: beamY },
-    end: { x: stemXs.at(-1), y: beamY - SHARED_RHYTHM_LINE_GAP * .08 * Math.max(0, values.length - 2) },
+    end: { x: stemXs.at(-1), y: beamY },
     centreX: (stemXs[0] + stemXs.at(-1)) / 2,
   };
 }
@@ -1321,7 +1320,7 @@ function SharedBeamedRhythmGroup({ pattern, highlightBeam = false, compact = fal
         <line x1={stemXs[index]} x2={stemXs[index]} y1={stemStartY} y2={stemEndY} stroke="currentColor" strokeWidth={stemThickness} strokeLinecap="butt" />
       </React.Fragment>;
     })}
-    <SharedRhythmBeam start={start} end={end} colour={beamColour} widthScale={Number(primaryBeamConfig.widthScale || 1)} thicknessScale={Number(primaryBeamConfig.heightScale || 1)} trim={values.includes("sixteenth") ? SHARED_SEMIQUAVER_BEAM_TRIM : 0} />
+    <SharedRhythmBeam start={start} end={end} colour={beamColour} widthScale={Number(primaryBeamConfig.widthScale || 1)} thicknessScale={Number(primaryBeamConfig.heightScale || 1)} trim={(values.includes("sixteenth") ? SHARED_SEMIQUAVER_BEAM_TRIM : 0) + (pattern === "pairedEighthNotes" ? 1 : 0)} />
     {secondarySegments.map((segment, index) => {
       const segmentStartX = stemXs[segment.startIndex];
       const segmentEndX = segment.hook ? segmentStartX + (segment.startIndex > 0 ? -14 : 14) : stemXs[segment.endIndex];
@@ -1351,6 +1350,22 @@ function RhythmFigureNotation({ notation, highlightBeam = false }) {
   return <svg className={`millionaire-rhythm-figure${pairedQuaverClass}`} viewBox="0 0 200 105" aria-hidden="true">
     <PositionedBeamedRhythm pattern={pattern} targetX={100} targetY={74} scale={scale} highlightBeam={highlightBeam} secondaryBeamTrim={Number(notation.secondaryBeamTrim || 0)} />
     {highlightBeam && <g className="millionaire-beam-pointer"><path d="M 100 -18 L 100 -2" /><path d="M 94 -8 L 100 -1 L 106 -8" /></g>}
+  </svg>;
+}
+
+function NotePartNotation({ notation }) {
+  const arrows = {
+    notehead: { x1: 38, y1: 82, x2: 86, y2: 82 },
+    stem: { x1: 164, y1: 54, x2: 113, y2: 54 },
+    flag: { x1: 164, y1: 18, x2: 124, y2: 36 },
+  };
+  const part = arrows[notation.part] ? notation.part : "notehead";
+  const arrow = arrows[part];
+  const markerId = `millionaire-note-part-arrow-${part}`;
+  return <svg className="millionaire-note-part" viewBox="0 0 200 120" aria-hidden="true">
+    <defs><marker id={markerId} markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M 0 0 L 9 4.5 L 0 9 Z" fill="#d97706" /></marker></defs>
+    <CalibratedNotationSymbol symbolKey="eighthNoteStemUp" x={100} y={88} gap={20} />
+    <line className="millionaire-note-part-arrow" x1={arrow.x1} y1={arrow.y1} x2={arrow.x2} y2={arrow.y2} markerEnd={`url(#${markerId})`} />
   </svg>;
 }
 
@@ -1523,7 +1538,7 @@ function AnswerTimeSignatureGlyph({ timeSignature, label }) {
 
 function RhythmSumNotation({ notation }) {
   const terms = notation.terms || [];
-  const className = `millionaire-rhythmsums${terms.length === 2 ? " is-two-term" : ""}${Number.isFinite(notation.total) ? " is-completion" : ""}`;
+  const className = `millionaire-rhythmsums${terms.length === 2 ? " is-two-term" : ""}${terms.length === 3 ? " is-three-term" : ""}${Number.isFinite(notation.total) ? " is-completion" : ""}`;
   return <div className={className}>
     {(notation.terms || []).map((term, index) => <React.Fragment key={`${term}-${index}`}>
       <RhythmSumTerm rhythm={term} />
@@ -1638,6 +1653,7 @@ function NotationView({ notation, className = "", whatNoteQuestion = false, sele
   else if (notation.kind === "bar") content = <CompleteBarNotation notation={notation} selectedRhythm={selectedRhythm} />;
   else if (notation.kind === "rhythmFigure") content = <RhythmFigureNotation notation={notation} />;
   else if (notation.kind === "beam") content = <RhythmFigureNotation notation={notation} highlightBeam={true} />;
+  else if (notation.kind === "notePart") content = <NotePartNotation notation={notation} />;
   else if (notation.kind === "twoBarMelody") content = <TwoBarMelodyNotation notation={notation} />;
   else content = <div className="millionaire-glyphs">{(notation.glyphs || []).map((glyph, index) => <InlineNotationGlyph glyph={glyph} index={index} shiftDottedMinimRight={shiftDottedMinimRight} />)}</div>;
   return <div className={`millionaire-notation${singleSymbolNotation ? " is-single-symbol-notation" : ""}${timeSignatureNotation ? " is-time-signature-question" : ""}${melodyNotation ? " is-melody-notation" : ""}${hairpinNotation ? " is-hairpin-notation" : ""}${trebleClefNotation ? " is-treble-clef-notation" : ""}${semibreveNotation ? " is-semibreve-notation" : ""}${repeatSignNotation ? " is-repeat-sign-notation" : ""}${twoTermRhythmSum ? " is-two-term-rhythm-sum" : ""}${rhythmCompletionNotation ? " is-rhythm-completion-question" : ""}${className ? ` ${className}` : ""}`} role="img" aria-label={notation.label || "Music notation"}>{content}</div>;

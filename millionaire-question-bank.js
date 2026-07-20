@@ -56,6 +56,16 @@
     const answerChoices = [answer, ...RHYTHM_VALUE_NAMES.filter((value) => value !== answer)];
     return base(id, "literacy", "rhythm-completion", "Which note value completes this calculation?", A(...answerChoices), "a", `The shown note value${shownValues.length > 1 ? "s" : ""} total ${shownBeats} beat${shownBeats === 1 ? "" : "s"}. To make ${target} beats, the missing value is ${answer.toLowerCase()}.`, "Add the shown beats, then subtract from the total.", 11, 15, { type: "notation", notation: { kind: "rhythmSum", terms: [...shownValues.map((value) => RHYTHM_GLYPHS[value]), "blank"], operators: Array(shownValues.length).fill("+"), total: target, label: `A rhythm calculation totalling ${target} beats with one missing note value.` } });
   };
+  const N4_RHYTHM_BEATS = { Semiquaver: .25, Quaver: .5, Crotchet: 1, Minim: 2, "Dotted minim": 3, Semibreve: 4 };
+  const N4_RHYTHM_GLYPHS = { Semiquaver: "sixteenthNote", Quaver: "eighthNote", Crotchet: "quarterNote", Minim: "halfNote", "Dotted minim": "dottedHalfNote", Semibreve: "wholeNote" };
+  const n4RhythmCompletion = (id, values, missingIndex, distractors) => {
+    const answer = values[missingIndex];
+    const total = values.reduce((sum, value) => sum + N4_RHYTHM_BEATS[value], 0);
+    const terms = values.map((value, index) => index === missingIndex ? "blank" : N4_RHYTHM_GLYPHS[value]);
+    const missingPosition = ["first", "middle", "last"][missingIndex];
+    const calculation = values.map((value) => N4_RHYTHM_BEATS[value]).join(" + ");
+    return n4Base(id, "hard", "three-rhythm-completion", "Which note value completes this calculation?", A(answer, ...distractors), "a", `${calculation} = ${total} beats, so the missing ${missingPosition} note value is a ${answer.toLowerCase()}.`, "Add the two visible note values, then subtract their total from the completed answer.", { type: "notation", notation: { kind: "rhythmSum", terms, operators: ["+", "+"], total, label: `A three-rhythm calculation totalling ${total} beats with the ${missingPosition} note value missing.` } });
+  };
 
   const listening = [
     base("n3-listening-001", "listening", "major-tonality", "Which tonality do you hear?", A("Major", "Minor", "Atonal", "Modal"), "a", "The notes outline a major chord, which gives the example a bright and settled sound.", "Listen to whether the final chord sounds bright or dark.", 1, 3, { type: "audio", audio: audio("n3-major-example", { bpm: 92, notes: [60, 64, 67, 72], beats: [1, 1, 1, 2], waveform: "triangle" }), preferredFiftyFiftyDistractor: "b" }),
@@ -226,9 +236,12 @@
     // Hard: beams, mixed semiquaver groups and fractional calculations.
     n4Base("n4-literacy-hard-001", "hard", "beam-name", "What is the highlighted part of the rhythm called?", A("Beam", "Stem", "Notehead", "Flag"), "a", "The horizontal line joining the notes is called a beam.", "The highlighted part joins the stems together.", { type: "notation", notation: { kind: "beam", pattern: "pairedEighthNotes", label: "Paired quavers with their beam highlighted." } }),
     n4Base("n4-literacy-hard-002", "hard", "beam-name", "What is the highlighted music symbol called?", A("Beam", "Barline", "Ledger line", "Tie"), "a", "This horizontal joining line is a beam.", "It groups short note values together.", { type: "notation", notation: { kind: "beam", pattern: "fourSixteenthNotes", label: "Grouped semiquavers with their beams highlighted." } }),
+    n4Base("n4-literacy-hard-045", "hard", "note-part-stem", "What is the part of the note indicated by the arrow called?", A("Stem", "Notehead", "Flag", "Beam"), "a", "The vertical line extending from the notehead is called the stem.", "Look at the straight vertical part of the note.", { type: "notation", notation: { kind: "notePart", part: "stem", label: "A quaver with an arrow pointing to its stem." } }),
+    n4Base("n4-literacy-hard-046", "hard", "note-part-notehead", "What is the part of the note indicated by the arrow called?", A("Notehead", "Stem", "Flag", "Beam"), "a", "The filled oval part of the note is called the notehead.", "Look at the rounded part that shows the note's pitch.", { type: "notation", notation: { kind: "notePart", part: "notehead", label: "A quaver with an arrow pointing to its notehead." } }),
+    n4Base("n4-literacy-hard-047", "hard", "note-part-flag", "What is the part of the note indicated by the arrow called?", A("Flag", "Stem", "Notehead", "Beam"), "a", "The curved mark attached to the top of a single quaver's stem is called the flag.", "A flag appears on a single quaver instead of a beam joining it to another note.", { type: "notation", notation: { kind: "notePart", part: "flag", label: "A quaver with an arrow pointing to its flag." } }),
     ...[
-      ["quaverTwoSemiquavers", "A quaver followed by two semiquavers.", 0],
-      ["twoSemiquaversQuaver", "Two semiquavers followed by a quaver.", 0],
+      ["quaverTwoSemiquavers", "A quaver followed by two semiquavers.", 1],
+      ["twoSemiquaversQuaver", "Two semiquavers followed by a quaver.", 1],
       ["semiquaverQuaverSemiquaver", "A semiquaver, a quaver and a semiquaver.", 0],
       ["quaverTwoSemiquavers", "A quaver and two semiquavers grouped together.", 1],
     ].map(([pattern, label, secondaryBeamTrim], index) => n4Base(`n4-literacy-hard-${String(index + 3).padStart(3, "0")}`, "hard", "mixed-quaver-semiquavers-total", "What is the total value of this rhythm?", A("1 beat", "0.5 beat", "1.5 beats", "2 beats"), "a", "The quaver is half a beat and the two semiquavers total half a beat, making one beat altogether.", "Convert each note into its beat value.", { type: "notation", notation: { kind: "rhythmFigure", pattern, label, secondaryBeamTrim } })),
@@ -269,6 +282,20 @@
       [["B4", "A4", "G4", "F4"], ["C5", "B4", "A4", "F4"]],
       [["A4", "B4", "C5", "D5"], ["G4", "A4", "C5", "C5"]],
     ].map(([firstBar, secondBar], index) => n4Base(`n4-literacy-hard-${String(index + 27).padStart(3, "0")}`, "hard", "two-bar-near-sequence", "What relationship is shown between the two bars?", A("Repetition", "Sequence higher", "Sequence lower", "None of these"), "d", "One note is a step away from the expected pattern, so the bars show neither an exact sequence nor repetition.", "Check every note: a sequence must move the complete pattern by the same distance.", { type: "notation", notation: { kind: "twoBarMelody", bars: [firstBar, secondBar], label: "Two related bars with one altered note, showing neither sequence nor exact repetition." } })),
+    ...[
+      [["Quaver", "Minim", "Crotchet"], 0, ["Semiquaver", "Crotchet", "Minim"]],
+      [["Dotted minim", "Semiquaver", "Crotchet"], 1, ["Quaver", "Crotchet", "Minim"]],
+      [["Quaver", "Crotchet", "Minim"], 2, ["Crotchet", "Dotted minim", "Semibreve"]],
+      [["Crotchet", "Semiquaver", "Dotted minim"], 0, ["Quaver", "Minim", "Dotted minim"]],
+      [["Semibreve", "Quaver", "Minim"], 1, ["Semiquaver", "Crotchet", "Minim"]],
+      [["Semiquaver", "Dotted minim", "Semibreve"], 2, ["Crotchet", "Minim", "Dotted minim"]],
+      [["Minim", "Quaver", "Dotted minim"], 0, ["Crotchet", "Dotted minim", "Semibreve"]],
+      [["Crotchet", "Semibreve", "Semiquaver"], 1, ["Crotchet", "Minim", "Dotted minim"]],
+      [["Minim", "Crotchet", "Quaver"], 2, ["Semiquaver", "Crotchet", "Minim"]],
+      [["Semiquaver", "Semibreve", "Minim"], 0, ["Quaver", "Crotchet", "Minim"]],
+      [["Dotted minim", "Crotchet", "Quaver"], 1, ["Quaver", "Minim", "Dotted minim"]],
+      [["Semibreve", "Dotted minim", "Semiquaver"], 2, ["Quaver", "Crotchet", "Minim"]],
+    ].map(([values, missingIndex, distractors], index) => n4RhythmCompletion(`n4-literacy-hard-${String(index + 33).padStart(3, "0")}`, values, missingIndex, distractors)),
   ];
 
   const concepts = [
