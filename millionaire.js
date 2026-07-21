@@ -33,6 +33,7 @@ Object.values(window.MILLIONAIRE_SOUND_CONFIG.stages).forEach((files) => {
 
 const SETTINGS_KEY = "mlh-millionaire-settings-v3";
 const HISTORY_KEY = "mlh-millionaire-recent-games-v1";
+const PERFORMANCE_KEY = "mlh-millionaire-performance-v1";
 const DEFAULT_SETTINGS = {
   soundEffects: true,
   backgroundMusic: true,
@@ -83,6 +84,23 @@ function safeWrite(key, value) {
   } catch {
     return false;
   }
+}
+
+function levelPerformance(level) {
+  const saved = safeRead(PERFORMANCE_KEY, {});
+  const record = saved && typeof saved === "object" ? saved[level] : null;
+  const highestQuestion = Number.isFinite(record?.highestQuestion) ? Math.max(0, Math.min(15, Math.round(record.highestQuestion))) : 0;
+  const legacyBestAmount = highestQuestion ? CORE.PRIZE_LADDER[Math.max(0, highestQuestion - 2)] || 0 : 0;
+  const bestTimesByQuestion = record?.bestTimesByQuestion && typeof record.bestTimesByQuestion === "object"
+    ? Object.fromEntries(Object.entries(record.bestTimesByQuestion).filter(([question, time]) => Number(question) >= 1 && Number(question) <= 15 && Number.isFinite(time) && time >= 0))
+    : {};
+  if (Number.isFinite(record?.bestWinMs) && record.bestWinMs >= 0 && bestTimesByQuestion[15] == null) bestTimesByQuestion[15] = record.bestWinMs;
+  return {
+    bestWinMs: Number.isFinite(record?.bestWinMs) && record.bestWinMs >= 0 ? record.bestWinMs : null,
+    highestQuestion,
+    bestAmount: Number.isFinite(record?.bestAmount) && record.bestAmount >= 0 ? record.bestAmount : legacyBestAmount,
+    bestTimesByQuestion,
+  };
 }
 
 function formatTime(milliseconds) {
@@ -818,6 +836,8 @@ const TIMESIG_RHYTHM_TOKENS = {
   "2semiquavers-quaver": ["semiquaver", "semiquaver", "quaver"],
   "dotted-quaver-semiquaver": ["dotted-quaver", "semiquaver"],
   "quaver-group-3": ["quaver", "quaver", "quaver"],
+  "crotchet-quaver": ["crotchet", "quaver"],
+  "quaver-crotchet": ["quaver", "crotchet"],
 };
 
 function timeSigRhythmInfo(rhythm) {
@@ -1452,7 +1472,7 @@ function HigherRhythmSumsRest({ rest, x = 42, systemTop = 12, gap = 10 }) {
 }
 
 function HigherRestNotation({ notation }) {
-  const visualOffset = notation.rest === "semibreve-rest" ? -5 : notation.rest === "minim-rest" ? -2 : ["crotchet-rest", "dotted-crotchet-rest"].includes(notation.rest) ? 25 : 0;
+  const visualOffset = notation.rest === "semibreve-rest" ? -5 : notation.rest === "minim-rest" ? -2 : notation.rest === "crotchet-rest" ? 5 : notation.rest === "dotted-crotchet-rest" ? 10 : 0;
   return <svg className="millionaire-higher-rest" viewBox="0 0 90 90" aria-hidden="true">
     <g transform={`translate(45 ${45 + visualOffset}) scale(2.2) translate(-42 -32)`}>
       <HigherRhythmSumsRest rest={notation.rest} x={42} systemTop={12} />
@@ -1474,7 +1494,7 @@ function HigherArticulationNotation({ notation }) {
   const top = 36;
   const bottom = top + gap * 4;
   const notes = notation.marking === "phrase"
-    ? [{ x: 190, position: 3 }, { x: 245, position: 5 }, { x: 300, position: 4 }, { x: 355, position: 6 }]
+    ? [{ x: 154, position: 3 }, { x: 190, position: 5 }, { x: 237, position: 4 }, { x: 273, position: 6 }, { x: 320, position: 5 }, { x: 356, position: 3 }, { x: 403, position: 4 }, { x: 439, position: 2 }]
     : notation.marking === "slur"
       ? [{ x: 235, position: 3 }, { x: 325, position: 6 }]
       : [{ x: 278, position: 4 }];
@@ -1504,6 +1524,8 @@ function HigherArticulationNotation({ notation }) {
   return <svg className="millionaire-higher-articulation" viewBox="30 10 440 130" aria-hidden="true">
     {Array.from({ length: 5 }, (_, index) => <line key={index} x1="52" x2="462" y1={top + index * gap} y2={top + index * gap} stroke="currentColor" strokeWidth="1.2" />)}
     <CalibratedNotationSymbol symbolKey="gClef" x={94} y={bottom - gap} gap={gap} />
+    {notation.marking === "phrase" && [213, 296, 379].map((x) => <line key={x} x1={x} x2={x} y1={top} y2={bottom} stroke="currentColor" strokeWidth="1.2" />)}
+    {notation.marking === "phrase" && <><line x1="457" x2="457" y1={top} y2={bottom} stroke="currentColor" strokeWidth="1.2" /><line x1="462" x2="462" y1={top - .75} y2={bottom + .75} stroke="currentColor" strokeWidth="4" /></>}
     {notes.map((note, index) => <CalibratedNotationSymbol key={index} symbolKey={stemDownFor(note.position) ? "quarterNoteStemDown" : "quarterNoteStemUp"} x={note.x} y={yFor(note.position)} gap={gap} />)}
     {notation.marking === "accent" && <CalibratedNotationSymbol symbolKey={firstStemDown ? "accentBelow" : "accentAbove"} x={notes[0].x} y={yFor(notes[0].position)} gap={gap} settingOverrides={{ opticalYOffset: firstStemDown ? 1 : -5 }} />}
     {notation.marking === "staccato" && <CalibratedNotationSymbol symbolKey={firstStemDown ? "staccatoBelow" : "staccatoAbove"} x={notes[0].x} y={yFor(notes[0].position)} gap={gap} settingOverrides={{ opticalYOffset: firstStemDown ? 2 : -6 }} />}
@@ -1520,12 +1542,12 @@ function HigherTripletNotation({ notation }) {
         <ellipse cx={x} cy="38" rx="6.3" ry="4.6" transform={`rotate(-18 ${x} 38)`} fill="currentColor" />
         <line x1={x + 5.3} x2={x + 5.3} y1="38" y2="12" stroke="currentColor" strokeWidth="1.5" />
       </g>)}
-      {quaverTriplet && <line x1="40.3" x2="94.3" y1="12" y2="12" stroke="currentColor" strokeWidth="4" />}
+      {quaverTriplet && <line x1="39.3" x2="95.3" y1="12" y2="12" stroke="currentColor" strokeWidth="4" />}
       {!quaverTriplet && <g stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round">
         <path d="M 40 9 L 40 0 L 56 0" />
         <path d="M 80 0 L 96 0 L 96 9" />
       </g>}
-      <text x="67" y={quaverTriplet ? "8" : "10"} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="22" fill="currentColor">3</text>
+      <text x="67" y={quaverTriplet ? "8" : "10"} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="11" fill="currentColor">3</text>
     </g>
   </svg>;
 }
@@ -1868,7 +1890,7 @@ function AnswerRhythmGlyph({ rhythm, label }) {
 }
 
 function AnswerRestGlyph({ rest, label }) {
-  const answerYOffset = rest === "semibreve-rest" ? 2 : 7;
+  const answerYOffset = rest === "semibreve-rest" ? -1 : rest === "quaver-rest" ? 2 : 7;
   return <span className="millionaire-answer-rhythm" role="img" aria-label={label}><svg viewBox="0 0 64 70" aria-hidden="true"><g transform={`translate(0 ${answerYOffset}) scale(1.15)`}><HigherRhythmSumsRest rest={rest} x={27} systemTop={8} /></g></svg></span>;
 }
 
@@ -2203,8 +2225,12 @@ function PrizeLadder({ currentIndex, correctCount, controls }) {
   </aside>;
 }
 
-function ResultStat({ label, children }) {
-  return <div className="millionaire-result-stat"><span>{label}</span><strong>{children}</strong></div>;
+function ResultStat({ label, children, previous = null }) {
+  return <div className="millionaire-result-stat">
+    <span>{label}</span>
+    <strong>{children}</strong>
+    {previous != null && <small>{previous}</small>}
+  </div>;
 }
 
 function QuestionTypeGlyph({ option }) {
@@ -2260,6 +2286,7 @@ function App() {
   const [highestReached, setHighestReached] = useState(0);
   const [startedAt, setStartedAt] = useState(null);
   const [finishedAt, setFinishedAt] = useState(null);
+  const [previousPerformance, setPreviousPerformance] = useState({ bestWinMs: null, highestQuestion: 0, bestAmount: 0, bestTimesByQuestion: {} });
   const [milestone, setMilestone] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(TIMER_DURATION_SECONDS);
   const [announcement, setAnnouncement] = useState("Welcome to Who Wants to Be a Millionaire.");
@@ -2479,6 +2506,7 @@ function App() {
     }
     setLevelOpen(false);
     setCustomiseOpen(false);
+    setPreviousPerformance(levelPerformance(settings.level));
     audioDirector.current.configure(settings);
     audioDirector.current.startGame();
     if (settings.reducedMotion || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
@@ -2490,7 +2518,7 @@ function App() {
     openingZoomTimer.current = window.setTimeout(() => {
       openingZoomTimer.current = null;
       setOpeningZooming(false);
-    }, 650);
+    }, 1600);
   }
 
   function resetGame() {
@@ -2615,11 +2643,29 @@ function App() {
     audioDirector.current.playQuestion(index + 1);
   }
 
-  function saveCompletedGame() {
+  function saveCompletedGame(finalOutcome, completedAt) {
     if (gameSaved.current) return;
     const recent = safeRead(HISTORY_KEY, []);
     const next = [...(Array.isArray(recent) ? recent : []), questions.map((item) => item.id)].slice(-5);
     safeWrite(HISTORY_KEY, next);
+    const allPerformance = safeRead(PERFORMANCE_KEY, {});
+    const previous = levelPerformance(settings.level);
+    const completedDuration = Math.max(0, completedAt - (startedAt || completedAt));
+    const completedHighestQuestion = Math.max(1, Math.min(15, highestReached || currentIndex + 1));
+    const lastCorrectRecord = [...records].reverse().find((record) => record.correct);
+    const completedAmount = lastCorrectRecord ? CORE.PRIZE_LADDER[lastCorrectRecord.questionNumber - 1] || 0 : 0;
+    const nextBestWinMs = finalOutcome === "won" && (previous.bestWinMs == null || completedDuration < previous.bestWinMs) ? completedDuration : previous.bestWinMs;
+    const previousQuestionBestMs = previous.bestTimesByQuestion[completedHighestQuestion];
+    const nextQuestionBestMs = previousQuestionBestMs == null || completedDuration < previousQuestionBestMs ? completedDuration : previousQuestionBestMs;
+    safeWrite(PERFORMANCE_KEY, {
+      ...(allPerformance && typeof allPerformance === "object" ? allPerformance : {}),
+      [settings.level]: {
+        bestWinMs: nextBestWinMs,
+        highestQuestion: Math.max(previous.highestQuestion, completedHighestQuestion),
+        bestAmount: Math.max(previous.bestAmount, completedAmount),
+        bestTimesByQuestion: { ...previous.bestTimesByQuestion, [completedHighestQuestion]: nextQuestionBestMs },
+      },
+    });
     gameSaved.current = true;
   }
 
@@ -2633,7 +2679,7 @@ function App() {
     setFinishedAt(now);
     setScreen("results");
     setDialog(null);
-    saveCompletedGame();
+    saveCompletedGame(finalOutcome, now);
     setAnnouncement(`Game complete. Final prize ${CORE.formatPrize(prize)}.`);
   }
 
@@ -2737,8 +2783,16 @@ function App() {
   }
 
   function TitleScreen() {
+    const openingLightRayLengths = [64, 71.5, 66, 73, 68.5, 70, 63, 69, 72, 65.5, 70.5, 62, 67.5, 74, 64.5, 71, 67, 73.5, 63.5, 69.5, 62.5, 72.5, 68, 65];
     return <section className={`millionaire-screen millionaire-opening-screen ${openingZooming ? "is-opening-zoom" : ""}`} aria-busy={openingZooming} aria-hidden={openingZooming || undefined}>
-      <span className="millionaire-opening-logo-shine"><img className="millionaire-opening-logo" src="millionairelogo new.svg" alt="Who Wants to Be a Millionaire" /></span>
+      <span className="millionaire-opening-logo-stage">
+        <span className="millionaire-opening-logo-shine"><img className="millionaire-opening-logo" src="millionairelogo new.svg" alt="Who Wants to Be a Millionaire" /></span>
+        <span className="millionaire-opening-logo-backlight" aria-hidden="true">
+          <span className="millionaire-opening-logo-rays">
+            {openingLightRayLengths.map((length, index) => <span className="millionaire-opening-logo-ray" key={length} style={{ "--ray-angle": `${index * 15}deg`, "--ray-length": `${length}%`, "--ray-width": `${8 + index % 5 * 1.8}px`, "--ray-opacity": .54 + index % 4 * .07 }} />)}
+          </span>
+        </span>
+      </span>
       <p className="millionaire-screen-copy millionaire-opening-copy">Test your musical knowledge and climb the prize ladder to £1 million.</p>
       <div className="millionaire-opening-actions">
         <button type="button" className="millionaire-secondary millionaire-play millionaire-opening-play" disabled={openingZooming} onClick={() => setScreen("rules")}><span className="millionaire-opening-play-label">How to Play</span></button>
@@ -2756,7 +2810,7 @@ function App() {
           <div className="millionaire-game-rules-copy">
             <p>Answer 15 music questions which progressively get more challenging.</p>
             <p>Each question is multiple choice with four possible answers.</p>
-            <p>Earn medals for correctly answering the following questions:</p>
+            <p>Earn awards for correctly answering the following questions:</p>
           </div>
           <ul className="millionaire-rewards-list">
             {[15, 10, 5, 3].map((stage) => <li key={stage}><img className="millionaire-reward-icon" src={QUESTION_REWARDS[stage].icon} alt={QUESTION_REWARDS[stage].label} /><span className={`millionaire-reward-label is-${QUESTION_REWARDS[stage].tier}`}>Question {stage}</span></li>)}
@@ -2841,17 +2895,23 @@ function App() {
   function ResultsScreen() {
     const lastCorrectRecord = [...records].reverse().find((record) => record.correct);
     const reviewQuestionNumber = lastCorrectRecord?.questionNumber || 0;
+    const reachedQuestionNumber = Math.max(1, Math.min(15, highestReached || currentIndex + 1));
     const reviewPrizeValue = reviewQuestionNumber ? CORE.PRIZE_LADDER[reviewQuestionNumber - 1] || 0 : 0;
     const reviewPrize = reviewPrizeValue === 1000000 ? "£1 MILLION" : CORE.formatPrize(reviewPrizeValue);
+    const previousPrizeValue = previousPerformance.bestAmount || 0;
+    const previousPrize = previousPrizeValue === 1000000 ? "£1 MILLION" : CORE.formatPrize(previousPrizeValue);
+    const previousQuestionBestMs = previousPerformance.bestTimesByQuestion[reachedQuestionNumber];
     const earnedMedalStage = [15, 10, 5, 3].find((stage) => stage <= correctCount);
     const earnedMedal = earnedMedalStage ? QUESTION_REWARDS[earnedMedalStage] : null;
     return <section className="millionaire-screen millionaire-results">
       {outcome === "won" && <FinalConfetti />}
-      <h2>Review</h2>{lastCorrectRecord && <div className="millionaire-result-prize">{reviewPrize}</div>}
+      <h2>Review</h2>
       <div className="millionaire-results-grid">
-        <ResultStat label="Medal achieved"><span className="millionaire-result-medal">{earnedMedal ? <img src={earnedMedal.icon} alt={earnedMedal.label} /> : "-"}</span></ResultStat>
-        <ResultStat label="Lifelines used"><span className="millionaire-result-lifelines">{usedLifelines.length ? usedLifelines.map(({ key, icon, label }) => <img key={key} src={icon} alt={label} />) : "-"}</span></ResultStat>
-        <ResultStat label="Time">{formatTime(elapsedMs)}</ResultStat>
+        <ResultStat label="Question" previous={`Previous best: ${previousPerformance.highestQuestion ? `${previousPerformance.highestQuestion} / 15` : "—"}`}>{reachedQuestionNumber} / 15</ResultStat>
+        <ResultStat label="Amount" previous={`Previous best: ${previousPerformance.highestQuestion ? previousPrize : "—"}`}>{lastCorrectRecord ? reviewPrize : "—"}</ResultStat>
+        <ResultStat label="Award"><span className="millionaire-result-medal">{earnedMedal ? <img src={earnedMedal.icon} alt={earnedMedal.label} /> : "—"}</span></ResultStat>
+        <ResultStat label="Time" previous={`Previous best: ${previousQuestionBestMs == null ? "—" : formatTime(previousQuestionBestMs)}`}>{formatTime(elapsedMs)}</ResultStat>
+        <ResultStat label="Lifelines used"><span className="millionaire-result-lifelines">{usedLifelines.length ? usedLifelines.map(({ key, icon, label }) => <img key={key} src={icon} alt={label} />) : "—"}</span></ResultStat>
       </div>
       <div className="millionaire-result-actions"><button type="button" className="millionaire-primary millionaire-final-answer" onClick={resetGame}><span className="millionaire-final-answer-label">Exit</span></button></div>
     </section>;
@@ -2913,6 +2973,7 @@ function App() {
         </button>
         {CurrentScreen()}
         {openingZooming && TitleScreen()}
+        {openingZooming && <span className="millionaire-opening-flash" aria-hidden="true" />}
       </div></div></div>
     </main></div>
     <div className="millionaire-legal-attribution">Unofficial educational classroom resource. Not affiliated with or endorsed by the owners of <em>Who Wants to Be a Millionaire?</em></div>

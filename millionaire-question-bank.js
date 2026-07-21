@@ -561,11 +561,15 @@
       ["dottedQuarterNote", "crotchet-rest", "2.5 beats"],
     ].map(([note, rest, answer], index) => hBase(`h-literacy-medium-${String(index + 16).padStart(3, "0")}`, "medium", "note-rest-sum", "What is the total value of these two symbols?", A(answer, ...["1.5 beats", "2 beats", "2.5 beats", "3 beats", "4 beats", "4.5 beats", "6 beats"].filter((choice) => choice !== answer).slice(index % 3, index % 3 + 3).concat(["1.5 beats", "2 beats", "2.5 beats", "3 beats", "4 beats", "4.5 beats", "6 beats"]).filter((choice, choiceIndex, choices) => choice !== answer && choices.indexOf(choice) === choiceIndex).slice(0, 3)), "a", `The note and rest have a combined value of ${answer}.`, "Work out the value of the note and the rest separately, then add them.", { type: "notation", notation: { kind: "restSum", note, rest, label: "One note plus one rest." } })),
     ...[
-      [["minim"], "2/4"], [["dotted-crotchet", "quaver"], "2/4"],
-      [["dotted-minim"], "3/4"], [["minim", "crotchet"], "3/4"],
-      [["semibreve"], "4/4"], [["minim", "minim"], "4/4"],
-      [["dotted-crotchet", "dotted-crotchet"], "6/8"], [["quaver-group-3", "dotted-crotchet"], "6/8"],
-    ].map(([rhythmTokens, answer], index) => hBase(`h-literacy-medium-${String(index + 24).padStart(3, "0")}`, "medium", "higher-time-signature", "Which time signature fits this complete bar?", A(answer, ...["2/4", "3/4", "4/4", "6/8"].filter((choice) => choice !== answer)), "a", `The displayed rhythms form a complete ${answer} bar.`, "Count the beats and check whether the rhythms are grouped in simple or compound time.", { type: "notation", notation: { kind: "bar", timeSignature: answer, rhythmTokens, label: `A complete ${answer} bar.` } })),
+      [["dotted-quaver-semiquaver", "quaver-2semiquavers"], "2/4"],
+      [["semiquaver-group-4", "2semiquavers-quaver"], "2/4"],
+      [["dotted-crotchet", "quaver", "dotted-quaver-semiquaver"], "3/4"],
+      [["quaver-2semiquavers", "crotchet", "2semiquavers-quaver"], "3/4"],
+      [["dotted-crotchet", "quaver", "semiquaver-group-4", "dotted-quaver-semiquaver"], "4/4"],
+      [["semiquaver-group-4", "2semiquavers-quaver", "dotted-crotchet", "quaver"], "4/4"],
+      [["quaver-group-3", "crotchet-quaver"], "6/8"],
+      [["quaver-crotchet", "quaver-group-3"], "6/8"],
+    ].map(([rhythmTokens, answer], index) => hBase(`h-literacy-medium-${String(index + 24).padStart(3, "0")}`, "medium", "higher-time-signature", "Which time signature fits this complete bar?", A(answer, ...["2/4", "3/4", "4/4", "6/8"].filter((choice) => choice !== answer)), "a", `The displayed rhythms form a complete ${answer} bar.`, "Count every subdivision and check whether the rhythms are grouped in simple or compound time.", { type: "notation", notation: { kind: "bar", timeSignature: answer, rhythmTokens, label: `A complete ${answer} bar using dotted and subdivided rhythms.` } })),
 
     // Hard: missing rests, triplet equivalence and scale-degree notes.
     // These bars use the same valid before/missing/after templates as rests.html.
