@@ -55,9 +55,22 @@
       explanation, tip, difficultyMin: range.min, difficultyMax: range.max, ...extra,
     };
   };
+  const hBase = (id, difficulty, concept, question, answers, correctAnswer, explanation, tip, extra = {}) => {
+    const range = DIFFICULTIES[difficulty];
+    return {
+      id, level: "H", category: "literacy", concept, question, answers, correctAnswer,
+      explanation, tip, difficultyMin: range.min, difficultyMax: range.max, ...extra,
+    };
+  };
   const RHYTHM_VALUE_NAMES = ["Crotchet", "Minim", "Dotted minim", "Semibreve"];
   const RHYTHM_BEATS = { Crotchet: 1, Minim: 2, "Dotted minim": 3, Semibreve: 4 };
   const RHYTHM_GLYPHS = { Crotchet: "quarterNote", Minim: "halfNote", "Dotted minim": "dottedHalfNote", Semibreve: "wholeNote" };
+  const N5_CHORD_PITCHES = {
+    "C major": ["C4", "E4", "G4"],
+    "G major": ["G4", "B4", "D5"],
+    "F major": ["F4", "A4", "C5"],
+    "A minor": ["A4", "C5", "E5"],
+  };
   const rhythmCompletion = (id, shownValues, target, answer) => {
     const shownBeats = shownValues.reduce((total, value) => total + RHYTHM_BEATS[value], 0);
     const answerChoices = [answer, ...RHYTHM_VALUE_NAMES.filter((value) => value !== answer)];
@@ -361,7 +374,7 @@
       const distractors = [...allowedSpellings.slice(index % allowedSpellings.length), ...allowedSpellings]
         .filter((choice, choiceIndex, choices) => choice !== answer && choices.indexOf(choice) === choiceIndex)
         .slice(0, 3);
-      return n5Base(`n5-literacy-easy-${String(index + 10).padStart(3, "0")}`, "easy", "accidental-note-identification", "What note is this?", A(answer, ...distractors), "a", `The note is ${answer}.`, "Identify the note position first, then read the accidental immediately before it.", { type: "notation", notation: { kind: "note", pitch, accidental, label: `The note ${answer} on the treble stave.` } });
+      return n5Base(`n5-literacy-easy-${String(index + 10).padStart(3, "0")}`, "easy", "accidental-note-identification", "What note is this?", A(answer, ...distractors), "a", `The note is ${answer}.`, "Identify the note position first, then read the accidental immediately before it.", { type: "notation", notation: { kind: "note", pitch, accidental, accidentalXOffset: -7, label: `The note ${answer} on the treble stave.` } });
     }),
     n5Base("n5-literacy-easy-029", "easy", "natural-sign-name", "What is this symbol called?", A("Natural", "Sharp", "Flat", "Key signature"), "a", "This is a natural sign. It cancels a sharp or flat.", "It returns a note to its unaltered pitch.", { type: "notation", notation: { kind: "accidentalSymbol", accidental: "natural", label: "A natural sign." } }),
     ...[
@@ -375,7 +388,18 @@
       ["dottedEighthNote", "Dotted quaver", "A dotted quaver lasts three quarters of a beat."],
       ["scotchSnap", "Scotch snap", "A Scotch snap is a semiquaver followed by a dotted quaver."],
       ["dottedQuaverSemiquaver", "Dotted quaver and semiquaver", "This group is a dotted quaver followed by a semiquaver."],
-    ].map(([term, answer, explanation], index) => n5Base(`n5-literacy-easy-${String(index + 34).padStart(3, "0")}`, "easy", "national-5-rhythm-name", "What is the name given to this rhythm?", A(answer, answer === "Scotch snap" ? "Dotted quaver and semiquaver" : "Scotch snap", "Paired quavers", "Four semiquavers"), "a", explanation, "Look carefully at the dot and the order of the short note values.", { type: "notation", notation: { kind: "rhythmSum", terms: [term], operators: [], label: explanation } })),
+    ].map(([term, answer, explanation], index) => {
+      const notation = ["dottedQuarterNote", "dottedEighthNote"].includes(term)
+        ? { kind: "glyphs", glyphs: [term], label: explanation }
+        : { kind: "rhythmSum", terms: [term], operators: [], label: explanation };
+      return n5Base(`n5-literacy-easy-${String(index + 34).padStart(3, "0")}`, "easy", "national-5-rhythm-name", "What is the name given to this rhythm?", A(answer, answer === "Scotch snap" ? "Dotted quaver and semiquaver" : "Scotch snap", "Paired quavers", "Four semiquavers"), "a", explanation, "Look carefully at the dot and the order of the short note values.", { type: "notation", notation });
+    }),
+    ...[
+      ["sharp", "What does a sharp sign do?", "Raises a note by one semitone", ["Lowers a note by one semitone", "Cancels a sharp or flat", "Raises a note by one tone"], "A sharp sign raises a note by one semitone."],
+      ["flat", "What does a flat sign do?", "Lowers a note by one semitone", ["Raises a note by one semitone", "Cancels a sharp or flat", "Lowers a note by one tone"], "A flat sign lowers a note by one semitone."],
+      ["natural", "What does a natural sign do?", "Cancels a sharp or flat", ["Raises a note by one semitone", "Lowers a note by one semitone", "Raises a note by one tone"], "A natural sign cancels a sharp or flat."],
+    ].map(([accidental, question, answer, distractors, explanation], index) => n5Base(`n5-literacy-easy-${String(index + 38).padStart(3, "0")}`, "easy", "accidental-function", question, A(answer, ...distractors), "a", explanation, "Think about how the symbol changes the pitch of a note.", { type: "notation", notation: { kind: "accidentalSymbol", accidental, label: `A ${accidental} sign.` } })),
+    n5Base("n5-literacy-easy-041", "easy", "augmentation-dot-function", "What does the dot after a note do?", A("Adds half the note’s original value", "Adds one beat", "Doubles the note’s value", "Makes the note staccato"), "a", "An augmentation dot adds half of the note’s original value.", "Work out half of the original note value, then add it on.", { type: "notation", notation: { kind: "glyphs", glyphs: ["dottedQuarterNote"], label: "A dotted crotchet showing an augmentation dot after the note." } }),
 
     // Medium: dynamics, repeat endings, intervals and beat values.
     ...[
@@ -387,9 +411,9 @@
     ...[
       ["Which dynamic is the quietest?", "pp", ["pp", "p", "f", "ff"], "Pianissimo is the quietest of these dynamics."],
       ["Which dynamic is the loudest?", "ff", ["ff", "f", "p", "pp"], "Fortissimo is the loudest of these dynamics."],
-      ["Which dynamic is quieter?", "pp", ["pp", "mp", "mf", "ff"], "Pianissimo is quieter than mezzo piano, mezzo forte and fortissimo."],
-      ["Which dynamic is louder?", "ff", ["ff", "mf", "mp", "pp"], "Fortissimo is louder than mezzo forte, mezzo piano and pianissimo."],
-    ].map(([question, answer, answers, explanation], index) => n5Base(`n5-literacy-medium-${String(index + 5).padStart(3, "0")}`, "medium", "dynamic-comparison", question, A(...answers), "a", explanation, "Order the dynamics from quietest to loudest.", { answerDisplay: "dynamic", type: "notation", notation: { kind: "dynamic", dynamic: answer, label: "A National 5 dynamics comparison." } })),
+      ["Which dynamic is the quietest?", "pp", ["pp", "mp", "mf", "ff"], "Pianissimo is the quietest of these dynamics."],
+      ["Which dynamic is the loudest?", "ff", ["ff", "mf", "mp", "pp"], "Fortissimo is the loudest of these dynamics."],
+    ].map(([question, answer, answers, explanation], index) => n5Base(`n5-literacy-medium-${String(index + 5).padStart(3, "0")}`, "medium", "dynamic-comparison", question, A(...answers), "a", explanation, "Order the dynamics from quietest to loudest.", { answerDisplay: "dynamic", type: "text" })),
     ...[
       [1, "1st-time bar", ["1st-time bar", "2nd-time bar", "Repeat sign", "Double barline"]],
       [2, "2nd-time bar", ["2nd-time bar", "1st-time bar", "Repeat sign", "Double barline"]],
@@ -400,32 +424,45 @@
       [["E4", "F4"], "2nd"], [["G4", "A4"], "2nd"], [["B4", "C5"], "2nd"],
       [["D5", "E5"], "2nd"], [["E4", "E5"], "Octave"], [["F4", "F5"], "Octave"],
       [["G4", "G5"], "Octave"], [["A4", "A5"], "Octave"],
-    ].map(([pitches, answer], index) => n5Base(`n5-literacy-medium-${String(index + 13).padStart(3, "0")}`, "medium", "interval-identification", "Name this interval.", A(answer, answer === "2nd" ? "3rd" : "7th", answer === "2nd" ? "Octave" : "6th", answer === "2nd" ? "Unison" : "2nd"), "a", `The interval is ${answer === "Octave" ? "an octave" : "a 2nd"}.`, "Count both the starting note and the finishing note.", { type: "notation", notation: { kind: "interval", pitches, label: `Two notes forming ${answer === "Octave" ? "an octave" : "a second"}.` } })),
+    ].map(([pitches, answer], index) => n5Base(`n5-literacy-medium-${String(index + 13).padStart(3, "0")}`, "medium", "interval-identification", "What interval is this?", A(answer, answer === "2nd" ? "3rd" : "7th", answer === "2nd" ? "Octave" : "6th", answer === "2nd" ? "Unison" : "2nd"), "a", `The interval is ${answer === "Octave" ? "an octave" : "a 2nd"}.`, "Count both the starting note and the finishing note.", { type: "notation", notation: { kind: "interval", pitches, matchStepLeapLayout: true, label: `Two notes forming ${answer === "Octave" ? "an octave" : "a second"}.` } })),
     ...[
       ["dottedQuarterNote", "Dotted crotchet", "1.5 beats", ["1 beat", "0.75 beat", "2 beats"]],
       ["dottedEighthNote", "Dotted quaver", "0.75 beat", ["0.5 beat", "1 beat", "1.5 beats"]],
       ["dottedQuaverSemiquaver", "Dotted quaver and semiquaver", "1 beat", ["0.75 beat", "1.25 beats", "1.5 beats"]],
       ["scotchSnap", "Scotch snap", "1 beat", ["0.75 beat", "1.25 beats", "1.5 beats"]],
-    ].flatMap(([term, name, answer, distractors], index) => [
-      n5Base(`n5-literacy-medium-${String(index + 21).padStart(3, "0")}`, "medium", "national-5-rhythm-beats", "What is the total value of this rhythm?", A(answer, ...distractors), "a", `${name} has a total value of ${answer}.`, "Add the value of the dot or the grouped notes.", { type: "notation", notation: { kind: "rhythmSum", terms: [term], operators: [], label: name } }),
-      n5Base(`n5-literacy-medium-${String(index + 25).padStart(3, "0")}`, "medium", "national-5-rhythm-name", "What is this rhythm called?", A(name, ...["Scotch snap", "Dotted quaver and semiquaver", "Paired quavers", "Four semiquavers"].filter((choice) => choice !== name).slice(0, 3)), "a", `This is ${name.toLowerCase()}.`, "Look at the order of the note values and any augmentation dot.", { type: "notation", notation: { kind: "rhythmSum", terms: [term], operators: [], label: name } }),
-    ]),
+    ].flatMap(([term, name, answer, distractors], index) => {
+      const notation = term === "dottedQuarterNote"
+        ? { kind: "glyphs", glyphs: [term], label: name }
+        : { kind: "rhythmSum", terms: [term], operators: [], label: name };
+      return [
+        n5Base(`n5-literacy-medium-${String(index + 21).padStart(3, "0")}`, "medium", "national-5-rhythm-beats", "What is the total value of this rhythm?", A(answer, ...distractors), "a", `${name} has a total value of ${answer}.`, "Add the value of the dot or the grouped notes.", { type: "notation", notation }),
+        n5Base(`n5-literacy-medium-${String(index + 25).padStart(3, "0")}`, "medium", "national-5-rhythm-name", name === "Dotted quaver and semiquaver" ? "Which statement best describes the rhythm you see?" : "What is this rhythm called?", A(name, ...["Scotch snap", "Dotted quaver and semiquaver", "Paired quavers", "Four semiquavers"].filter((choice) => choice !== name).slice(0, 3)), "a", `This is ${name.toLowerCase()}.`, "Look at the order of the note values and any augmentation dot.", { type: "notation", notation }),
+      ];
+    }),
     ...[
-      [["dottedQuarterNote", "eighthNote"], "2/4"],
-      [["dottedQuarterNote", "dottedQuarterNote"], "3/4"],
-      [["dottedQuarterNote", "dottedQuarterNote", "quarterNote"], "4/4"],
-      [["dottedQuaverSemiquaver", "quarterNote"], "2/4"],
-      [["scotchSnap", "halfNote"], "3/4"],
-      [["dottedQuaverSemiquaver", "dottedHalfNote"], "4/4"],
-    ].map(([glyphs, answer], index) => n5Base(`n5-literacy-medium-${String(index + 29).padStart(3, "0")}`, "medium", "national-5-time-signature", "Which time signature fits this complete bar?", A(answer, answer === "2/4" ? "3/4" : "2/4", answer === "4/4" ? "3/4" : "4/4", "5/4"), "a", `The notes fill a complete ${answer} bar.`, "Add the beat values, including the dot.", { type: "notation", notation: { kind: "bar", glyphs, label: `A complete ${answer} bar using National 5 rhythms.` } })),
+      [["dotted-crotchet", "quaver"], "2/4"],
+      [["dotted-quaver-semiquaver", "crotchet", "crotchet"], "3/4"],
+      [["crotchet", "crotchet", "crotchet", "dotted-quaver-semiquaver"], "4/4"],
+      [["dotted-quaver-semiquaver", "crotchet"], "2/4"],
+      [["crotchet", "quaver-2semiquavers", "crotchet"], "3/4"],
+      [["minim", "quaver", "quaver", "quaver", "quaver"], "4/4"],
+    ].map(([rhythmTokens, answer], index) => n5Base(`n5-literacy-medium-${String(index + 29).padStart(3, "0")}`, "medium", "national-5-time-signature", "Which time signature fits this complete bar?", A(answer, answer === "2/4" ? "3/4" : "2/4", answer === "4/4" ? "3/4" : "4/4", "5/4"), "a", `The notes fill a complete ${answer} bar.`, "Add the beat values, including the dot.", { type: "notation", notation: { kind: "bar", timeSignature: answer, rhythmTokens, label: `A complete ${answer} bar using National 5 rhythms.` } })),
+    ...[
+      ["How many semiquavers fit into a quaver?", "sixteenthNote", "eighthNote", "2", ["4", "1", "8"], "Two semiquavers have the same total value as one quaver.", "A semiquaver compared with a quaver."],
+      ["How many semiquavers fit into a crotchet?", "sixteenthNote", "quarterNote", "4", ["2", "8", "3"], "Four semiquavers have the same total value as one crotchet.", "A semiquaver compared with a crotchet."],
+      ["How many quavers fit into a minim?", "eighthNote", "halfNote", "4", ["2", "8", "6"], "A minim lasts two beats, so four quavers fit into it.", "A quaver compared with a minim."],
+      ["How many crotchets fit into a semibreve?", "quarterNote", "wholeNote", "4", ["2", "8", "3"], "A semibreve lasts four beats, so four crotchets fit into it.", "A crotchet compared with a semibreve."],
+    ].map(([question, smaller, larger, answer, distractors, explanation, label], index) => n5Base(`n5-literacy-medium-${String(index + 35).padStart(3, "0")}`, "medium", "note-value-comparison", question, A(answer, ...distractors), "a", explanation, "Compare the beat value of the larger note with the smaller note value.", { type: "notation", notation: { kind: "rhythmSum", terms: [smaller, larger], operators: ["→"], label } })),
+    ...[
+      ["G major", "Which note is sharpened in G major?", "F", ["C", "G", "B"], "G major has one sharp: F sharp."],
+      ["F major", "Which note is flattened in F major?", "B", ["F", "E", "A"], "F major has one flat: B flat."],
+    ].map(([signature, question, answer, distractors, explanation], index) => n5Base(`n5-literacy-medium-${String(index + 39).padStart(3, "0")}`, "medium", "key-signature-accidental", question, A(answer, ...distractors), "a", explanation, "Read the accidental shown in the key signature and identify its line or space.", { type: "notation", notation: { kind: "keySignature", signature, label: `The key signature of ${signature}.` } })),
 
     // Hard: chords, sforzando, tone/semitone decisions and calculations.
-    ...[
-      ["C major", ["C4", "E4", "G4"]], ["C major", ["E4", "G4", "C5"]],
-      ["G major", ["G4", "B4", "D5"]], ["G major", ["B4", "D5", "G5"]],
-      ["F major", ["F4", "A4", "C5"]], ["F major", ["A4", "C5", "F5"]],
-      ["A minor", ["A4", "C5", "E5"]], ["A minor", ["C4", "E4", "A4"]],
-    ].map(([answer, pitches], index) => n5Base(`n5-literacy-hard-${String(index + 1).padStart(3, "0")}`, "hard", "chord-identification", "Name the chord outlined.", A(answer, ...["C major", "G major", "F major", "A minor"].filter((choice) => choice !== answer)), "a", `The notes belong to the chord of ${answer}.`, "Identify the three note names, then match them to the four National 5 chords.", { type: "notation", notation: { kind: "chord", pitches, label: `The notes of a ${answer} chord.` } })),
+    ...["C major", "C major", "G major", "G major", "F major", "F major", "A minor", "A minor"].map((answer, index) => {
+      const chordPitches = N5_CHORD_PITCHES[answer];
+      return n5Base(`n5-literacy-hard-${String(index + 1).padStart(3, "0")}`, "hard", "chord-identification", "Name the chord outlined.", A(answer, ...["C major", "G major", "F major", "A minor"].filter((choice) => choice !== answer)), "a", `The notes belong to the chord of ${answer}.`, "Identify the three note names, then match them to the four National 5 chords.", { type: "notation", notation: { kind: "n5ChordOutline", pitches: chordPitches, label: `The notes of the ${answer} chord.` } });
+    }),
     ...[
       ["What is this dynamic called?", "Sforzando", ["Fortissimo", "Pianissimo", "Forte"]],
       ["What does this dynamic mean?", "A sudden strong accent", ["Very quiet", "Gradually louder", "Very loud throughout"]],
@@ -438,7 +475,7 @@
       ["F major", ["B4", "C5"], "Tone"], ["F major", ["G4", "A4"], "Tone"],
       ["A minor", ["E4", "F4"], "Semitone"], ["A minor", ["G4", "A4"], "Tone"],
       ["A minor", ["B4", "C5"], "Semitone"], ["A minor", ["C5", "D5"], "Tone"],
-    ].map(([keySignature, pitches, answer], index) => n5Base(`n5-literacy-hard-${String(index + 12).padStart(3, "0")}`, "hard", "tone-or-semitone", "What is the distance between these two notes?", A(answer, answer === "Tone" ? "Semitone" : "Tone", "Octave", "Unison"), "a", `In ${keySignature}, these notes are a ${answer.toLowerCase()} apart.`, "Apply the key signature before judging the distance.", { type: "notation", notation: { kind: "interval", pitches, keySignature, label: `Two adjacent notes in the key signature of ${keySignature}.` } })),
+    ].map(([keySignature, pitches, answer], index) => n5Base(`n5-literacy-hard-${String(index + 12).padStart(3, "0")}`, "hard", "tone-or-semitone", "What is the distance between these two notes?", A(answer, answer === "Tone" ? "Semitone" : "Tone", "Octave", "Unison"), "a", `In ${keySignature}, these notes are a ${answer.toLowerCase()} apart.`, "Apply the key signature before judging the distance.", { type: "notation", notation: { kind: "interval", pitches, keySignature, noteXOffset: -45, keySignatureXOffset: -15, toneSemitoneZoom: true, label: `Two adjacent notes in the key signature of ${keySignature}.` } })),
     ...[
       [["dottedQuarterNote", "dottedEighthNote"], ["+"], "2.25 beats"],
       [["dottedQuaverSemiquaver", "dottedQuarterNote"], ["+"], "2.5 beats"],
@@ -457,6 +494,106 @@
       [[3, 4], ["dottedQuaverSemiquaver", "quarterNote", "blank"], "Crotchet"],
       [[4, 4], ["scotchSnap", "halfNote", "blank"], "Crotchet"],
     ].map(([time, glyphs, answer], index) => n5Base(`n5-literacy-hard-${String(index + 32).padStart(3, "0")}`, "hard", "national-5-bar-completion", "Which note value completes this bar?", A(answer, answer === "Quaver" ? "Crotchet" : "Quaver", "Semiquaver", "Dotted crotchet"), "a", `A ${answer.toLowerCase()} completes this ${time[0]}/${time[1]} bar.`, "Add the shown values, then subtract from the number of beats required.", { type: "notation", notation: { kind: "bar", time, glyphs, label: `A ${time[0]}/${time[1]} bar using a National 5 dotted rhythm with one note missing.` } })),
+    ...[
+      ["How many semiquavers fit into a dotted quaver?", "sixteenthNote", "dottedEighthNote", "3", ["2", "4", "6"], "A dotted quaver lasts three quarters of a beat, so three semiquavers fit into it.", "A semiquaver compared with a dotted quaver."],
+      ["How many semiquavers fit into a dotted crotchet?", "sixteenthNote", "dottedQuarterNote", "6", ["3", "4", "8"], "A dotted crotchet lasts one and a half beats, so six semiquavers fit into it.", "A semiquaver compared with a dotted crotchet."],
+      ["How many quavers fit into a dotted crotchet?", "eighthNote", "dottedQuarterNote", "3", ["2", "4", "6"], "A dotted crotchet lasts one and a half beats, so three quavers fit into it.", "A quaver compared with a dotted crotchet."],
+      ["How many dotted quavers fit into a dotted crotchet?", "dottedEighthNote", "dottedQuarterNote", "2", ["3", "4", "6"], "A dotted crotchet is worth twice as much as a dotted quaver, so two dotted quavers fit into it.", "A dotted quaver compared with a dotted crotchet."],
+    ].map(([question, smaller, larger, answer, distractors, explanation, label], index) => n5Base(`n5-literacy-hard-${String(index + 38).padStart(3, "0")}`, "hard", "note-value-comparison", question, A(answer, ...distractors), "a", explanation, "Compare the beat value of the larger note with the smaller note value.", { type: "notation", notation: { kind: "rhythmSum", terms: [smaller, larger], operators: ["→"], label } })),
+  ];
+
+  const higherLiteracy = [
+    // Easy: Higher bass-clef range, diatonic intervals, articulation
+    // definitions and the four National 5 key signatures.
+    ...[
+      ["E2", "E"], ["F2", "F"], ["G2", "G"], ["A2", "A"], ["B2", "B"],
+      ["C3", "C"], ["D3", "D"], ["E3", "E"], ["F3", "F"], ["G3", "G"],
+      ["A3", "A"], ["B3", "B"], ["C4", "C"],
+    ].map(([pitch, answer], index) => {
+      const distractors = ["C", "D", "E", "F", "G", "A", "B"].filter((choice) => choice !== answer);
+      return hBase(`h-literacy-easy-${String(index + 1).padStart(3, "0")}`, "easy", "bass-clef-note-identification", "What note is this?", A(answer, ...distractors.slice(index % 4, index % 4 + 3).concat(distractors).slice(0, 3)), "a", `This bass-clef note is ${answer}.`, "Use the bass-clef line and space names, then count any ledger lines carefully.", { type: "notation", notation: { kind: "note", clef: "bass", pitch, label: `The note ${answer} in the bass clef.` } });
+    }),
+    ...[
+      [["E4", "F4"], "2nd"], [["E4", "G4"], "3rd"], [["E4", "A4"], "4th"],
+      [["E4", "B4"], "5th"], [["D4", "B4"], "6th"], [["D4", "C5"], "7th"],
+      [["C4", "C5"], "Octave"],
+    ].map(([pitches, answer], index) => hBase(`h-literacy-easy-${String(index + 14).padStart(3, "0")}`, "easy", "diatonic-interval-identification", "What interval is this?", A(answer, ...["2nd", "3rd", "4th", "5th", "6th", "7th", "Octave"].filter((choice) => choice !== answer).slice(index % 3, index % 3 + 3).concat(["2nd", "3rd", "4th", "5th", "6th", "7th", "Octave"]).filter((choice, choiceIndex, choices) => choice !== answer && choices.indexOf(choice) === choiceIndex).slice(0, 3)), "a", `Counting both written notes gives ${answer === "Octave" ? "an octave" : `a ${answer}`}.`, "Count the first note as one, then count each line and space up to the second note.", { type: "notation", notation: { kind: "interval", pitches, matchStepLeapLayout: true, label: `Two treble-clef notes forming ${answer === "Octave" ? "an octave" : `a ${answer}`}.` } })),
+    ...[
+      ["accent", "What does an accent tell a performer to do?", "Play the note with extra emphasis", ["Play the note short and detached", "Play the notes smoothly", "Play the phrase more quietly"], "An accent gives a note extra emphasis."],
+      ["staccato", "What does staccato tell a performer to do?", "Play short and detached", ["Play smoothly and connected", "Play with extra emphasis", "Play gradually louder"], "Staccato notes are played short and detached."],
+      ["slur", "What does a slur tell a performer to do?", "Play the notes smoothly and connected", ["Play every note with an accent", "Play the notes short and detached", "Repeat the complete phrase"], "A slur tells the performer to play the notes smoothly and connected."],
+      ["phrase", "What does a phrase mark show?", "Where a complete musical phrase is shaped", ["Where every note is detached", "Where the music must repeat", "Where one note is strongly accented"], "A phrase mark shows the span of a complete musical phrase."],
+    ].map(([marking, question, answer, distractors, explanation], index) => hBase(`h-literacy-easy-${String(index + 21).padStart(3, "0")}`, "easy", "articulation-definition", question, A(answer, ...distractors), "a", explanation, "Think about how the marking changes the way the notes are performed.", { marking })),
+    ...[
+      ["C major", "What is this major key signature?", ["C major", "G major", "F major", "D major"]],
+      ["G major", "What is this major key signature?", ["G major", "F major", "C major", "D major"]],
+      ["F major", "What is this major key signature?", ["F major", "G major", "C major", "D major"]],
+      ["A minor", "What is this minor key signature?", ["A minor", "E minor", "C minor", "D minor"]],
+    ].map(([signature, question, answers], index) => hBase(`h-literacy-easy-${String(index + 25).padStart(3, "0")}`, "easy", "key-signature-identification", question, A(...answers), "a", `${signature} has ${signature === "G major" ? "one sharp" : signature === "F major" ? "one flat" : "no sharps or flats"} in its key signature.`, "Count the sharps or flats and check their positions on the stave.", { type: "notation", notation: { kind: "keySignature", signature, label: `The key signature of ${signature}.` } })),
+
+    // Medium: visual articulation, D.C., rest recognition and arithmetic,
+    // plus simple and 6/8 time-signature identification.
+    ...[
+      ["accent", "Accent", ["Accent", "Staccato", "Slur", "Phrase mark"]],
+      ["staccato", "Staccato", ["Staccato", "Accent", "Slur", "Phrase mark"]],
+      ["slur", "Slur", ["Slur", "Phrase mark", "Accent", "Staccato"]],
+      ["phrase", "Phrase mark", ["Phrase mark", "Slur", "Staccato", "Accent"]],
+    ].map(([marking, answer, answers], index) => hBase(`h-literacy-medium-${String(index + 1).padStart(3, "0")}`, "medium", "articulation-identification", "What is this articulation marking called?", A(...answers), "a", `This is ${answer === "Accent" ? "an accent" : answer === "Phrase mark" ? "a phrase mark" : `a ${answer.toLowerCase()}`}.`, "Look at whether the marking applies to one note, a short group or a complete phrase.", { type: "notation", notation: { kind: "articulation", marking, label: `${answer} shown on musical notation.` } })),
+    hBase("h-literacy-medium-005", "medium", "da-capo-definition", "What does D.C. instruct a performer to do?", A("Return to the beginning and play again", "Repeat only the previous bar", "Jump to the coda", "Finish immediately"), "a", "Da capo, abbreviated D.C., means return to the beginning and play again.", "The Italian words da capo mean from the beginning."),
+    ...[
+      ["quaver-rest", "Quaver rest", "0.5 beat"],
+      ["crotchet-rest", "Crotchet rest", "1 beat"],
+      ["dotted-crotchet-rest", "Dotted crotchet rest", "1.5 beats"],
+      ["minim-rest", "Minim rest", "2 beats"],
+      ["semibreve-rest", "Semibreve rest", "4 beats"],
+    ].flatMap(([rest, name, value], index) => [
+      hBase(`h-literacy-medium-${String(index + 6).padStart(3, "0")}`, "medium", "rest-name", "What is this rest called?", A(name, ...["Quaver rest", "Crotchet rest", "Dotted crotchet rest", "Minim rest", "Semibreve rest"].filter((choice) => choice !== name).slice(0, 3)), "a", `This symbol is a ${name.toLowerCase()}.`, "Compare its shape and stave position with the standard rest symbols.", { type: "notation", notation: { kind: "rest", rest, label: name } }),
+      hBase(`h-literacy-medium-${String(index + 11).padStart(3, "0")}`, "medium", "rest-value", "What is the value of this rest?", A(value, ...["0.5 beat", "1 beat", "1.5 beats", "2 beats", "4 beats"].filter((choice) => choice !== value).slice(0, 3)), "a", `A ${name.toLowerCase()} is worth ${value}.`, "Match the rest symbol to the equivalent note value.", { type: "notation", notation: { kind: "rest", rest, label: name } }),
+    ]),
+    ...[
+      ["quarterNote", "quaver-rest", "1.5 beats"],
+      ["dottedQuarterNote", "quaver-rest", "2 beats"],
+      ["halfNote", "crotchet-rest", "3 beats"],
+      ["quarterNote", "minim-rest", "3 beats"],
+      ["eighthNote", "dotted-crotchet-rest", "2 beats"],
+      ["dottedHalfNote", "dotted-crotchet-rest", "4.5 beats"],
+      ["halfNote", "semibreve-rest", "6 beats"],
+      ["dottedQuarterNote", "crotchet-rest", "2.5 beats"],
+    ].map(([note, rest, answer], index) => hBase(`h-literacy-medium-${String(index + 16).padStart(3, "0")}`, "medium", "note-rest-sum", "What is the total value of these two symbols?", A(answer, ...["1.5 beats", "2 beats", "2.5 beats", "3 beats", "4 beats", "4.5 beats", "6 beats"].filter((choice) => choice !== answer).slice(index % 3, index % 3 + 3).concat(["1.5 beats", "2 beats", "2.5 beats", "3 beats", "4 beats", "4.5 beats", "6 beats"]).filter((choice, choiceIndex, choices) => choice !== answer && choices.indexOf(choice) === choiceIndex).slice(0, 3)), "a", `The note and rest have a combined value of ${answer}.`, "Work out the value of the note and the rest separately, then add them.", { type: "notation", notation: { kind: "restSum", note, rest, label: "One note plus one rest." } })),
+    ...[
+      [["minim"], "2/4"], [["dotted-crotchet", "quaver"], "2/4"],
+      [["dotted-minim"], "3/4"], [["minim", "crotchet"], "3/4"],
+      [["semibreve"], "4/4"], [["minim", "minim"], "4/4"],
+      [["dotted-crotchet", "dotted-crotchet"], "6/8"], [["quaver-group-3", "dotted-crotchet"], "6/8"],
+    ].map(([rhythmTokens, answer], index) => hBase(`h-literacy-medium-${String(index + 24).padStart(3, "0")}`, "medium", "higher-time-signature", "Which time signature fits this complete bar?", A(answer, ...["2/4", "3/4", "4/4", "6/8"].filter((choice) => choice !== answer)), "a", `The displayed rhythms form a complete ${answer} bar.`, "Count the beats and check whether the rhythms are grouped in simple or compound time.", { type: "notation", notation: { kind: "bar", timeSignature: answer, rhythmTokens, label: `A complete ${answer} bar.` } })),
+
+    // Hard: missing rests, triplet equivalence and scale-degree notes.
+    // These bars use the same valid before/missing/after templates as rests.html.
+    // In compound time, every array section is built around a dotted-crotchet beat,
+    // so quaver groups and missing rests never cross a compound-beat boundary.
+    ...[
+      [[2, 4], [], "crotchet-rest", ["crotchet"], "Crotchet rest"],
+      [[2, 4], ["quaver"], "quaver-rest", ["crotchet"], "Quaver rest"],
+      [[3, 4], ["crotchet"], "crotchet-rest", ["crotchet"], "Crotchet rest"],
+      [[3, 4], ["quaver-group-2"], "crotchet-rest", ["crotchet"], "Crotchet rest"],
+      [[4, 4], ["minim"], "minim-rest", [], "Minim rest"],
+      [[4, 4], ["crotchet", "crotchet"], "minim-rest", [], "Minim rest"],
+      [[6, 8], [], "dotted-crotchet-rest", ["dotted-crotchet"], "Dotted crotchet rest"],
+      [[6, 8], ["crotchet", "quaver"], "dotted-crotchet-rest", [], "Dotted crotchet rest"],
+      [[9, 8], ["dotted-crotchet"], "dotted-crotchet-rest", ["dotted-crotchet"], "Dotted crotchet rest"],
+      [[9, 8], ["dotted-crotchet", "quaver"], "crotchet-rest", ["dotted-crotchet"], "Crotchet rest"],
+      [[12, 8], ["dotted-crotchet", "quaver-group-3"], "dotted-crotchet-rest", ["crotchet", "quaver"], "Dotted crotchet rest"],
+      [[12, 8], ["dotted-crotchet", "quaver-group-3", "quaver"], "crotchet-rest", ["dotted-crotchet"], "Crotchet rest"],
+    ].map(([time, before, missingRest, after, answer], index) => hBase(`h-literacy-hard-${String(index + 1).padStart(3, "0")}`, "hard", "missing-rest", "Which rest completes this bar?", A(answer, ...["Quaver rest", "Crotchet rest", "Dotted crotchet rest", "Minim rest", "Semibreve rest"].filter((choice) => choice !== answer).slice(index % 2, index % 2 + 3).concat(["Quaver rest", "Crotchet rest", "Dotted crotchet rest", "Minim rest", "Semibreve rest"]).filter((choice, choiceIndex, choices) => choice !== answer && choices.indexOf(choice) === choiceIndex).slice(0, 3)), "a", `A ${answer.toLowerCase()} supplies the missing value and completes the ${time[0]}/${time[1]} bar.`, "Add the visible note values, then choose the rest that supplies the missing value.", { type: "notation", notation: { kind: "restBar", time, before, missingRest, after, source: "rests.html", label: `A ${time[0]}/${time[1]} bar with one missing rest.` } })),
+    hBase("h-literacy-hard-013", "hard", "triplet-equivalence", "How many quaver-triplet groups fit into a semibreve?", A("4", "3", "6", "8"), "a", "One quaver-triplet group lasts one beat, so four groups fit into a four-beat semibreve.", "Treat each complete quaver-triplet group as one crotchet beat.", { type: "notation", notation: { kind: "triplet", triplet: "quaver", comparison: "wholeNote", label: "A quaver-triplet group compared with a semibreve." } }),
+    hBase("h-literacy-hard-014", "hard", "triplet-equivalence", "Which rhythm has the same total value as a crotchet-triplet group?", A("Minim", "Crotchet", "Dotted crotchet", "Semibreve"), "a", "A complete crotchet-triplet group lasts two beats, the same as a minim.", "Three crotchet triplets fit evenly into two crotchet beats.", { type: "notation", notation: { kind: "triplet", triplet: "crotchet", label: "A group of three crotchet triplets." } }),
+    hBase("h-literacy-hard-015", "hard", "triplet-equivalence", "Which rhythm has the same total value as a quaver-triplet group?", A("Crotchet", "Quaver", "Minim", "Dotted crotchet"), "a", "A complete quaver-triplet group lasts one beat, the same as a crotchet.", "Three quaver triplets fit evenly into one crotchet beat.", { type: "notation", notation: { kind: "triplet", triplet: "quaver", label: "A group of three quaver triplets." } }),
+    ...[
+      ["C major", "tonic", "C"], ["C major", "subdominant", "F"], ["C major", "dominant", "G"],
+      ["G major", "tonic", "G"], ["G major", "subdominant", "C"], ["G major", "dominant", "D"],
+      ["F major", "tonic", "F"], ["F major", "subdominant", "B flat"], ["F major", "dominant", "C"],
+      ["A minor", "tonic", "A"], ["A minor", "subdominant", "D"], ["A minor", "dominant", "E"],
+    ].map(([key, degree, answer], index) => hBase(`h-literacy-hard-${String(index + 16).padStart(3, "0")}`, "hard", "tonic-subdominant-dominant", `The key is ${key}. What is the ${degree} note?`, A(answer, ...["A", "B flat", "B", "C", "D", "E", "F", "G"].filter((choice) => choice !== answer).slice(index % 4, index % 4 + 3).concat(["A", "B flat", "B", "C", "D", "E", "F", "G"]).filter((choice, choiceIndex, choices) => choice !== answer && choices.indexOf(choice) === choiceIndex).slice(0, 3)), "a", `In ${key}, the ${degree} note is ${answer}.`, degree === "tonic" ? "The tonic is the first note of the scale." : degree === "subdominant" ? "The subdominant is the fourth note of the scale." : "The dominant is the fifth note of the scale.")),
   ];
 
   const concepts = [
@@ -553,6 +690,7 @@
   const n3Concepts = splitExistingQuestions(concepts);
   const n4LiteracyPools = groupQuestionsByDifficultyRange(n4Literacy);
   const n5LiteracyPools = groupQuestionsByDifficultyRange(n5Literacy);
+  const higherLiteracyPools = groupQuestionsByDifficultyRange(higherLiteracy);
   // Replace a createPlaceholderLevel(...) entry with real pools when that
   // course's final questions are ready. No game-engine change will be needed.
   const questionPools = {
@@ -571,7 +709,11 @@
       literacy: n5LiteracyPools[difficulty],
       concepts: [],
     }])),
-    H: createPlaceholderLevel("H"),
+    H: Object.fromEntries(Object.keys(DIFFICULTIES).map((difficulty) => [difficulty, {
+      listening: [],
+      literacy: higherLiteracyPools[difficulty],
+      concepts: [],
+    }])),
     AH: createPlaceholderLevel("AH"),
   };
 

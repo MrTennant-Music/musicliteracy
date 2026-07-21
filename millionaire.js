@@ -5,25 +5,25 @@ const QUESTION_POOLS = window.MILLIONAIRE_QUESTION_POOLS || {};
 
 const MILLIONAIRE_SOUND_PATH = "./soundsmillionaire/";
 window.MILLIONAIRE_SOUND_CONFIG = {
-  opening: `${MILLIONAIRE_SOUND_PATH}opening menu.ogg`,
-  start: `${MILLIONAIRE_SOUND_PATH}start.ogg`,
-  lifeline: `${MILLIONAIRE_SOUND_PATH}lifeline.ogg`,
-  earlyQuestion: `${MILLIONAIRE_SOUND_PATH}11 $100-$1,000 Questions.ogg`,
-  earlyFinalAnswer: `${MILLIONAIRE_SOUND_PATH}final answer 1-5.ogg`,
-  earlyCorrect: `${MILLIONAIRE_SOUND_PATH}correct 1-5.ogg`,
-  earlyIncorrect: `${MILLIONAIRE_SOUND_PATH}incorrect 1-5.ogg`,
-  thousandWin: `${MILLIONAIRE_SOUND_PATH}12 Win $1,000.ogg`,
+  opening: `${MILLIONAIRE_SOUND_PATH}opening menu.mp3`,
+  start: `${MILLIONAIRE_SOUND_PATH}start.mp3`,
+  lifeline: `${MILLIONAIRE_SOUND_PATH}lifeline.mp3`,
+  earlyQuestion: `${MILLIONAIRE_SOUND_PATH}11 $100-$1,000 Questions.mp3`,
+  earlyFinalAnswer: `${MILLIONAIRE_SOUND_PATH}final answer 1-5.mp3`,
+  earlyCorrect: `${MILLIONAIRE_SOUND_PATH}correct 1-5.mp3`,
+  earlyIncorrect: `${MILLIONAIRE_SOUND_PATH}incorrect 1-5.mp3`,
+  thousandWin: `${MILLIONAIRE_SOUND_PATH}12 Win $1,000.mp3`,
   stages: {
-    6: ["13 Let's Play $2,000.ogg", "14 $2,000 Question.ogg", "15 $2,000 Final Answer-.ogg", "16 $2,000 Lose.ogg", "17 $2,000 Win.ogg"],
-    7: ["18 Let's Play $4,000.ogg", "19 $4,000 Question.ogg", "20 $4,000 Final Answer-.ogg", "21 $4,000 Lose.ogg", "22 $4,000 Win.ogg"],
-    8: ["23 Let's Play $8,000.ogg", "24 $8,000 Question.ogg", "25 $8,000 Final Answer-.ogg", "26 $8,000 Lose.ogg", "27 $8,000 Win.ogg"],
-    9: ["28 Let's Play $16,000.ogg", "29 $16,000 Question.ogg", "30 $16,000 Final Answer-.ogg", "31 $16,000 Lose.ogg", "32 $16,000 Win.ogg"],
-    10: ["33 Let's Play $32,000.ogg", "34 $32,000 Question.ogg", "35 $32,000 Final Answer-.ogg", "36 $32,000 Lose.ogg", "37 $32,000 Win.ogg"],
-    11: ["38 Let's Play $64,000.ogg", "39 $64,000 Question.ogg", "40 $64,000 Final Answer-.ogg", "41 $64,000 Lose.ogg", "42 $64,000 Win.ogg"],
-    12: ["43 Let's Play $125,000.ogg", "44 $125,000 Question.ogg", "45 $125,000 Final Answer-.ogg", "46 $125,000 Lose.ogg", "47 $125,000 Win.ogg"],
-    13: ["48 Let's Play $250,000.ogg", "49 $250,000 Question.ogg", "50 $250,000 Final Answer-.ogg", "51 $250,000 Lose.ogg", "52 $250,000 Win.ogg"],
-    14: ["53 Let's Play $500,000.ogg", "54 $500,000 Question.ogg", "55 $500,000 Final Answer-.ogg", "56 $500,000 Lose.ogg", "57 $500,000 Win.ogg"],
-    15: ["58 Let's Play $1,000,000.ogg", "59 $1,000,000 Question.ogg", "60 $1,000,000 Final Answer-.ogg", "61 $1,000,000 Lose.ogg", "62 $1,000,000 Win.ogg"],
+    6: ["13 Let's Play $2,000.mp3", "14 $2,000 Question.mp3", "15 $2,000 Final Answer-.mp3", "16 $2,000 Lose.mp3", "17 $2,000 Win.mp3"],
+    7: ["18 Let's Play $4,000.mp3", "19 $4,000 Question.mp3", "20 $4,000 Final Answer-.mp3", "21 $4,000 Lose.mp3", "22 $4,000 Win.mp3"],
+    8: ["23 Let's Play $8,000.mp3", "24 $8,000 Question.mp3", "25 $8,000 Final Answer-.mp3", "26 $8,000 Lose.mp3", "27 $8,000 Win.mp3"],
+    9: ["28 Let's Play $16,000.mp3", "29 $16,000 Question.mp3", "30 $16,000 Final Answer-.mp3", "31 $16,000 Lose.mp3", "32 $16,000 Win.mp3"],
+    10: ["33 Let's Play $32,000.mp3", "34 $32,000 Question.mp3", "35 $32,000 Final Answer-.mp3", "36 $32,000 Lose.mp3", "37 $32,000 Win.mp3"],
+    11: ["38 Let's Play $64,000.mp3", "39 $64,000 Question.mp3", "40 $64,000 Final Answer-.mp3", "41 $64,000 Lose.mp3", "42 $64,000 Win.mp3"],
+    12: ["43 Let's Play $125,000.mp3", "44 $125,000 Question.mp3", "45 $125,000 Final Answer-.mp3", "46 $125,000 Lose.mp3", "47 $125,000 Win.mp3"],
+    13: ["48 Let's Play $250,000.mp3", "49 $250,000 Question.mp3", "50 $250,000 Final Answer-.mp3", "51 $250,000 Lose.mp3", "52 $250,000 Win.mp3"],
+    14: ["53 Let's Play $500,000.mp3", "54 $500,000 Question.mp3", "55 $500,000 Final Answer-.mp3", "56 $500,000 Lose.mp3", "57 $500,000 Win.mp3"],
+    15: ["58 Let's Play $1,000,000.mp3", "59 $1,000,000 Question.mp3", "60 $1,000,000 Final Answer-.mp3", "61 $1,000,000 Lose.mp3", "62 $1,000,000 Win.mp3"],
   },
 };
 
@@ -674,13 +674,14 @@ function AutoFitAnswer({ answer, question }) {
   const contentRef = useRef(null);
   const textRef = useRef(null);
   const rhythm = (question?.notation?.kind === "bar" || (question?.notation?.kind === "rhythmSum" && Number.isFinite(question.notation.total))) ? RHYTHM_ANSWER_VALUES[answer.text] : null;
-  const timeSignature = question?.notation?.kind === "bar" && /^([2-5])\/4$/.test(answer.text) ? answer.text : null;
+  const rest = question?.notation?.kind === "restBar" ? REST_ANSWER_VALUES[answer.text] : null;
+  const timeSignature = question?.notation?.kind === "bar" && /^(?:[2-5]\/4|6\/8)$/.test(answer.text) ? answer.text : null;
   const dynamic = question?.answerDisplay === "dynamic" && DYNAMIC_SYMBOL_KEYS[answer.text] ? answer.text : null;
 
   useLayoutEffect(() => {
     const content = contentRef.current;
     const text = textRef.current;
-    if (!content || !text || rhythm || timeSignature || dynamic) return undefined;
+    if (!content || !text || rhythm || rest || timeSignature || dynamic) return undefined;
 
     function fitText() {
       text.classList.remove("is-wrapped");
@@ -701,9 +702,9 @@ function AutoFitAnswer({ answer, question }) {
       observer?.disconnect();
       window.removeEventListener("resize", fitText);
     };
-  }, [answer.letter, answer.text, dynamic, rhythm, timeSignature]);
+  }, [answer.letter, answer.text, dynamic, rest, rhythm, timeSignature]);
 
-  return <span ref={contentRef} className="millionaire-answer-content"><span className="millionaire-answer-diamond" aria-hidden="true">◆</span><span className="millionaire-answer-letter">{answer.letter}:</span>{rhythm ? <AnswerRhythmGlyph rhythm={rhythm} label={answer.text} /> : timeSignature ? <AnswerTimeSignatureGlyph timeSignature={timeSignature} label={answer.text} /> : dynamic ? <AnswerDynamicGlyph dynamic={dynamic} label={answer.text} /> : <span ref={textRef} className="millionaire-answer-text">{answer.text}</span>}</span>;
+  return <span ref={contentRef} className={`millionaire-answer-content${dynamic ? " has-dynamic-answer" : ""}${rest ? " has-rest-answer" : ""}`}><span className="millionaire-answer-diamond" aria-hidden="true">◆</span><span className="millionaire-answer-letter">{answer.letter}:</span>{rhythm ? <AnswerRhythmGlyph rhythm={rhythm} label={answer.text} /> : rest ? <AnswerRestGlyph rest={rest} label={answer.text} /> : timeSignature ? <AnswerTimeSignatureGlyph timeSignature={timeSignature} label={answer.text} /> : dynamic ? <AnswerDynamicGlyph dynamic={dynamic} label={answer.text} /> : <span ref={textRef} className="millionaire-answer-text">{answer.text}</span>}</span>;
 }
 
 // Use the same shared Bravura symbol catalogue and notation calibration as
@@ -719,6 +720,8 @@ const GLYPHS = {
   sixteenthNote: bravuraSymbol("sixteenthNoteStemUp", "\uE1D9"),
   halfNote: bravuraSymbol("halfNoteStemUp", "\uE1D3"),
   wholeNote: bravuraSymbol("wholeNote", "\uE1D2"),
+  dottedQuarterNote: `${bravuraSymbol("quarterNoteStemUp", "\uE1D5")}${bravuraSymbol("augmentationDot", "\uE1E7")}`,
+  dottedEighthNote: `${bravuraSymbol("eighthNoteStemUp", "\uE1D7")}${bravuraSymbol("augmentationDot", "\uE1E7")}`,
   dottedHalfNote: `${bravuraSymbol("halfNoteStemUp", "\uE1D3")}${bravuraSymbol("augmentationDot", "\uE1E7")}`,
   dynamicForte: bravuraSymbol("forte", "\uE522"),
   dynamicPiano: bravuraSymbol("piano", "\uE520"),
@@ -729,7 +732,8 @@ const GLYPHS = {
 };
 const TIME_DIGITS = ["\uE080", bravuraSymbol("timeSig1", "\uE081"), bravuraSymbol("timeSig2", "\uE082"), bravuraSymbol("timeSig3", "\uE083"), bravuraSymbol("timeSig4", "\uE084"), bravuraSymbol("timeSig5", "\uE085"), bravuraSymbol("timeSig6", "\uE086"), "\uE087", bravuraSymbol("timeSig8", "\uE088"), bravuraSymbol("timeSig9", "\uE089")];
 const PITCH_INDEX = { C4: 0, D4: 1, E4: 2, F4: 3, G4: 4, A4: 5, B4: 6, C5: 7, D5: 8, E5: 9, F5: 10, G5: 11, A5: 12 };
-const NOTATION_FALLBACKS = { gClef: "\uE050", noteheadBlack: "\uE0A4", quarterNoteStemUp: "\uE1D5", quarterNoteStemDown: "\uE1D6", eighthNoteStemUp: "\uE1D7", sixteenthNoteStemUp: "\uE1D9", halfNoteStemUp: "\uE1D3", wholeNote: "\uE1D2", augmentationDot: "\uE1E7", augmentationDotLine: "\uE1E7", sharpInScore: "\uE262", flatInScore: "\uE260", naturalInScore: "\uE261", sharpKeySignature: "\uE262", flatKeySignature: "\uE260" };
+const BASS_PITCH_INDEX = { E2: 0, F2: 1, G2: 2, A2: 3, B2: 4, C3: 5, D3: 6, E3: 7, F3: 8, G3: 9, A3: 10, B3: 11, C4: 12 };
+const NOTATION_FALLBACKS = { gClef: "\uE050", fClef: "\uE062", noteheadBlack: "\uE0A4", quarterNoteStemUp: "\uE1D5", quarterNoteStemDown: "\uE1D6", eighthNoteStemUp: "\uE1D7", eighthNoteStemDown: "\uE1D8", sixteenthNoteStemUp: "\uE1D9", halfNoteStemUp: "\uE1D3", wholeNote: "\uE1D2", augmentationDot: "\uE1E7", augmentationDotLine: "\uE1E7", accentAbove: "\uE4A0", staccatoAbove: "\uE4A2", wholeRest: "\uE4E3", halfRest: "\uE4E4", quarterRest: "\uE4E5", eighthRest: "\uE4E6", sharpInScore: "\uE262", flatInScore: "\uE260", naturalInScore: "\uE261", sharpKeySignature: "\uE262", flatKeySignature: "\uE260" };
 const NOTE_STEM_DOWN_STEP_THRESHOLD = 4;
 const NOTE_STEM_STEP_OFFSET = 2;
 const WHAT_NOTE_STAFF_GAP = 18.9;
@@ -777,6 +781,43 @@ const TIMESIG_GLYPH_RHYTHMS = {
   quaverTwoSemiquavers: ["quaver", "semiquaver", "semiquaver"],
   twoSemiquaversQuaver: ["semiquaver", "semiquaver", "quaver"],
   semiquaverQuaverSemiquaver: ["semiquaver", "quaver", "semiquaver"],
+};
+
+const N5_SIMPLE_TIME_PATTERNS = {
+  "2/4": [
+    ["minim"], ["crotchet", "crotchet"], ["quaver", "quaver", "crotchet"],
+    ["crotchet", "quaver", "quaver"], ["quaver", "quaver", "quaver", "quaver"],
+    ["dotted-crotchet", "quaver"], ["quaver", "dotted-crotchet"],
+    ["semiquaver-group-4", "crotchet"], ["quaver-2semiquavers", "crotchet"],
+    ["2semiquavers-quaver", "crotchet"], ["dotted-quaver-semiquaver", "crotchet"],
+  ],
+  "3/4": [
+    ["dotted-minim"], ["minim", "crotchet"], ["crotchet", "minim"],
+    ["crotchet", "crotchet", "crotchet"], ["quaver", "quaver", "crotchet", "crotchet"],
+    ["crotchet", "quaver", "quaver", "crotchet"], ["crotchet", "crotchet", "quaver", "quaver"],
+    ["quaver", "quaver", "quaver", "quaver", "crotchet"], ["crotchet", "quaver", "quaver", "quaver", "quaver"],
+    ["semiquaver-group-4", "crotchet", "crotchet"], ["crotchet", "quaver-2semiquavers", "crotchet"],
+    ["crotchet", "crotchet", "2semiquavers-quaver"], ["dotted-quaver-semiquaver", "crotchet", "crotchet"],
+  ],
+  "4/4": [
+    ["minim", "minim"], ["minim", "crotchet", "crotchet"], ["crotchet", "crotchet", "minim"],
+    ["crotchet", "crotchet", "crotchet", "crotchet"], ["quaver", "quaver", "crotchet", "crotchet", "crotchet"],
+    ["crotchet", "quaver", "quaver", "crotchet", "crotchet"], ["crotchet", "crotchet", "quaver", "quaver", "crotchet"],
+    ["crotchet", "crotchet", "crotchet", "quaver", "quaver"], ["quaver", "quaver", "quaver", "quaver", "minim"],
+    ["minim", "quaver", "quaver", "quaver", "quaver"], ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
+    ["semiquaver-group-4", "crotchet", "crotchet", "crotchet"], ["crotchet", "quaver-2semiquavers", "crotchet", "crotchet"],
+    ["crotchet", "crotchet", "2semiquavers-quaver", "crotchet"], ["crotchet", "crotchet", "crotchet", "dotted-quaver-semiquaver"],
+  ],
+};
+
+const TIMESIG_RHYTHM_TOKENS = {
+  crotchet: ["crotchet"], minim: ["minim"], "dotted-minim": ["dotted-minim"], semibreve: ["semibreve"],
+  quaver: ["quaver"], semiquaver: ["semiquaver"], "dotted-crotchet": ["dotted-crotchet"],
+  "semiquaver-group-4": ["semiquaver", "semiquaver", "semiquaver", "semiquaver"],
+  "quaver-2semiquavers": ["quaver", "semiquaver", "semiquaver"],
+  "2semiquavers-quaver": ["semiquaver", "semiquaver", "quaver"],
+  "dotted-quaver-semiquaver": ["dotted-quaver", "semiquaver"],
+  "quaver-group-3": ["quaver", "quaver", "quaver"],
 };
 
 function timeSigRhythmInfo(rhythm) {
@@ -871,11 +912,29 @@ function timeSigQuaverGroups(notes) {
   const groups = [];
   let index = 0;
   while (index < notes.length) {
-    const groupId = notes[index].beamGroupId;
-    if (!groupId) { index += 1; continue; }
-    const start = index;
-    while (index < notes.length && notes[index].beamGroupId === groupId) index += 1;
-    if (index - start > 1) groups.push({ start, end: index - 1 });
+    const note = notes[index];
+    const beamable = ["quaver", "semiquaver", "dotted-quaver"].includes(note.rhythm);
+    if (!beamable || note.beamGroupId === null) { index += 1; continue; }
+    const runStart = index;
+    const groupId = note.beamGroupId;
+    if (groupId === undefined) {
+      while (index < notes.length && ["quaver", "semiquaver", "dotted-quaver"].includes(notes[index].rhythm) && notes[index].beamGroupId === undefined) index += 1;
+    } else {
+      while (index < notes.length && ["quaver", "semiquaver", "dotted-quaver"].includes(notes[index].rhythm) && notes[index].beamGroupId === groupId) index += 1;
+    }
+    const runEnd = index - 1;
+    if (groupId !== undefined) {
+      if (runEnd > runStart) groups.push({ start: runStart, end: runEnd });
+      continue;
+    }
+    let groupStart = runStart;
+    while (groupStart <= runEnd) {
+      const remaining = runEnd - groupStart + 1;
+      const groupSize = remaining >= 4 ? 4 : remaining === 3 ? 2 : remaining;
+      const groupEnd = groupStart + groupSize - 1;
+      if (groupEnd > groupStart) groups.push({ start: groupStart, end: groupEnd });
+      groupStart = groupEnd + 1;
+    }
   }
   return groups;
 }
@@ -899,18 +958,21 @@ function TimeSigPreviewBeam({ beamData, groupNotes, groupPositions }) {
       const x1 = stemXFor(segment.startIndex) + 1;
       const y1 = timeSigBeamLineYAtX(x1, beamData.start, beamData.end) + 7;
       const x2 = segment.isHook ? x1 + (segment.startIndex > 0 ? -14 : 14) : stemXFor(segment.endIndex) + 1;
-      const y2 = segment.isHook ? y1 : timeSigBeamLineYAtX(x2, beamData.start, beamData.end) + 7;
+      const y2 = timeSigBeamLineYAtX(x2, beamData.start, beamData.end) + 7;
       return <line key={index} x1={x1 - .5} y1={y1} x2={x2} y2={y2} stroke="currentColor" strokeWidth="4" strokeLinecap="butt" />;
     })}
   </g>;
 }
 
-function timeSigPreviewNotes(glyphs) {
+function timeSigPreviewNotes(notation) {
   const notes = [];
   let pitchIndex = 0;
-  (glyphs || []).forEach((glyph, glyphIndex) => {
-    const rhythms = TIMESIG_GLYPH_RHYTHMS[glyph] || ["crotchet"];
-    const beamGroupId = rhythms.length > 1 && rhythms.every((rhythm) => ["quaver", "dotted-quaver", "semiquaver"].includes(rhythm)) ? `beam-${glyphIndex}` : null;
+  const usesRhythmTokens = Array.isArray(notation.rhythmTokens);
+  const source = usesRhythmTokens ? notation.rhythmTokens : notation.glyphs || [];
+  source.forEach((token, tokenIndex) => {
+    const rhythms = usesRhythmTokens ? TIMESIG_RHYTHM_TOKENS[token] || ["crotchet"] : TIMESIG_GLYPH_RHYTHMS[token] || ["crotchet"];
+    const isExplicitGroup = rhythms.length > 1 && rhythms.every((rhythm) => ["quaver", "dotted-quaver", "semiquaver"].includes(rhythm));
+    const beamGroupId = isExplicitGroup ? `beam-${tokenIndex}` : usesRhythmTokens ? undefined : null;
     rhythms.forEach((rhythm) => {
       const step = [2, 3, 4, 3, 2, 1, 2, 0][pitchIndex % 8];
       notes.push({ rhythm, pitch: { step }, beamGroupId });
@@ -921,7 +983,7 @@ function timeSigPreviewNotes(glyphs) {
 }
 
 function TimeSigFirstBarNotation({ notation }) {
-  const notes = timeSigPreviewNotes(notation.glyphs);
+  const notes = timeSigPreviewNotes(notation);
   const positions = timeSigBarNotePositions(notes);
   const groups = timeSigQuaverGroups(notes);
   const fadeStart = TIMESIG_PREVIEW.firstBarEnd + 1;
@@ -1040,9 +1102,10 @@ function RestsPreviewTimeSignature({ time }) {
   const adjustedX = RESTS_PREVIEW.timeSignatureX + RESTS_PREVIEW.lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
   const adjustedY = anchorY + RESTS_PREVIEW.lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
   const fontSize = RESTS_PREVIEW.lineGap * Number(settings.fontSizeScale || 3.5);
+  const digitGlyphs = (value) => String(value).split("").map((digit) => bravuraSymbol(`timeSig${digit}`, TIME_DIGITS[digit])).join("");
   return <g className="millionaire-music-symbol" transform={`translate(${adjustedX} ${adjustedY}) scale(${settings.widthScale || 1} ${settings.heightScale || 1}) translate(${-adjustedX} ${-adjustedY})`}>
-    <text x={adjustedX} y={adjustedY - fontSize * .14} fontSize={fontSize} textAnchor="middle">{bravuraSymbol(`timeSig${top}`, TIME_DIGITS[top])}</text>
-    <text x={adjustedX} y={adjustedY + fontSize * .43} fontSize={fontSize} textAnchor="middle">{bravuraSymbol(`timeSig${bottom}`, TIME_DIGITS[bottom])}</text>
+    <text x={adjustedX} y={adjustedY - fontSize * .14} fontSize={fontSize} textAnchor="middle">{digitGlyphs(top)}</text>
+    <text x={adjustedX} y={adjustedY + fontSize * .43} fontSize={fontSize} textAnchor="middle">{digitGlyphs(bottom)}</text>
   </g>;
 }
 
@@ -1157,6 +1220,65 @@ function RestsFirstBarNotation({ notation, selectedRhythm = null }) {
   </svg>;
 }
 
+const HIGHER_REST_UNITS = { "quaver-rest": 2, "crotchet-rest": 4, "dotted-crotchet-rest": 6, "minim-rest": 8, "semibreve-rest": 16 };
+
+// This is the same token expansion used by rests.html. Explicit token groups
+// carry their own beam id; isolated quavers stay separate, which preserves
+// the dotted-crotchet beat groupings in 6/8, 9/8 and 12/8.
+function higherRestBarItems(notation) {
+  const items = [];
+  let pitchIndex = 0;
+  let beamIndex = 0;
+  const addTokens = (tokens) => (tokens || []).forEach((token) => {
+    const rhythms = TIMESIG_RHYTHM_TOKENS[token] || [token];
+    const explicitlyBeamed = ["quaver-group-2", "quaver-group-3", "semiquaver-group-4", "quaver-2semiquavers", "2semiquavers-quaver", "dotted-quaver-semiquaver"].includes(token);
+    const beamGroupId = explicitlyBeamed && rhythms.length > 1 ? `higher-rest-beam-${beamIndex++}` : null;
+    rhythms.forEach((rhythm) => {
+      const step = [2, 3, 4, 3, 2, 1, 2, 0][pitchIndex % 8];
+      items.push({ rhythm, pitch: { step }, beamGroupId });
+      pitchIndex += 1;
+    });
+  });
+  addTokens(notation.before);
+  items.push({ rhythm: "missing", units: HIGHER_REST_UNITS[notation.missingRest] || 4 });
+  addTokens(notation.after);
+  return items;
+}
+
+function HigherRestBarNotation({ notation, selectedRest = null }) {
+  const items = higherRestBarItems(notation);
+  const positions = restsBarNotePositions(items);
+  const groups = timeSigQuaverGroups(items);
+  return <svg className="millionaire-higher-rest-bar" viewBox="135 94 415 116" aria-hidden="true">
+    <rect x="135" y="94" width="415" height="116" fill="#fff" />
+    {Array.from({ length: 5 }, (_, index) => <line key={index} x1={RESTS_PREVIEW.staffStart} x2="550" y1={RESTS_PREVIEW.systemTop + index * RESTS_PREVIEW.lineGap} y2={RESTS_PREVIEW.systemTop + index * RESTS_PREVIEW.lineGap} stroke="currentColor" strokeWidth="1.2" />)}
+    <TimeSigCalibratedSymbol symbolKey="gClef" x={RESTS_PREVIEW.clefX} y={restsYForStep(2)} />
+    <RestsPreviewTimeSignature time={notation.time} />
+    {items.map((item, index) => {
+      if (item.rhythm === "missing") {
+        const width = Math.max(40, Math.min(58, item.units * 8));
+        return <g key={index}>
+          <rect x={positions[index] - width / 2} y={RESTS_PREVIEW.systemTop - 9} width={width} height={RESTS_PREVIEW.lineGap * 4 + 17} rx="7" ry="7" fill="none" stroke="#78716c" strokeWidth="1.6" />
+          {selectedRest && <HigherRestMark rest={selectedRest} x={positions[index]} y={restsYForStep(4)} gap={RESTS_PREVIEW.lineGap} />}
+        </g>;
+      }
+      const group = groups.find((candidate) => index >= candidate.start && index <= candidate.end);
+      if (!group) return <RestsPreviewNote key={index} item={item} x={positions[index]} />;
+      const groupItems = items.slice(group.start, group.end + 1);
+      const groupPositions = positions.slice(group.start, group.end + 1);
+      const beamData = restsBeamData(groupItems, groupPositions);
+      const stem = restsStemData(item, positions[index], beamData.stemDown);
+      return <RestsPreviewNote key={index} item={item} x={positions[index]} stemDownOverride={beamData.stemDown} forcedStemEndY={timeSigBeamLineYAtX(stem.stemX, beamData.start, beamData.end)} showFlag={false} />;
+    })}
+    {groups.map((group, index) => {
+      const groupItems = items.slice(group.start, group.end + 1);
+      const groupPositions = positions.slice(group.start, group.end + 1);
+      return <RestsPreviewBeam key={index} beamData={restsBeamData(groupItems, groupPositions)} groupItems={groupItems} groupPositions={groupPositions} />;
+    })}
+    <line x1={RESTS_PREVIEW.barEnd} x2={RESTS_PREVIEW.barEnd} y1={RESTS_PREVIEW.systemTop} y2={RESTS_PREVIEW.systemTop + RESTS_PREVIEW.lineGap * 4} stroke="currentColor" strokeWidth="1.4" />
+  </svg>;
+}
+
 function sharedNotationSymbol(symbolKey) {
   const settings = SHARED_NOTATION.symbols?.[symbolKey] ?? {};
   return {
@@ -1196,7 +1318,10 @@ function CalibratedNotationSymbol({ symbolKey, x, y, gap, settingOverrides = {} 
 
 function StaffNotation({ notation, compactStave = false, whatNoteQuestion = false }) {
   const pitches = notation.kind === "note" ? [notation.pitch] : notation.pitches || [];
+  const bassClef = notation.clef === "bass";
+  const pitchIndex = bassClef ? BASS_PITCH_INDEX : PITCH_INDEX;
   const staffGap = whatNoteQuestion ? WHAT_NOTE_STAFF_GAP : Math.max(10, Number(SHARED_NOTATION.stave?.lineGap || 14));
+  const accidentalXOffset = Number(notation.accidentalXOffset || 0);
   const left = 52;
   const fullRight = 462;
   const compactSpanScale = 0.72;
@@ -1218,13 +1343,14 @@ function StaffNotation({ notation, compactStave = false, whatNoteQuestion = fals
   return <svg className="millionaire-staff" viewBox="30 10 440 130" aria-hidden="true">
     <defs><linearGradient id={staffFadeId} x1={left} y1="0" x2={right} y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor="currentColor" stopOpacity="1" /><stop offset="84%" stopColor="currentColor" stopOpacity="1" /><stop offset="100%" stopColor="currentColor" stopOpacity="0" /></linearGradient></defs>
     {Array.from({ length: 5 }, (_, index) => <line key={index} className="millionaire-staff-line" x1={left} x2={right} y1={top + index * staffGap} y2={top + index * staffGap} style={{ stroke: `url(#${staffFadeId})` }} />)}
-    {notation.showClef !== false && <CalibratedNotationSymbol symbolKey="gClef" x={94} y={bottom - staffGap} gap={staffGap} />}
+    {notation.showClef !== false && <CalibratedNotationSymbol symbolKey={bassClef ? "fClef" : "gClef"} x={94} y={bassClef ? bottom - staffGap * 3 : bottom - staffGap} gap={staffGap} />}
     {pitches.map((pitch, index) => {
-      const position = PITCH_INDEX[pitch] ?? 4;
+      const position = pitchIndex[pitch] ?? 4;
       const y = bottom - (position - 2) * staffGap / 2;
       const x = noteStart + index * noteSpacing + (notation.kind === "melody" ? (index === 0 ? -40 : -15) : 0);
       const step = position - NOTE_STEM_STEP_OFFSET;
       const stemDown = step > NOTE_STEM_DOWN_STEP_THRESHOLD;
+      const ledgerAccidentalXOffset = position <= 0 || position >= 12 ? -10 : 0;
       const ledgerPositions = [];
       if (position <= 0) for (let ledger = 0; ledger >= position; ledger -= 2) ledgerPositions.push(ledger);
       if (position >= 12) for (let ledger = 12; ledger <= position; ledger += 2) ledgerPositions.push(ledger);
@@ -1233,20 +1359,20 @@ function StaffNotation({ notation, compactStave = false, whatNoteQuestion = fals
           const ledgerY = bottom - (ledger - 2) * staffGap / 2;
           return <line key={ledger} className="millionaire-ledger" x1={x - staffGap * Number(SHARED_NOTATION.drawing?.ledgerLineWidthScale || 2.4) / 2} x2={x + staffGap * Number(SHARED_NOTATION.drawing?.ledgerLineWidthScale || 2.4) / 2} y1={ledgerY} y2={ledgerY} />;
         })}
-        {(notation.accidentals?.[index] || (index === 0 ? notation.accidental : null)) && <CalibratedNotationSymbol symbolKey={accidentalSymbolKey(notation.accidentals?.[index] || notation.accidental)} x={x - staffGap * 1.65} y={y} gap={staffGap} settingOverrides={{ fontSizeScale: 3.05 }} />}
+        {(notation.accidentals?.[index] || (index === 0 ? notation.accidental : null)) && <CalibratedNotationSymbol symbolKey={accidentalSymbolKey(notation.accidentals?.[index] || notation.accidental)} x={x - staffGap * 1.65 + accidentalXOffset + ledgerAccidentalXOffset} y={y} gap={staffGap} settingOverrides={{ fontSizeScale: 3.05 }} />}
         <CalibratedNotationSymbol symbolKey={stemDown ? "quarterNoteStemDown" : "quarterNoteStemUp"} x={x} y={y} gap={staffGap} />
       </React.Fragment>;
     })}
   </svg>;
 }
 
-function SignatureMarks({ signature, top, bottom, gap, startX = 145 }) {
+function SignatureMarks({ signature, top, bottom, gap, startX = 140 }) {
   const marks = signature === "G major" ? [{ accidental: "sharp", position: 10 }]
     : signature === "F major" ? [{ accidental: "flat", position: 6 }]
       : [];
   return marks.map((mark, index) => {
     const y = bottom - (mark.position - 2) * gap / 2;
-    return <CalibratedNotationSymbol key={`${mark.accidental}-${index}`} symbolKey={accidentalSymbolKey(mark.accidental, "keySignature")} x={startX + index * gap * 1.25} y={y} gap={gap} settingOverrides={{ fontSizeScale: 3.05 }} />;
+    return <CalibratedNotationSymbol key={`${mark.accidental}-${index}`} symbolKey={accidentalSymbolKey(mark.accidental, "keySignature")} x={startX + index * gap * 1.25} y={y} gap={gap} />;
   });
 }
 
@@ -1258,21 +1384,23 @@ function KeySignatureNotation({ notation }) {
     <defs><linearGradient id="millionaire-key-signature-fade" x1="52" y1="0" x2="462" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor="currentColor" /><stop offset="84%" stopColor="currentColor" /><stop offset="100%" stopColor="currentColor" stopOpacity="0" /></linearGradient></defs>
     {Array.from({ length: 5 }, (_, index) => <line key={index} className="millionaire-staff-line" x1="52" x2="462" y1={top + index * gap} y2={top + index * gap} style={{ stroke: "url(#millionaire-key-signature-fade)" }} />)}
     <CalibratedNotationSymbol symbolKey="gClef" x={94} y={bottom - gap} gap={gap} />
-    <SignatureMarks signature={notation.signature} top={top} bottom={bottom} gap={gap} />
-    <line className="millionaire-complete-barline" x1="245" x2="245" y1={top} y2={bottom} />
+    <SignatureMarks signature={notation.signature} top={top} bottom={bottom} gap={gap} startX={130} />
   </svg>;
 }
 
 function IntervalNotation({ notation }) {
+  if (notation.matchStepLeapLayout) return <StaffNotation notation={{ ...notation, kind: "melody" }} whatNoteQuestion={true} />;
   const gap = 14;
   const top = 36;
   const bottom = top + gap * 4;
-  const noteXs = [260, 345];
-  return <svg className="millionaire-interval" viewBox="30 10 440 130" aria-hidden="true">
+  const noteXOffset = Number(notation.noteXOffset || 0);
+  const keySignatureXOffset = Number(notation.keySignatureXOffset || 0);
+  const noteXs = [260 + noteXOffset, 345 + noteXOffset];
+  return <svg className={`millionaire-interval${notation.toneSemitoneZoom ? " is-tone-semitone-interval" : ""}`} viewBox="30 10 440 130" aria-hidden="true">
     <defs><linearGradient id="millionaire-interval-fade" x1="52" y1="0" x2="462" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stopColor="currentColor" /><stop offset="84%" stopColor="currentColor" /><stop offset="100%" stopColor="currentColor" stopOpacity="0" /></linearGradient></defs>
     {Array.from({ length: 5 }, (_, index) => <line key={index} className="millionaire-staff-line" x1="52" x2="462" y1={top + index * gap} y2={top + index * gap} style={{ stroke: "url(#millionaire-interval-fade)" }} />)}
     <CalibratedNotationSymbol symbolKey="gClef" x={94} y={bottom - gap} gap={gap} />
-    <SignatureMarks signature={notation.keySignature} top={top} bottom={bottom} gap={gap} />
+    <SignatureMarks signature={notation.keySignature} top={top} bottom={bottom} gap={gap} startX={140 + keySignatureXOffset} />
     {(notation.pitches || []).slice(0, 2).map((pitch, index) => {
       const position = PITCH_INDEX[pitch] ?? 4;
       const y = bottom - (position - 2) * gap / 2;
@@ -1293,7 +1421,112 @@ function RepeatEndingNotation({ notation }) {
 
 function AccidentalSymbolNotation({ notation }) {
   return <svg className="millionaire-accidental-symbol" viewBox="0 0 120 110" aria-hidden="true">
-    <CalibratedNotationSymbol symbolKey={accidentalSymbolKey(notation.accidental)} x={60} y={58} gap={24} settingOverrides={{ fontSizeScale: 3.3 }} />
+    <CalibratedNotationSymbol symbolKey={accidentalSymbolKey(notation.accidental)} x={60} y={58} gap={24} settingOverrides={{ fontSizeScale: 3.3, xOffsetScale: 0 }} />
+  </svg>;
+}
+
+function higherRestSymbolKey(rest) {
+  if (rest === "quaver-rest") return "eighthRest";
+  return "quarterRest";
+}
+
+function HigherRestMark({ rest, x, y, gap = 14 }) {
+  const exactRestGlyph = rest === "semibreve-rest" ? "\uE4F4" : rest === "minim-rest" ? "\uE4F5" : null;
+  return <g>
+    {exactRestGlyph
+      ? <text className="millionaire-music-symbol" x={x} y={y} fontSize={gap * 3.4} textAnchor="middle" dominantBaseline="middle">{exactRestGlyph}</text>
+      : <CalibratedNotationSymbol symbolKey={higherRestSymbolKey(rest)} x={x} y={y} gap={gap} />}
+    {rest === "dotted-crotchet-rest" && <CalibratedNotationSymbol symbolKey="augmentationDotLine" x={x + gap * 1.1} y={y - gap * .4} gap={gap} />}
+  </g>;
+}
+
+function HigherRhythmSumsRest({ rest, x = 42, systemTop = 12, gap = 10 }) {
+  const y = systemTop + gap * 2 - (["crotchet-rest", "dotted-crotchet-rest"].includes(rest) ? gap * .5 : 0);
+  const exactRestGlyph = rest === "semibreve-rest" ? "\uE4F4" : rest === "minim-rest" ? "\uE4F5" : null;
+  return <g>
+    {exactRestGlyph
+      ? <text className="millionaire-music-symbol" x={x} y={y} fontSize={gap * 3.4} textAnchor="middle" dominantBaseline="middle">{exactRestGlyph}</text>
+      : <CalibratedNotationSymbol symbolKey={higherRestSymbolKey(rest)} x={x} y={y} gap={gap} />}
+    {rest === "dotted-crotchet-rest" && <CalibratedNotationSymbol symbolKey="augmentationDotSpace" x={x + gap * 1.1} y={y - gap * .35} gap={gap} />}
+  </g>;
+}
+
+function HigherRestNotation({ notation }) {
+  const visualOffset = notation.rest === "semibreve-rest" ? -5 : notation.rest === "minim-rest" ? -2 : ["crotchet-rest", "dotted-crotchet-rest"].includes(notation.rest) ? 25 : 0;
+  return <svg className="millionaire-higher-rest" viewBox="0 0 90 90" aria-hidden="true">
+    <g transform={`translate(45 ${45 + visualOffset}) scale(2.2) translate(-42 -32)`}>
+      <HigherRhythmSumsRest rest={notation.rest} x={42} systemTop={12} />
+    </g>
+  </svg>;
+}
+
+function HigherRestSumNotation({ notation }) {
+  const noteItem = RHYTHM_SUM_ITEMS[notation.note] || RHYTHM_SUM_ITEMS.quarterNote;
+  return <div className="millionaire-higher-rest-sum" aria-hidden="true">
+    <span className="millionaire-higher-rest-sum-slot"><RhythmSumsGlyph item={noteItem} scale={1.14} /></span>
+    <span className="millionaire-higher-rest-sum-plus">+</span>
+    <span className="millionaire-higher-rest-sum-slot"><svg viewBox="0 0 90 90" className="millionaire-higher-rest-sum-rest"><g transform="translate(45 70) scale(1.14) translate(-42 -50)"><HigherRhythmSumsRest rest={notation.rest} x={42} systemTop={12} /></g></svg></span>
+  </div>;
+}
+
+function HigherArticulationNotation({ notation }) {
+  const gap = 14;
+  const top = 36;
+  const bottom = top + gap * 4;
+  const notes = notation.marking === "phrase"
+    ? [{ x: 190, position: 3 }, { x: 245, position: 5 }, { x: 300, position: 4 }, { x: 355, position: 6 }]
+    : notation.marking === "slur"
+      ? [{ x: 235, position: 3 }, { x: 325, position: 6 }]
+      : [{ x: 278, position: 4 }];
+  const yFor = (position) => bottom - (position - 2) * gap / 2;
+  const stemDownFor = (position) => position - NOTE_STEM_STEP_OFFSET > NOTE_STEM_DOWN_STEP_THRESHOLD;
+  const firstStemDown = stemDownFor(notes[0].position);
+  const curveFor = (phrase) => {
+    const first = notes[0];
+    const last = notes.at(-1);
+    const settings = sharedNotationSymbol(phrase ? "phraseMarking" : (firstStemDown ? "slurStemDown" : "slurStemUp"));
+    const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
+    const direction = firstStemDown ? -1 : 1;
+    const xOffset = gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
+    const yOffset = gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
+    const sizeRatio = clamp(Number(settings.fontSizeScale || 5) / 5.3, .55, 1.8);
+    const endpointGap = gap * (phrase ? 1.4 : 1.05) * sizeRatio;
+    const x1 = first.x + xOffset;
+    const x2 = last.x + xOffset;
+    const y1 = yFor(first.position) + direction * endpointGap + yOffset;
+    const y2 = yFor(last.position) + direction * endpointGap + yOffset;
+    const span = Math.max(gap * 1.4, Math.abs(x2 - x1));
+    const handleWidth = span * .28 * clamp(Number(settings.widthScale || 1), .35, 2.5);
+    const depth = direction * gap * (phrase ? 2.1 : 1) * clamp(Number(settings.heightScale || 1), .35, 2.5) * sizeRatio;
+    const strokeWidth = Math.max(1.1, gap * .13 * sizeRatio);
+    return <path d={`M${x1} ${y1} C${x1 + handleWidth} ${y1 + depth}, ${x2 - handleWidth} ${y2 + depth}, ${x2} ${y2}`} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" />;
+  };
+  return <svg className="millionaire-higher-articulation" viewBox="30 10 440 130" aria-hidden="true">
+    {Array.from({ length: 5 }, (_, index) => <line key={index} x1="52" x2="462" y1={top + index * gap} y2={top + index * gap} stroke="currentColor" strokeWidth="1.2" />)}
+    <CalibratedNotationSymbol symbolKey="gClef" x={94} y={bottom - gap} gap={gap} />
+    {notes.map((note, index) => <CalibratedNotationSymbol key={index} symbolKey={stemDownFor(note.position) ? "quarterNoteStemDown" : "quarterNoteStemUp"} x={note.x} y={yFor(note.position)} gap={gap} />)}
+    {notation.marking === "accent" && <CalibratedNotationSymbol symbolKey={firstStemDown ? "accentBelow" : "accentAbove"} x={notes[0].x} y={yFor(notes[0].position)} gap={gap} settingOverrides={{ opticalYOffset: firstStemDown ? 1 : -5 }} />}
+    {notation.marking === "staccato" && <CalibratedNotationSymbol symbolKey={firstStemDown ? "staccatoBelow" : "staccatoAbove"} x={notes[0].x} y={yFor(notes[0].position)} gap={gap} settingOverrides={{ opticalYOffset: firstStemDown ? 2 : -6 }} />}
+    {notation.marking === "slur" && curveFor(false)}
+    {notation.marking === "phrase" && curveFor(true)}
+  </svg>;
+}
+
+function HigherTripletNotation({ notation }) {
+  const quaverTriplet = notation.triplet === "quaver";
+  return <svg className="millionaire-higher-triplet" viewBox="0 -8 150 78" aria-hidden="true">
+    <g transform="translate(-8,-4) scale(1.25)">
+      {[35, 62, 89].map((x) => <g key={x}>
+        <ellipse cx={x} cy="38" rx="6.3" ry="4.6" transform={`rotate(-18 ${x} 38)`} fill="currentColor" />
+        <line x1={x + 5.3} x2={x + 5.3} y1="38" y2="12" stroke="currentColor" strokeWidth="1.5" />
+      </g>)}
+      {quaverTriplet && <line x1="40.3" x2="94.3" y1="12" y2="12" stroke="currentColor" strokeWidth="4" />}
+      {!quaverTriplet && <g stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round">
+        <path d="M 40 9 L 40 0 L 56 0" />
+        <path d="M 80 0 L 96 0 L 96 9" />
+      </g>}
+      <text x="67" y={quaverTriplet ? "8" : "10"} textAnchor="middle" fontFamily="serif" fontWeight="900" fontSize="22" fill="currentColor">3</text>
+    </g>
   </svg>;
 }
 
@@ -1455,6 +1688,7 @@ function NotePartNotation({ notation }) {
 
 const BAR_NOTE_SYMBOL_KEYS = { quarterNote: "quarterNoteStemUp", dottedQuarterNote: "quarterNoteStemUp", eighthNote: "eighthNoteStemUp", dottedEighthNote: "eighthNoteStemUp", sixteenthNote: "sixteenthNoteStemUp", halfNote: "halfNoteStemUp", dottedHalfNote: "halfNoteStemUp", wholeNote: "wholeNote" };
 const RHYTHM_ANSWER_VALUES = { Semiquaver: "sixteenthNote", Quaver: "eighthNote", "Dotted quaver": "dottedEighthNote", Crotchet: "quarterNote", "Dotted crotchet": "dottedQuarterNote", Minim: "halfNote", "Dotted minim": "dottedHalfNote", Semibreve: "wholeNote" };
+const REST_ANSWER_VALUES = { "Quaver rest": "quaver-rest", "Crotchet rest": "crotchet-rest", "Dotted crotchet rest": "dotted-crotchet-rest", "Minim rest": "minim-rest", "Semibreve rest": "semibreve-rest" };
 
 const RHYTHM_SUMS_INFO = {
   semibreve: { stem: false, dots: 0 },
@@ -1572,7 +1806,9 @@ function RhythmSumsBeam({ start, end, colour = "currentColor", widthScale = 1, t
 
 function RhythmSumsBeamedNotes({ rhythms, colour = "currentColor", scale = 1 }) {
   const systemTop = 12;
-  const spacing = rhythms.length >= 4 ? 24 : 26;
+  const isDottedPair = rhythms.length === 2 && rhythms[0] === "dotted-quaver" && rhythms[1] === "semiquaver";
+  const isScotchSnap = rhythms.length === 2 && rhythms[0] === "semiquaver" && rhythms[1] === "dotted-quaver";
+  const spacing = isDottedPair ? 30 : rhythms.length >= 4 ? 24 : 26;
   const positions = rhythms.map((_, index) => 22 + index * spacing);
   const stemXs = positions.map((x, index) => rhythmSumsStemX(rhythms[index], x, systemTop));
   const hasSemi = rhythms.some((rhythm) => rhythmSumsInfo(rhythm).beams === 2);
@@ -1591,13 +1827,22 @@ function RhythmSumsBeamedNotes({ rhythms, colour = "currentColor", scale = 1 }) 
   });
   return <svg viewBox="0 0 118 92" className="millionaire-rhythmsums-glyph is-beamed" aria-hidden="true">
     <g transform={`translate(58 72) scale(${scale}) translate(-54 -50)`}>
-      {rhythms.map((rhythm, index) => <RhythmSumsNote key={`${rhythm}-${index}`} rhythm={rhythm} x={positions[index]} systemTop={systemTop} colour={colour} beamed stemEndY={rhythmSumsBeamLineY(stemXs[index], start, end)} />)}
-      <RhythmSumsBeam start={start} end={end} colour={colour} widthScale={Number(primaryBeamConfig.widthScale || 1)} thicknessScale={Number(primaryBeamConfig.heightScale || 1)} trim={hasSemi ? RHYTHM_SUMS_SEMIQUAVER_BEAM_TRIM : 0} />
+      {rhythms.map((rhythm, index) => {
+        const dotXOffset = rhythm === "dotted-quaver" ? isDottedPair ? 3 : isScotchSnap ? 2 : null : null;
+        return <RhythmSumsNote key={`${rhythm}-${index}`} rhythm={rhythm} x={positions[index]} systemTop={systemTop} colour={colour} beamed stemEndY={rhythmSumsBeamLineY(stemXs[index], start, end)} dotXOffset={dotXOffset} />;
+      })}
+      <RhythmSumsBeam start={start} end={end} colour={colour} widthScale={Number(primaryBeamConfig.widthScale || 1)} thicknessScale={Number(primaryBeamConfig.heightScale || 1)} trim={hasSemi ? RHYTHM_SUMS_SEMIQUAVER_BEAM_TRIM - (isDottedPair || isScotchSnap ? 1 : 0) : 0} />
       {secondarySegments.map((segment, index) => {
         const segmentStartX = stemXs[segment.startIndex];
         const segmentEndX = segment.hook ? segmentStartX + (segment.startIndex > 0 ? -14 : 14) : stemXs[segment.endIndex];
-        const secondStart = { x: Math.min(segmentStartX, segmentEndX), y: rhythmSumsBeamLineY(Math.min(segmentStartX, segmentEndX), start, end) + RHYTHM_SUMS_LINE_GAP * .58 };
-        const secondEnd = { x: Math.max(segmentStartX, segmentEndX), y: rhythmSumsBeamLineY(Math.max(segmentStartX, segmentEndX), start, end) + RHYTHM_SUMS_LINE_GAP * .58 };
+        const rawSecondStartX = segmentStartX + (isDottedPair ? 4 : 0) - (isScotchSnap ? 1 : 0);
+        const rawSecondEndX = segmentEndX - (isScotchSnap ? 1 : 0);
+        const secondBeamShiftX = isDottedPair ? -1 : 0;
+        const secondBeamWidthReduction = isDottedPair ? 3 : 0;
+        const secondBeamLeftX = Math.min(rawSecondStartX, rawSecondEndX) + secondBeamShiftX + secondBeamWidthReduction / 2;
+        const secondBeamRightX = Math.max(rawSecondStartX, rawSecondEndX) + secondBeamShiftX - secondBeamWidthReduction / 2;
+        const secondStart = { x: secondBeamLeftX, y: rhythmSumsBeamLineY(secondBeamLeftX, start, end) + RHYTHM_SUMS_LINE_GAP * .58 };
+        const secondEnd = { x: secondBeamRightX, y: rhythmSumsBeamLineY(secondBeamRightX, start, end) + RHYTHM_SUMS_LINE_GAP * .58 };
         return <RhythmSumsBeam key={index} start={secondStart} end={secondEnd} colour={colour} widthScale={Number(secondBeamConfig.widthScale || 1)} thicknessScale={Number(secondBeamConfig.heightScale || 1)} trim={RHYTHM_SUMS_SEMIQUAVER_BEAM_TRIM} />;
       })}
     </g>
@@ -1609,16 +1854,22 @@ function RhythmSumsGlyph({ item, colour = "currentColor", scale = 1 }) {
   return <svg viewBox="0 0 90 90" className="millionaire-rhythmsums-glyph" aria-hidden="true"><g transform={`translate(45 70) scale(${scale}) translate(-42 -50)`}><RhythmSumsNote rhythm={item.rhythm} x={42} systemTop={12} colour={colour} /></g></svg>;
 }
 
-function RhythmSumTerm({ rhythm }) {
+function RhythmSumTerm({ rhythm, scale = .9 }) {
   if (rhythm === "blank") return <span className="millionaire-rhythmsums-blank" aria-hidden="true" />;
   const item = RHYTHM_SUM_ITEMS[rhythm] || RHYTHM_SUM_ITEMS.quarterNote;
-  return <span className="millionaire-rhythmsums-slot"><RhythmSumsGlyph item={item} scale={.9} /></span>;
+  const positionClass = rhythm === "dottedQuaverSemiquaver" ? " is-dotted-quaver-semiquaver" : rhythm === "scotchSnap" ? " is-scotch-snap" : "";
+  return <span className={`millionaire-rhythmsums-slot${positionClass}`}><RhythmSumsGlyph item={item} scale={scale} /></span>;
 }
 
 function AnswerRhythmGlyph({ rhythm, label }) {
   const symbolKey = BAR_NOTE_SYMBOL_KEYS[rhythm] || "quarterNoteStemUp";
   const dotted = ["dottedEighthNote", "dottedQuarterNote", "dottedHalfNote"].includes(rhythm);
   return <span className="millionaire-answer-rhythm" role="img" aria-label={label}><svg viewBox="0 0 64 70" aria-hidden="true"><CalibratedNotationSymbol symbolKey={symbolKey} x={30} y={43} gap={10} />{dotted && <CalibratedNotationSymbol symbolKey="augmentationDotLine" x={43} y={40.5} gap={10} />}</svg></span>;
+}
+
+function AnswerRestGlyph({ rest, label }) {
+  const answerYOffset = rest === "semibreve-rest" ? 2 : 7;
+  return <span className="millionaire-answer-rhythm" role="img" aria-label={label}><svg viewBox="0 0 64 70" aria-hidden="true"><g transform={`translate(0 ${answerYOffset}) scale(1.15)`}><HigherRhythmSumsRest rest={rest} x={27} systemTop={8} /></g></svg></span>;
 }
 
 function AnswerTimeSignatureGlyph({ timeSignature, label }) {
@@ -1628,10 +1879,10 @@ function AnswerTimeSignatureGlyph({ timeSignature, label }) {
 
 function RhythmSumNotation({ notation }) {
   const terms = notation.terms || [];
-  const className = `millionaire-rhythmsums${terms.length === 2 ? " is-two-term" : ""}${terms.length === 3 ? " is-three-term" : ""}${Number.isFinite(notation.total) ? " is-completion" : ""}`;
+  const className = `millionaire-rhythmsums${terms.length === 1 ? " is-single-term" : ""}${terms.length === 2 ? " is-two-term" : ""}${terms.length === 3 ? " is-three-term" : ""}${Number.isFinite(notation.total) ? " is-completion" : ""}`;
   return <div className={className}>
     {(notation.terms || []).map((term, index) => <React.Fragment key={`${term}-${index}`}>
-      <RhythmSumTerm rhythm={term} />
+      <RhythmSumTerm rhythm={term} scale={terms.length === 1 ? 1.14 : .9} />
       {notation.operators?.[index] && <span className="millionaire-rhythmsums-operator" aria-hidden="true">{notation.operators[index]}</span>}
     </React.Fragment>)}
     {Number.isFinite(notation.total) && <><span className="millionaire-rhythmsums-operator" aria-hidden="true">=</span><span className="millionaire-rhythmsums-total" aria-label={`${notation.total} beats`}>{notation.total}</span></>}
@@ -1710,6 +1961,58 @@ function TwoBarMelodyNotation({ notation }) {
   </svg>;
 }
 
+// National 5 chord questions use the same score dimensions, note positions,
+// rhythm choices and shared Bravura calibration as chords.html.
+function N5ChordOutlineNotation({ notation }) {
+  const width = 920;
+  const height = 430;
+  const gap = 10;
+  const top = 154;
+  const staffStart = 248;
+  const staffEnd = 673;
+  const noteXs = [338, 458, 578];
+  const fadeId = `millionaire-n5-chord-fade-${notation.scoreId || "score"}`;
+  const ledgerConfig = SHARED_NOTATION.symbols?.ledgerLines || {};
+  const ledgerWidth = 12 * Number(ledgerConfig.widthScale || 1);
+  const ledgerThickness = Math.max(1, .6 * Number(ledgerConfig.fontSizeScale || 2) * Number(ledgerConfig.heightScale || 1));
+  const ledgerXOffset = Number(ledgerConfig.xOffsetScale || 0) * gap;
+  const ledgerYOffset = Number(ledgerConfig.yOffsetScale || 0) * gap;
+  return <svg className="millionaire-n5-chord-outline" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+    <defs>
+      <linearGradient id={fadeId} gradientUnits="userSpaceOnUse" x1={staffStart} x2={staffEnd} y1="0" y2="0">
+        <stop offset="0%" stopColor="#000" stopOpacity="1" />
+        <stop offset="82%" stopColor="#000" stopOpacity="1" />
+        <stop offset="100%" stopColor="#000" stopOpacity="0" />
+      </linearGradient>
+    </defs>
+    <rect width={width} height={height} fill="transparent" />
+    <g transform={`translate(${width / 2} ${top + gap * 2}) scale(1.5) translate(${-width / 2} ${-(top + gap * 2)})`}>
+      {Array.from({ length: 5 }, (_, line) => <line key={line} x1={staffStart} x2={staffEnd} y1={top + line * gap} y2={top + line * gap} stroke={`url(#${fadeId})`} strokeWidth="1.2" />)}
+      <CalibratedNotationSymbol symbolKey="gClef" x={staffStart + gap * 3.2} y={top + gap * 3} gap={gap} />
+      {(notation.notes || []).slice(0, 3).map((note, index) => {
+        const position = PITCH_INDEX[note.pitch] ?? 4;
+        const step = position - NOTE_STEM_STEP_OFFSET;
+        const noteY = top + gap * 4 - step * gap / 2;
+        const noteX = noteXs[index];
+        const stemDown = step > NOTE_STEM_DOWN_STEP_THRESHOLD;
+        const symbolKey = note.rhythm === "minim"
+          ? (stemDown ? "halfNoteStemDown" : "halfNoteStemUp")
+          : (stemDown ? "quarterNoteStemDown" : "quarterNoteStemUp");
+        const ledgerSteps = [];
+        for (let ledgerStep = -2; ledgerStep >= step; ledgerStep -= 2) ledgerSteps.push(ledgerStep);
+        for (let ledgerStep = 10; ledgerStep <= step; ledgerStep += 2) ledgerSteps.push(ledgerStep);
+        return <React.Fragment key={`${note.pitch}-${note.rhythm}-${index}`}>
+          {ledgerSteps.map((ledgerStep) => {
+            const ledgerY = top + gap * 4 - ledgerStep * gap / 2 + ledgerYOffset;
+            return <line key={ledgerStep} x1={noteX + ledgerXOffset - ledgerWidth} x2={noteX + ledgerXOffset + ledgerWidth} y1={ledgerY} y2={ledgerY} stroke="currentColor" strokeWidth={ledgerThickness} />;
+          })}
+          <CalibratedNotationSymbol symbolKey={symbolKey} x={noteX} y={noteY} gap={gap} />
+        </React.Fragment>;
+      })}
+    </g>
+  </svg>;
+}
+
 // Complete-bar questions now use the Rests single-bar score. Selecting a
 // Millionaire answer places that note into the outlined target.
 function CompleteBarNotation({ notation, selectedRhythm = null }) {
@@ -1720,7 +2023,8 @@ function CompleteBarNotation({ notation, selectedRhythm = null }) {
 function InlineNotationGlyph({ glyph, index, shiftDottedMinimRight = false }) {
   if (glyph === "blank") return <span className="millionaire-glyph-blank" key={index}>?</span>;
   const isDottedMinim = glyph === "dottedHalfNote";
-  const className = [isDottedMinim ? "millionaire-dotted-note" : "", shiftDottedMinimRight && isDottedMinim ? "millionaire-dotted-minim-shift-right" : ""].filter(Boolean).join(" ");
+  const isDottedNote = isDottedMinim || ["dottedQuarterNote", "dottedEighthNote"].includes(glyph);
+  const className = [isDottedNote ? "millionaire-dotted-note" : "", shiftDottedMinimRight && isDottedMinim ? "millionaire-dotted-minim-shift-right" : ""].filter(Boolean).join(" ");
   return <span className={className} key={index}>{GLYPHS[glyph] || "?"}</span>;
 }
 
@@ -1739,12 +2043,18 @@ function NotationView({ notation, className = "", whatNoteQuestion = false, sele
   const compactStave = typeof className === "string" && className.includes("is-note-name-question") && notation.kind !== "melody";
   const centeredTimeSignature = typeof className === "string" && className.includes("is-time-signature-question");
   const shiftDottedMinimRight = typeof className === "string" && className.includes("is-dotted-minim-name-question");
-  if (notation.kind === "note" || notation.kind === "melody" || notation.kind === "chord") content = <StaffNotation notation={notation} compactStave={compactStave} whatNoteQuestion={whatNoteQuestion || notation.kind === "melody"} />;
+  if (notation.kind === "note" || notation.kind === "melody") content = <StaffNotation notation={notation} compactStave={compactStave} whatNoteQuestion={whatNoteQuestion || notation.kind === "melody"} />;
+  else if (notation.kind === "n5ChordOutline") content = <N5ChordOutlineNotation notation={notation} />;
   else if (notation.kind === "stave") content = <StaffNotation notation={{ ...notation, showClef: false, showBarline: false }} compactStave={compactStave} whatNoteQuestion={whatNoteQuestion} />;
   else if (notation.kind === "keySignature") content = <KeySignatureNotation notation={notation} />;
   else if (notation.kind === "interval") content = <IntervalNotation notation={notation} />;
   else if (notation.kind === "repeatEnding") content = <RepeatEndingNotation notation={notation} />;
   else if (notation.kind === "accidentalSymbol") content = <AccidentalSymbolNotation notation={notation} />;
+  else if (notation.kind === "articulation") content = <HigherArticulationNotation notation={notation} />;
+  else if (notation.kind === "rest") content = <HigherRestNotation notation={notation} />;
+  else if (notation.kind === "restSum") content = <HigherRestSumNotation notation={notation} />;
+  else if (notation.kind === "restBar") content = <HigherRestBarNotation notation={notation} selectedRest={selectedRhythm} />;
+  else if (notation.kind === "triplet") content = <HigherTripletNotation notation={notation} />;
   else if (notation.kind === "rhythmSum") content = <RhythmSumNotation notation={notation} />;
   else if (notation.kind === "dynamic") content = <DynamicNotation notation={notation} />;
   else if (notation.kind === "barline") content = <div className="millionaire-glyphs millionaire-final-barline-glyphs"><InlineNotationGlyph glyph="barlineFinal" index={0} /></div>;
@@ -1771,9 +2081,9 @@ function isDottedMinimBeatsQuestion(question) {
 }
 
 function isTimeSignatureBarCompletionQuestion(question) {
-  return question?.notation?.kind === "bar"
+  return question?.notation?.kind === "restBar" || (question?.notation?.kind === "bar"
     && Array.isArray(question.notation.time)
-    && question.notation.glyphs?.includes("blank");
+    && question.notation.glyphs?.includes("blank"));
 }
 
 function isWhatNoteQuestion(question) {
@@ -1927,7 +2237,7 @@ function App() {
     const queryLevel = new URLSearchParams(window.location.search).get("level");
     const level = CORE.SUPPORTED_LEVELS.includes(queryLevel) ? queryLevel
       : CORE.SUPPORTED_LEVELS.includes(saved.level) ? saved.level : DEFAULT_SETTINGS.level;
-    return { ...DEFAULT_SETTINGS, ...saved, level, questionTypes: ["N4", "N5"].includes(level) ? ["literacy"] : savedTypes.length ? [...new Set(savedTypes)] : DEFAULT_SETTINGS.questionTypes.slice() };
+    return { ...DEFAULT_SETTINGS, ...saved, level, questionTypes: ["N4", "N5", "H"].includes(level) ? ["literacy"] : savedTypes.length ? [...new Set(savedTypes)] : DEFAULT_SETTINGS.questionTypes.slice() };
   });
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
@@ -1955,6 +2265,7 @@ function App() {
   const [announcement, setAnnouncement] = useState("Welcome to Who Wants to Be a Millionaire.");
   const [transitioning, setTransitioning] = useState(false);
   const [correctRevealSkippable, setCorrectRevealSkippable] = useState(false);
+  const [openingZooming, setOpeningZooming] = useState(false);
   const levelRef = useRef(null);
   const customiseRef = useRef(null);
   const lifelineRef = useRef(null);
@@ -1964,6 +2275,7 @@ function App() {
   const timerTickAudio = useRef(null);
   const lastTimerTick = useRef(null);
   const twoBarPatternHistory = useRef(new Map());
+  const openingZoomTimer = useRef(null);
 
   const question = questions[currentIndex];
   window.MLH.useClickOutside(
@@ -1986,7 +2298,7 @@ function App() {
   }, [settings]);
 
   useEffect(() => {
-    const canRunTimer = settings.timer && screen === "game" && question && !locked && !transitioning && !revealed;
+    const canRunTimer = settings.timer && screen === "game" && question && !openingZooming && !locked && !transitioning && !revealed;
     if (!canRunTimer) {
       setTimeRemaining(TIMER_DURATION_SECONDS);
       return undefined;
@@ -2004,7 +2316,7 @@ function App() {
     updateTimer();
     const interval = window.setInterval(updateTimer, 100);
     return () => window.clearInterval(interval);
-  }, [settings.timer, screen, currentIndex, question?.id, locked, transitioning, revealed]);
+  }, [settings.timer, screen, currentIndex, question?.id, openingZooming, locked, transitioning, revealed]);
 
   useEffect(() => {
     const timerIsActive = settings.timer && settings.soundEffects && screen === "game" && question && !locked && !transitioning && !revealed;
@@ -2023,6 +2335,7 @@ function App() {
   }, [settings.timer, settings.soundEffects, screen, question?.id, locked, transitioning, revealed, timeRemaining]);
 
   useEffect(() => () => {
+    window.clearTimeout(openingZoomTimer.current);
     audioDirector.current.destroy();
   }, []);
 
@@ -2051,14 +2364,14 @@ function App() {
   });
 
   function toggleGameAudio() {
-    setSettings((current) => {
-      const enabled = current.backgroundMusic && current.soundEffects;
-      return { ...current, backgroundMusic: !enabled, soundEffects: !enabled };
-    });
+    const enabled = settings.backgroundMusic && settings.soundEffects;
+    const nextSettings = { ...settings, backgroundMusic: !enabled, soundEffects: !enabled };
+    audioDirector.current.configure(nextSettings);
+    setSettings(nextSettings);
   }
 
   function toggleQuestionType(category) {
-    if (settings.level === "N4") return;
+    if (["N4", "N5", "H"].includes(settings.level)) return;
     setSettings((current) => {
       const enabled = current.questionTypes.includes(category);
       if (enabled && current.questionTypes.length === 1) return current;
@@ -2069,8 +2382,27 @@ function App() {
   function createQuestions() {
     const recentGames = safeRead(HISTORY_KEY, []);
     try {
-      const categories = ["N4", "N5"].includes(settings.level) ? ["literacy"] : settings.questionTypes;
-      return CORE.composeGame(QUESTION_BANK, recentGames, Math.random, { level: settings.level, categories }).map(randomiseTwoBarQuestion);
+      const categories = ["N4", "N5", "H"].includes(settings.level) ? ["literacy"] : settings.questionTypes;
+      for (let gameAttempt = 0; gameAttempt < 20; gameAttempt += 1) {
+        const prepared = [];
+        const usedFingerprints = new Set();
+        const selected = CORE.composeGame(QUESTION_BANK, recentGames, Math.random, { level: settings.level, categories });
+        let collision = false;
+        for (const targetQuestion of selected) {
+          let candidate = targetQuestion;
+          let fingerprint = "";
+          for (let variantAttempt = 0; variantAttempt < 40; variantAttempt += 1) {
+            candidate = randomiseTwoBarQuestion(targetQuestion);
+            fingerprint = CORE.questionFingerprint(candidate);
+            if (!usedFingerprints.has(fingerprint)) break;
+          }
+          if (usedFingerprints.has(fingerprint)) { collision = true; break; }
+          usedFingerprints.add(fingerprint);
+          prepared.push(candidate);
+        }
+        if (!collision && prepared.length === 15) return prepared;
+      }
+      throw new Error("Could not prepare fifteen pupil-facing questions without a repeat.");
     } catch (error) {
       console.error("Millionaire game composition failed.", error);
       return null;
@@ -2078,6 +2410,27 @@ function App() {
   }
 
   function randomiseTwoBarQuestion(targetQuestion) {
+    if (targetQuestion?.concept === "national-5-time-signature") {
+      const notation = targetQuestion.notation || {};
+      const timeSignature = targetQuestion.answers?.find((answer) => answer.id === targetQuestion.correctAnswer)?.text || notation.timeSignature;
+      const patterns = N5_SIMPLE_TIME_PATTERNS[timeSignature] || [];
+      const semiquaverPatterns = patterns.filter((pattern) => pattern.some((token) => token.includes("semiquaver")));
+      const regularPatterns = patterns.filter((pattern) => !pattern.some((token) => token.includes("semiquaver")));
+      const pool = semiquaverPatterns.length && Math.random() < .16 ? semiquaverPatterns : regularPatterns;
+      const finalPool = timeSignature === "4/4" ? [["semibreve"], ...pool] : pool;
+      const rhythmTokens = CORE.shuffle(finalPool.length ? finalPool : patterns, Math.random)[0];
+      return { ...targetQuestion, notation: { ...notation, timeSignature, rhythmTokens } };
+    }
+    if (targetQuestion?.concept === "chord-identification") {
+      const notation = targetQuestion.notation || {};
+      const rhythmPatterns = [
+        ["crotchet", "crotchet", "minim"],
+        ["minim", "crotchet", "crotchet"],
+      ];
+      const pattern = CORE.shuffle(rhythmPatterns, Math.random)[0];
+      const notes = CORE.shuffle(notation.pitches || [], Math.random).map((pitch, index) => ({ pitch, rhythm: pattern[index] }));
+      return { ...targetQuestion, notation: { ...notation, scoreId: targetQuestion.id, notes } };
+    }
     const previousSignature = twoBarPatternHistory.current.get(targetQuestion?.concept) || "";
     const generated = CORE.generateTwoBarMelody(targetQuestion?.concept, Math.random, previousSignature);
     if (!generated) return targetQuestion;
@@ -2098,14 +2451,8 @@ function App() {
     setCorrectRevealSkippable(false);
   }
 
-  function startGame() {
-    const nextQuestions = createQuestions();
-    if (!nextQuestions) {
-      setDialog({ type: "error", message: `A complete ${MILLIONAIRE_LEVELS[settings.level].label} game could not be prepared. Please reload and try again.` });
-      return;
-    }
+  function beginPreparedGame(nextQuestions, keepOpeningZoom = false) {
     gameSaved.current = false;
-    setCustomiseOpen(false);
     setQuestions(nextQuestions);
     setCurrentIndex(0);
     setRecords([]);
@@ -2118,12 +2465,38 @@ function App() {
     setFinishedAt(null);
     setMilestone(null);
     resetQuestionState();
-    audioDirector.current.startGame();
+    if (!keepOpeningZoom) setOpeningZooming(false);
     setScreen("game");
     setAnnouncement("Question 1 for £100.");
   }
 
+  function startGame() {
+    if (openingZooming) return;
+    const nextQuestions = createQuestions();
+    if (!nextQuestions) {
+      setDialog({ type: "error", message: `A complete ${MILLIONAIRE_LEVELS[settings.level].label} game could not be prepared. Please reload and try again.` });
+      return;
+    }
+    setLevelOpen(false);
+    setCustomiseOpen(false);
+    audioDirector.current.configure(settings);
+    audioDirector.current.startGame();
+    if (settings.reducedMotion || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+      beginPreparedGame(nextQuestions);
+      return;
+    }
+    setOpeningZooming(true);
+    beginPreparedGame(nextQuestions, true);
+    openingZoomTimer.current = window.setTimeout(() => {
+      openingZoomTimer.current = null;
+      setOpeningZooming(false);
+    }, 650);
+  }
+
   function resetGame() {
+    window.clearTimeout(openingZoomTimer.current);
+    openingZoomTimer.current = null;
+    setOpeningZooming(false);
     resetQuestionState();
     audioDirector.current.stopMusic();
     audioDirector.current.stopEffect();
@@ -2285,13 +2658,19 @@ function App() {
   function useSwitch() {
     if (!lifelines.switch || locked || transitioning || !question) return;
     const enabledQuestionBank = QUESTION_BANK.filter((item) => settings.questionTypes.includes(item.category));
-    const replacement = CORE.switchQuestion(enabledQuestionBank, questions, currentIndex + 1, question.level, Math.random, { allowRepeats: settings.questionTypes.length === 1 });
-    if (!replacement) {
+    const otherFingerprints = new Set(questions.filter((_, index) => index !== currentIndex).map(CORE.questionFingerprint));
+    let randomisedReplacement = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const replacement = CORE.switchQuestion(enabledQuestionBank, questions, currentIndex + 1, question.level, Math.random);
+      if (!replacement) break;
+      const candidate = randomiseTwoBarQuestion(replacement);
+      if (!otherFingerprints.has(CORE.questionFingerprint(candidate))) { randomisedReplacement = candidate; break; }
+    }
+    if (!randomisedReplacement) {
       setDialog({ type: "error", message: "A replacement question of the same difficulty is not available." });
       return;
     }
     resetQuestionState();
-    const randomisedReplacement = randomiseTwoBarQuestion(replacement);
     setQuestions((current) => current.map((item, index) => index === currentIndex ? randomisedReplacement : item));
     setLifelines((current) => ({ ...current, switch: false }));
     setAnnouncement(`Switch used. A replacement question has been selected for question ${currentIndex + 1}.`);
@@ -2341,7 +2720,7 @@ function App() {
     const symbolMeaningQuestion = isSymbolMeaningQuestion(recordQuestion);
     const timeSignatureBarCompletionQuestion = isTimeSignatureBarCompletionQuestion(recordQuestion);
     const selectedBarAnswer = recordQuestion === question && selectedLetter ? recordQuestion.answers?.find((answer) => answer.letter === selectedLetter) : null;
-    const selectedBarRhythm = selectedBarAnswer ? RHYTHM_ANSWER_VALUES[selectedBarAnswer.text] || null : null;
+    const selectedBarRhythm = selectedBarAnswer ? (recordQuestion.notation?.kind === "restBar" ? REST_ANSWER_VALUES[selectedBarAnswer.text] : RHYTHM_ANSWER_VALUES[selectedBarAnswer.text]) || null : null;
     const notationClassName = [noteValueNameQuestion ? "is-name-note-question is-note-name-question" : "", whatNoteQuestion ? "is-what-note-question" : "", recordQuestion.notation?.kind === "melody" ? "is-name-note-question" : "", singleNoteBeatsQuestion ? "is-note-name-question" : "", beatTotalQuestion ? "is-beat-total-question" : "", timeSignatureQuestion ? "is-time-signature-question" : "", dottedMinimNameQuestion ? "is-dotted-minim-name-question" : "", dottedMinimBeatsQuestion ? "is-dotted-minim-beats-question" : "", dynamicSymbolQuestion ? "is-dynamic-symbol-question" : "", symbolMeaningQuestion ? "is-symbol-meaning-question" : "", timeSignatureBarCompletionQuestion ? "is-time-signature-bar-completion" : ""].filter(Boolean).join(" ");
     return <>
       {(recordQuestion.type === "notation" || recordQuestion.type === "text-notation") && <NotationView notation={recordQuestion.notation} className={notationClassName} whatNoteQuestion={whatNoteQuestion} selectedRhythm={selectedBarRhythm} />}
@@ -2358,12 +2737,12 @@ function App() {
   }
 
   function TitleScreen() {
-    return <section className="millionaire-screen">
-      <span className="millionaire-opening-logo-shine"><img className="millionaire-opening-logo" src="millionairelogo.svg" alt="Who Wants to Be a Millionaire" /></span>
+    return <section className={`millionaire-screen millionaire-opening-screen ${openingZooming ? "is-opening-zoom" : ""}`} aria-busy={openingZooming} aria-hidden={openingZooming || undefined}>
+      <span className="millionaire-opening-logo-shine"><img className="millionaire-opening-logo" src="millionairelogo new.svg" alt="Who Wants to Be a Millionaire" /></span>
       <p className="millionaire-screen-copy millionaire-opening-copy">Test your musical knowledge and climb the prize ladder to £1 million.</p>
       <div className="millionaire-opening-actions">
-        <button type="button" className="millionaire-secondary millionaire-play millionaire-opening-play" onClick={() => setScreen("rules")}><span className="millionaire-opening-play-label">How to Play</span></button>
-        <button type="button" className="millionaire-primary millionaire-play millionaire-opening-play" onClick={startGame}><span className="millionaire-opening-play-label">Start</span></button>
+        <button type="button" className="millionaire-secondary millionaire-play millionaire-opening-play" disabled={openingZooming} onClick={() => setScreen("rules")}><span className="millionaire-opening-play-label">How to Play</span></button>
+        <button type="button" className="millionaire-primary millionaire-play millionaire-opening-play" disabled={openingZooming} onClick={startGame}><span className="millionaire-opening-play-label">Start</span></button>
       </div>
     </section>;
   }
@@ -2468,7 +2847,7 @@ function App() {
     const earnedMedal = earnedMedalStage ? QUESTION_REWARDS[earnedMedalStage] : null;
     return <section className="millionaire-screen millionaire-results">
       {outcome === "won" && <FinalConfetti />}
-      <h2>Review</h2>{lastCorrectRecord && <div className="millionaire-result-prize" aria-label={`Question ${reviewQuestionNumber}, ${reviewPrize}`}><span>QUESTION {reviewQuestionNumber}</span><span className="millionaire-result-prize-diamond" aria-hidden="true">◆</span><span>{reviewPrize}</span></div>}
+      <h2>Review</h2>{lastCorrectRecord && <div className="millionaire-result-prize">{reviewPrize}</div>}
       <div className="millionaire-results-grid">
         <ResultStat label="Medal achieved"><span className="millionaire-result-medal">{earnedMedal ? <img src={earnedMedal.icon} alt={earnedMedal.label} /> : "-"}</span></ResultStat>
         <ResultStat label="Lifelines used"><span className="millionaire-result-lifelines">{usedLifelines.length ? usedLifelines.map(({ key, icon, label }) => <img key={key} src={icon} alt={label} />) : "-"}</span></ResultStat>
@@ -2502,7 +2881,7 @@ function App() {
     return ReviewScreen();
   }
 
-  const customiseUnavailable = screen === "game" || screen === "milestone";
+  const customiseUnavailable = openingZooming || screen === "game" || screen === "milestone";
   const activeLevelLabel = MILLIONAIRE_LEVELS[settings.level]?.label || "National 3";
 
   return <div className={window.MLH.shell.pageShellClass} style={{ overflowX: "clip" }}>
@@ -2512,7 +2891,7 @@ function App() {
         <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
           <div className="hub-menu-anchor relative" ref={levelRef}>
             <window.MLH.LevelButton icon={<img src="levels.svg" alt="" className="h-[26px] w-[26px]" />} activeLevel={settings.level} activeLabel={activeLevelLabel} onClick={() => { setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />
-            {levelOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={settings.level} onSelect={(level) => { setSettings((current) => ({ ...current, level, questionTypes: ["N4", "N5"].includes(level) ? ["literacy"] : current.questionTypes })); setLevelOpen(false); }} levels={MILLIONAIRE_LEVELS} /></window.MLH.MenuPanel>}
+            {levelOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={settings.level} onSelect={(level) => { setSettings((current) => ({ ...current, level, questionTypes: ["N4", "N5", "H"].includes(level) ? ["literacy"] : current.questionTypes })); setLevelOpen(false); }} levels={MILLIONAIRE_LEVELS} /></window.MLH.MenuPanel>}
           </div>
         </fieldset>
         <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
@@ -2520,8 +2899,8 @@ function App() {
             <window.MLH.CustomiseButton icon={<img src="customise.svg" alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} onClick={() => { setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />
             {customiseOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}>
               <window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>
-              {QUESTION_TYPE_OPTIONS.map((option) => <window.MLH.MenuToggleRow key={option.id} glyph={<QuestionTypeGlyph option={option} />} label={option.label} checked={settings.questionTypes.includes(option.id)} disabled={["N4", "N5"].includes(settings.level) || (settings.questionTypes.includes(option.id) && settings.questionTypes.length === 1)} onChange={() => toggleQuestionType(option.id)} />)}
-              {["N4", "N5"].includes(settings.level) && <p className="mx-3 my-2 text-xs leading-snug text-stone-500">{MILLIONAIRE_LEVELS[settings.level]?.label} currently contains Music Literacy questions only.</p>}
+              {QUESTION_TYPE_OPTIONS.map((option) => <window.MLH.MenuToggleRow key={option.id} glyph={<QuestionTypeGlyph option={option} />} label={option.label} checked={settings.questionTypes.includes(option.id)} disabled={["N4", "N5", "H"].includes(settings.level) || (settings.questionTypes.includes(option.id) && settings.questionTypes.length === 1)} onChange={() => toggleQuestionType(option.id)} />)}
+              {["N4", "N5", "H"].includes(settings.level) && <p className="mx-3 my-2 text-xs leading-snug text-stone-500">{MILLIONAIRE_LEVELS[settings.level]?.label} currently contains Music Literacy questions only.</p>}
               <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
               <window.MLH.MenuToggleRow glyph={<img src="timer.svg" alt="" aria-hidden="true" className="h-7 w-7 object-contain" />} label="Timer" checked={settings.timer} onChange={() => setSettings((current) => ({ ...current, timer: !current.timer }))} />
             </window.MLH.MenuPanel>}
@@ -2533,6 +2912,7 @@ function App() {
           <img src="audio-svgrepo-com.svg" alt="" aria-hidden="true" />
         </button>
         {CurrentScreen()}
+        {openingZooming && TitleScreen()}
       </div></div></div>
     </main></div>
     <div className="millionaire-legal-attribution">Unofficial educational classroom resource. Not affiliated with or endorsed by the owners of <em>Who Wants to Be a Millionaire?</em></div>

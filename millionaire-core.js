@@ -351,6 +351,29 @@
     };
   }
 
+  function stableQuestionValue(value) {
+    if (Array.isArray(value)) return value.map(stableQuestionValue);
+    if (!value || typeof value !== "object") return value;
+    const nonVisualKeys = new Set(["id", "label", "scoreId", "source"]);
+    return Object.fromEntries(Object.keys(value).filter((key) => !nonVisualKeys.has(key)).sort().map((key) => [key, stableQuestionValue(value[key])]));
+  }
+
+  // Two records with different IDs can still present exactly the same
+  // question to a pupil. This fingerprint deliberately ignores the ID and
+  // distractors, and compares the prompt, correct answer and displayed media.
+  function questionFingerprint(question) {
+    const correct = (question?.answers || []).find((answer) => answer.id === question.correctAnswer || answer.originalId === question.correctAnswer);
+    const normaliseText = (value) => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+    return JSON.stringify(stableQuestionValue({
+      prompt: normaliseText(question?.question || question?.prompt),
+      correctAnswer: normaliseText(correct?.text),
+      type: question?.type || "text",
+      notation: question?.notation || question?.notationData || null,
+      image: question?.image?.src || "",
+      audio: question?.audioSrc || question?.audio?.src || question?.audio?.generator || null,
+    }));
+  }
+
   function recentSets(recentGames) {
     return (Array.isArray(recentGames) ? recentGames : [])
       .slice(-5)
@@ -373,8 +396,8 @@
       difficulty,
       category,
       concept: "fallback-placeholder",
-      question: `Fallback placeholder: ${levelLabel} ${difficulty} ${categoryLabel} question`,
-      prompt: `Fallback placeholder: ${levelLabel} ${difficulty} ${categoryLabel} question`,
+      question: `Fallback placeholder: ${levelLabel} ${difficulty} ${categoryLabel} question ${stage}`,
+      prompt: `Fallback placeholder: ${levelLabel} ${difficulty} ${categoryLabel} question ${stage}`,
       answers: ["Answer A", "Answer B", "Answer C", "Answer D"].map((text, index) => ({ id: "abcd"[index], text })),
       correctAnswer: "a",
       explanation: "This fallback appears because the requested question pool is incomplete.",
@@ -394,6 +417,7 @@
   // crosses the selected course level or the current difficulty block.
   function selectForSchedule(validQuestions, schedule, recentlyUsed, rng, level, enabledCategories) {
     const used = new Set();
+    const usedFingerprints = new Set();
     const selected = [];
     for (let stage = 1; stage <= 15; stage += 1) {
       const category = schedule[stage - 1];
@@ -404,25 +428,31 @@
         const fallback = createFallbackQuestion(level, difficulty, category, stage);
         selected.push(fallback);
         used.add(fallback.id);
+        usedFingerprints.add(questionFingerprint(fallback));
         continue;
       }
-      const unusedRequested = requestedPool.filter((question) => !used.has(question.id));
+      const unusedRequested = requestedPool.filter((question) => !used.has(question.id) && !usedFingerprints.has(questionFingerprint(question)));
       const unusedSameDifficulty = validQuestions.filter((question) => question.difficulty === difficulty
-        && enabledCategories.includes(question.category) && !used.has(question.id));
+        && enabledCategories.includes(question.category) && !used.has(question.id) && !usedFingerprints.has(questionFingerprint(question)));
       let candidates = unusedRequested;
       if (!candidates.length && unusedSameDifficulty.length) {
         console.warn(`Millionaire question pool has too few unused questions: ${level} / ${difficulty} / ${category}. Using another type at the same level and difficulty.`);
         candidates = unusedSameDifficulty;
       }
       if (!candidates.length) {
-        console.warn(`Millionaire question pools are exhausted: ${level} / ${difficulty}. Reusing a question as the final fallback.`);
-        candidates = requestedPool;
+        console.warn(`Millionaire question pools are exhausted: ${level} / ${difficulty}. Using a unique fallback placeholder.`);
+        const fallback = createFallbackQuestion(level, difficulty, category, stage);
+        selected.push(fallback);
+        used.add(fallback.id);
+        usedFingerprints.add(questionFingerprint(fallback));
+        continue;
       }
       const fresh = candidates.filter((question) => !recentlyUsed.has(question.id));
       const preferred = fresh.length ? fresh : candidates;
       const choice = preferred[randomInt(preferred.length, rng)];
       selected.push(choice);
       used.add(choice.id);
+      usedFingerprints.add(questionFingerprint(choice));
     }
     return selected;
   }
@@ -454,18 +484,16 @@
 
   function switchQuestion(questionBank, currentQuestions, stage, level = "N3", rng = Math.random, options = {}) {
     const usedIds = new Set((currentQuestions || []).map((question) => question.id));
+    const usedFingerprints = new Set((currentQuestions || []).map(questionFingerprint));
     const currentQuestion = (currentQuestions || [])[stage - 1];
     const validAtLevel = (questionBank || []).filter((question) => question.level === level
       && !validateQuestion(question).length);
     const difficulty = difficultyForStage(stage);
     const eligible = validAtLevel.filter((question) => question.difficulty === difficulty
-      && !usedIds.has(question.id));
+      && !usedIds.has(question.id)
+      && !usedFingerprints.has(questionFingerprint(question)));
     const sameCategory = eligible.filter((question) => question.category === currentQuestion?.category);
     let candidates = sameCategory.length ? sameCategory : eligible;
-    if (!candidates.length && options.allowRepeats) {
-      const sameCategoryPool = validAtLevel.filter((question) => question.category === currentQuestion?.category && question.id !== currentQuestion?.id);
-      candidates = sameCategoryPool.filter((question) => question.difficulty === difficulty);
-    }
     if (!candidates.length) return null;
     const replacement = candidates[randomInt(candidates.length, rng)];
     const correctLetter = LETTERS[randomInt(LETTERS.length, rng)];
@@ -537,6 +565,7 @@
     applyGeneratedTwoBarMelody,
     completeBarLayout,
     composeGame,
+    questionFingerprint,
     fiftyFifty,
     switchQuestion,
     audienceVotes,
