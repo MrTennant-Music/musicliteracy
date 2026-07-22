@@ -218,6 +218,10 @@
     if (!Array.isArray(question.answers) || question.answers.length !== 4) errors.push("Exactly four answers are required.");
     const answerIds = Array.isArray(question.answers) ? question.answers.map((answer) => answer?.id) : [];
     if (new Set(answerIds).size !== 4 || answerIds.some((id) => typeof id !== "string" || !id)) errors.push("Answer IDs must be unique strings.");
+    const answerTexts = Array.isArray(question.answers) ? question.answers.map((answer) => answer?.text) : [];
+    if (answerTexts.some((text) => typeof text !== "string" || !text.trim())) errors.push("Every answer must contain non-blank text.");
+    const normalisedAnswerTexts = answerTexts.map((text) => String(text || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB"));
+    if (answerTexts.length === 4 && new Set(normalisedAnswerTexts).size !== 4) errors.push("Answer text must be unique after normalising case and spacing.");
     if (!answerIds.includes(question.correctAnswer)) errors.push("The correct answer must match one answer ID.");
     if (!question.explanation || typeof question.explanation !== "string") errors.push("An explanation is required.");
     if (!question.tip || typeof question.tip !== "string") errors.push("A tip is required.");
@@ -227,6 +231,10 @@
     const expectedRange = DIFFICULTY_RANGES[question.difficulty];
     if (expectedRange && (question.difficultyMin !== expectedRange.min || question.difficultyMax !== expectedRange.max)) {
       errors.push(`Difficulty ${question.difficulty} must use stages ${expectedRange.min} to ${expectedRange.max}.`);
+    }
+    if (question.fixedStage !== undefined && (!Number.isInteger(question.fixedStage)
+      || question.fixedStage < question.difficultyMin || question.fixedStage > question.difficultyMax)) {
+      errors.push("A fixed stage must sit inside the question's difficulty range.");
     }
     if (typeof question.audioSrc !== "string") errors.push("An audioSrc field is required, even when it is empty.");
     if (!("notationData" in question)) errors.push("A notationData field is required, even when it is null.");
@@ -386,53 +394,33 @@
     return "hard";
   }
 
-  function createFallbackQuestion(level, difficulty, category, stage) {
-    const levelLabel = LEVEL_LABELS[level] || level;
-    const categoryLabel = CATEGORY_LABELS[category] || category;
-    const range = DIFFICULTY_RANGES[difficulty];
-    return {
-      id: `fallback-${level}-${difficulty}-${category}-${String(stage).padStart(2, "0")}`,
-      level,
-      difficulty,
-      category,
-      concept: "fallback-placeholder",
-      question: `Fallback placeholder: ${levelLabel} ${difficulty} ${categoryLabel} question ${stage}`,
-      prompt: `Fallback placeholder: ${levelLabel} ${difficulty} ${categoryLabel} question ${stage}`,
-      answers: ["Answer A", "Answer B", "Answer C", "Answer D"].map((text, index) => ({ id: "abcd"[index], text })),
-      correctAnswer: "a",
-      explanation: "This fallback appears because the requested question pool is incomplete.",
-      tip: "Development fallback question.",
-      difficultyMin: range.min,
-      difficultyMax: range.max,
-      type: category === "listening" ? "audio" : "text",
-      audio: category === "listening" ? { src: "", generator: null, placeholder: true } : undefined,
-      audioSrc: "",
-      notationData: null,
-      placeholder: true,
-      fallback: true,
-    };
+  function withinGameLimit(question, groupCounts) {
+    if (!question?.gameLimitGroup || !Number.isInteger(question.gameLimit)) return true;
+    return (groupCounts.get(question.gameLimitGroup) || 0) < question.gameLimit;
+  }
+
+  function addToGameLimit(question, groupCounts) {
+    if (!question?.gameLimitGroup || !Number.isInteger(question.gameLimit)) return;
+    groupCounts.set(question.gameLimitGroup, (groupCounts.get(question.gameLimitGroup) || 0) + 1);
   }
 
   // Selection may change category only when a pool is too small. It never
   // crosses the selected course level or the current difficulty block.
-  function selectForSchedule(validQuestions, schedule, recentlyUsed, rng, level, enabledCategories) {
+  function selectForSchedule(validQuestions, schedule, recentlyUsed, recentlyUsedFingerprints, rng, level, enabledCategories) {
     const used = new Set();
     const usedFingerprints = new Set();
+    const groupCounts = new Map();
     const selected = [];
     for (let stage = 1; stage <= 15; stage += 1) {
       const category = schedule[stage - 1];
       const difficulty = difficultyForStage(stage);
-      const requestedPool = validQuestions.filter((question) => question.category === category && question.difficulty === difficulty);
+      const allowedAtStage = (question) => !Number.isInteger(question.fixedStage) || question.fixedStage === stage;
+      const requestedPool = validQuestions.filter((question) => question.category === category && question.difficulty === difficulty && allowedAtStage(question) && withinGameLimit(question, groupCounts));
       if (!requestedPool.length) {
-        console.warn(`Millionaire question pool is empty: ${level} / ${difficulty} / ${category}. Using a fallback placeholder.`);
-        const fallback = createFallbackQuestion(level, difficulty, category, stage);
-        selected.push(fallback);
-        used.add(fallback.id);
-        usedFingerprints.add(questionFingerprint(fallback));
-        continue;
+        throw new Error(`Millionaire question pool is empty: ${level} / ${difficulty} / ${category}.`);
       }
       const unusedRequested = requestedPool.filter((question) => !used.has(question.id) && !usedFingerprints.has(questionFingerprint(question)));
-      const unusedSameDifficulty = validQuestions.filter((question) => question.difficulty === difficulty
+      const unusedSameDifficulty = validQuestions.filter((question) => question.difficulty === difficulty && allowedAtStage(question) && withinGameLimit(question, groupCounts)
         && enabledCategories.includes(question.category) && !used.has(question.id) && !usedFingerprints.has(questionFingerprint(question)));
       let candidates = unusedRequested;
       if (!candidates.length && unusedSameDifficulty.length) {
@@ -440,19 +428,17 @@
         candidates = unusedSameDifficulty;
       }
       if (!candidates.length) {
-        console.warn(`Millionaire question pools are exhausted: ${level} / ${difficulty}. Using a unique fallback placeholder.`);
-        const fallback = createFallbackQuestion(level, difficulty, category, stage);
-        selected.push(fallback);
-        used.add(fallback.id);
-        usedFingerprints.add(questionFingerprint(fallback));
-        continue;
+        throw new Error(`Millionaire question pools are exhausted: ${level} / ${difficulty}.`);
       }
-      const fresh = candidates.filter((question) => !recentlyUsed.has(question.id));
+      const fixedForThisStage = candidates.filter((question) => question.fixedStage === stage);
+      if (fixedForThisStage.length) candidates = fixedForThisStage;
+      const fresh = candidates.filter((question) => !recentlyUsed.has(question.id) && !recentlyUsedFingerprints.has(questionFingerprint(question)));
       const preferred = fresh.length ? fresh : candidates;
       const choice = preferred[randomInt(preferred.length, rng)];
       selected.push(choice);
       used.add(choice.id);
       usedFingerprints.add(questionFingerprint(choice));
+      addToGameLimit(choice, groupCounts);
     }
     return selected;
   }
@@ -465,12 +451,15 @@
       if (question?.id) seen.add(question.id);
     });
     const requestedLevel = options.level || (questionBank || []).find((question) => !invalidIds.has(question?.id))?.level || "N3";
-    const enabledCategories = normaliseCategories(options.categories);
+    const availableCategories = [...new Set((questionBank || []).filter((question) => !invalidIds.has(question?.id) && question.level === requestedLevel).map((question) => question.category))];
+    const enabledCategories = normaliseCategories(options.categories === undefined ? availableCategories : options.categories);
     const validQuestions = (questionBank || []).filter((question) => !invalidIds.has(question.id) && question.level === requestedLevel && enabledCategories.includes(question.category));
     const history = recentSets(recentGames);
     const recentlyUsed = new Set(history.flatMap((set) => [...set]));
+    const questionsById = new Map((questionBank || []).filter((question) => question?.id).map((question) => [question.id, question]));
+    const recentlyUsedFingerprints = new Set([...recentlyUsed].map((id) => questionsById.get(id)).filter(Boolean).map(questionFingerprint));
     const schedule = buildCategorySchedule(rng, enabledCategories);
-    const selected = selectForSchedule(validQuestions, schedule, recentlyUsed, rng, requestedLevel, enabledCategories);
+    const selected = selectForSchedule(validQuestions, schedule, recentlyUsed, recentlyUsedFingerprints, rng, requestedLevel, enabledCategories);
     const letters = answerLetterPlan(rng);
     return selected.map((question, index) => shuffledQuestion(question, letters[index], rng));
   }
@@ -482,52 +471,30 @@
     return incorrect.filter((answer) => answer.letter !== retainedDistractor.letter).map((answer) => answer.letter);
   }
 
-  function switchQuestion(questionBank, currentQuestions, stage, level = "N3", rng = Math.random, options = {}) {
+  function switchQuestion(questionBank, currentQuestions, stage, level = "N3", rng = Math.random) {
     const usedIds = new Set((currentQuestions || []).map((question) => question.id));
     const usedFingerprints = new Set((currentQuestions || []).map(questionFingerprint));
     const currentQuestion = (currentQuestions || [])[stage - 1];
+    const groupCounts = new Map();
+    (currentQuestions || []).forEach((question, index) => {
+      if (index !== stage - 1) addToGameLimit(question, groupCounts);
+    });
     const validAtLevel = (questionBank || []).filter((question) => question.level === level
       && !validateQuestion(question).length);
     const difficulty = difficultyForStage(stage);
     const eligible = validAtLevel.filter((question) => question.difficulty === difficulty
+      && (!Number.isInteger(question.fixedStage) || question.fixedStage === stage)
+      && withinGameLimit(question, groupCounts)
       && !usedIds.has(question.id)
       && !usedFingerprints.has(questionFingerprint(question)));
     const sameCategory = eligible.filter((question) => question.category === currentQuestion?.category);
     let candidates = sameCategory.length ? sameCategory : eligible;
+    const fixedForThisStage = candidates.filter((question) => question.fixedStage === stage);
+    if (fixedForThisStage.length) candidates = fixedForThisStage;
     if (!candidates.length) return null;
     const replacement = candidates[randomInt(candidates.length, rng)];
     const correctLetter = LETTERS[randomInt(LETTERS.length, rng)];
     return shuffledQuestion(replacement, correctLetter, rng);
-  }
-
-  function audienceReliability(stage, rng = Math.random) {
-    const ranges = stage <= 3 ? [70, 90]
-      : stage <= 5 ? [60, 80]
-        : stage <= 8 ? [45, 70]
-          : stage <= 10 ? [35, 60]
-            : stage <= 12 ? [25, 55]
-              : [20, 50];
-    return ranges[0] + randomInt(ranges[1] - ranges[0] + 1, rng);
-  }
-
-  function audienceVotes(question, stage, removedLetters = [], rng = Math.random) {
-    const available = question.answers.map((answer) => answer.letter).filter((letter) => !removedLetters.includes(letter));
-    const correctPercent = audienceReliability(stage, rng);
-    const others = available.filter((letter) => letter !== question.correctLetter);
-    const result = Object.fromEntries(LETTERS.map((letter) => [letter, 0]));
-    result[question.correctLetter] = correctPercent;
-    let remaining = 100 - correctPercent;
-    const weights = others.map(() => rng() + 0.1);
-    const totalWeight = weights.reduce((sum, value) => sum + value, 0);
-    others.forEach((letter, index) => {
-      if (index === others.length - 1) result[letter] = remaining;
-      else {
-        const share = Math.round((100 - correctPercent) * weights[index] / totalWeight);
-        result[letter] = Math.min(remaining, share);
-        remaining -= result[letter];
-      }
-    });
-    return result;
   }
 
   function categoryResults(records) {
@@ -568,7 +535,6 @@
     questionFingerprint,
     fiftyFifty,
     switchQuestion,
-    audienceVotes,
     categoryResults,
   };
 });

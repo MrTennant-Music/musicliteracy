@@ -13,7 +13,7 @@ function seeded(seed) {
   };
 }
 
-test("question bank contains all course pools and the completed N4/N5/Higher Literacy banks", () => {
+test("question bank contains completed Music Literacy pools only", () => {
   assert.ok(BANK.length >= 400);
   assert.equal(new Set(BANK.map((question) => question.id)).size, BANK.length);
   assert.deepEqual(CORE.validateQuestionBank(BANK), []);
@@ -23,18 +23,16 @@ test("question bank contains all course pools and the completed N4/N5/Higher Lit
     for (const difficulty of CORE.DIFFICULTIES) {
       for (const category of CORE.CATEGORIES) {
         const pool = BANK.pools[level][difficulty][category];
-        if (["N4", "N5", "H"].includes(level)) {
-          if (category === "literacy") assert.ok(pool.length >= 5, `${level}/${difficulty}/literacy should contain a complete question pool`);
-          else assert.equal(pool.length, 0, `${level}/${difficulty}/${category} should remain unavailable`);
-        } else assert.ok(pool.length >= 5, `${level}/${difficulty}/${category} should contain the expected questions`);
+        if (category === "literacy") assert.ok(pool.length >= 5, `${level}/${difficulty}/literacy should contain a complete question pool`);
+        else assert.equal(pool.length, 0, `${level}/${difficulty}/${category} should remain unavailable`);
         assert.ok(pool.every((question) => question.level === level && question.difficulty === difficulty && question.category === category));
       }
     }
   }
   const national3 = BANK.filter((question) => question.level === "N3");
-  assert.ok(national3.length >= 76);
+  assert.ok(national3.length >= 60);
   assert.ok(national3.every((question) => !question.placeholder));
-  assert.ok(national3.some((question) => question.id === "n3-listening-001"));
+  assert.ok(national3.every((question) => question.category === "literacy"));
   const n3Literacy = BANK.filter((question) => question.level === "N3" && question.category === "literacy");
   assert.ok(n3Literacy.length >= 46);
   assert.ok(n3Literacy.every((question) => ["easy", "medium", "hard"].includes(question.difficulty)));
@@ -58,7 +56,7 @@ test("question bank contains all course pools and the completed N4/N5/Higher Lit
   const n5ToneSemitoneQuestions = BANK.filter((question) => question.level === "N5" && question.concept === "tone-or-semitone");
   assert.ok(n5ToneSemitoneQuestions.length > 0 && n5ToneSemitoneQuestions.every((question) => question.notation?.noteXOffset === -45 && question.notation?.keySignatureXOffset === -15 && question.notation?.toneSemitoneZoom === true), "National 5 tone-and-semitone notes and key signatures should use their requested left offsets and enlarged layout.");
   const n5NoteValueComparisons = BANK.filter((question) => question.level === "N5" && question.concept === "note-value-comparison");
-  assert.equal(n5NoteValueComparisons.filter((question) => question.difficulty === "medium").length, 4, "National 5 should contain four Medium note-value comparisons.");
+  assert.equal(n5NoteValueComparisons.filter((question) => question.difficulty === "medium").length, 1, "National 5 should retain only its unique Medium note-value comparison.");
   assert.equal(n5NoteValueComparisons.filter((question) => question.difficulty === "hard").length, 4, "National 5 should contain four Hard note-value comparisons.");
   assert.ok(n5NoteValueComparisons.every((question) => question.notation?.kind === "rhythmSum" && question.notation?.operators?.[0] === "→"), "National 5 note-value comparisons should show both musical note values.");
   assert.ok(n5NoteValueComparisons.filter((question) => question.question.includes("dotted quaver") || question.question.includes("dotted crotchet")).every((question) => question.difficulty === "hard"), "Comparisons involving dotted quavers or dotted crotchets should be Hard.");
@@ -89,7 +87,7 @@ test("question bank contains all course pools and the completed N4/N5/Higher Lit
   assert.ok(n3Literacy.filter((question) => question.difficulty === "hard").some((question) => question.notation?.kind === "bar"));
 
   const higherLiteracy = BANK.filter((question) => question.level === "H" && question.category === "literacy");
-  assert.deepEqual(Object.fromEntries(CORE.DIFFICULTIES.map((difficulty) => [difficulty, higherLiteracy.filter((question) => question.difficulty === difficulty).length])), { easy: 28, medium: 31, hard: 27 });
+  assert.deepEqual(Object.fromEntries(CORE.DIFFICULTIES.map((difficulty) => [difficulty, higherLiteracy.filter((question) => question.difficulty === difficulty).length])), { easy: 25, medium: 31, hard: 27 });
   assert.ok(higherLiteracy.every((question) => !question.placeholder), "Higher Music Literacy should use real questions only.");
   assert.ok(higherLiteracy.every((question) => !["transposition", "chord-identification", "written-interval"].includes(question.concept)), "The omitted Higher topics must not appear.");
 
@@ -148,28 +146,112 @@ test("question bank contains all course pools and the completed N4/N5/Higher Lit
   const higherScaleDegrees = higherLiteracy.filter((question) => question.concept === "tonic-subdominant-dominant");
   assert.equal(higherScaleDegrees.length, 12);
   assert.ok(higherScaleDegrees.every((question) => question.type !== "notation" && question.notation === undefined), "Tonic, subdominant and dominant questions should not show a notation container.");
+
+  const ahLiteracy = BANK.filter((question) => question.level === "AH" && question.category === "literacy");
+  assert.deepEqual(Object.fromEntries(CORE.DIFFICULTIES.map((difficulty) => [difficulty, ahLiteracy.filter((question) => question.difficulty === difficulty).length])), { easy: 26, medium: 30, hard: 144 });
+  assert.ok(ahLiteracy.every((question) => !question.placeholder), "Advanced Higher Music Literacy should use real questions only.");
+  assert.ok(BANK.every((question) => /\?$/.test(String(question.question || question.prompt || "").trim())), "Every Millionaire prompt across every level should be phrased as a direct question.");
+  const ahNotes = ahLiteracy.filter((question) => question.concept === "note-identification");
+  assert.equal(ahNotes.length, 10);
+  assert.equal(ahNotes.filter((question) => question.notation.accidental).length, 2, "Twenty per cent of AH note-identification questions should contain an accidental.");
+  const isLedgerNote = (question) => {
+    const pitch = question.notation.pitch;
+    const index = question.notation.clef === "bass"
+      ? ["C2","D2","E2","F2","G2","A2","B2","C3","D3","E3","F3","G3","A3","B3","C4","D4","E4"].indexOf(pitch) - 2
+      : ["C4","D4","E4","F4","G4","A4","B4","C5","D5","E5","F5","G5","A5","B5","C6"].indexOf(pitch);
+    return index <= 0 || index >= 12;
+  };
+  assert.equal(ahNotes.filter(isLedgerNote).length, 8, "Eighty per cent of AH note-identification questions should use ledger lines.");
+  const ahKeys = ahLiteracy.filter((question) => question.concept === "key-signature-identification");
+  assert.equal(ahKeys.length, 8);
+  assert.equal(ahKeys.filter((question) => ["D major","B flat major","E minor","D minor"].includes(question.notation.signature)).length, 4);
+  assert.ok(ahKeys.filter((question) => question.notation.signature.endsWith("minor")).every((question) => question.question.includes("minor key signature")));
+  const ahTimeSignatures = ahLiteracy.filter((question) => question.concept === "time-signature");
+  assert.equal(ahTimeSignatures.length, 10);
+  assert.equal(ahTimeSignatures.filter((question) => question.answers[0].text === "5/4").length, 6);
+  assert.ok(ahTimeSignatures.filter((question) => question.answers[0].text === "5/4").every((question) => question.notation.groupAfterBeats === 3), "Every 5/4 identification bar should show a 3+2 grouping.");
+  const ahFiveFourRests = ahLiteracy.filter((question) => question.concept === "five-four-missing-rest");
+  assert.equal(ahFiveFourRests.length, 8);
+  assert.ok(ahFiveFourRests.every((question) => question.notation.groupAfterBeats === 3), "Every missing-rest bar should show a 3+2 grouping.");
+  const ahFiveFourQuestions = ahLiteracy.filter((question) => question.gameLimitGroup === "five-four");
+  assert.equal(ahFiveFourQuestions.length, 14);
+  assert.ok(ahFiveFourQuestions.every((question) => question.gameLimit === 1), "All 5/4 questions should share a one-per-game limit.");
+  const ahTimeSignatureQuestions = ahLiteracy.filter((question) => question.concept === "time-signature");
+  const ahTimeTokenBeats = { quaver:.5, "dotted-crotchet":1.5, "semiquaver-group-4":1, "quaver-2semiquavers":1, "2semiquavers-quaver":1, "dotted-quaver-semiquaver":1, "dotted-quaver-semiquaver-quaver":1.5, "quaver-2semiquavers-quaver":1.5 };
+  const ahExpectedBarBeats = { "2/4":2, "3/4":3, "4/4":4, "5/4":5, "6/8":3 };
+  const ahComplexRhythms = new Set(["semiquaver-group-4","quaver-2semiquavers","2semiquavers-quaver","dotted-quaver-semiquaver","dotted-quaver-semiquaver-quaver","quaver-2semiquavers-quaver"]);
+  assert.ok(ahTimeSignatureQuestions.every((question) => question.notation.rhythmTokens.some((token) => ahComplexRhythms.has(token))), "Every AH time-signature bar should contain an appropriately complex rhythm.");
+  assert.ok(ahTimeSignatureQuestions.every((question) => Math.abs(question.notation.rhythmTokens.reduce((sum, token) => sum + ahTimeTokenBeats[token], 0) - ahExpectedBarBeats[question.notation.timeSignature]) < .001), "Every complex AH time-signature rhythm must still complete its displayed bar exactly.");
+  assert.ok(ahTimeSignatureQuestions.filter((question) => question.notation.timeSignature === "5/4").every((question) => question.notation.rhythmTokens.reduce((state, token) => ({ elapsed:state.elapsed+ahTimeTokenBeats[token], boundary:state.boundary||Math.abs(state.elapsed+ahTimeTokenBeats[token]-3)<.001 }), { elapsed:0, boundary:false }).boundary), "Every complex 5/4 bar should preserve the visible 3+2 boundary.");
+  const ahRhythmUnits = { quaver:2, crotchet:4, "dotted-crotchet":6, minim:8, "dotted-minim":12, "semiquaver-group-4":4 };
+  const ahRestUnits = { "crotchet-rest":4, "minim-rest":8, "dotted-minim-rest":12 };
+  assert.ok(ahFiveFourRests.every((question) => {
+    const events = [...question.notation.before.map((token) => ahRhythmUnits[token]), ahRestUnits[question.notation.missingRest], ...question.notation.after.map((token) => ahRhythmUnits[token])];
+    let cursor=0;
+    return events.reduce((total,units)=>total+units,0)===20 && events.every((units)=>{const start=cursor;cursor+=units;return !(start<12&&cursor>12);});
+  }), "Every 5/4 missing-rest example should total five beats without crossing the 3+2 boundary.");
+  assert.equal(ahLiteracy.filter((question) => question.concept === "enharmonic-equivalent").length, 10);
+  const ahOctaveSigns = ahLiteracy.filter((question) => question.concept === "octave-sign");
+  assert.equal(ahOctaveSigns.filter((question) => question.question.startsWith("What does")).length, 2);
+  assert.ok(ahOctaveSigns.filter((question) => question.question.startsWith("What does")).every((question) => question.notation?.kind === "octaveSign"), "8va and 8vb meaning questions should show the Bravura sign in a notation container.");
+  assert.ok(ahOctaveSigns.filter((question) => question.question.startsWith("Which instruction")).every((question) => !question.notation), "Instruction-identification questions must not display their answer as notation.");
+  assert.ok(ahLiteracy.filter((question) => question.concept === "enharmonic-equivalent").every((question) => question.notation.accidentalXOffset === -7 && question.notation.clefXOffset === 10 && question.notation.noteXOffset === -15), "AH enharmonic notes should use the requested accidental, clef and note spacing.");
+  const ahChordQuestions = ahLiteracy.filter((question) => question.concept === "chord-and-position");
+  assert.equal(ahChordQuestions.length, 106, "The AH chord pool should contain every required key, chord and permitted inversion combination.");
+  const ahMajorChordKeys = ["C major","G major","F major","D major","B flat major"];
+  const ahMinorChordKeys = ["A minor","E minor","D minor"];
+  const expectedAhChordCases = [
+    ...ahMajorChordKeys.flatMap((key) => ["I","II","IV","V","VI"].flatMap((symbol) => (symbol === "II" ? [0,1] : [0,1,2]).map((inversion) => `${key}|${symbol}|${inversion}`))),
+    ...ahMinorChordKeys.flatMap((key) => ["I","IV","V","VI"].flatMap((symbol) => [0,1,2].map((inversion) => `${key}|${symbol}|${inversion}`))),
+  ].sort();
+  const actualAhChordCases = ahChordQuestions.map((question) => {
+    const key = question.question.match(/^In (.+), which chord/)?.[1];
+    const answer = question.answers[0].text.match(/^Chord (I|II|IV|V|VI), (root position|1st inversion|2nd inversion)$/);
+    const inversion = answer?.[2] === "1st inversion" ? 1 : answer?.[2] === "2nd inversion" ? 2 : 0;
+    return `${key}|${answer?.[1]}|${inversion}`;
+  }).sort();
+  assert.deepEqual(actualAhChordCases, expectedAhChordCases, "Chord II should use root and 1st inversion in every listed major key, while chords I, IV, V and VI should use all three positions in every listed major and minor key.");
+  assert.ok(ahChordQuestions.every((question) => question.notation.kind === "ahChord" && !question.notation.chordSymbol && !/\b(?:I|II|IV|V|VI)(?:b|c)?\b/.test(question.notation.label)), "Chord-identification notation must not reveal the chord or inversion visually or accessibly.");
+  assert.ok(ahChordQuestions.every((question) => new Set(question.answers.map((answer) => answer.text.match(/^Chord (I|II|IV|V|VI),/)?.[1])).size === 4), "Each chord-identification answer set should use four different chord numbers.");
+  assert.ok(ahChordQuestions.every((question) => question.gameLimitGroup === "chord-and-position" && question.gameLimit === 1), "Chord-and-position questions should be limited to one per game.");
+  const ahBassQuestions = ahLiteracy.filter((question) => question.concept === "bass-note-from-chord");
+  assert.ok(ahBassQuestions.every((question) => question.notation.kind === "ahBassPrompt" && question.gameLimitGroup === "bass-note-from-chord" && question.gameLimit === 1), "Bass-note questions should have their own one-per-game limit, separate from chord-and-position questions.");
+  assert.ok(ahBassQuestions.every((question) => /Which bass note should be used for [A-G](?: (?:sharp|flat))? (?:major|minor), (?:root position|1st inversion|2nd inversion)\?$/.test(question.question)), "Bass-note questions should name the chord and inversion in plain text.");
+  assert.ok(ahBassQuestions.every((question) => question.notation.treblePitches.length === 3 && question.notation.bassPitch === null), "Bass-note questions should show the complete three-note chord on the treble stave and leave the bass stave unanswered.");
+  const ahTritoneQuestions = ahLiteracy.filter((question) => question.concept === "tritone");
+  assert.equal(ahTritoneQuestions.length, 8);
+  assert.ok(ahTritoneQuestions.every((question) => question.notation.kind === "ahInterval" && question.notation.source === "intervals.html"), "AH tritone questions should use the dedicated intervals.html notation construction.");
+  assert.ok(ahTritoneQuestions.every((question) => question.gameLimitGroup === "interval-identification" && question.gameLimit === 1), "AH interval questions should be limited to one per game.");
+  const ahDsAlFineQuestions = ahLiteracy.filter((question) => question.concept === "ds-al-fine");
+  assert.equal(ahDsAlFineQuestions.length, 8);
+  assert.ok(ahDsAlFineQuestions.every((question) => question.gameLimitGroup === "ds-al-fine" && question.gameLimit === 1), "D.S. al Fine interpretation questions should form their own hard-question group.");
+  const ahSegnoQuestions = ahLiteracy.filter((question) => question.concept === "segno");
+  assert.equal(ahSegnoQuestions.length, 1);
+  assert.ok(ahSegnoQuestions.every((question) => question.answers.find((answer) => answer.id === question.correctAnswer)?.text === "Segno" && question.notation?.label === "The segno sign."));
+  assert.deepEqual([...new Set(ahLiteracy.filter((question) => question.concept === "raised-seventh").map((question) => question.answers[0].text))].sort(), ["C sharp","D sharp","G sharp"]);
+  assert.ok(ahLiteracy.filter((question) => question.concept === "raised-seventh").every((question) => question.fixedStage === 15), "Raised-seventh questions should be locked to the £1 million stage.");
+  for (let seed = 1; seed <= 25; seed += 1) {
+    const game = CORE.composeGame(BANK, [], seeded(seed), { level:"AH", categories:["literacy"] });
+    assert.ok(game.filter((question) => question.gameLimitGroup === "five-four").length <= 1, "An AH game must contain no more than one 5/4 question.");
+    assert.ok(game.filter((question) => question.concept === "chord-and-position").length <= 1, "An AH game must contain no more than one chord-and-position question.");
+    assert.ok(game.filter((question) => question.concept === "bass-note-from-chord").length <= 1, "An AH game must contain no more than one bass-note question.");
+    assert.ok(game.filter((question) => question.concept === "tritone").length <= 1, "An AH game must contain no more than one interval question.");
+    assert.ok(game.filter((question) => question.concept === "ds-al-fine").length <= 1, "An AH game must contain no more than one D.S. al Fine question.");
+    assert.deepEqual(game.slice(10,14).map((question) => question.concept).sort(), ["bass-note-from-chord","chord-and-position","ds-al-fine","tritone"], "The four non-million-pound hard stages should use one question from each hard type.");
+    assert.ok(game.slice(0,14).every((question) => question.concept !== "raised-seventh"), "A raised-seventh question must never appear before £1 million.");
+    assert.equal(game[14].concept, "raised-seventh", "The £1 million AH question should use the raised-seventh pool.");
+  }
 });
 
-test("placeholder questions use one consistent schema and safe empty audio fields", () => {
-  const placeholders = BANK.filter((question) => question.placeholder);
-  assert.equal(placeholders.length, 45);
-  placeholders.forEach((question) => {
-    assert.match(question.question, /^Placeholder:/);
-    assert.equal(question.answers.length, 4);
-    assert.equal(question.correctAnswer, "a");
-    assert.equal(typeof question.audioSrc, "string");
-    assert.ok(Object.hasOwn(question, "notationData"));
-    if (question.category === "listening") {
-      assert.equal(question.audioSrc, "");
-      assert.equal(question.audio.generator, null);
-    }
-  });
+test("question bank contains no non-literacy or placeholder records", () => {
+  assert.ok(BANK.every((question) => question.category === "literacy"));
+  assert.ok(BANK.every((question) => !question.placeholder && !question.fallback));
 });
 
 test("games for every course level meet block, mixture and uniqueness rules", () => {
   for (const level of CORE.SUPPORTED_LEVELS) {
     for (let seed = 1; seed <= 100; seed += 1) {
-      const categories = ["N4", "N5", "H"].includes(level) ? ["literacy"] : CORE.CATEGORIES;
+      const categories = ["literacy"];
       const game = CORE.composeGame(BANK, [], seeded(seed * 10 + CORE.SUPPORTED_LEVELS.indexOf(level)), { level, categories });
       assert.equal(game.length, 15);
       assert.equal(new Set(game.map((question) => question.id)).size, 15);
@@ -199,10 +281,30 @@ test("new games are random while a composed game remains a fixed sequence", () =
   assert.deepEqual(first.map((question) => question.id), originalIds);
 });
 
-test("single question-type games use all 15 questions once and still get harder", () => {
+test("recent-game history recognises duplicate pupil-facing questions with different IDs", () => {
+  const original = BANK.find((question) => question.id === "n4-literacy-medium-002");
+  const duplicate = { ...original, id: "test-only-duplicate-question" };
+  const testBank = [...BANK, duplicate];
+  assert.equal(CORE.questionFingerprint(original), CORE.questionFingerprint(duplicate));
+  const freshAlternative = BANK.find((question) => question.level === "N4" && question.difficulty === "medium" && question.category === "literacy"
+    && CORE.questionFingerprint(original) !== CORE.questionFingerprint(question));
+  assert.ok(freshAlternative);
+  const game = CORE.composeGame(testBank, [[original.id]], seeded(17), { level: "N4", categories: ["literacy"] });
+  assert.ok(!game.some((question) => CORE.questionFingerprint(question) === CORE.questionFingerprint(original)));
+});
+
+test("question validation rejects blank and effectively duplicated answer text", () => {
+  const valid = BANK[0];
+  const blank = { ...valid, id: "audit-blank-answer", answers: valid.answers.map((answer, index) => index === 3 ? { ...answer, text: "   " } : answer) };
+  const duplicate = { ...valid, id: "audit-duplicate-answer", answers: valid.answers.map((answer, index) => index === 3 ? { ...answer, text: `  ${valid.answers[0].text.toUpperCase()}  ` } : answer) };
+  assert.ok(CORE.validateQuestion(blank).includes("Every answer must contain non-blank text."));
+  assert.ok(CORE.validateQuestion(duplicate).includes("Answer text must be unique after normalising case and spacing."));
+});
+
+test("Music Literacy games use 15 unique questions and get harder", () => {
   for (const level of CORE.SUPPORTED_LEVELS) {
-    for (const category of CORE.CATEGORIES) {
-      const game = CORE.composeGame(BANK, [], seeded(300 + CORE.CATEGORIES.indexOf(category)), { level, categories: [category] });
+      const category = "literacy";
+      const game = CORE.composeGame(BANK, [], seeded(300), { level, categories: [category] });
       assert.equal(game.length, 15);
       assert.equal(new Set(game.map((question) => question.id)).size, 15);
       assert.equal(new Set(game.map(CORE.questionFingerprint)).size, 15, `${level}/${category} must not repeat a pupil-facing question.`);
@@ -210,61 +312,31 @@ test("single question-type games use all 15 questions once and still get harder"
       assert.deepEqual(game.map((question) => question.difficulty), [
         ...Array(5).fill("easy"), ...Array(5).fill("medium"), ...Array(5).fill("hard"),
       ]);
-    }
   }
 });
 
-test("two enabled question types appear in every difficulty block without triples", () => {
-  const enabled = ["listening", "concepts"];
-  for (let seed = 1; seed <= 100; seed += 1) {
-    const game = CORE.composeGame(BANK, [], seeded(400 + seed), { level: "AH", categories: enabled });
-    assert.equal(new Set(game.map((question) => question.id)).size, 15);
-    assert.equal(new Set(game.map(CORE.questionFingerprint)).size, 15);
-    for (let start = 0; start < 15; start += 5) {
-      const counts = enabled.map((category) => game.slice(start, start + 5).filter((question) => question.category === category).length).sort();
-      assert.deepEqual(counts, [2, 3]);
-    }
-    game.forEach((question, index) => {
-      if (index >= 2) assert.ok(!(game[index - 2].category === question.category && game[index - 1].category === question.category));
-    });
-  }
+test("unavailable question types fail safely instead of creating placeholders", () => {
+  assert.throws(() => CORE.composeGame(BANK, [], seeded(400), { level: "N3", categories: ["listening"] }), /question pool is empty/);
+  assert.throws(() => CORE.composeGame(BANK, [], seeded(401), { level: "N3", categories: ["concepts"] }), /question pool is empty/);
 });
 
 test("invalid, empty and incomplete pools fail safely without crossing level or difficulty", () => {
-  const originalWarn = console.warn;
-  const warnings = [];
-  console.warn = (message) => warnings.push(message);
-  try {
-    const incomplete = BANK.filter((question) => !(question.level === "AH" && question.difficulty === "easy" && question.category === "listening"));
-    const game = CORE.composeGame(incomplete, [], seeded(7), { level: "AH" });
-    assert.equal(game.length, 15);
-    assert.ok(game.every((question, index) => question.level === "AH" && question.difficulty === CORE.difficultyForStage(index + 1)));
-    assert.ok(game.some((question) => question.fallback && question.category === "listening" && question.difficulty === "easy"));
-    assert.ok(warnings.some((message) => message.includes("question pool is empty")));
-
     const tooSmall = BANK.filter((question) => !(question.level === "AH" && question.difficulty === "easy" && question.category === "literacy"))
       .concat(BANK.pools.AH.easy.literacy[0]);
-    const fallbackGame = CORE.composeGame(tooSmall, [], seeded(9), { level: "AH", categories: ["literacy", "concepts"] });
-    assert.equal(new Set(fallbackGame.map((question) => question.id)).size, 15);
-    assert.ok(fallbackGame.every((question, index) => question.level === "AH" && question.difficulty === CORE.difficultyForStage(index + 1)));
-    assert.ok(warnings.some((message) => message.includes("too few unused questions")));
+    assert.throws(() => CORE.composeGame(tooSmall, [], seeded(9), { level: "AH", categories: ["literacy"] }), /question pools are exhausted/);
 
     const invalid = { ...BANK[0], id: "broken", answers: BANK[0].answers.slice(0, 3) };
-    const validGame = CORE.composeGame([...BANK, invalid], [], seeded(8), { level: "N3" });
+    const validGame = CORE.composeGame([...BANK, invalid], [], seeded(8), { level: "N3", categories: ["literacy"] });
     assert.ok(!validGame.some((question) => question.id === "broken"));
-  } finally {
-    console.warn = originalWarn;
-  }
 });
 
-test("50:50 keeps the correct answer and preferred distractor after shuffling", () => {
-  const source = BANK.find((question) => question.preferredFiftyFiftyDistractor);
+test("50:50 keeps the correct answer and one distractor after shuffling", () => {
+  const source = BANK[0];
   const shuffled = CORE.shuffledQuestion(source, "D", seeded(4));
   const removed = CORE.fiftyFifty(shuffled, seeded(5));
   assert.equal(removed.length, 2);
   assert.ok(!removed.includes(shuffled.correctLetter));
-  const preferred = shuffled.answers.find((answer) => answer.originalId === source.preferredFiftyFiftyDistractor);
-  assert.ok(!removed.includes(preferred.letter));
+  assert.equal(shuffled.answers.filter((answer) => !removed.includes(answer.letter)).length, 2);
 });
 
 test("Switch replaces the current question with an unused question valid for the same stage", () => {
@@ -285,21 +357,11 @@ test("Switch keeps a replacement within the selected question type", () => {
   const categoryBank = BANK.filter((question) => question.category === category);
   const game = CORE.composeGame(categoryBank, [], seeded(500), { categories: [category] });
   const stage = 15;
-  const replacement = CORE.switchQuestion(categoryBank, game, stage, "N3", seeded(501), { allowRepeats: true });
+  const replacement = CORE.switchQuestion(categoryBank, game, stage, "N3", seeded(501));
   assert.ok(replacement);
   assert.equal(replacement.category, category);
   assert.notEqual(replacement.id, game[stage - 1].id);
   assert.notEqual(replacement.id, game[stage - 1].id);
-});
-
-test("audience percentages total 100 and respect 50:50 removals", () => {
-  const question = CORE.shuffledQuestion(BANK[0], "C", seeded(9));
-  const removed = CORE.fiftyFifty(question, seeded(10));
-  for (let stage = 1; stage <= 15; stage += 1) {
-    const votes = CORE.audienceVotes(question, stage, removed, seeded(stage));
-    assert.equal(Object.values(votes).reduce((sum, value) => sum + value, 0), 100);
-    removed.forEach((letter) => assert.equal(votes[letter], 0));
-  }
 });
 
 test("prize and guaranteed milestone calculations are exact", () => {
@@ -327,6 +389,8 @@ test("category results count only attempted records", () => {
 
 test("interface includes the required screens, controls and protections", () => {
   const script = fs.readFileSync(path.join(__dirname, "millionaire.js"), "utf8");
+  const coreScript = fs.readFileSync(path.join(__dirname, "millionaire-core.js"), "utf8");
+  const bankScript = fs.readFileSync(path.join(__dirname, "millionaire-question-bank.js"), "utf8");
   const html = fs.readFileSync(path.join(__dirname, "millionaire.html"), "utf8");
   const css = fs.readFileSync(path.join(__dirname, "millionaire.css"), "utf8");
   const menuScript = fs.readFileSync(path.join(__dirname, "hub-menu.js"), "utf8");
@@ -341,7 +405,10 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('["title", "rules", "results"].includes(screen)) audioDirector.current.playOpening();'), "Opening-menu audio should start when the Review screen opens.");
   assert.ok(script.includes('const [hintVisible, setHintVisible] = useState(false);'), "Hint visibility should be managed inside the question screen.");
   assert.ok(script.includes('setHintVisible(true);') && script.includes('setAnnouncement(`Hint: ${question.tip}`);'), "Using Hint should reveal and announce the in-page clue.");
-  assert.ok(script.includes('{hintVisible && <div className="millionaire-inline-hint" role="note"><strong>Hint</strong><span>{question.tip}</span></div>}'), "The hint should appear at the top of the question panel.");
+  assert.ok(script.includes('{hintVisible && <div className="millionaire-inline-hint" role="note"><strong>Hint</strong><span><HintText question={question} /></span></div>}'), "The hint should appear at the top of the question panel.");
+  assert.ok(script.includes("question.tipEmphasis") && script.includes("<b>{emphasised}</b>"), "Hints should safely support a bold emphasis segment without interpreting arbitrary HTML.");
+  assert.ok(script.includes('const ranOutOfTime = revealed === "incorrect" && settings.timer && !selectedLetter;') && script.includes('{ranOutOfTime ? "You ran out of time" : "Incorrect answer"}'), "Timer expiry should show a distinct message while submitted wrong answers retain the normal incorrect-answer heading.");
+  assert.match(script, /async function handleTimerExpired\(\)[\s\S]*?await handleIncorrectAnswer\(record\);\s*audioDirector\.current\.stopMusic\(\);/, "Timer expiry should let the incorrect-answer sound finish and then stop the background music.");
   assert.ok(!script.includes('dialog?.type === "hint"'), "Hint should not use a popover dialog.");
   assert.match(script, /function resetQuestionState\(\)\s*\{[^}]*setHintVisible\(false\);/s, "Changing questions should hide the current hint.");
   assert.match(script, /function lockAnswer\(\)\s*\{[^}]*setHintVisible\(false\);/s, "Answering should hide the current hint.");
@@ -350,10 +417,29 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('onClick={() => setScreen("title")}><span className="millionaire-back-button-label">Back</span></button>'), "The rules button should show Back in title case.");
   assert.ok(!script.includes('className="millionaire-back-icon"'), "The rules Back button should not show an icon.");
   assert.ok(html.includes("bravura-symbols.js") && html.includes("shared-notation-config.js"), "Millionaire notation should use the shared Bravura symbols and notation settings.");
-  assert.ok(html.includes("millionaire.css?v=20260721-centred-review-stats") && html.includes("millionaire-core.js?v=20260721-no-repeat-questions") && html.includes("millionaire-question-bank.js?v=20260721-compound-time-groups") && html.includes("millionaire.js?v=20260721-award-wording"), "The Millionaire files should use current cache-version tags.");
+  assert.ok(html.includes("millionaire.css?v=20260721-literacy-only") && html.includes("millionaire-core.js?v=20260721-literacy-only") && html.includes("millionaire-question-bank.js?v=20260721-literacy-only") && html.includes("millionaire.js?v=20260721-literacy-only"), "The Millionaire files should use current cache-version tags.");
+  assert.ok(!css.includes('background-lossless.webp'), "The menu, How to Play and Review screens should use the built-in Millionaire background rather than a separate picture.");
+  assert.ok(css.includes('.millionaire-opening-copy { max-width: none; font-size: 24px; text-shadow: 0 2px 5px rgba(0,0,0,.85);'), "The main-menu introduction should have a restrained shadow for contrast over the artwork.");
+  assert.ok(bankScript.includes("staveInset:20, notationZoom:1.15") && script.includes("const left = 52 + staveInset;") && script.includes("const fullRight = 462 - staveInset;") && css.includes(".millionaire-staff.is-enharmonic-focus { transform: scale(1.15);"), "Advanced Higher enharmonic notation should shorten the stave by 20px per side and enlarge it by 15%.");
+  assert.ok(script.includes("const firstX = 230, secondX = 300;") && script.includes("const arrowY = outerY + 7;") && script.includes('transform={`rotate(-90 ${arrowCentreX} ${arrowY+arrowSize/2})`}') && script.includes('stroke="url(#millionaire-tie-staff-fade)"'), "The tied notes, tie and upward arrow should share the requested placement, with the stave fading on the right.");
+  assert.ok(css.includes(".millionaire-tie-callout { display: block; width: 100%; height: auto; overflow: visible; transform: scale(1.15); transform-origin: center; }"), "The AH tie example should be enlarged by 15% without changing its notation container.");
+  assert.ok(coreScript.includes("withinGameLimit(question, groupCounts)") && coreScript.includes("addToGameLimit(choice, groupCounts)"), "Game composition and Switch should enforce per-game question-group limits.");
+  assert.ok(script.includes('if (screen === "results" && outcome === "won") audioDirector.current.pauseMusic();') && script.includes('const preserveMillionWinAudio = finalOutcome === "won" && prize === 1000000;') && script.includes('if (!preserveMillionWinAudio) audioDirector.current.stopEffect();'), "A £1 million win should keep its correct-answer audio through Review and defer menu music until Exit.");
+  assert.ok(script.includes('valueClassName="millionaire-result-amount"') && script.includes('className="millionaire-result-previous-amount"') && !css.includes('.millionaire-result-stat strong.millionaire-result-amount') && !css.includes('.millionaire-result-previous-amount {'), "The current and previous-best Amount values should inherit the same interface font as the other result values.");
+  assert.ok(script.includes("const width=920, height=430, gap=10, trebleTop=112, bassTop=220") && script.includes("const left=255, right=665, keyX=left+68, noteX=width/2") && css.includes(".millionaire-ah-grand-staff { display: block; width: 100%; height: auto; overflow: visible; transform: translateY(19px) scale(2.06640625);") && script.includes("The Roman numeral is omitted because identifying it is the question"), "Advanced Higher chord and bass-note scores should share the shortened and enlarged grand-stave geometry, positioned 15px lower.");
+  assert.ok(script.includes("function AHIntervalNotation({ notation })") && script.includes("const width=920, height=420, left=222, right=684, top=132, gap=21") && script.includes("const noteXs=[392,536]") && script.includes('viewBox={`195 96 ${width/1.806} ${height/1.806}`}'), "Advanced Higher tritones should reuse intervals.html score geometry while leaving enough room for the complete treble clef.");
+  assert.ok(css.includes(".millionaire-ah-interval { display: block; width: 100%; height: auto; overflow: hidden; transform: translateY(40px);"), "The cropped Advanced Higher interval score should remain clipped and sit a further 15px lower in its notation container.");
+  assert.ok(script.includes('const selectedBassNote = recordQuestion.notation?.kind === "ahBassPrompt" ? selectedBarAnswer?.text || null : null;') && script.includes('showBassNote={Boolean(selectedBassNote)}') && script.includes("function ahSelectedBassNotation(answerText, keySignature)"), "Selecting a bass-note answer should preview the correctly spelled note on the bass stave.");
+  assert.ok(script.includes("function timeSigBarNotePositions(notes, groupAfterBeats = null)") && script.includes("function restsBarNotePositions(items, groupAfterBeats = null)"), "5/4 note and rest bars should support a visible three-plus-two group gap.");
+  assert.ok(script.includes("const missingTargetX = positions[index] + 10;") && script.includes("<HigherRestMark rest={selectedRest} x={missingTargetX}"), "The Advanced Higher missing-rest target and selected rest should sit 10px farther right.");
+  assert.ok(script.includes("function normaliseFiveFourRhythmTokens(notation)") && script.includes('signature === "minim|minim|crotchet"') && script.includes('notation.timeSignature === "5/4" ? 3'), "Legacy 5/4 questions should be normalised to a valid 3+2 grouping before rendering.");
+  assert.ok(script.includes('if (rest === "semibreve-rest") return "wholeRest";') && script.includes('<CalibratedNotationSymbol symbolKey={higherRestSymbolKey(rest)} x={x} y={y} gap={gap} />'), "Whole rests placed on a stave should use the shared calibration that hangs them from the fourth line.");
+  assert.ok(script.includes("function TieCalloutNotation") && script.includes("const tiePath =") && script.includes('href="next.svg"'), "AH tie questions should use the Missing Notes tie geometry and the shared next.svg arrow.");
+  assert.match(script, /function TieCalloutNotation[\s\S]*?for \(let ledgerStep = -2; ledgerStep >= step; ledgerStep -= 2\)[\s\S]*?ledgerSteps\.map/, "Tie notes outside the stave should draw the required calibrated ledger lines.");
   assert.ok(script.includes('openingZooming ? "is-opening-zoom" : ""') && script.includes("function beginPreparedGame(nextQuestions, keepOpeningZoom = false)") && script.includes("}, 1600);"), "Starting the game should zoom through the centre of the opening logo, then complete the slower white-light reveal before showing Question 1.");
   assert.ok(script.includes('settings.reducedMotion || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches') && script.includes("beginPreparedGame(nextQuestions);"), "The opening zoom should be skipped when reduced motion is enabled.");
   assert.ok(css.includes("@keyframes millionaireOpeningLogoZoom") && css.includes("transform: scale(18)") && css.includes("transform-origin: center") && !css.includes("72% { opacity: 1; transform: scale(5.5); }"), "The opening logo should use one uninterrupted, centred camera-style zoom.");
+  assert.match(css, /\.millionaire-opening-screen\.is-opening-zoom\s*\{[^}]*background:\s*#020617;/s, "The opening zoom should have an opaque backing so the prepared question cannot show through the logo.");
   assert.match(script, /function startGame\(\)[\s\S]*audioDirector\.current\.startGame\(\);[\s\S]*window\.setTimeout/, "The Start click should begin audio before the delayed screen change so browser autoplay protection does not block it.");
   assert.match(script, /function toggleGameAudio\(\)[\s\S]*audioDirector\.current\.configure\(nextSettings\);[\s\S]*setSettings\(nextSettings\);/, "Turning audio on should request playback synchronously inside the pupil's click.");
   assert.match(script, /function startGame\(\)[\s\S]*audioDirector\.current\.configure\(settings\);[\s\S]*audioDirector\.current\.startGame\(\);/, "Starting should synchronously apply the current sound settings before requesting the opening game audio.");
@@ -371,14 +457,14 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(keySignatureRenderer.includes("<SignatureMarks") && !keySignatureRenderer.includes("millionaire-complete-barline"), "Key-signature questions should not show a trailing barline.");
   assert.ok(keySignatureRenderer.includes("startX={130}"), "Standalone key-signature accidentals should move ten pixels further left.");
   assert.ok(css.includes(".millionaire-key-signature { transform: scale(1.1); transform-origin: center center; }"), "Key-signature questions at every level should be enlarged by ten percent while remaining centred.");
-  assert.ok(script.includes("function SignatureMarks({ signature, top, bottom, gap, startX = 140 })"), "Key-signature accidentals should sit five pixels further left.");
+  assert.ok(script.includes('function SignatureMarks({ signature, top, bottom, gap, startX = 140, clef = "treble" })'), "Key-signature accidentals should retain their established horizontal position and support both clefs.");
   assert.match(script, /function SignatureMarks[\s\S]*?symbolKey=\{accidentalSymbolKey\(mark\.accidental, "keySignature"\)\}[\s\S]*?gap=\{gap\}\s*\/>;/, "Key-signature accidentals should retain the shared calibrated size used by Key Signatures.");
   assert.ok(script.includes('if (notation.matchStepLeapLayout) return <StaffNotation notation={{ ...notation, kind: "melody" }} whatNoteQuestion={true} />;'), "National 5 intervals should reuse the complete National 3 step/leap stave renderer.");
   assert.ok(script.includes('y={bassClef ? bottom - staffGap * 3 : bottom - staffGap}'), "Bass clefs should use the same second-line anchor as Note Identification.");
   assert.ok(script.includes('sharedNotationSymbol(phrase ? "phraseMarking" : (firstStemDown ? "slurStemDown" : "slurStemUp"))'), "Slurs and phrase marks should use the calibrated curve settings from Articulation Markings.");
   assert.ok(script.includes('notation.marking === "phrase" && [213, 296, 379].map') && script.includes('{ x: 154, position: 3 }') && script.includes('{ x: 439, position: 2 }') && script.includes('x1="457" x2="457"') && script.includes('x1="462" x2="462"'), "Phrase-mark questions should render four bars with two notes per bar, internal barlines and a final double barline.");
   assert.ok(script.includes('settingOverrides={{ opticalYOffset: firstStemDown ? 1 : -5 }}') && script.includes('settingOverrides={{ opticalYOffset: firstStemDown ? 2 : -6 }}'), "Accents and staccato marks should use the calibrated Articulation Markings offsets.");
-  assert.ok(script.includes('rest === "semibreve-rest" ? "\\uE4F4"') && script.includes('rest === "minim-rest" ? "\\uE4F5"'), "Higher semibreve and minim rests should use the exact Bravura glyphs from Rests.");
+  assert.ok(script.includes('rest === "semibreve-rest" ? "\\uE4F4"') && script.includes('["minim-rest", "dotted-minim-rest"].includes(rest) ? "\\uE4F5"'), "Higher semibreve, minim and dotted-minim rests should use the exact Bravura rest glyphs from Rests.");
   const higherRestRenderer = script.match(/function HigherRestNotation\(\{ notation \}\)\s*\{[\s\S]*?\n\}/)?.[0] || "";
   assert.ok(higherRestRenderer.includes('<HigherRhythmSumsRest rest={notation.rest} x={42} systemTop={12} />') && !higherRestRenderer.includes('symbolKey="gClef"'), "Standalone rest questions should be centred and shown without a treble clef.");
   assert.ok(higherRestRenderer.includes('notation.rest === "crotchet-rest" ? 5 : notation.rest === "dotted-crotchet-rest" ? 10 : 0'), "The standalone crotchet rest should sit twenty pixels above its previous position while the dotted crotchet rest keeps its independent adjustment.");
@@ -419,13 +505,13 @@ test("interface includes the required screens, controls and protections", () => 
     'AH: { label: "Advanced Higher" }',
   ].forEach((level) => assert.ok(script.includes(level), `Missing selectable level: ${level}`));
   assert.ok(script.includes("activeLevel={settings.level}") && script.includes("activeLabel={activeLevelLabel}"), "The Level menu should show the selected course level.");
-  assert.ok(script.includes('const categories = ["N4", "N5", "H"].includes(settings.level) ? ["literacy"] : settings.questionTypes;') && script.includes("level: settings.level, categories"), "New games should use the selected course level and available question types.");
+  assert.ok(script.includes("const categories = settings.questionTypes;") && script.includes("level: settings.level, categories"), "New games should use the selected course level and available question types.");
   assert.ok(script.includes('profileLabel={activeLevelLabel}'), "The page header should reflect the selected course level.");
   assert.ok(script.includes("CORE.validateQuestionPools(QUESTION_POOLS)") && script.includes("CORE.questionPoolSummary(QUESTION_POOLS)"), "Development checks should validate and summarise all 45 pools.");
   assert.ok(script.includes('${dynamic ? " has-dynamic-answer" : ""}${rest ? " has-rest-answer" : ""}') && css.includes('.millionaire-answer-content.has-dynamic-answer .millionaire-answer-dynamic { position: absolute; left: 50%; top: calc(50% - 3px); width: 76px;'), "Dynamic symbols should be horizontally centred and sit three pixels above the answer centre independently of the answer letter and diamond.");
   assert.ok(css.includes('.millionaire-answer-content.has-rest-answer .millionaire-answer-rhythm { position: absolute; left: 50%; top: 50%; width: 76px;'), "Rest symbols should be centred independently of the answer letter and diamond.");
   assert.ok(script.includes('rest === "semibreve-rest" ? -1 : rest === "quaver-rest" ? 2 : 7'), "Only the quaver-rest answer glyph should move five pixels upward from the standard rest-answer position.");
-  assert.ok(script.includes('role="status">Audio file not yet added.</div>'), "Missing question audio should show a safe temporary message.");
+  assert.ok(!script.includes("Audio file not yet added."), "Temporary audio placeholder text should not remain in the interface.");
   assert.ok(!script.includes("<window.MLH.HelpButton"), "The toolbar Help button should not be shown.");
   assert.ok(!script.includes('label="Reduced motion"'), "The manual Reduced motion setting should not be shown.");
   assert.ok(!script.includes("Listening plays: 3 maximum"), "The listening-play information row should not be shown in Customise.");
@@ -494,6 +580,7 @@ test("interface includes the required screens, controls and protections", () => 
   assert.match(css, /\.millionaire-back-button\s*\{[^}]*text-transform:\s*none;/s, "The Back button should preserve its title-case label.");
   assert.match(css, /\.millionaire-back-button-label\s*\{[^}]*font-size:\s*30px;[^}]*line-height:\s*1;[^}]*transform:\s*translateY\(3px\);/s, "The Back label should match the Start label and remain optically centred.");
   assert.match(css, /\.millionaire-opening-actions\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*center;/s, "Rules and Start should sit together on one row.");
+  assert.ok(css.includes(".millionaire-opening-actions .millionaire-opening-play { box-shadow: 0 10px 28px rgba(0,0,0,.58); }"), "Both opening-screen buttons should cast a clear shadow without changing the sound control.");
   assert.match(css, /\.millionaire-rules-card h2\s*\{[^}]*margin-top:\s*-2px;/s, "The RULES heading should move up by 20px.");
   assert.match(css, /\.millionaire-rules-grid\s*\{[^}]*min-height:\s*320px;[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/s, "The rules panels should extend upward while keeping their lower alignment.");
   assert.match(css, /\.millionaire-rules-section h3\s*\{[^}]*text-align:\s*center;/s, "Both rules-panel headings should be centred.");
@@ -553,12 +640,15 @@ test("interface includes the required screens, controls and protections", () => 
   assert.match(css, /\.millionaire-results-grid\s*\{[^}]*margin-top:\s*122px;/s, "The desktop Review cards should be vertically centred in the open middle area.");
   assert.ok(css.includes(".millionaire-result-stat:nth-child(-n+3) { grid-column: span 2; }") && css.includes(".millionaire-result-stat:nth-child(4) { grid-column: 2 / span 2; }") && css.includes(".millionaire-result-stat:nth-child(5) { grid-column: 4 / span 2; }"), "The two previous-record cards should sit centred beneath the three current-game cards.");
   assert.match(css, /\.millionaire-results > :not\(.millionaire-final-confetti\)\s*\{[^}]*z-index:\s*2;/s, "Review content should remain readable above winner confetti.");
+  assert.ok(css.includes(".millionaire-results h2 { margin: 0; font-size: 36px; font-weight: 950; text-shadow: 0 4px 12px rgba(0,0,0,.78); }"), "The Review heading should cast a readable shadow over the menu artwork.");
+  assert.ok(css.includes("box-shadow: 0 10px 26px rgba(0,0,0,.48); text-shadow: 0 2px 5px rgba(0,0,0,.72);"), "Every Review statistic card and its text should have a coordinated shadow.");
+  assert.ok(css.includes(".millionaire-result-actions .millionaire-final-answer { box-shadow: 0 10px 28px rgba(0,0,0,.5), 0 8px 24px rgba(246,196,83,.24); }"), "The Review Exit button should cast a shadow while leaving the sound control unchanged.");
   assert.match(css, /\.millionaire-result-lifelines img\s*\{[^}]*width:\s*60px;[^}]*height:\s*40px;/s, "Used lifeline icons should be clearly visible in the Review summary.");
   assert.ok(!script.includes('className="millionaire-result-prize"'), "The Review prize should be shown inside the Amount card rather than above the cards.");
   assert.ok(script.includes('const reviewPrizeValue = reviewQuestionNumber ? CORE.PRIZE_LADDER[reviewQuestionNumber - 1] || 0 : 0;'), "The Review screen should show the monetary value of the highest correctly answered question.");
-  assert.ok(script.includes('const reviewPrize = reviewPrizeValue === 1000000 ? "£1 MILLION" : CORE.formatPrize(reviewPrizeValue);'), "The Review question value should capitalise MILLION at the top prize.");
+  assert.ok(script.includes('const reviewPrize = reviewPrizeValue === 1000000 ? "£1 Million" : CORE.formatPrize(reviewPrizeValue);') && script.includes('const previousPrize = previousPrizeValue === 1000000 ? "£1 Million" : CORE.formatPrize(previousPrizeValue);'), "Only the Review screen should show the current and previous top prize as £1 Million.");
   assert.match(script, /<ResultStat label="Question"[\s\S]*<ResultStat label="Amount"[\s\S]*<ResultStat label="Award">[\s\S]*<ResultStat label="Time"[\s\S]*<ResultStat label="Lifelines used">/, "Review should show Question, Amount and Award above Time and Lifelines used.");
-  assert.ok(script.includes('Previous best: ${previousPerformance.highestQuestion') && script.includes('Previous best: ${previousQuestionBestMs'), "The Question, Amount and Time cards should include their previous best in smaller supporting text.");
+  assert.ok(script.includes('Previous best: ${previousPerformance.highestQuestion') && script.includes('Previous best for ${reachedQuestionNumber}/15: ${previousQuestionBestMs'), "The Question, Amount and Time cards should include their previous best in smaller supporting text, with the Time card naming the matching score.");
   assert.match(css, /\.millionaire-result-stat small\s*\{[^}]*color:\s*#9ca3af;[^}]*font-size:\s*13px;/s, "Previous-best values should use smaller grey text inside their cards.");
   assert.ok(script.includes('const PERFORMANCE_KEY = "mlh-millionaire-performance-v1";') && script.includes("function levelPerformance(level)") && script.includes("highestQuestion: Math.max(previous.highestQuestion, completedHighestQuestion)") && script.includes("bestAmount: Math.max(previous.bestAmount, completedAmount)") && script.includes("bestTimesByQuestion: { ...previous.bestTimesByQuestion, [completedHighestQuestion]: nextQuestionBestMs }"), "Best times by question, highest question and best amount should be stored separately for each course level.");
   assert.ok(script.includes('finalOutcome === "won"') && script.includes("previous.bestWinMs == null || completedDuration < previous.bestWinMs"), "Only a faster £1 MILLION win should replace the saved best time.");
@@ -600,8 +690,8 @@ test("interface includes the required screens, controls and protections", () => 
   assert.match(css, /\.millionaire-ladder-lifelines \.millionaire-lifeline-icon\s*\{[^}]*width:\s*82px;[^}]*height:\s*54px;/s, "The prize-ladder lifelines should be larger.");
   assert.match(css, /\.millionaire-game-grid\s*\{[^}]*padding:\s*0;/s, "The prize ladder should reach the full height and right edge of the game window.");
   assert.match(css, /\.millionaire-play-area\s*\{[^}]*padding:\s*18px;/s, "The question area should retain even internal spacing without clipping its controls.");
-  assert.match(css, /\.millionaire-play-area::before\s*\{[^}]*background:\s*url\("\.\/background-lossless\.webp"\) center \/ cover no-repeat;[^}]*filter:\s*blur\(3px\);/s, "The question-and-answer area should use the softly blurred, optimised stage background behind all elements and up to the divider.");
-  assert.ok(fs.existsSync(path.join(__dirname, "background-lossless.webp")), "The lossless compressed stage background should be present.");
+  assert.match(css, /\.millionaire-play-area::before\s*\{[^}]*background:\s*url\("\.\/gameback-optimized\.webp\?v=20260721-new-photo"\) center \/ cover no-repeat;[^}]*filter:\s*blur\(3px\);/s, "The question-and-answer area should use the softly blurred replacement game background behind all elements and up to the divider.");
+  assert.ok(fs.existsSync(path.join(__dirname, "gameback-optimized.webp")), "The compressed restored game background should be present.");
   assert.ok(script.includes("this.scheduleEarlyStart(8000, questionPath, sequence)"), "The Questions 1–5 music should begin eight seconds after Start is pressed.");
   assert.ok(script.includes("const fadeSeconds = 5"), "The Questions 1–5 loop should crossfade during its final five seconds.");
   assert.ok(script.includes("this.playMusicSequence(stageFiles[0], stageFiles[1], false, 5)"), "Every £2,000–£1 million question track should use a five-second crossfade loop.");
@@ -666,10 +756,11 @@ test("interface includes the required screens, controls and protections", () => 
   assert.match(script, /const QUESTION_TYPE_OPTIONS = \[[\s\S]*id: "literacy"[\s\S]*id: "concepts"[\s\S]*id: "listening"/, "Customise should list Music Literacy, Music Concepts, then Audio.");
   assert.ok(script.includes('glyph: "\\uE050", notationGlyph: true'), "Music Literacy should use the Bravura treble clef glyph.");
   assert.ok(script.includes('icon: "worksheet.svg", iconSize: "h-[26px] w-[26px]"'), "Music Concepts should use a larger worksheet.svg icon.");
-  assert.ok(script.includes('iconSize: "h-[42px] w-[42px]"'), "The Audio icon should be substantially larger.");
+  assert.ok(script.includes('iconSize: "h-[52.5px] w-[52.5px]"'), "The Audio icon should be 25 percent larger than its previous 42px size.");
   assert.match(css, /\.millionaire-question-type-clef\s*\{[^}]*font-family:\s*"Bravura", serif;[^}]*font-size:\s*20px;[^}]*font-weight:\s*400;[^}]*transform:\s*translateY\(4px\);/s, "The Music Literacy glyph should use smaller regular-weight Bravura notation with the requested vertical alignment.");
   assert.ok(script.includes("if (enabled && current.questionTypes.length === 1) return current;"), "At least one question type should always remain enabled.");
-  assert.ok(script.includes('disabled={["N4", "N5", "H"].includes(settings.level) || (settings.questionTypes.includes(option.id) && settings.questionTypes.length === 1)}'), "The final enabled question-type toggle should be visibly unavailable.");
+  assert.ok(script.includes('disabled={!available || (settings.questionTypes.includes(option.id) && settings.questionTypes.length === 1)}'), "Unavailable question types and the final enabled type should be visibly unavailable.");
+  assert.ok(!coreScript.includes("audienceVotes") && !css.includes("millionaire-audience"), "Unused audience-vote code and styling should be removed.");
   assert.ok(script.includes('const customiseUnavailable = openingZooming || screen === "game" || screen === "milestone";') && script.includes("<fieldset disabled={customiseUnavailable}"), "Customise should be unavailable during the opening transition and while a game is active.");
   assert.ok(script.includes('level: settings.level, categories'), "The next game should use the selected question types.");
   assert.ok(script.includes("const otherFingerprints = new Set") && script.includes("!otherFingerprints.has(CORE.questionFingerprint(candidate))"), "Switch must reject any replacement that duplicates another pupil-facing question in the game.");
