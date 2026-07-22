@@ -14,35 +14,34 @@
   <script src="./hub-audio.js?v=20260712-metronome-samples"></script>
   <script src="./hub-shell.js?v=20260717-worksheet-header-cards"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
-  <script src="./name-randomiser-core.js?v=20260722-slots2"></script>
+  <script src="./name-randomiser-core.js?v=20260722-multi-white-arrow"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
     :root { color-scheme: light; --names-shared-shadow: 0 12px 20px rgba(28,25,23,.12); }
     body { margin: 0; background: #fafaf9; color: #111827; }
     button { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible { outline-color: rgba(0,0,0,.45); }
     .names-page > header > div { max-width: 1500px; }
     .names-page .hub-toolbar button, .names-page .hub-toolbar input { height: 44px !important; min-height: 44px !important; box-sizing: border-box; }
     .names-main { display: flex; flex-direction: column; }
     .names-layout { display: flex; width: 100%; min-height: 0; flex: 1; }
-    .names-panel { min-width: 0; border: 1px solid #e7e5e4; border-radius: 16px; background: #fafaf9; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-    .names-panel-title { margin: 0; color: #111; font-size: 15px; font-weight: 900; line-height: 1.2; }
     .names-panel-note { margin: 4px 0 0; color: #78716c; font-size: 11px; line-height: 1.35; }
     .names-field { width: 100%; min-height: 44px; border: 1px solid #d6d3d1; border-radius: 12px; background: white; padding: 0 12px; color: #111; font: inherit; font-size: 14px; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-    .names-field:focus-visible { border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.16); }
+    .names-field:focus-visible { border-color: #111; box-shadow: 0 0 0 3px rgba(0,0,0,.16); }
     .names-field::placeholder { color: #a8a29e; }
     .names-toolbar-name { width: 260px; }
     .names-toolbar-add { width: 92px; min-width: 92px; }
-    .names-add-group { position: absolute; left: 50%; display: flex; align-items: center; gap: 8px; transform: translateX(-130px); }
+    .names-add-group { position: absolute; left: 50%; display: flex; align-items: flex-start; gap: 8px; transform: translateX(-130px); }
+    .names-add-field-wrap { position: relative; width: 260px; }
+    .names-duplicate-message { position: absolute; top: calc(100% + 7px); left: 0; width: 100%; margin: 0; color: #dc2626; font-size: 12px; font-weight: 800; line-height: 1.2; text-align: center; white-space: nowrap; animation: namesDuplicateShake .38s ease-in-out; }
     .names-wheel-stage { position: relative; box-sizing: border-box; display: flex; min-width: 0; min-height: 610px; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 14px; }
     .names-wheel-wrap { position: relative; width: auto; height: min(calc(100% - 24px), 850px); max-width: 100%; aspect-ratio: 1; margin: 0 auto; }
     .names-wheel { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(var(--names-shared-shadow)); }
     .names-wheel-rotor { transform-origin: 300px 300px; will-change: transform; }
-    .names-wheel-segment-symbol { font-family: "Bravura", serif; font-weight: 400; }
-    .names-border-toggle-glyph { display: inline-flex; width: 28px; height: 22px; align-items: center; justify-content: center; overflow: visible; color: #1c1917; }
-    .names-border-toggle-glyph > span { font-family: "Bravura", serif; font-size: 20px; font-weight: 400; line-height: 1; transform: translateY(4px); }
-    .names-wheel-pointer-group { position: absolute; z-index: 5; left: -6px; top: 50%; display: flex; align-items: center; gap: 10px; transform: translate(-120px, -50%); }
-    .names-wheel-pointer { display: block; width: 68px; height: 58px; flex: none; filter: drop-shadow(var(--names-shared-shadow)); }
+    .names-wheel-centre-glyph { font-family: "Bravura", serif; font-size: 34px; font-weight: 400; }
+    .names-wheel-pointer-group { position: absolute; z-index: 5; left: 0; top: 50%; display: flex; align-items: center; gap: 10px; transform: translate(-120px, -50%); }
+    .names-wheel-pointer { display: block; width: 73px; height: 62px; flex: none; filter: drop-shadow(var(--names-shared-shadow)); }
     .names-wheel-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 34px; line-height: 1.4; text-align: center; animation: namesWelcomeSpin 4s ease-in-out infinite; }
     .names-empty-title { color: #111; font-size: 28px; font-weight: 800; line-height: 1.1; }
     .names-empty-description { margin-top: 4px; color: #a8a29e; font-size: 14px; font-weight: 400; line-height: 1.3; }
@@ -64,25 +63,52 @@
     .names-slots-window::before, .names-slots-window::after { pointer-events: none; position: absolute; z-index: 3; right: 0; left: 0; height: 32%; content: ""; }
     .names-slots-window::before { top: 0; background: linear-gradient(to bottom, white 8%, rgba(255,255,255,.96) 32%, rgba(255,255,255,0)); }
     .names-slots-window::after { bottom: 0; background: linear-gradient(to top, white 8%, rgba(255,255,255,.96) 32%, rgba(255,255,255,0)); }
+    .names-slots-corner-clef { pointer-events: none; position: absolute; z-index: 4; color: #000; font-family: "Bravura", serif; font-size: 36px; font-weight: 400; line-height: 1; opacity: 1; transform-origin: center; }
+    .names-slots-corner-clef.is-top-left { top: 28px; left: 20px; transform: rotate(20deg); }
+    .names-slots-corner-clef.is-top-right { top: 28px; right: 20px; transform: rotate(-20deg); }
+    .names-slots-corner-clef.is-bottom-left { bottom: 18px; left: 20px; transform: rotate(-20deg); }
+    .names-slots-corner-clef.is-bottom-right { right: 20px; bottom: 18px; transform: rotate(20deg); }
     .names-slots-row { position: absolute; z-index: 1; left: 18px; display: flex; width: calc(100% - 36px); height: 82px; align-items: center; justify-content: center; border: 1px solid #d6d3d1; border-radius: 14px; color: #111; font: inherit; font-weight: 800; line-height: 1.05; text-align: center; box-shadow: 0 2px 7px rgba(0,0,0,.04); transform-origin: center; }
-    .names-slots-row-content { display: grid; width: 100%; height: 100%; min-width: 0; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; gap: 8px; padding: 0 18px; }
+    .names-slots-row-content { display: flex; width: 100%; height: 100%; min-width: 0; align-items: center; justify-content: center; padding: 0 18px; }
     .names-slots-row-name { min-width: 0; overflow-wrap: anywhere; }
-    .names-slots-row-symbol { display: inline-flex; width: 42px; height: 100%; align-items: center; justify-content: center; justify-self: center; font-family: "Bravura", serif; font-size: .8em; font-weight: 400; line-height: 1; text-decoration: none; transform: translateY(4px); }
-    .names-slots-row-symbol.is-hidden { visibility: hidden; }
     .names-slots-row.is-removable { cursor: pointer; }
     .names-slots-row.is-removable:hover .names-slots-row-name, .names-slots-row.is-removable:focus-visible .names-slots-row-name { text-decoration: line-through; text-decoration-thickness: 2px; }
     .names-slots-row:disabled { cursor: default; }
     .names-slots-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.4; text-align: center; }
-    .names-saved-list { display: flex; max-height: 300px; flex-direction: column; gap: 8px; overflow-y: auto; padding-right: 2px; }
-    .names-saved-card { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #e7e5e4; border-radius: 12px; background: white; padding: 9px 10px; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+    .names-saved-list { display: flex; max-height: 300px; flex-direction: column; gap: 8px; overflow-y: auto; padding: 8px; }
+    .names-saved-row { display: flex; min-width: 0; align-items: stretch; gap: 6px; }
+    .names-saved-card { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #e7e5e4; border-radius: 12px; background: white; padding: 9px 10px; color: #111; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,.03); transition: transform .08s ease, filter .08s ease, box-shadow .12s ease, background-color .12s ease; }
+    .names-saved-card.is-active { border-color: #78716c; background: #f5f5f4; }
+    .names-saved-name { display: flex; min-width: 0; align-items: center; gap: 7px; }
+    .names-saved-tick { display: block; width: 15px; height: 15px; flex: none; object-fit: contain; }
+    .names-saved-title { min-width: 0; overflow: hidden; color: #1c1917; font-size: 14px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+    .names-saved-count { flex: none; color: #78716c; font-size: 14px; font-weight: 400; white-space: nowrap; }
+    .names-saved-icon-button { display: inline-flex; width: 42px; min-width: 42px; align-items: center; justify-content: center; border: 1px solid #d6d3d1; border-radius: 12px; background: white; transition: transform .08s ease, filter .08s ease, box-shadow .12s ease, background-color .12s ease; }
+    .names-saved-icon { display: block; width: 19px; height: 19px; object-fit: contain; }
+    .names-saved-card:disabled, .names-saved-icon-button:disabled { cursor: not-allowed; opacity: .42; transform: none; filter: none; box-shadow: none; }
     .names-toolbar-save { border-color: #000 !important; background: #000 !important; color: #fff !important; }
-    .names-toolbar-save-glyph { display: block; width: 21px; height: 21px; flex: none; object-fit: contain; filter: invert(1); }
-    .names-toolbar-clear { border-color: #dc2626 !important; background: #dc2626 !important; color: #fff !important; }
+    .names-toolbar-list-glyph, .names-toolbar-save-glyph { display: block; width: 21px; height: 21px; flex: none; object-fit: contain; }
+    .names-toolbar-save-glyph { filter: invert(1); }
+    .names-toolbar-clear { border-color: #d6d3d1 !important; background: #fff !important; color: #000 !important; }
     .names-toolbar-clear:disabled, .names-toolbar-save:disabled { cursor: not-allowed; opacity: .42; transform: none; filter: none; box-shadow: none; }
     @media (min-width: 640px) { .names-toolbar-save, .names-toolbar-clear { width: 92px; } }
-    .names-colour-picker { margin-top: 12px; border-top: 1px solid #e7e5e4; padding-top: 12px; }
-    .names-colour-label { margin: 0 0 10px; color: #111; font-size: 14px; font-weight: 700; line-height: 1.2; }
-    .names-colour-grid { display: grid; grid-template-columns: repeat(4, 34px); justify-content: center; gap: 12px; }
+    .names-saved-actions { position: absolute; z-index: 5; right: 0; bottom: 0; display: flex; align-items: center; gap: 8px; }
+    .names-saved-actions button { box-sizing: border-box; height: 44px !important; min-height: 44px !important; }
+    .names-saved-actions .hub-menu-panel { top: auto; bottom: 100%; margin-top: 0; margin-bottom: .5rem; }
+    .names-fullscreen-action { position: absolute; z-index: 5; bottom: 0; left: 0; }
+    .names-fullscreen-action { opacity: 1; transition: opacity .35s ease; }
+    .names-fullscreen-action.is-hidden { pointer-events: none; opacity: 0; }
+    .names-fullscreen-action button { box-sizing: border-box; height: 44px !important; min-height: 44px !important; }
+    .names-fullscreen-glyph { display: block; width: 21px; height: 21px; flex: none; object-fit: contain; }
+    .names-customise-action { width: 100%; }
+    .names-customise-action-icon { display: block; width: 23px; height: 23px; flex: none; object-fit: contain; filter: invert(1); transform: translateX(-2px); }
+    body > .hub-menu-panel-customise .hub-menu-title { margin-bottom: 0; }
+    .hub-menu-panel-customise .names-customise-section { display: flex; flex-direction: column; gap: 6px; }
+    .hub-menu-panel-customise .names-customise-section + .names-customise-section { margin-top: 12px; }
+    .hub-menu-panel-customise .names-customise-section > :first-child { padding-top: 0; padding-bottom: 0; }
+    .hub-menu-panel-customise .names-customise-section .hub-toggle-row { margin-bottom: 0; }
+    .names-colour-picker { margin-top: 0; }
+    .names-colour-grid { box-sizing: border-box; display: grid; width: 100%; grid-template-columns: repeat(4, 34px); justify-content: space-between; column-gap: 0; row-gap: 12px; padding: 0 14px; }
     .names-colour-swatch { width: 34px; height: 34px; border: 1px solid #a8a29e; border-radius: 50%; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
     .names-colour-swatch[aria-pressed="true"] { outline: 2px solid #111; outline-offset: 2px; }
     .names-colour-swatch:disabled { cursor: not-allowed; opacity: .42; }
@@ -99,33 +125,52 @@
     .names-primary-button:disabled, .names-secondary-button:disabled, .names-danger-button:disabled { cursor: not-allowed; opacity: .42; transform: none; filter: none; box-shadow: none; }
     .names-primary-button.names-spin-button { box-shadow: var(--names-shared-shadow); }
     @media (hover:hover) and (pointer:fine) {
-      .names-primary-button:not(:disabled):hover, .names-secondary-button:not(:disabled):hover, .names-danger-button:not(:disabled):hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+      .names-primary-button:not(:disabled):hover, .names-secondary-button:not(:disabled):hover, .names-danger-button:not(:disabled):hover, .names-saved-card:not(:disabled):hover, .names-saved-icon-button:not(:disabled):hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
       .names-primary-button.names-spin-button:not(:disabled):hover { box-shadow: var(--names-shared-shadow); }
       .names-wheel-segment.is-removable:hover .names-segment-label { text-decoration: line-through; text-decoration-thickness: 2px; }
     }
     .names-spin-button { min-width: 110px; min-height: 58px; height: 58px; transform-origin: center; }
-    .names-overlay { position: fixed; inset: 0; z-index: 1300; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15,23,42,.72); backdrop-filter: blur(4px); }
-    .names-dialog { width: min(500px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; border-radius: 22px; background: white; padding: 22px; box-shadow: 0 24px 70px rgba(0,0,0,.32); text-align: center; }
-    .names-dialog h2 { margin: 0; color: #111; font-size: 1.2rem; font-weight: 900; line-height: 1.2; }
-    .names-dialog p { margin: 9px 0 0; color: #57534e; font-size: 14px; line-height: 1.45; }
     .names-dialog-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 18px; }
     .names-winner { margin: 18px 0 0; color: #111; font-size: clamp(1.45rem, 4vw, 2.4rem); font-weight: 900; letter-spacing: -.035em; line-height: 1.08; }
-    .names-winner span { display: block; }
+    .names-winner span { display: block; transform-origin: center; animation: namesWinnerPulse .9s ease-in-out infinite; }
     .names-winner-panel { position: absolute; z-index: 6; top: 50%; left: 50%; width: min(420px, calc(100% - 40px)); transform: translate(-50%, -50%); border: 1px solid #e7e5e4; border-radius: 18px; background: white; padding: 18px; box-shadow: var(--names-shared-shadow); text-align: center; }
     .names-winner-panel .names-winner { margin-top: 0; }
     .names-winner-panel .names-dialog-actions { flex-direction: row; flex-wrap: nowrap; margin-top: 16px; }
     .names-winner-panel .names-dialog-actions button { width: auto; flex: 1; }
-    .names-winner-panel:not(.names-wheel-confirm-panel) .names-winner { transform: translateY(11px); }
-    .names-winner-panel:not(.names-wheel-confirm-panel) .names-dialog-actions { margin-top: 42px; border-top: 1px solid #d6d3d1; padding-top: 23px; }
+    .names-winner-panel:not(.names-wheel-confirm-panel) .names-winner { transform: translateY(22px); }
+    .names-winner-panel:not(.names-wheel-confirm-panel) .names-dialog-actions { margin-top: 66px; }
     .names-wheel-confirm-panel h2 { margin: 0; color: #111; font-size: 1.2rem; font-weight: 900; line-height: 1.2; }
     .names-wheel-confirm-panel .names-dialog-actions { flex-direction: row; }
     .names-wheel-confirm-panel .names-dialog-actions button { width: auto; flex: 1; }
-    .names-wheel-stage.has-wheel-overlay .names-wheel, .names-wheel-stage.has-wheel-overlay .names-slots-window, .names-wheel-stage.has-wheel-overlay .names-wheel-pointer, .names-wheel-stage.has-wheel-overlay .names-spin-button { opacity: .24; filter: grayscale(1); }
+    .names-wheel-popover { max-height: calc(100% - 40px); overflow-y: auto; }
+    .names-wheel-popover h2 { margin: 0; padding: 0 32px; color: #111; font-size: 1.2rem; font-weight: 900; line-height: 1.2; text-align: center; }
+    .names-wheel-popover-body { margin-top: 12px; text-align: left; }
+    .names-wheel-popover-body > p { margin: 0; color: #57534e; font-size: 14px; line-height: 1.45; text-align: center; }
+    .names-class-textarea { box-sizing: border-box; min-height: 190px; resize: vertical; padding-top: 11px; padding-bottom: 11px; line-height: 1.45; overscroll-behavior-y: contain; }
+    .names-edit-field-label { display: block; margin: 14px 0 6px; color: #78716c; font-size: 11px; font-weight: 800; letter-spacing: .12em; line-height: 1.2; text-align: left; text-transform: uppercase; }
+    .names-numbered-textarea { position: relative; }
+    .names-numbered-textarea .names-class-textarea { display: block; padding-left: 52px; }
+    .names-numbered-textarea.is-empty .names-class-textarea { padding-left: 12px; }
+    .names-numbered-textarea.is-edit-class .names-class-textarea { height: 420px; min-height: 220px; max-height: calc(100dvh - 580px); }
+    .names-class-line-numbers { pointer-events: none; position: absolute; z-index: 1; top: 1px; bottom: 1px; left: 1px; box-sizing: border-box; width: 40px; overflow: hidden; border-radius: 11px 0 0 11px; padding: 11px 0 11px 14px; color: #a8a29e; font-size: 14px; line-height: 1.45; text-align: left; }
+    .names-class-line-number { display: block; height: 1.45em; }
+    .names-wheel-stage.has-wheel-overlay .names-wheel, .names-wheel-stage.has-wheel-overlay .names-slots-window, .names-wheel-stage.has-wheel-overlay .names-wheel-pointer, .names-wheel-stage.has-wheel-overlay .names-spin-button { opacity: .24; }
+    .names-wheel-stage.has-wheel-overlay .names-spin-button { box-shadow: none; }
     .names-confetti { pointer-events: none; position: fixed; inset: 0; z-index: 1400; overflow: hidden; }
     .names-confetti span { position: absolute; top: -18px; width: 9px; height: 16px; border-radius: 3px; animation: namesConfettiFall 1.8s cubic-bezier(.15,.65,.4,1) forwards; }
     @keyframes namesWelcomeSpin { 0% { transform: rotate(0); } 12% { transform: rotate(360deg); } 100% { transform: rotate(360deg); } }
+    @keyframes namesWinnerPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+    @keyframes namesDuplicateShake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
     @keyframes namesConfettiFall { 0% { opacity: 1; transform: translate3d(0,-5vh,0) rotate(0); } 100% { opacity: 0; transform: translate3d(var(--drift),105vh,0) rotate(680deg); } }
-    @media (prefers-reduced-motion: reduce) { .names-confetti { display: none; } .names-wheel-rotor { transition-duration: .01ms !important; } .names-wheel-empty { animation: none !important; } }
+    .names-main:fullscreen { width: 100vw; min-height: 100vh !important; border: 0; border-radius: 0; background: #fff; padding: 0; }
+    .names-main:fullscreen .hub-toolbar, .names-main:fullscreen .names-saved-actions { display: none !important; }
+    .names-main:fullscreen .names-wheel-stage { min-height: 100vh; padding: 24px; }
+    .names-main:fullscreen .names-wheel-stage.is-rows .names-slots-wrap { transform: translateX(60px); }
+    .names-main:fullscreen .names-wheel-stage.is-rows .names-winner-panel { left: calc(50% + 60px); }
+    .names-main:fullscreen .names-wheel-stage.is-wheel .names-wheel-wrap { transform: translateX(60px); }
+    .names-main:fullscreen .names-wheel-stage.is-wheel .names-winner-panel { left: calc(50% + 60px); }
+    .names-main:fullscreen .names-fullscreen-action { bottom: 24px; left: 24px; }
+    @media (prefers-reduced-motion: reduce) { .names-confetti { display: none; } .names-wheel-rotor { transition-duration: .01ms !important; } .names-wheel-empty { animation: none !important; } .names-duplicate-message { animation: none !important; } .names-winner span { animation: none !important; } .names-fullscreen-action { transition: none !important; } }
   </style>
 </head>
 <body>
@@ -136,7 +181,8 @@ const { useEffect, useMemo, useRef, useState } = React;
 const CORE = window.NAME_RANDOMISER_CORE;
 const STORAGE_KEY = "mlh-name-randomiser-v1";
 const MIN_SPIN_DURATION = 6000;
-const ASSET = { appIcon: "names-icon.svg", wheel: "wheel2.svg", slots: "slots.svg", customise: "customise.svg", save: "save.svg", audio: "audio-svgrepo-com.svg?v=20260722-smaller15", tick: "tick.svg", spin: "spin.mp3" };
+const FULLSCREEN_CONTROL_TIMEOUT = 3000;
+const ASSET = { appIcon: "names-icon.svg", wheel: "wheel2.svg", slots: "slots.svg", customise: "customise.svg", classIcon: "class.svg", list: "list.svg", save: "save.svg", edit: "rename.svg", bin: "bin.svg", fullscreen: "full screen.svg", audio: "audio-svgrepo-com.svg?v=20260722-smaller15", tick: "tick.svg", spin: "spin.mp3" };
 
 function uid(prefix) {
   if (window.crypto?.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
@@ -175,21 +221,32 @@ function wrapName(name, maxChars) {
   return lines;
 }
 
-const MUSIC_BORDER_GLYPHS = [
-  "\uE050", "\uE062", "\uE047", "\uE040", "\uE041", "\uE1D2", "\uE1D3", "\uE1D4",
-  "\uE1D5", "\uE1D6", "\uE1D7", "\uE1D8", "\uE1D9", "\uE1DA", "\uE260", "\uE261",
-  "\uE262", "\uE4A0", "\uE4A1", "\uE4A2", "\uE4A3", "\uE4E3", "\uE4E4", "\uE4E5",
-  "\uE4E6", "\uE4E7", "\uE520", "\uE522", "\uE52B", "\uE52C", "\uE52D", "\uE52F",
-];
-function Wheel({ segments, rotation, spinning, locked, durationMs, alternateColour, showBorder, onRemove, onSpin, spinDisabled }) {
+function segmentTextColour(fill) {
+  return fill === "#111111" ? "#fff" : "#111";
+}
+
+function spinArrowOutline(selectedColour, spinColour) {
+  if (selectedColour === "#111111") return "#fff";
+  return spinColour === "#111111" ? "none" : "#111";
+}
+
+function randomiserFontSize(count) {
+  return Math.max(7, Math.min(28, 34 - count * 1.05));
+}
+
+function Wheel({ segments, rotation, spinning, locked, durationMs, selectedColour, onRemove, onSpin, spinDisabled }) {
   const [armedRemoveId, setArmedRemoveId] = useState(null);
   const count = segments.length;
   const slice = count ? 360 / count : 360;
   const sliceRadians = slice * Math.PI / 180;
   const textRadius = count === 1 ? 140 : (4 * 260 * Math.sin(sliceRadians / 2)) / (3 * sliceRadians);
   const textX = 300 + textRadius;
-  const baseFontSize = Math.max(7, Math.min(28, 34 - count * 1.05));
+  const baseFontSize = randomiserFontSize(count);
   const maxChars = Math.max(7, Math.floor(19 - Math.min(9, count * .35)));
+  const colourPalette = CORE.segmentColourPalette(selectedColour);
+  const spinColour = CORE.spinControlColour(selectedColour);
+  const spinButtonColour = spinColour;
+  const arrowOutline = spinArrowOutline(selectedColour, spinColour);
   return <div className="names-wheel-wrap">
     <svg className="names-wheel" viewBox="0 0 600 600" role="img" aria-label={count ? `Wheel containing ${count} segments` : "Empty name wheel"}>
       <circle cx="300" cy="300" r="260" fill="#fff" stroke="#111" strokeWidth="1.25" />
@@ -198,10 +255,9 @@ function Wheel({ segments, rotation, spinning, locked, durationMs, alternateColo
           const start = index * slice;
           const end = start + slice;
           const middle = count === 1 ? 0 : start + slice / 2;
-          const segmentFill = index % 2 === 0 ? "#fff" : alternateColour;
-          const segmentTextColour = segmentFill === "#111111" ? "#fff" : "#111";
+          const segmentFill = colourPalette[index % colourPalette.length];
+          const textColour = segmentTextColour(segmentFill);
           const textLines = segment.names.flatMap((name) => wrapName(name, maxChars));
-          const segmentSymbol = MUSIC_BORDER_GLYPHS[index % MUSIC_BORDER_GLYPHS.length];
           const longestLine = Math.max(1, ...textLines.map((line) => line.length));
           const fontSize = Math.max(7, Math.min(baseFontSize, 190 / (longestLine * .62)));
           const lineHeight = fontSize * 1.12;
@@ -222,28 +278,35 @@ function Wheel({ segments, rotation, spinning, locked, durationMs, alternateColo
               ? <circle cx="300" cy="300" r="259" fill={segmentFill} />
               : <path d={wedgePath(start, end)} fill={segmentFill} stroke="#111" strokeWidth={count > 35 ? .75 : 1.25} />}
             <g transform={`rotate(${middle} 300 300)`}>
-              <text className="names-segment-label" x={textX} y="300" transform={`rotate(180 ${textX} 300)`} fill={segmentTextColour} fontSize={fontSize} fontWeight="800" textAnchor="middle" dominantBaseline="middle">
+              <text className="names-segment-label" x={textX} y="300" transform={`rotate(180 ${textX} 300)`} fill={textColour} fontSize={fontSize} fontWeight="800" textAnchor="middle" dominantBaseline="middle">
                 {textLines.map((line, lineIndex) => <tspan key={`${line}-${lineIndex}`} x={textX} dy={lineIndex === 0 ? firstDy : lineHeight}>{line}</tspan>)}
-                {showBorder && textLines.length > 0 && <tspan className="names-wheel-segment-symbol" dx={Math.max(5, fontSize * .25)} dy="0" fontSize={fontSize * .86} aria-hidden="true">{segmentSymbol}</tspan>}
               </text>
             </g>
           </g>;
         })}
+        {count > 0 && <g aria-hidden="true">
+          <circle cx="300" cy="300" r="36" fill="#fff" stroke="#111" strokeWidth="1.25" />
+          <text className="names-wheel-centre-glyph" x="300" y="300" fill="#111" textAnchor="middle" dominantBaseline="central" transform="translate(0 7)">{"\uE050"}</text>
+        </g>}
       </g>
-      {count > 0 && <circle cx="300" cy="300" r="10" fill="#111" />}
     </svg>
     {count === 0 && <div className="names-wheel-empty"><span className="names-empty-title">Welcome!</span><span className="names-empty-description">Add a name to get started.</span></div>}
     <div className="names-wheel-pointer-group">
-      <button type="button" className="names-primary-button names-spin-button" style={{ fontSize: `${baseFontSize}px`, fontWeight: 800 }} disabled={spinDisabled} onClick={onSpin}>Spin</button>
-      <svg className="names-wheel-pointer" viewBox="0 0 68 58" aria-hidden="true"><path d="M7 5 L7 53 L62 29 Z" fill="#111" /></svg>
+      <button type="button" className="names-primary-button names-spin-button" style={{ backgroundColor: spinButtonColour, borderColor: "#111", color: segmentTextColour(spinButtonColour), fontSize: `${baseFontSize}px`, fontWeight: 800 }} disabled={spinDisabled} onClick={onSpin}>Spin</button>
+      <svg className="names-wheel-pointer" viewBox="0 0 68 58" aria-hidden="true"><path d="M5 13 L5 45 Q5 57 15.94 52.06 L56.06 33.94 Q67 29 56.06 24.06 L15.94 5.94 Q5 1 5 13 Z" fill={spinColour} stroke={arrowOutline} strokeWidth={arrowOutline === "none" ? 0 : 1} /></svg>
     </div>
   </div>;
 }
 
-function SlotMachine({ segments, position, locked, alternateColour, showBorder, onRemove, onSpin, spinDisabled }) {
+function SlotMachine({ segments, position, locked, selectedColour, onRemove, onSpin, spinDisabled }) {
   const count = segments.length;
+  const spinFontSize = randomiserFontSize(count);
   const base = Math.floor(position);
   const fraction = position - base;
+  const colourPalette = CORE.segmentColourPalette(selectedColour);
+  const spinColour = CORE.spinControlColour(selectedColour);
+  const spinButtonColour = spinColour;
+  const arrowOutline = spinArrowOutline(selectedColour, spinColour);
   const visibleRows = count ? Array.from({ length: 7 }, (_, rowIndex) => {
     const offset = rowIndex - 3;
     const segmentIndex = ((base + offset) % count + count) % count;
@@ -251,21 +314,24 @@ function SlotMachine({ segments, position, locked, alternateColour, showBorder, 
   }) : [];
 
   return <div className="names-slots-wrap">
-    <div className="names-slots-window" role="group" aria-label={count ? `Slots containing ${count} names` : "Empty Slots"}>
+    <div className="names-slots-window" role="group" aria-label={count ? `Rows containing ${count} names` : "Empty Rows"}>
+      <span className="names-slots-corner-clef is-top-left" aria-hidden="true">{"\uE050"}</span>
+      <span className="names-slots-corner-clef is-top-right" aria-hidden="true">{"\uE050"}</span>
+      <span className="names-slots-corner-clef is-bottom-left" aria-hidden="true">{"\uE050"}</span>
+      <span className="names-slots-corner-clef is-bottom-right" aria-hidden="true">{"\uE050"}</span>
       {visibleRows.map(({ offset, segmentIndex, segment }) => {
         const distance = Math.abs(offset - fraction);
         const fontSize = Math.max(17, 36 - distance * 7);
         const scale = Math.max(.76, 1 - distance * .11);
         const removable = !segment.preview && !locked;
-        const rowColour = segmentIndex % 2 === 0 ? "#fff" : alternateColour;
-        const rowSymbol = MUSIC_BORDER_GLYPHS[segmentIndex % MUSIC_BORDER_GLYPHS.length];
-        return <button key={`${offset}-${segment.id}`} type="button" className={`names-slots-row ${removable ? "is-removable" : ""}`} style={{ top: `calc(50% + ${(offset - fraction) * 92}px)`, backgroundColor: rowColour, color: rowColour === "#111111" ? "#fff" : "#111", fontSize: `${fontSize}px`, opacity: Math.max(.5, 1 - distance * .16), transform: `translateY(-50%) scale(${scale})`, zIndex: distance < .55 ? 2 : 1 }} disabled={!removable} aria-label={!segment.preview ? `Remove ${segment.names.join(" and ")}` : "Name preview"} onClick={() => removable && onRemove(segment.id)}><span className="names-slots-row-content"><span className={`names-slots-row-symbol ${showBorder ? "" : "is-hidden"}`} aria-hidden="true">{rowSymbol}</span><span className="names-slots-row-name">{segment.names.map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}</span><span className={`names-slots-row-symbol ${showBorder ? "" : "is-hidden"}`} aria-hidden="true">{rowSymbol}</span></span></button>;
+        const rowColour = colourPalette[segmentIndex % colourPalette.length];
+        return <button key={`${offset}-${segment.id}`} type="button" className={`names-slots-row ${removable ? "is-removable" : ""}`} style={{ top: `calc(50% + ${(offset - fraction) * 92}px)`, backgroundColor: rowColour, color: segmentTextColour(rowColour), fontSize: `${fontSize}px`, opacity: Math.max(.5, 1 - distance * .16), transform: `translateY(-50%) scale(${scale})`, zIndex: distance < .55 ? 2 : 1 }} disabled={!removable} aria-label={!segment.preview ? `Remove ${segment.names.join(" and ")}` : "Name preview"} onClick={() => removable && onRemove(segment.id)}><span className="names-slots-row-content"><span className="names-slots-row-name">{segment.names.map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}</span></span></button>;
       })}
       {!count && <div className="names-slots-empty"><span className="names-empty-title">Welcome!</span><span className="names-empty-description">Add a name to get started.</span></div>}
     </div>
     <div className="names-wheel-pointer-group">
-      <button type="button" className="names-primary-button names-spin-button" style={{ fontSize: "28px", fontWeight: 800 }} disabled={spinDisabled} onClick={onSpin}>Spin</button>
-      <svg className="names-wheel-pointer" viewBox="0 0 68 58" aria-hidden="true"><path d="M7 5 L7 53 L62 29 Z" fill="#111" /></svg>
+      <button type="button" className="names-primary-button names-spin-button" style={{ backgroundColor: spinButtonColour, borderColor: "#111", color: segmentTextColour(spinButtonColour), fontSize: `${spinFontSize}px`, fontWeight: 800 }} disabled={spinDisabled} onClick={onSpin}>Spin</button>
+      <svg className="names-wheel-pointer" viewBox="0 0 68 58" aria-hidden="true"><path d="M5 13 L5 45 Q5 57 15.94 52.06 L56.06 33.94 Q67 29 56.06 24.06 L15.94 5.94 Q5 1 5 13 Z" fill={spinColour} stroke={arrowOutline} strokeWidth={arrowOutline === "none" ? 0 : 1} /></svg>
     </div>
   </div>;
 }
@@ -276,44 +342,56 @@ function Confetti({ activeKey }) {
   return <div key={activeKey} className="names-confetti" aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <span key={index} style={{ left: `${(index * 37) % 100}%`, backgroundColor: colours[index % colours.length], animationDelay: `${(index % 12) * .045}s`, animationDuration: `${1.35 + (index % 7) * .13}s`, "--drift": `${((index * 29) % 180) - 90}px` }} />)}</div>;
 }
 
-function Dialog({ title, children, actions, onClose, labelledBy = "names-dialog-title" }) {
-  const dialogRef = useRef(null);
+function WheelPopover({ title, children, actions, onClose, labelledBy = "names-wheel-popover-title" }) {
+  const popoverRef = useRef(null);
   useEffect(() => {
     const previous = document.activeElement;
-    dialogRef.current?.querySelector("input, button")?.focus();
+    popoverRef.current?.querySelector("input, textarea, button")?.focus();
     const onKeyDown = (event) => { if (event.key === "Escape") onClose?.(); };
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); previous?.focus?.(); };
-  }, [onClose]);
-  return <div className="names-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
-    <div ref={dialogRef} className="names-dialog" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+  }, [title]);
+  return <aside ref={popoverRef} className="names-winner-panel names-wheel-confirm-panel names-wheel-popover" role="dialog" aria-modal="true" aria-labelledby={labelledBy} data-menu-panel="true">
       <h2 id={labelledBy}>{title}</h2>
-      {children}
-      <div className="names-dialog-actions">{actions}</div>
-    </div>
-  </div>;
+      <div className="names-wheel-popover-body">{children}</div>
+      {actions && <div className="names-dialog-actions">{actions}</div>}
+  </aside>;
 }
 
-function NameComposer({ draftName, setDraftName, addName, disabled }) {
+function NumberedClassTextarea({ id, value, onChange, rows, autoFocus = false, placeholder, existingSegments = [] }) {
+  const gutterRef = useRef(null);
+  const { count, numbers } = CORE.classListNumbering(value, existingSegments);
+  return <>
+    <label htmlFor={id} className="names-edit-field-label">Students ({count})</label>
+    <div className={`names-numbered-textarea ${rows === 20 ? "is-edit-class" : ""} ${value ? "" : "is-empty"}`}>
+      <div ref={gutterRef} className="names-class-line-numbers" aria-hidden="true">{numbers.map((number, index) => <span key={index} className="names-class-line-number">{number || "\u00a0"}</span>)}</div>
+      <textarea id={id} className="names-field names-class-textarea" rows={rows} wrap="off" autoFocus={autoFocus} value={value} placeholder={placeholder} onScroll={(event) => { if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop; }} onChange={onChange} />
+    </div>
+  </>;
+}
+
+function NameComposer({ draftName, setDraftName, addName, duplicateErrorKey, clearDuplicateError, disabled }) {
   const valid = Boolean(CORE.cleanName(draftName));
   return <div className="names-add-group" role="group" aria-label="Add Name">
-    <input className="names-field names-toolbar-name" value={draftName} disabled={disabled} placeholder="Name" aria-label="Name" autoCapitalize="words" onChange={(event) => setDraftName(CORE.capitaliseNameInput(event.target.value))} onKeyDown={(event) => { if (event.key === "Enter" && valid) addName(); }} />
+    <div className="names-add-field-wrap">
+      <input className="names-field names-toolbar-name" value={draftName} disabled={disabled} placeholder="Name" aria-label="Name" autoCapitalize="words" aria-describedby={duplicateErrorKey ? "names-duplicate-message" : undefined} onChange={(event) => { clearDuplicateError(); setDraftName(CORE.capitaliseNameInput(event.target.value)); }} onKeyDown={(event) => { if (event.key === "Enter" && valid) addName(); }} />
+      {duplicateErrorKey > 0 && <p key={duplicateErrorKey} id="names-duplicate-message" className="names-duplicate-message" role="alert">Name already added!</p>}
+    </div>
     <button type="button" className="names-primary-button names-toolbar-add" disabled={disabled || !valid} onClick={addName}>Add</button>
   </div>;
 }
 
-function SavedLists({ lists, activeSavedId, loadList, renameList, deleteList, disabled }) {
-  return <div aria-label="Saved Lists">
-    <p className="names-panel-note text-center">Stored in this browser on this device.</p>
+function SavedLists({ lists, activeSavedId, loadList, editList, deleteList, disabled }) {
+  return <div aria-label="Saved Classes">
     <div className="names-saved-list mt-3">
-      {!lists.length && <p className="names-panel-note !m-0 rounded-xl border border-dashed border-stone-300 bg-white px-3 py-5 text-center">Saved lists will appear here</p>}
-      {lists.map((list) => <div key={list.id} className={`names-saved-card flex-col !items-stretch ${list.id === activeSavedId ? "border-stone-500" : ""}`}>
-        <div className="min-w-0"><div className="truncate text-sm font-black text-stone-900">{list.title}</div><div className="mt-1 text-[11px] font-semibold text-stone-500">{list.segments.length} {list.segments.length === 1 ? "name" : "names"}</div></div>
-        <div className="grid grid-cols-3 gap-1.5">
-          <button type="button" className="names-secondary-button !min-h-[36px] px-2" disabled={disabled} onClick={() => loadList(list)}>Load</button>
-          <button type="button" className="names-secondary-button !min-h-[36px] px-2" disabled={disabled} onClick={() => renameList(list)}>Rename</button>
-          <button type="button" className="names-secondary-button !min-h-[36px] px-2" disabled={disabled} onClick={() => deleteList(list)}>Delete</button>
-        </div>
+      {!lists.length && <p className="names-panel-note !m-0 rounded-xl border border-dashed border-stone-300 bg-white px-3 py-5 text-center">Empty</p>}
+      {lists.map((list) => <div key={list.id} className="names-saved-row">
+        <button type="button" className={`names-saved-card ${list.id === activeSavedId ? "is-active" : ""}`} disabled={disabled} aria-label={`Load ${list.title}, ${list.segments.length} ${list.segments.length === 1 ? "name" : "names"}`} onClick={() => loadList(list)}>
+          <span className="names-saved-name">{list.id === activeSavedId && <img src={ASSET.tick} alt="" aria-hidden="true" className="names-saved-tick" />}<span className="names-saved-title">{list.title}</span></span>
+          <span className="names-saved-count">{list.segments.length} {list.segments.length === 1 ? "name" : "names"}</span>
+        </button>
+        <button type="button" className="names-saved-icon-button" disabled={disabled} aria-label={`Edit ${list.title}`} title={`Edit ${list.title}`} onClick={() => editList(list)}><img src={ASSET.edit} alt="" aria-hidden="true" className="names-saved-icon" /></button>
+        <button type="button" className="names-saved-icon-button" disabled={disabled} aria-label={`Delete ${list.title}`} title={`Delete ${list.title}`} onClick={() => deleteList(list)}><img src={ASSET.bin} alt="" aria-hidden="true" className="names-saved-icon" /></button>
       </div>)}
     </div>
   </div>;
@@ -326,7 +404,6 @@ function App() {
   const [activeSavedId, setActiveSavedId] = useState(initial.activeSavedId);
   const [draftName, setDraftName] = useState(initial.draftName);
   const [soundEffects, setSoundEffects] = useState(initial.soundEffects);
-  const [borderSymbols, setBorderSymbols] = useState(initial.borderSymbols);
   const [segmentColour, setSegmentColour] = useState(initial.segmentColour);
   const [randomiserMethod, setRandomiserMethod] = useState(initial.randomiserMethod);
   const [customiseOpen, setCustomiseOpen] = useState(false);
@@ -341,36 +418,79 @@ function App() {
   const [confettiKey, setConfettiKey] = useState(0);
   const [dialog, setDialog] = useState(null);
   const [status, setStatus] = useState("");
+  const [duplicateErrorKey, setDuplicateErrorKey] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenControlVisible, setFullscreenControlVisible] = useState(true);
+  const mainRef = useRef(null);
   const customiseRef = useRef(null);
   const methodRef = useRef(null);
   const savedListsRef = useRef(null);
   const spinAudioRef = useRef(null);
   const spinTimerRef = useRef(null);
   const slotFrameRef = useRef(null);
+  const fullscreenFadeTimerRef = useRef(null);
+  const winnerPanelRef = useRef(null);
+  const removalPanelRef = useRef(null);
 
   window.MLH.useClickOutside?.([customiseRef, methodRef, savedListsRef], [() => customiseOpen && setCustomiseOpen(false), () => methodOpen && setMethodOpen(false), () => savedListsOpen && setSavedListsOpen(false)]);
 
   useEffect(() => {
-    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: CORE.STORAGE_VERSION, currentSegments: segments, savedLists, activeSavedId, draftName, soundEffects, borderSymbols, segmentColour, randomiserMethod })); }
+    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: CORE.STORAGE_VERSION, currentSegments: segments, savedLists, activeSavedId, draftName, soundEffects, segmentColour, randomiserMethod })); }
     catch {}
-  }, [segments, savedLists, activeSavedId, draftName, soundEffects, borderSymbols, segmentColour, randomiserMethod]);
+  }, [segments, savedLists, activeSavedId, draftName, soundEffects, segmentColour, randomiserMethod]);
 
   useEffect(() => () => { window.clearTimeout(spinTimerRef.current); window.cancelAnimationFrame(slotFrameRef.current); }, []);
 
   useEffect(() => {
-    if (randomiserMethod !== "Slots" || !segments.length || spinning) return;
+    const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === mainRef.current);
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
+
+  useEffect(() => {
+    window.clearTimeout(fullscreenFadeTimerRef.current);
+    if (!isFullscreen) {
+      setFullscreenControlVisible(true);
+      return undefined;
+    }
+    const revealControl = () => {
+      setFullscreenControlVisible(true);
+      window.clearTimeout(fullscreenFadeTimerRef.current);
+      fullscreenFadeTimerRef.current = window.setTimeout(() => setFullscreenControlVisible(false), FULLSCREEN_CONTROL_TIMEOUT);
+    };
+    revealControl();
+    document.addEventListener("mousemove", revealControl, { passive: true });
+    document.addEventListener("touchstart", revealControl, { passive: true });
+    document.addEventListener("keydown", revealControl);
+    return () => {
+      window.clearTimeout(fullscreenFadeTimerRef.current);
+      document.removeEventListener("mousemove", revealControl);
+      document.removeEventListener("touchstart", revealControl);
+      document.removeEventListener("keydown", revealControl);
+    };
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    if (randomiserMethod !== "Rows" || !segments.length || spinning) return;
     setSlotPosition((current) => segments.length * 2 + (((current % segments.length) + segments.length) % segments.length));
   }, [randomiserMethod, segments.length]);
 
   useEffect(() => {
+    if (duplicateErrorKey > 0 && !CORE.hasName(segments, draftName)) setDuplicateErrorKey(0);
+  }, [segments, draftName, duplicateErrorKey]);
+
+  useEffect(() => { if (winner) winnerPanelRef.current?.querySelector("button")?.focus(); }, [winner]);
+  useEffect(() => { if (pendingRemoval) removalPanelRef.current?.querySelector("button")?.focus(); }, [pendingRemoval]);
+
+  useEffect(() => {
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (spinning || winner || pendingRemoval || reducedMotion) return undefined;
+    if (spinning || winner || pendingRemoval || dialog || reducedMotion) return undefined;
     const idleTimer = window.setInterval(() => {
-      if (randomiserMethod === "Slots" && segments.length) setSlotPosition((current) => current + .004);
+      if (randomiserMethod === "Rows" && segments.length) setSlotPosition((current) => current + .004);
       else if (randomiserMethod === "Wheel") setRotation((current) => current + .3);
     }, 50);
     return () => window.clearInterval(idleTimer);
-  }, [spinning, winner, pendingRemoval, randomiserMethod, segments.length]);
+  }, [spinning, winner, pendingRemoval, dialog, randomiserMethod, segments.length]);
 
   function animateSlots(start, target, duration) {
     window.cancelAnimationFrame(slotFrameRef.current);
@@ -387,9 +507,39 @@ function App() {
   function addName() {
     const clean = CORE.cleanName(CORE.capitaliseNameInput(draftName));
     if (!clean || spinning || winner || pendingRemoval) return;
+    if (CORE.hasName(segments, clean)) {
+      setDuplicateErrorKey((key) => key + 1);
+      setStatus("Name already added!");
+      return;
+    }
     setSegments((current) => [...current, { id: uid("segment"), names: [clean] }]);
     setDraftName("");
+    setDuplicateErrorKey(0);
     setStatus("Name added.");
+  }
+
+  function addClass() {
+    const names = CORE.uniqueNewNames(dialog?.value, segments);
+    if (!names.length) {
+      setDialog((current) => ({ ...current, error: "No new names to add." }));
+      return;
+    }
+    const enteredCount = String(dialog?.value ?? "").split(/\r?\n/).map(CORE.cleanName).filter(Boolean).length;
+    setSegments((current) => [...current, ...names.map((name) => ({ id: uid("segment"), names: [name] }))]);
+    setDraftName("");
+    setDuplicateErrorKey(0);
+    setDialog(null);
+    const skipped = enteredCount - names.length;
+    setStatus(`${names.length} ${names.length === 1 ? "name" : "names"} added${skipped > 0 ? `; ${skipped} duplicate${skipped === 1 ? "" : "s"} skipped` : ""}.`);
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await mainRef.current?.requestFullscreen();
+    } catch {
+      setStatus("Full screen is not available in this browser.");
+    }
   }
 
   function removeSegment(id) {
@@ -407,8 +557,21 @@ function App() {
     setPendingRemoval(null);
   }
 
-  function performSpin(nextSegments = segments) {
-    if (spinning || nextSegments.length < 2 || CORE.cleanName(draftName)) return;
+  function performSpin() {
+    if (spinning) return;
+    const clean = CORE.cleanName(CORE.capitaliseNameInput(draftName));
+    if (clean && CORE.hasName(segments, clean)) {
+      setDuplicateErrorKey((key) => key + 1);
+      setStatus("Name already added!");
+      return;
+    }
+    const nextSegments = clean ? [...segments, { id: uid("segment"), names: [clean] }] : segments;
+    if (nextSegments.length < 2) return;
+    if (clean) {
+      setSegments(nextSegments);
+      setDraftName("");
+      setDuplicateErrorKey(0);
+    }
     setWinner(null);
     setDialog(null);
     const chosenIndex = CORE.chooseIndex(nextSegments.length);
@@ -421,7 +584,7 @@ function App() {
     setSpinDuration(duration);
     setSpinning(true);
     setStatus("Spinning…");
-    if (randomiserMethod === "Slots") {
+    if (randomiserMethod === "Rows") {
       const firstWholePosition = Math.ceil(slotPosition);
       const slotDelta = ((chosenIndex - firstWholePosition) % nextSegments.length + nextSegments.length) % nextSegments.length;
       animateSlots(slotPosition, firstWholePosition + nextSegments.length * 6 + slotDelta, duration);
@@ -437,7 +600,7 @@ function App() {
     window.clearTimeout(spinTimerRef.current);
     spinTimerRef.current = window.setTimeout(() => {
       window.cancelAnimationFrame(slotFrameRef.current);
-      if (randomiserMethod === "Slots") setSlotPosition(nextSegments.length * 2 + chosenIndex);
+      if (randomiserMethod === "Rows") setSlotPosition(nextSegments.length * 2 + chosenIndex);
       setSpinning(false);
       const selected = nextSegments[chosenIndex];
       setWinner(selected);
@@ -475,49 +638,69 @@ function App() {
   }
 
   function loadList(list) {
-    const apply = () => { setSegments(CORE.copySegments(list.segments)); setActiveSavedId(list.id); setDialog(null); setStatus(`${list.title} loaded.`); };
+    const apply = () => { setSegments(CORE.copySegments(list.segments)); setActiveSavedId(list.id); setDraftName(""); setDuplicateErrorKey(0); setDialog(null); setStatus(`${list.title} loaded.`); };
     if (!segments.length) { apply(); return; }
     setDialog({ type: "load", list, confirm: apply });
   }
 
-  function confirmRename() {
-    const title = CORE.cleanName(dialog?.value);
-    if (!title) return;
-    setSavedLists((current) => current.map((list) => list.id === dialog.list.id ? { ...list, title } : list));
+  function confirmEditList() {
+    const title = CORE.cleanName(dialog?.listTitle);
+    const names = CORE.uniqueNewNames(dialog?.value, []);
+    if (!title || !names.length) {
+      setDialog((current) => ({ ...current, error: !title ? "Enter a class name." : "Add at least one student." }));
+      return;
+    }
+    const nextSegments = names.map((name) => ({ id: uid("segment"), names: [name] }));
+    const nextList = { ...dialog.list, title, segments: nextSegments };
+    setSavedLists((current) => current.map((list) => list.id === nextList.id ? nextList : list));
+    if (activeSavedId === nextList.id) {
+      setSegments(CORE.copySegments(nextSegments));
+      setDraftName("");
+      setDuplicateErrorKey(0);
+    }
     setDialog(null);
-    setStatus("Saved list renamed.");
+    setStatus(`${title} updated.`);
   }
 
-  const previewName = CORE.cleanName(draftName);
+  const cleanDraftName = CORE.cleanName(draftName);
+  const previewName = CORE.hasName(segments, cleanDraftName) ? "" : cleanDraftName;
   const displayedSegments = previewName ? [...segments, { id: "draft-preview", names: [previewName], preview: true }] : segments;
-  const wheelOverlayOpen = Boolean(winner || pendingRemoval);
+  const wheelOverlayOpen = Boolean(winner || pendingRemoval || dialog);
   const wheelLocked = spinning || wheelOverlayOpen;
 
   return <div className={`${window.MLH.shell.pageShellClass} names-page`}>
-    <window.MLH.AppHeader icon={ASSET.appIcon} title="Name Randomiser" subtitle="Randomly select students to perform, participate in activities or answer questions." profileUsesSharedSettings={false} />
+    <window.MLH.AppHeader icon={ASSET.appIcon} title="Name Randomiser" subtitle="Randomly select students to perform, participate in activities or answer questions." profileUsesSharedSettings={false} profileShowLabel={false} />
     <div className={`${window.MLH.shell.pageContentClass} !max-w-[1500px]`}>
-      <main className={`${window.MLH.shell.mainShellClass} names-main !min-h-[740px]`}>
+      <main ref={mainRef} className={`${window.MLH.shell.mainShellClass} names-main !min-h-[740px]`}>
         <window.MLH.AppToolbar left={<div className="flex items-center gap-2">
           <div className="hub-menu-anchor relative" ref={customiseRef}>
-            <window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px]" />} onClick={() => { setMethodOpen(false); setSavedListsOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />
+            <window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px]" />} onClick={() => { if (wheelLocked) return; setMethodOpen(false); setSavedListsOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />
             {customiseOpen && <window.MLH.MenuPanel title="Customise" position="left-0" variant="customise" dataMenuPanel={true}>
-              <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Sound Effects" checked={soundEffects} onChange={() => setSoundEffects((enabled) => !enabled)} />
-              <window.MLH.MenuToggleRow glyph={<span className="names-border-toggle-glyph" aria-hidden="true"><span>{"\uE050"}</span></span>} label="Symbols" checked={borderSymbols} onChange={() => setBorderSymbols((visible) => !visible)} />
-              <div className="names-colour-picker">
-                <p className="names-colour-label">Accent Colour</p>
-                <div className="names-colour-grid">
-                  {CORE.SEGMENT_COLOURS.map((colour) => <button key={colour.id} type="button" className="names-colour-swatch" style={{ backgroundColor: colour.value }} title={colour.label} aria-label={`${colour.label} segment colour`} aria-pressed={segmentColour === colour.value} disabled={wheelLocked} onClick={() => { setSegmentColour(colour.value); setStatus(`Segment colour changed to ${colour.label}.`); }}><span className="sr-only">{colour.label}</span></button>)}
+              <div className="names-customise-section">
+                <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
+                <button type="button" className="names-primary-button names-customise-action" onClick={() => { setCustomiseOpen(false); setDialog({ type: "add-class", value: "", error: "" }); }}><img src={ASSET.classIcon} alt="" aria-hidden="true" className="names-customise-action-icon" /><span>Add Class</span></button>
+              </div>
+              <div className="names-customise-section">
+                <window.MLH.MenuSubheading>Audio</window.MLH.MenuSubheading>
+                <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Sound Effects" checked={soundEffects} onChange={() => setSoundEffects((enabled) => !enabled)} />
+              </div>
+              <div className="names-customise-section">
+                <window.MLH.MenuSubheading>Colour</window.MLH.MenuSubheading>
+                <div className="names-colour-picker">
+                  <div className="names-colour-grid">
+                    {CORE.SEGMENT_COLOURS.map((colour) => <button key={colour.id} type="button" className="names-colour-swatch" style={colour.value === CORE.MULTI_SEGMENT_COLOUR ? { background: `conic-gradient(${CORE.MULTI_SEGMENT_PALETTE.join(", ")})` } : { backgroundColor: colour.value }} title={colour.label} aria-label={`${colour.label} colour`} aria-pressed={segmentColour === colour.value} disabled={wheelLocked} onClick={() => { setSegmentColour(colour.value); setStatus(`Colour changed to ${colour.label}.`); }}><span className="sr-only">{colour.label}</span></button>)}
+                  </div>
                 </div>
               </div>
             </window.MLH.MenuPanel>}
           </div>
           <div className="hub-menu-anchor names-method-anchor relative" ref={methodRef}>
             <button type="button" className={`${window.MLH.ToolbarButtonClass} names-method-button`} data-menu-trigger="true" disabled={wheelLocked} aria-expanded={methodOpen} onClick={() => { setCustomiseOpen(false); setSavedListsOpen(false); setMethodOpen((open) => !open); }}><img src={randomiserMethod === "Wheel" ? ASSET.wheel : ASSET.slots} alt="" aria-hidden="true" className="names-method-button-glyph" /><span>{randomiserMethod}</span></button>
-            {methodOpen && <window.MLH.MenuPanel title="Method" position="left-0" dataMenuPanel={true}>
+            {methodOpen && <window.MLH.MenuPanel title="Randomiser" position="left-0" dataMenuPanel={true}>
               <div className="names-method-options">
                 {CORE.RANDOMISER_METHODS.map((method) => {
                   const active = randomiserMethod === method;
-                  return <button key={method} type="button" className="names-method-option" aria-pressed={active} onClick={() => { setRandomiserMethod(method); setMethodOpen(false); setStatus(`${method} method selected.`); }}>
+                  return <button key={method} type="button" className="names-method-option" aria-pressed={active} onClick={() => { setRandomiserMethod(method); setMethodOpen(false); setStatus(`${method} randomiser selected.`); }}>
                     <span className="names-method-option-inner">
                       <span className="names-method-badge" aria-hidden="true"><img src={method === "Wheel" ? ASSET.wheel : ASSET.slots} alt="" className="names-method-glyph" /></span>
                       <span className="names-method-label">{method}</span>
@@ -528,33 +711,44 @@ function App() {
               </div>
             </window.MLH.MenuPanel>}
           </div>
-        </div>} feedback={<NameComposer draftName={draftName} setDraftName={setDraftName} addName={addName} disabled={wheelLocked} />} right={<div className="flex items-center gap-2">
-          <div className="hub-menu-anchor relative" ref={savedListsRef}>
-            <button type="button" className={`${window.MLH.ToolbarButtonClass} sm:min-w-[112px]`} data-menu-trigger="true" disabled={wheelLocked} aria-haspopup="menu" aria-expanded={savedListsOpen} onClick={() => { setCustomiseOpen(false); setMethodOpen(false); setSavedListsOpen((open) => !open); }}>Saved Lists</button>
-            {savedListsOpen && <window.MLH.MenuPanel title="Saved Lists" position="right-0" dataMenuPanel={true}>
-              <SavedLists lists={savedLists} activeSavedId={activeSavedId} loadList={(list) => { setSavedListsOpen(false); loadList(list); }} renameList={(list) => { setSavedListsOpen(false); setDialog({ type: "rename", list, value: list.title }); }} deleteList={(list) => { setSavedListsOpen(false); setDialog({ type: "delete", list }); }} disabled={wheelLocked} />
-            </window.MLH.MenuPanel>}
-          </div>
-          <button type="button" className={`${window.MLH.ToolbarButtonClass} names-toolbar-save gap-2 sm:min-w-[92px]`} disabled={wheelLocked || !segments.length} onClick={() => { setCustomiseOpen(false); setMethodOpen(false); setSavedListsOpen(false); requestSave(); }}>
-              <img src={ASSET.save} alt="" aria-hidden="true" className="names-toolbar-save-glyph" />
-              <span>Save</span>
-          </button>
+        </div>} feedback={<NameComposer draftName={draftName} setDraftName={setDraftName} addName={addName} duplicateErrorKey={duplicateErrorKey} clearDuplicateError={() => setDuplicateErrorKey(0)} disabled={wheelLocked} />} right={<div className="flex items-center gap-2">
           <button type="button" className={`${window.MLH.ToolbarButtonClass} names-toolbar-clear sm:min-w-[92px]`} disabled={wheelLocked || !segments.length} onClick={() => setDialog({ type: "clear" })}>Clear</button>
         </div>} />
 
         <div className="names-layout">
-          <section className={`names-wheel-stage ${wheelOverlayOpen ? "has-wheel-overlay" : ""}`} aria-label={`${randomiserMethod} name randomiser`}>
+          <section className={`names-wheel-stage ${randomiserMethod === "Rows" ? "is-rows" : "is-wheel"} ${wheelOverlayOpen ? "has-wheel-overlay" : ""}`} aria-label={`${randomiserMethod} name randomiser`}>
             {randomiserMethod === "Wheel"
-              ? <Wheel segments={displayedSegments} rotation={rotation} spinning={spinning} locked={wheelLocked} durationMs={spinDuration} alternateColour={segmentColour} showBorder={borderSymbols} onRemove={removeSegment} onSpin={() => performSpin()} spinDisabled={wheelLocked || segments.length < 2 || Boolean(previewName)} />
-              : <SlotMachine segments={displayedSegments} position={slotPosition} locked={wheelLocked} alternateColour={segmentColour} showBorder={borderSymbols} onRemove={removeSegment} onSpin={() => performSpin()} spinDisabled={wheelLocked || segments.length < 2 || Boolean(previewName)} />}
-            {winner && <aside className="names-winner-panel" aria-label="Selected name">
+              ? <Wheel segments={displayedSegments} rotation={rotation} spinning={spinning} locked={wheelLocked} durationMs={spinDuration} selectedColour={segmentColour} onRemove={removeSegment} onSpin={performSpin} spinDisabled={wheelLocked || displayedSegments.length < 2 || Boolean(cleanDraftName && !previewName)} />
+              : <SlotMachine segments={displayedSegments} position={slotPosition} locked={wheelLocked} selectedColour={segmentColour} onRemove={removeSegment} onSpin={performSpin} spinDisabled={wheelLocked || displayedSegments.length < 2 || Boolean(cleanDraftName && !previewName)} />}
+            <div className={`names-fullscreen-action ${isFullscreen && !fullscreenControlVisible ? "is-hidden" : ""}`}>
+              <button type="button" className={`${window.MLH.ToolbarButtonClass} names-toolbar-clear gap-2`} aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"} onFocus={() => setFullscreenControlVisible(true)} onClick={toggleFullscreen}><img src={ASSET.fullscreen} alt="" aria-hidden="true" className="names-fullscreen-glyph" /><span>{isFullscreen ? "Exit Full Screen" : "Full Screen"}</span></button>
+            </div>
+            <div className="names-saved-actions">
+              <div className="hub-menu-anchor relative" ref={savedListsRef}>
+                <button type="button" className={`${window.MLH.ToolbarButtonClass} gap-2 sm:min-w-[112px]`} data-menu-trigger="true" disabled={wheelLocked} aria-haspopup="menu" aria-expanded={savedListsOpen} onClick={() => { setCustomiseOpen(false); setMethodOpen(false); setSavedListsOpen((open) => !open); }}><img src={ASSET.list} alt="" aria-hidden="true" className="names-toolbar-list-glyph" /><span>Saved Classes</span></button>
+                {savedListsOpen && <window.MLH.MenuPanel title="Saved Classes" position="right-0" dataMenuPanel={true}>
+                  <SavedLists lists={savedLists} activeSavedId={activeSavedId} loadList={(list) => { setSavedListsOpen(false); loadList(list); }} editList={(list) => { setSavedListsOpen(false); setDialog({ type: "edit", list, listTitle: list.title, value: list.segments.flatMap((segment) => segment.names).join("\n"), error: "" }); }} deleteList={(list) => { setSavedListsOpen(false); setDialog({ type: "delete", list }); }} disabled={wheelLocked} />
+                </window.MLH.MenuPanel>}
+              </div>
+              <button type="button" className={`${window.MLH.ToolbarButtonClass} names-toolbar-save gap-2 sm:min-w-[92px]`} disabled={wheelLocked || !segments.length} onClick={() => { setCustomiseOpen(false); setMethodOpen(false); setSavedListsOpen(false); requestSave(); }}>
+                <img src={ASSET.save} alt="" aria-hidden="true" className="names-toolbar-save-glyph" />
+                <span>Save</span>
+              </button>
+            </div>
+            {dialog?.type === "add-class" && <WheelPopover title="Add Class" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" disabled={!CORE.cleanName(dialog.value)} onClick={addClass}>Add Class</button></>}><p>Paste a class list below, with one student on each line.</p><NumberedClassTextarea id="names-add-class-students" autoFocus value={dialog.value} existingSegments={segments} placeholder={'For example:\nEmma\nLewis\nSophie\nCallum\nAisha'} onChange={(event) => setDialog((current) => ({ ...current, value: event.target.value, error: "" }))} />{dialog.error && <p className="names-duplicate-message !relative !top-auto mt-2" role="alert">{dialog.error}</p>}</WheelPopover>}
+            {dialog?.type === "save" && <WheelPopover title="Save Class" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" disabled={!CORE.cleanName(dialog.value)} onClick={confirmSave}>Save</button></>}><p>Save the names currently in the randomiser to a class set you can use.</p><input className="names-field mt-4" autoFocus value={dialog.value} placeholder="For example, S2 Music" aria-label="Saved list name" onChange={(event) => setDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") confirmSave(); }} /></WheelPopover>}
+            {dialog?.type === "edit" && <WheelPopover title="Edit Class" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" disabled={!CORE.cleanName(dialog.listTitle) || !CORE.uniqueNewNames(dialog.value, []).length} onClick={confirmEditList}>Save</button></>}><p>Edit the class name and students below, with one student on each line.</p><label htmlFor="names-edit-class-name" className="names-edit-field-label">Class Name</label><input id="names-edit-class-name" className="names-field" autoFocus value={dialog.listTitle} placeholder="Class name" onChange={(event) => setDialog((current) => ({ ...current, listTitle: event.target.value, error: "" }))} /><NumberedClassTextarea id="names-edit-class-students" rows={20} value={dialog.value} onChange={(event) => setDialog((current) => ({ ...current, value: event.target.value, error: "" }))} />{dialog.error && <p className="names-duplicate-message !relative !top-auto mt-2" role="alert">{dialog.error}</p>}</WheelPopover>}
+            {dialog?.type === "load" && <WheelPopover title="Load List" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" onClick={dialog.confirm}>Load</button></>}><p>Loading <strong>{dialog.list.title}</strong> will replace the current wheel.</p></WheelPopover>}
+            {dialog?.type === "clear" && <WheelPopover title="Are you sure?" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" onClick={() => { setSegments([]); setActiveSavedId(null); setDraftName(""); setDuplicateErrorKey(0); setDialog(null); setStatus("Wheel cleared."); }}>Clear</button></>}><p>This will remove every name from the current wheel. Saved lists will not be affected.</p></WheelPopover>}
+            {dialog?.type === "delete" && <WheelPopover title="Are you sure?" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" onClick={() => { setSavedLists((current) => current.filter((list) => list.id !== dialog.list.id)); if (activeSavedId === dialog.list.id) setActiveSavedId(null); setDialog(null); setStatus(`${dialog.list.title} deleted.`); }}>Delete</button></>}><p>Delete <strong>{dialog.list.title}</strong>? This cannot be undone.</p></WheelPopover>}
+            {winner && <aside ref={winnerPanelRef} className="names-winner-panel" role="dialog" aria-label="Selected name">
               <div className="names-winner">{winner.names.map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}</div>
               <div className="names-dialog-actions">
                 <button type="button" className="names-primary-button" onClick={removeSelectedName}>Remove Name</button>
                 <button type="button" className="names-secondary-button" onClick={() => setWinner(null)}>Continue</button>
               </div>
             </aside>}
-            {pendingRemoval && <aside className="names-winner-panel names-wheel-confirm-panel" aria-labelledby="names-remove-title">
+            {pendingRemoval && <aside ref={removalPanelRef} className="names-winner-panel names-wheel-confirm-panel" role="dialog" aria-labelledby="names-remove-title">
               <h2 id="names-remove-title">Remove {pendingRemoval.names.join(" and ")}?</h2>
               <div className="names-dialog-actions">
                 <button type="button" className="names-secondary-button" onClick={() => setPendingRemoval(null)}>Cancel</button>
@@ -564,21 +758,11 @@ function App() {
             <p className="sr-only" role="status" aria-live="polite">{status}</p>
           </section>
         </div>
+        <Confetti activeKey={confettiKey} />
       </main>
     </div>
 
     <audio ref={spinAudioRef} src={ASSET.spin} preload="auto" onLoadedMetadata={(event) => { if (event.currentTarget.duration > .5) setSpinDuration(Math.max(MIN_SPIN_DURATION, Math.round(event.currentTarget.duration * 1000))); }} />
-    <Confetti activeKey={confettiKey} />
-
-    {dialog?.type === "save" && <Dialog title="Save Current List" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" disabled={!CORE.cleanName(dialog.value)} onClick={confirmSave}>Save</button></>}><p>Give this list a name so you can use it again.</p><input className="names-field mt-4" autoFocus value={dialog.value} placeholder="For example, S2 Music" aria-label="Saved list name" onChange={(event) => setDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") confirmSave(); }} /></Dialog>}
-
-    {dialog?.type === "rename" && <Dialog title="Rename List" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" disabled={!CORE.cleanName(dialog.value)} onClick={confirmRename}>Rename</button></>}><input className="names-field mt-4" autoFocus value={dialog.value} aria-label="Saved list name" onChange={(event) => setDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") confirmRename(); }} /></Dialog>}
-
-    {dialog?.type === "load" && <Dialog title="Load List" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" onClick={dialog.confirm}>Load</button></>}><p>Loading <strong>{dialog.list.title}</strong> will replace the current wheel.</p></Dialog>}
-
-    {dialog?.type === "clear" && <Dialog title="Are you sure?" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-danger-button" onClick={() => { setSegments([]); setActiveSavedId(null); setDialog(null); setStatus("Wheel cleared."); }}>Clear</button></>}><p>This will remove every name from the current wheel. Saved lists will not be affected.</p></Dialog>}
-
-    {dialog?.type === "delete" && <Dialog title="Are you sure?" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-danger-button" onClick={() => { setSavedLists((current) => current.filter((list) => list.id !== dialog.list.id)); if (activeSavedId === dialog.list.id) setActiveSavedId(null); setDialog(null); setStatus(`${dialog.list.title} deleted.`); }}>Delete</button></>}><p>Delete <strong>{dialog.list.title}</strong>? This cannot be undone.</p></Dialog>}
   </div>;
 }
 

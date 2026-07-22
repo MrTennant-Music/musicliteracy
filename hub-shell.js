@@ -162,7 +162,7 @@
     }, React.createElement("div", { className: "relative w-full max-w-2xl rounded-3xl bg-white p-10 text-center shadow-2xl" },
       React.createElement("button", { type: "button", onClick: onClose, className: "absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-xl font-bold text-stone-700", "aria-label": "Close QR code" }, "×"),
       React.createElement("h2", { className: "text-3xl font-semibold text-stone-900" }, title),
-      React.createElement("p", { className: "mt-2 text-lg text-stone-600" }, subtitle),
+      subtitle && React.createElement("p", { className: "mt-2 text-lg text-stone-600" }, subtitle),
       React.createElement("img", { className: "mx-auto mt-6 w-[min(560px,100%)] rounded-2xl border border-stone-200", src: qrUrl, alt: `QR code linking to ${title} ${subtitle}` }),
       React.createElement("button", { type: "button", onClick: copyLink, className: "mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-md transition hover:bg-blue-700" }, copied ? "Copied" : "Copy Link")
     ));
@@ -178,7 +178,7 @@
     return ({ N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher" })[level] || "Custom";
   }
 
-  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, profileUsesSharedSettings = true, worksheetConfig, worksheetMode = false }) {
+  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, profileUsesSharedSettings = true, profileShowLabel = true, worksheetConfig, worksheetMode = false }) {
     const [qrOpen, setQrOpen] = React.useState(false);
     const [worksheetOpening, setWorksheetOpening] = React.useState(false);
     const [, setProfileRevision] = React.useState(0);
@@ -189,7 +189,7 @@
     const displayedIcon = activeWorksheetMode && worksheetHeader?.icon ? worksheetHeader.icon : icon;
     const activityTitle = profileTitle || (typeof displayedTitle === "string" ? displayedTitle : "Activity");
     const hasSharedSettings = profileUsesSharedSettings && MLH.profileSettings.hasCustomSettings();
-    const shareLabel = hasSharedSettings ? "Custom" : (profileLabel || defaultProfileLabel());
+    const shareLabel = profileShowLabel ? (hasSharedSettings ? "Custom" : (profileLabel || defaultProfileLabel())) : "";
     const shareUrlObject = new URL(profileShareUrl || defaultProfileShareUrl());
     if (hasSharedSettings) shareUrlObject.searchParams.set("settings", MLH.profileSettings.encoded());
     else shareUrlObject.searchParams.delete("settings");

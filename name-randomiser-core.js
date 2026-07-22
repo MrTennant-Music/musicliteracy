@@ -4,25 +4,44 @@
   root.NAME_RANDOMISER_CORE = api;
 })(typeof window !== "undefined" ? window : globalThis, function () {
   const STORAGE_VERSION = 4;
-  const RANDOMISER_METHODS = Object.freeze(["Wheel", "Slots"]);
-  const DEFAULT_SEGMENT_COLOUR = "#f5f5f4";
+  const RANDOMISER_METHODS = Object.freeze(["Wheel", "Rows"]);
+  const MULTI_SEGMENT_COLOUR = "multi";
+  const WHITE_SEGMENT_COLOUR = "#ffffff";
+  const DEFAULT_SEGMENT_COLOUR = MULTI_SEGMENT_COLOUR;
+  const MULTI_CONTROL_COLOUR = "#ffffff";
+  const MULTI_SEGMENT_PALETTE = Object.freeze(["#fee2e2", "#ffedd5", "#fef9c3", "#dcfce7", "#dbeafe", "#ede9fe"]);
   const SEGMENT_COLOURS = Object.freeze([
-    { id: "grey", label: "Grey", value: DEFAULT_SEGMENT_COLOUR },
-    { id: "black", label: "Black", value: "#111111" },
-    { id: "red", label: "Red", value: "#fee2e2" },
-    { id: "orange", label: "Orange", value: "#ffedd5" },
-    { id: "yellow", label: "Yellow", value: "#fef9c3" },
-    { id: "green", label: "Green", value: "#dcfce7" },
-    { id: "blue", label: "Blue", value: "#dbeafe" },
-    { id: "violet", label: "Violet", value: "#ede9fe" },
+    { id: "multi", label: "Multi", value: MULTI_SEGMENT_COLOUR, palette: MULTI_SEGMENT_PALETTE },
+    { id: "white", label: "White", value: WHITE_SEGMENT_COLOUR, strongValue: "#fafaf9" },
+    { id: "black", label: "Black", value: "#111111", strongValue: "#ffffff" },
+    { id: "red", label: "Red", value: "#fee2e2", strongValue: "#fca5a5" },
+    { id: "yellow", label: "Yellow", value: "#fef9c3", strongValue: "#fde047" },
+    { id: "green", label: "Green", value: "#dcfce7", strongValue: "#86efac" },
+    { id: "blue", label: "Blue", value: "#dbeafe", strongValue: "#93c5fd" },
+    { id: "violet", label: "Violet", value: "#ede9fe", strongValue: "#c4b5fd" },
   ]);
 
   function cleanSegmentColour(value) {
+    if (value === "#f5f5f4") return WHITE_SEGMENT_COLOUR;
+    if (value === "#ffedd5") return MULTI_SEGMENT_COLOUR;
     return SEGMENT_COLOURS.some((colour) => colour.value === value) ? value : DEFAULT_SEGMENT_COLOUR;
   }
 
+  function segmentColourPalette(value) {
+    const selected = SEGMENT_COLOURS.find((colour) => colour.value === cleanSegmentColour(value)) || SEGMENT_COLOURS[0];
+    if (selected.value === MULTI_SEGMENT_COLOUR) return [...MULTI_SEGMENT_PALETTE];
+    return [selected.strongValue, selected.value];
+  }
+
+  function spinControlColour(value) {
+    const selected = SEGMENT_COLOURS.find((colour) => colour.value === cleanSegmentColour(value)) || SEGMENT_COLOURS[0];
+    if (selected.value === WHITE_SEGMENT_COLOUR || selected.value === "#111111") return "#111111";
+    if (selected.value === MULTI_SEGMENT_COLOUR) return MULTI_CONTROL_COLOUR;
+    return selected.strongValue;
+  }
+
   function cleanRandomiserMethod(value) {
-    if (value === "Puggie") return "Slots";
+    if (value === "Puggie" || value === "Slots") return "Rows";
     return RANDOMISER_METHODS.includes(value) ? value : "Wheel";
   }
 
@@ -34,6 +53,38 @@
     return String(value ?? "").replace(/(^|\s)(\p{L})/gu, (match, prefix, letter) => `${prefix}${letter.toLocaleUpperCase("en-GB")}`);
   }
 
+  function normaliseNameKey(value) {
+    return cleanName(value).toLocaleLowerCase("en-GB");
+  }
+
+  function classListNumbering(value, segments = []) {
+    const used = new Set(cleanSegments(segments).map((segment) => normaliseNameKey(segment.names[0])));
+    let count = 0;
+    const numbers = String(value ?? "").split(/\r?\n/).map((line) => {
+      const key = normaliseNameKey(line);
+      if (!key || used.has(key)) return null;
+      used.add(key);
+      count += 1;
+      return count;
+    });
+    return { count, numbers };
+  }
+
+  function hasName(segments, name) {
+    const key = normaliseNameKey(name);
+    return Boolean(key) && cleanSegments(segments).some((segment) => normaliseNameKey(segment.names[0]) === key);
+  }
+
+  function uniqueNewNames(value, segments = []) {
+    const used = new Set(cleanSegments(segments).map((segment) => normaliseNameKey(segment.names[0])));
+    return String(value ?? "").split(/\r?\n/).map((name) => cleanName(capitaliseNameInput(name))).filter((name) => {
+      const key = normaliseNameKey(name);
+      if (!key || used.has(key)) return false;
+      used.add(key);
+      return true;
+    });
+  }
+
   function cleanSegment(segment, fallbackId = "") {
     const names = Array.isArray(segment?.names) ? segment.names.map(cleanName).filter(Boolean) : [];
     if (!names.length) return null;
@@ -42,18 +93,24 @@
 
   function cleanSegments(segments) {
     if (!Array.isArray(segments)) return [];
+    const usedNames = new Set();
     return segments.flatMap((segment, index) => {
       const clean = cleanSegment(segment, `segment-${index + 1}`);
       if (!clean) return [];
-      return clean.names.map((name, nameIndex) => ({
-        id: clean.names.length === 1 ? clean.id : `${clean.id}-${nameIndex + 1}`,
-        names: [name],
-      }));
+      return clean.names.flatMap((name, nameIndex) => {
+        const key = normaliseNameKey(name);
+        if (usedNames.has(key)) return [];
+        usedNames.add(key);
+        return [{
+          id: clean.names.length === 1 ? clean.id : `${clean.id}-${nameIndex + 1}`,
+          names: [name],
+        }];
+      });
     });
   }
 
   function emptyPersistence() {
-    return { version: STORAGE_VERSION, currentSegments: [], savedLists: [], activeSavedId: null, draftName: "", soundEffects: true, borderSymbols: true, segmentColour: DEFAULT_SEGMENT_COLOUR, randomiserMethod: "Wheel" };
+    return { version: STORAGE_VERSION, currentSegments: [], savedLists: [], activeSavedId: null, draftName: "", soundEffects: true, segmentColour: DEFAULT_SEGMENT_COLOUR, randomiserMethod: "Wheel" };
   }
 
   function cleanPersistence(value) {
@@ -73,7 +130,6 @@
       activeSavedId: savedLists.some((list) => list.id === value.activeSavedId) ? value.activeSavedId : null,
       draftName,
       soundEffects: value.soundEffects !== false,
-      borderSymbols: value.borderSymbols !== false,
       segmentColour: cleanSegmentColour(value.segmentColour),
       randomiserMethod: cleanRandomiserMethod(value.randomiserMethod),
     };
@@ -109,12 +165,21 @@
   return {
     STORAGE_VERSION,
     DEFAULT_SEGMENT_COLOUR,
+    MULTI_SEGMENT_COLOUR,
+    MULTI_CONTROL_COLOUR,
+    MULTI_SEGMENT_PALETTE,
     SEGMENT_COLOURS,
+    segmentColourPalette,
+    spinControlColour,
     RANDOMISER_METHODS,
     cleanSegmentColour,
     cleanRandomiserMethod,
     cleanName,
     capitaliseNameInput,
+    normaliseNameKey,
+    classListNumbering,
+    hasName,
+    uniqueNewNames,
     cleanSegment,
     cleanSegments,
     emptyPersistence,
