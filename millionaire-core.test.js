@@ -568,7 +568,7 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes("Guides you towards the correct answer with a hint"), "The Hint rules should use the requested wording.");
   assert.ok(!script.includes('className="millionaire-primary millionaire-play" onClick={startGame}>Start game</button>'), "The rules panel should not include a Start Game button.");
   assert.ok(script.includes('className="millionaire-audio-toggle"'), "The game board should include the combined audio control.");
-  assert.ok(script.includes('<img src="audio-svgrepo-com.svg?v=20260722-smaller" alt="" aria-hidden="true" />'), "The combined audio control should use the versioned shared audio icon.");
+  assert.ok(script.includes('<img src="audio-svgrepo-com.svg?v=20260722-smaller15" alt="" aria-hidden="true" />'), "The combined audio control should use the versioned shared audio icon.");
   assert.match(css, /\.millionaire-audio-toggle img\s*\{[^}]*filter:\s*brightness\(0\) invert\(1\);/s, "The combined audio icon should be white.");
   assert.ok(script.includes('const nextSettings = { ...settings, backgroundMusic: !enabled, soundEffects: !enabled };'), "The combined audio control should toggle music and effects together.");
   assert.ok(script.includes('const SETTINGS_KEY = "mlh-millionaire-settings-v3";'), "The settings version should apply the new defaults once.");
@@ -762,8 +762,8 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('glyph: "\\uE050", notationGlyph: true'), "Music Literacy should use the Bravura treble clef glyph.");
   assert.ok(script.includes('icon: "worksheet.svg", iconSize: "h-[26px] w-[26px]"'), "Music Concepts should use a larger worksheet.svg icon.");
   assert.ok(script.includes('label: "Music Concepts", icon: "worksheet.svg"'), "The combined Music Concepts toggle should retain the worksheet glyph.");
-  assert.ok(script.includes('src="audio-svgrepo-com.svg?v=20260722-smaller"') && script.includes('className="h-[42px] w-[42px] object-contain"') && script.includes('label="Audio Questions"') && script.includes('checked={settings.audioQuestions}'), "Options should provide a saved Audio Questions toggle using the shared audio glyph.");
-  assert.ok(audioIcon.includes('viewBox="-133.333 -133.333 1066.667 1066.667"'), "The shared audio artwork should render 25 percent smaller across the Hub.");
+  assert.ok(script.includes('src="audio-svgrepo-com.svg?v=20260722-smaller15"') && script.includes('className="h-[42px] w-[42px] object-contain"') && script.includes('label="Audio Questions"') && script.includes('checked={settings.audioQuestions}'), "Options should provide a saved Audio Questions toggle using the shared audio glyph.");
+  assert.ok(audioIcon.includes('viewBox="-227.451 -227.451 1254.902 1254.902"'), "The shared audio artwork should render 15 percent smaller than its previous Hub size.");
   assert.ok(script.includes("Turn this off to remove questions that require you to hear the audio to answer."), "The Audio Questions option should explain clearly what switching it off does.");
   assert.ok(script.indexOf('label="Timer"') < script.indexOf('label="Audio Questions"') && script.includes('className="-mt-1 mb-2 ml-2 w-[256px] text-xs'), "Timer should appear before Audio Questions and its description should share the section-header inset and right edge.");
   assert.ok(script.includes('settings.audioQuestions ? settings.questionTypes : settings.questionTypes.filter((category) => category !== "listening")'), "Turning off Audio Questions should remove only the listening pool.");

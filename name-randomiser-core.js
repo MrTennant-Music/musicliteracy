@@ -3,10 +3,35 @@
   if (typeof module === "object" && module.exports) module.exports = api;
   root.NAME_RANDOMISER_CORE = api;
 })(typeof window !== "undefined" ? window : globalThis, function () {
-  const STORAGE_VERSION = 1;
+  const STORAGE_VERSION = 4;
+  const RANDOMISER_METHODS = Object.freeze(["Wheel", "Slots"]);
+  const DEFAULT_SEGMENT_COLOUR = "#f5f5f4";
+  const SEGMENT_COLOURS = Object.freeze([
+    { id: "grey", label: "Grey", value: DEFAULT_SEGMENT_COLOUR },
+    { id: "black", label: "Black", value: "#111111" },
+    { id: "red", label: "Red", value: "#fee2e2" },
+    { id: "orange", label: "Orange", value: "#ffedd5" },
+    { id: "yellow", label: "Yellow", value: "#fef9c3" },
+    { id: "green", label: "Green", value: "#dcfce7" },
+    { id: "blue", label: "Blue", value: "#dbeafe" },
+    { id: "violet", label: "Violet", value: "#ede9fe" },
+  ]);
+
+  function cleanSegmentColour(value) {
+    return SEGMENT_COLOURS.some((colour) => colour.value === value) ? value : DEFAULT_SEGMENT_COLOUR;
+  }
+
+  function cleanRandomiserMethod(value) {
+    if (value === "Puggie") return "Slots";
+    return RANDOMISER_METHODS.includes(value) ? value : "Wheel";
+  }
 
   function cleanName(value) {
     return String(value ?? "").trim().replace(/\s+/g, " ");
+  }
+
+  function capitaliseNameInput(value) {
+    return String(value ?? "").replace(/(^|\s)(\p{L})/gu, (match, prefix, letter) => `${prefix}${letter.toLocaleUpperCase("en-GB")}`);
   }
 
   function cleanSegment(segment, fallbackId = "") {
@@ -17,11 +42,18 @@
 
   function cleanSegments(segments) {
     if (!Array.isArray(segments)) return [];
-    return segments.map((segment, index) => cleanSegment(segment, `segment-${index + 1}`)).filter(Boolean);
+    return segments.flatMap((segment, index) => {
+      const clean = cleanSegment(segment, `segment-${index + 1}`);
+      if (!clean) return [];
+      return clean.names.map((name, nameIndex) => ({
+        id: clean.names.length === 1 ? clean.id : `${clean.id}-${nameIndex + 1}`,
+        names: [name],
+      }));
+    });
   }
 
   function emptyPersistence() {
-    return { version: STORAGE_VERSION, currentSegments: [], savedLists: [], activeSavedId: null, draftNames: [""], soundEffects: true };
+    return { version: STORAGE_VERSION, currentSegments: [], savedLists: [], activeSavedId: null, draftName: "", soundEffects: true, borderSymbols: true, segmentColour: DEFAULT_SEGMENT_COLOUR, randomiserMethod: "Wheel" };
   }
 
   function cleanPersistence(value) {
@@ -33,14 +65,17 @@
       if (!title || !segments.length) return null;
       return { id: cleanName(list?.id) || `list-${index + 1}`, title, segments };
     }).filter(Boolean) : [];
-    const draftNames = Array.isArray(value.draftNames) ? value.draftNames.map((name) => String(name ?? "")) : [""];
+    const draftName = capitaliseNameInput(value.draftName ?? (Array.isArray(value.draftNames) ? value.draftNames[0] : "") ?? "");
     return {
       version: STORAGE_VERSION,
       currentSegments: cleanSegments(value.currentSegments),
       savedLists,
       activeSavedId: savedLists.some((list) => list.id === value.activeSavedId) ? value.activeSavedId : null,
-      draftNames: draftNames.length ? draftNames : [""],
+      draftName,
       soundEffects: value.soundEffects !== false,
+      borderSymbols: value.borderSymbols !== false,
+      segmentColour: cleanSegmentColour(value.segmentColour),
+      randomiserMethod: cleanRandomiserMethod(value.randomiserMethod),
     };
   }
 
@@ -73,7 +108,13 @@
 
   return {
     STORAGE_VERSION,
+    DEFAULT_SEGMENT_COLOUR,
+    SEGMENT_COLOURS,
+    RANDOMISER_METHODS,
+    cleanSegmentColour,
+    cleanRandomiserMethod,
     cleanName,
+    capitaliseNameInput,
     cleanSegment,
     cleanSegments,
     emptyPersistence,

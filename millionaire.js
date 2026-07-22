@@ -3166,7 +3166,7 @@ function App() {
               {QUESTION_TYPE_OPTIONS.map((option) => { const available = option.categories.every((category) => CORE.DIFFICULTIES.every((difficulty) => (QUESTION_POOLS[settings.level]?.[difficulty]?.[category]?.length || 0) >= 5)); const checked = option.categories.every((category) => settings.questionTypes.includes(category)); const enabledOptionCount = QUESTION_TYPE_OPTIONS.filter((candidate) => candidate.categories.some((category) => settings.questionTypes.includes(category))).length; return <window.MLH.MenuToggleRow key={option.id} glyph={<QuestionTypeGlyph option={option} />} label={option.label} checked={checked} disabled={!available || (checked && enabledOptionCount === 1)} onChange={() => toggleQuestionType(option)} />; })}
               <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
               <window.MLH.MenuToggleRow glyph={<img src="30timer.svg" alt="" aria-hidden="true" className="h-[21px] w-[21px] object-contain" />} label="Timer" checked={settings.timer} onChange={() => setSettings((current) => ({ ...current, timer: !current.timer }))} />
-              <window.MLH.MenuToggleRow glyph={<img src="audio-svgrepo-com.svg?v=20260722-smaller" alt="" aria-hidden="true" className="h-[42px] w-[42px] object-contain" />} label="Audio Questions" checked={settings.audioQuestions} disabled={!settings.questionTypes.includes("concepts")} onChange={() => setSettings((current) => ({ ...current, audioQuestions: !current.audioQuestions }))} />
+              <window.MLH.MenuToggleRow glyph={<img src="audio-svgrepo-com.svg?v=20260722-smaller15" alt="" aria-hidden="true" className="h-[42px] w-[42px] object-contain" />} label="Audio Questions" checked={settings.audioQuestions} disabled={!settings.questionTypes.includes("concepts")} onChange={() => setSettings((current) => ({ ...current, audioQuestions: !current.audioQuestions }))} />
               <p className="-mt-1 mb-2 ml-2 w-[256px] text-xs leading-snug text-stone-500">Turn this off to remove questions that require you to hear the audio to answer.</p>
             </window.MLH.MenuPanel>}
           </div>
@@ -3174,7 +3174,7 @@ function App() {
       </div>} feedback={null} right={<button type="button" className="millionaire-toolbar-reset flex h-10 w-[58px] items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5" aria-label="Reset game and return to opening screen" disabled={screen !== "game"} onClick={resetGame}><img src="restart.svg" alt="" className="h-[20px] w-[20px]" /><span className="hidden sm:relative sm:-left-[1.5px] sm:inline">Reset</span></button>} /></div>
       <div className="millionaire-scroll"><div className="millionaire-stage"><div className="millionaire-board">
         <button type="button" className="millionaire-audio-toggle" aria-label={settings.backgroundMusic && settings.soundEffects ? "Turn off game audio" : "Turn on game audio"} aria-pressed={settings.backgroundMusic && settings.soundEffects} onClick={toggleGameAudio}>
-          <img src="audio-svgrepo-com.svg?v=20260722-smaller" alt="" aria-hidden="true" />
+          <img src="audio-svgrepo-com.svg?v=20260722-smaller15" alt="" aria-hidden="true" />
         </button>
         {CurrentScreen()}
         {openingZooming && TitleScreen()}
