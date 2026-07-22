@@ -38,7 +38,8 @@ const DEFAULT_SETTINGS = {
   soundEffects: true,
   backgroundMusic: true,
   reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false,
-  timer: false,
+  timer: true,
+  audioQuestions: true,
   questionTypes: ["literacy"],
   level: "N3",
 };
@@ -52,10 +53,10 @@ const MILLIONAIRE_LEVELS = {
 };
 const CATEGORY_LABELS = { listening: "Listening", literacy: "Music literacy", concepts: "Music concepts" };
 const QUESTION_TYPE_OPTIONS = [
-  { id: "literacy", label: "Music Literacy", glyph: "\uE050", notationGlyph: true },
-  { id: "concepts", label: "Music Concepts", icon: "worksheet.svg", iconSize: "h-[26px] w-[26px]" },
-  { id: "listening", label: "Audio", icon: "audio-svgrepo-com.svg", iconSize: "h-[52.5px] w-[52.5px]" },
+  { id: "literacy", categories: ["literacy"], label: "Music Literacy", glyph: "\uE050", notationGlyph: true },
+  { id: "concepts", categories: ["concepts", "listening"], label: "Music Concepts", icon: "worksheet.svg", iconSize: "h-[26px] w-[26px]" },
 ];
+const selectedQuestionCategories = (settings) => settings.audioQuestions ? settings.questionTypes : settings.questionTypes.filter((category) => category !== "listening");
 const LIFELINE_RESULTS = [
   { key: "fifty", icon: "50.50.svg", label: "50:50" },
   { key: "hint", icon: "hint.svg", label: "Hint" },
@@ -2457,7 +2458,9 @@ function App() {
       : CORE.SUPPORTED_LEVELS.includes(saved.level) ? saved.level : DEFAULT_SETTINGS.level;
     const availableTypes = CORE.CATEGORIES.filter((category) => CORE.DIFFICULTIES.every((difficulty) => (QUESTION_POOLS[level]?.[difficulty]?.[category]?.length || 0) >= 5));
     const selectedTypes = savedTypes.filter((category) => availableTypes.includes(category));
-    return { ...DEFAULT_SETTINGS, ...saved, level, questionTypes: selectedTypes.length ? [...new Set(selectedTypes)] : availableTypes };
+    const selectedOptions = QUESTION_TYPE_OPTIONS.filter((option) => option.categories.some((category) => selectedTypes.includes(category)) && option.categories.every((category) => availableTypes.includes(category)));
+    const groupedSelectedTypes = selectedOptions.flatMap((option) => option.categories);
+    return { ...DEFAULT_SETTINGS, ...saved, level, questionTypes: selectedTypes.length ? [...new Set(groupedSelectedTypes)] : availableTypes };
   });
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
@@ -2592,20 +2595,22 @@ function App() {
     setSettings(nextSettings);
   }
 
-  function toggleQuestionType(category) {
+  function toggleQuestionType(option) {
     const availableTypes = CORE.CATEGORIES.filter((item) => CORE.DIFFICULTIES.every((difficulty) => (QUESTION_POOLS[settings.level]?.[difficulty]?.[item]?.length || 0) >= 5));
-    if (!availableTypes.includes(category)) return;
+    if (!option.categories.every((category) => availableTypes.includes(category))) return;
     setSettings((current) => {
-      const enabled = current.questionTypes.includes(category);
-      if (enabled && current.questionTypes.length === 1) return current;
-      return { ...current, questionTypes: enabled ? current.questionTypes.filter((item) => item !== category) : [...current.questionTypes, category] };
+      const enabled = option.categories.every((category) => current.questionTypes.includes(category));
+      const enabledOptionCount = QUESTION_TYPE_OPTIONS.filter((candidate) => candidate.categories.some((category) => current.questionTypes.includes(category))).length;
+      if (enabled && enabledOptionCount === 1) return current;
+      const remaining = current.questionTypes.filter((category) => !option.categories.includes(category));
+      return { ...current, questionTypes: enabled ? remaining : [...new Set([...remaining, ...option.categories])] };
     });
   }
 
   function createQuestions() {
     const recentGames = safeRead(HISTORY_KEY, []);
     try {
-      const categories = settings.questionTypes;
+      const categories = selectedQuestionCategories(settings);
       for (let gameAttempt = 0; gameAttempt < 20; gameAttempt += 1) {
         const prepared = [];
         const usedFingerprints = new Set();
@@ -2901,7 +2906,8 @@ function App() {
 
   function useSwitch() {
     if (!lifelines.switch || locked || transitioning || !question) return;
-    const enabledQuestionBank = QUESTION_BANK.filter((item) => settings.questionTypes.includes(item.category));
+    const enabledCategories = selectedQuestionCategories(settings);
+    const enabledQuestionBank = QUESTION_BANK.filter((item) => enabledCategories.includes(item.category));
     const otherFingerprints = new Set(questions.filter((_, index) => index !== currentIndex).map(CORE.questionFingerprint));
     let randomisedReplacement = null;
     for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -3157,17 +3163,18 @@ function App() {
             <window.MLH.CustomiseButton icon={<img src="customise.svg" alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} onClick={() => { setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />
             {customiseOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}>
               <window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>
-              {QUESTION_TYPE_OPTIONS.map((option) => { const available = CORE.DIFFICULTIES.every((difficulty) => (QUESTION_POOLS[settings.level]?.[difficulty]?.[option.id]?.length || 0) >= 5); return <window.MLH.MenuToggleRow key={option.id} glyph={<QuestionTypeGlyph option={option} />} label={option.label} checked={settings.questionTypes.includes(option.id)} disabled={!available || (settings.questionTypes.includes(option.id) && settings.questionTypes.length === 1)} onChange={() => toggleQuestionType(option.id)} />; })}
-              <p className="mx-3 my-2 text-xs leading-snug text-stone-500">Only completed question types can be selected.</p>
+              {QUESTION_TYPE_OPTIONS.map((option) => { const available = option.categories.every((category) => CORE.DIFFICULTIES.every((difficulty) => (QUESTION_POOLS[settings.level]?.[difficulty]?.[category]?.length || 0) >= 5)); const checked = option.categories.every((category) => settings.questionTypes.includes(category)); const enabledOptionCount = QUESTION_TYPE_OPTIONS.filter((candidate) => candidate.categories.some((category) => settings.questionTypes.includes(category))).length; return <window.MLH.MenuToggleRow key={option.id} glyph={<QuestionTypeGlyph option={option} />} label={option.label} checked={checked} disabled={!available || (checked && enabledOptionCount === 1)} onChange={() => toggleQuestionType(option)} />; })}
               <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
-              <window.MLH.MenuToggleRow glyph={<img src="timer.svg" alt="" aria-hidden="true" className="h-7 w-7 object-contain" />} label="Timer" checked={settings.timer} onChange={() => setSettings((current) => ({ ...current, timer: !current.timer }))} />
+              <window.MLH.MenuToggleRow glyph={<img src="30timer.svg" alt="" aria-hidden="true" className="h-[21px] w-[21px] object-contain" />} label="Timer" checked={settings.timer} onChange={() => setSettings((current) => ({ ...current, timer: !current.timer }))} />
+              <window.MLH.MenuToggleRow glyph={<img src="audio-svgrepo-com.svg?v=20260722-smaller" alt="" aria-hidden="true" className="h-[42px] w-[42px] object-contain" />} label="Audio Questions" checked={settings.audioQuestions} disabled={!settings.questionTypes.includes("concepts")} onChange={() => setSettings((current) => ({ ...current, audioQuestions: !current.audioQuestions }))} />
+              <p className="-mt-1 mb-2 ml-2 w-[256px] text-xs leading-snug text-stone-500">Turn this off to remove questions that require you to hear the audio to answer.</p>
             </window.MLH.MenuPanel>}
           </div>
         </fieldset>
       </div>} feedback={null} right={<button type="button" className="millionaire-toolbar-reset flex h-10 w-[58px] items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5" aria-label="Reset game and return to opening screen" disabled={screen !== "game"} onClick={resetGame}><img src="restart.svg" alt="" className="h-[20px] w-[20px]" /><span className="hidden sm:relative sm:-left-[1.5px] sm:inline">Reset</span></button>} /></div>
       <div className="millionaire-scroll"><div className="millionaire-stage"><div className="millionaire-board">
         <button type="button" className="millionaire-audio-toggle" aria-label={settings.backgroundMusic && settings.soundEffects ? "Turn off game audio" : "Turn on game audio"} aria-pressed={settings.backgroundMusic && settings.soundEffects} onClick={toggleGameAudio}>
-          <img src="audio-svgrepo-com.svg" alt="" aria-hidden="true" />
+          <img src="audio-svgrepo-com.svg?v=20260722-smaller" alt="" aria-hidden="true" />
         </button>
         {CurrentScreen()}
         {openingZooming && TitleScreen()}

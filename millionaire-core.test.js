@@ -394,6 +394,7 @@ test("interface includes the required screens, controls and protections", () => 
   const html = fs.readFileSync(path.join(__dirname, "millionaire.html"), "utf8");
   const css = fs.readFileSync(path.join(__dirname, "millionaire.css"), "utf8");
   const menuScript = fs.readFileSync(path.join(__dirname, "hub-menu.js"), "utf8");
+  const audioIcon = fs.readFileSync(path.join(__dirname, "audio-svgrepo-com.svg"), "utf8");
   ["50:50", "Hint", "Switch", "Final Answer", "aria-live", "role=\"dialog\""].forEach((required) => {
     assert.ok(script.includes(required) || html.includes(required), `Missing ${required}`);
   });
@@ -417,7 +418,8 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('onClick={() => setScreen("title")}><span className="millionaire-back-button-label">Back</span></button>'), "The rules button should show Back in title case.");
   assert.ok(!script.includes('className="millionaire-back-icon"'), "The rules Back button should not show an icon.");
   assert.ok(html.includes("bravura-symbols.js") && html.includes("shared-notation-config.js"), "Millionaire notation should use the shared Bravura symbols and notation settings.");
-  assert.ok(html.includes("millionaire.css?v=20260721-literacy-only") && html.includes("millionaire-core.js?v=20260721-literacy-only") && html.includes("millionaire-question-bank.js?v=20260721-literacy-only") && html.includes("millionaire.js?v=20260721-literacy-only"), "The Millionaire files should use current cache-version tags.");
+  assert.ok(html.includes("millionaire.css?v=20260721-literacy-only") && html.includes("millionaire-core.js?v=20260721-literacy-only") && html.includes("millionaire-question-bank.js?v=20260721-literacy-only") && html.includes("millionaire.js?v=20260722-smaller-shared-audio-icon"), "The Millionaire files should use current cache-version tags.");
+  assert.ok(script.includes('glyph={<img src="30timer.svg"') && script.includes('className="h-[21px] w-[21px] object-contain"') && !script.includes('glyph={<img src="timer.svg"'), "The Customise menu should use the supplied timer icon at its requested 21px size.");
   assert.ok(!css.includes('background-lossless.webp'), "The menu, How to Play and Review screens should use the built-in Millionaire background rather than a separate picture.");
   assert.ok(css.includes('.millionaire-opening-copy { max-width: none; font-size: 24px; text-shadow: 0 2px 5px rgba(0,0,0,.85);'), "The main-menu introduction should have a restrained shadow for contrast over the artwork.");
   assert.ok(bankScript.includes("staveInset:20, notationZoom:1.15") && script.includes("const left = 52 + staveInset;") && script.includes("const fullRight = 462 - staveInset;") && css.includes(".millionaire-staff.is-enharmonic-focus { transform: scale(1.15);"), "Advanced Higher enharmonic notation should shorten the stave by 20px per side and enlarge it by 15%.");
@@ -505,7 +507,7 @@ test("interface includes the required screens, controls and protections", () => 
     'AH: { label: "Advanced Higher" }',
   ].forEach((level) => assert.ok(script.includes(level), `Missing selectable level: ${level}`));
   assert.ok(script.includes("activeLevel={settings.level}") && script.includes("activeLabel={activeLevelLabel}"), "The Level menu should show the selected course level.");
-  assert.ok(script.includes("const categories = settings.questionTypes;") && script.includes("level: settings.level, categories"), "New games should use the selected course level and available question types.");
+  assert.ok(script.includes("const categories = selectedQuestionCategories(settings);") && script.includes("level: settings.level, categories"), "New games should use the selected course level and available question types.");
   assert.ok(script.includes('profileLabel={activeLevelLabel}'), "The page header should reflect the selected course level.");
   assert.ok(script.includes("CORE.validateQuestionPools(QUESTION_POOLS)") && script.includes("CORE.questionPoolSummary(QUESTION_POOLS)"), "Development checks should validate and summarise all 45 pools.");
   assert.ok(script.includes('${dynamic ? " has-dynamic-answer" : ""}${rest ? " has-rest-answer" : ""}') && css.includes('.millionaire-answer-content.has-dynamic-answer .millionaire-answer-dynamic { position: absolute; left: 50%; top: calc(50% - 3px); width: 76px;'), "Dynamic symbols should be horizontally centred and sit three pixels above the answer centre independently of the answer letter and diamond.");
@@ -566,11 +568,13 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes("Guides you towards the correct answer with a hint"), "The Hint rules should use the requested wording.");
   assert.ok(!script.includes('className="millionaire-primary millionaire-play" onClick={startGame}>Start game</button>'), "The rules panel should not include a Start Game button.");
   assert.ok(script.includes('className="millionaire-audio-toggle"'), "The game board should include the combined audio control.");
-  assert.ok(script.includes('<img src="audio-svgrepo-com.svg" alt="" aria-hidden="true" />'), "The combined audio control should use the requested audio icon.");
+  assert.ok(script.includes('<img src="audio-svgrepo-com.svg?v=20260722-smaller" alt="" aria-hidden="true" />'), "The combined audio control should use the versioned shared audio icon.");
   assert.match(css, /\.millionaire-audio-toggle img\s*\{[^}]*filter:\s*brightness\(0\) invert\(1\);/s, "The combined audio icon should be white.");
   assert.ok(script.includes('const nextSettings = { ...settings, backgroundMusic: !enabled, soundEffects: !enabled };'), "The combined audio control should toggle music and effects together.");
   assert.ok(script.includes('const SETTINGS_KEY = "mlh-millionaire-settings-v3";'), "The settings version should apply the new defaults once.");
   assert.match(script, /const DEFAULT_SETTINGS = \{[^}]*soundEffects:\s*true,[^}]*backgroundMusic:\s*true,/s, "Sound Effects and Background Music should both default to on.");
+  assert.match(script, /const DEFAULT_SETTINGS = \{[^}]*timer:\s*true,/, "The 30-second question timer should default to on.");
+  assert.match(script, /const DEFAULT_SETTINGS = \{[^}]*audioQuestions:\s*true,/, "Audio-based questions should default to on.");
   assert.ok(script.includes("Test your musical knowledge and climb the prize ladder to £1 million."), "The opening screen should repeat the page subtitle.");
   assert.match(css, /\.millionaire-opening-copy\s*\{[^}]*font-size:\s*24px;[^}]*white-space:\s*nowrap;/s, "The opening subtitle should be 24px and remain on one line.");
   assert.match(css, /\.millionaire-opening-play\s*\{[^}]*font-size:\s*30px;[^}]*line-height:\s*1;[^}]*text-transform:\s*none;/s, "Opening Rules and Start should use title case and fill their button height.");
@@ -752,14 +756,22 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(!script.includes("Ask the Audience"), "Ask the Audience should be replaced by Switch.");
   assert.ok(script.includes('src="50.50.svg"') && script.includes('src="hint.svg"') && script.includes('src="switch.svg"'), "The three lifelines should use the supplied SVG icons.");
   assert.ok(script.includes("<window.MLH.CustomiseButton") && script.includes("<window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>"), "Customise should use the shared Hub menu and Question Types heading.");
-  ["Music Literacy", "Audio", "Music Concepts"].forEach((label) => assert.ok(script.includes(`label: "${label}"`), `Customise should include ${label}.`));
-  assert.match(script, /const QUESTION_TYPE_OPTIONS = \[[\s\S]*id: "literacy"[\s\S]*id: "concepts"[\s\S]*id: "listening"/, "Customise should list Music Literacy, Music Concepts, then Audio.");
+  ["Music Literacy", "Music Concepts"].forEach((label) => assert.ok(script.includes(`label: "${label}"`), `Customise should include ${label}.`));
+  assert.match(script, /const QUESTION_TYPE_OPTIONS = \[[\s\S]*id: "literacy", categories: \["literacy"\][\s\S]*id: "concepts", categories: \["concepts", "listening"\]/, "Customise should group audio and non-audio concepts behind one Music Concepts toggle.");
+  assert.ok(!script.includes('label: "Music Concepts - Audio"') && !script.includes('label: "Music Concepts - No Audio"'), "Customise should not show separate audio and non-audio concept toggles.");
   assert.ok(script.includes('glyph: "\\uE050", notationGlyph: true'), "Music Literacy should use the Bravura treble clef glyph.");
   assert.ok(script.includes('icon: "worksheet.svg", iconSize: "h-[26px] w-[26px]"'), "Music Concepts should use a larger worksheet.svg icon.");
-  assert.ok(script.includes('iconSize: "h-[52.5px] w-[52.5px]"'), "The Audio icon should be 25 percent larger than its previous 42px size.");
+  assert.ok(script.includes('label: "Music Concepts", icon: "worksheet.svg"'), "The combined Music Concepts toggle should retain the worksheet glyph.");
+  assert.ok(script.includes('src="audio-svgrepo-com.svg?v=20260722-smaller"') && script.includes('className="h-[42px] w-[42px] object-contain"') && script.includes('label="Audio Questions"') && script.includes('checked={settings.audioQuestions}'), "Options should provide a saved Audio Questions toggle using the shared audio glyph.");
+  assert.ok(audioIcon.includes('viewBox="-133.333 -133.333 1066.667 1066.667"'), "The shared audio artwork should render 25 percent smaller across the Hub.");
+  assert.ok(script.includes("Turn this off to remove questions that require you to hear the audio to answer."), "The Audio Questions option should explain clearly what switching it off does.");
+  assert.ok(script.indexOf('label="Timer"') < script.indexOf('label="Audio Questions"') && script.includes('className="-mt-1 mb-2 ml-2 w-[256px] text-xs'), "Timer should appear before Audio Questions and its description should share the section-header inset and right edge.");
+  assert.ok(script.includes('settings.audioQuestions ? settings.questionTypes : settings.questionTypes.filter((category) => category !== "listening")'), "Turning off Audio Questions should remove only the listening pool.");
+  assert.ok(script.includes("const enabledCategories = selectedQuestionCategories(settings);") && script.includes("enabledCategories.includes(item.category)"), "Switch should respect the Audio Questions setting.");
+  assert.ok(!script.includes("Only completed question types can be selected."), "Customise menus should not show the completed-question-types note.");
   assert.match(css, /\.millionaire-question-type-clef\s*\{[^}]*font-family:\s*"Bravura", serif;[^}]*font-size:\s*20px;[^}]*font-weight:\s*400;[^}]*transform:\s*translateY\(4px\);/s, "The Music Literacy glyph should use smaller regular-weight Bravura notation with the requested vertical alignment.");
-  assert.ok(script.includes("if (enabled && current.questionTypes.length === 1) return current;"), "At least one question type should always remain enabled.");
-  assert.ok(script.includes('disabled={!available || (settings.questionTypes.includes(option.id) && settings.questionTypes.length === 1)}'), "Unavailable question types and the final enabled type should be visibly unavailable.");
+  assert.ok(script.includes("if (enabled && enabledOptionCount === 1) return current;"), "At least one visible question-type toggle should always remain enabled.");
+  assert.ok(script.includes("const checked = option.categories.every") && script.includes("disabled={!available || (checked && enabledOptionCount === 1)}"), "The combined concept pools should share one visible toggle state.");
   assert.ok(!coreScript.includes("audienceVotes") && !css.includes("millionaire-audience"), "Unused audience-vote code and styling should be removed.");
   assert.ok(script.includes('const customiseUnavailable = openingZooming || screen === "game" || screen === "milestone";') && script.includes("<fieldset disabled={customiseUnavailable}"), "Customise should be unavailable during the opening transition and while a game is active.");
   assert.ok(script.includes('level: settings.level, categories'), "The next game should use the selected question types.");

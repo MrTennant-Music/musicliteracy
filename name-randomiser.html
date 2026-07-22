@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Name Randomiser</title>
+  <link rel="icon" type="image/svg+xml" href="./names-icon.svg" />
+  <link rel="apple-touch-icon" href="./names-icon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="./hub-mobile.js?v=20260629"></script>
+  <script src="./hub-audio.js?v=20260712-metronome-samples"></script>
+  <script src="./hub-shell.js?v=20260717-worksheet-header-cards"></script>
+  <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
+  <script src="./name-randomiser-core.js?v=20260722"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; background: #fafaf9; color: #111827; }
+    button { -webkit-tap-highlight-color: transparent; }
+    .names-layout { display: grid; grid-template-columns: minmax(245px, 290px) minmax(430px, 1fr) minmax(220px, 260px); align-items: start; gap: 16px; }
+    .names-panel { min-width: 0; border: 1px solid #e7e5e4; border-radius: 16px; background: #fafaf9; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    .names-panel-title { margin: 0; color: #111; font-size: 15px; font-weight: 900; line-height: 1.2; }
+    .names-panel-note { margin: 4px 0 0; color: #78716c; font-size: 11px; line-height: 1.35; }
+    .names-field { width: 100%; min-height: 44px; border: 1px solid #d6d3d1; border-radius: 12px; background: white; padding: 0 12px; color: #111; font: inherit; font-size: 14px; outline: none; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    .names-field:focus-visible { border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.16); }
+    .names-field::placeholder { color: #a8a29e; }
+    .names-wheel-stage { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: center; }
+    .names-wheel-wrap { position: relative; width: min(100%, 620px); aspect-ratio: 1; margin: 0 auto; }
+    .names-wheel { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 12px 20px rgba(28,25,23,.12)); }
+    .names-wheel-rotor { transform-origin: 300px 300px; will-change: transform; }
+    .names-wheel-pointer { position: absolute; z-index: 5; right: -2px; top: 50%; width: 58px; height: 68px; transform: translateY(-50%); filter: drop-shadow(0 3px 4px rgba(0,0,0,.22)); }
+    .names-wheel-empty { position: absolute; inset: 17%; display: flex; align-items: center; justify-content: center; border: 1px dashed #a8a29e; border-radius: 50%; background: #fafaf9; padding: 34px; color: #78716c; font-size: 14px; font-weight: 700; line-height: 1.4; text-align: center; }
+    .names-segment-list, .names-saved-list { display: flex; max-height: 300px; flex-direction: column; gap: 8px; overflow-y: auto; padding-right: 2px; }
+    .names-segment-card, .names-saved-card { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #e7e5e4; border-radius: 12px; background: white; padding: 9px 10px; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+    .names-segment-people { min-width: 0; color: #111; font-size: 12px; font-weight: 800; line-height: 1.28; overflow-wrap: anywhere; }
+    .names-segment-people span { display: block; }
+    .names-icon-button { display: inline-flex; width: 34px; height: 34px; flex: 0 0 34px; align-items: center; justify-content: center; border: 1px solid #d6d3d1; border-radius: 10px; background: white; color: #44403c; font-size: 19px; font-weight: 700; line-height: 1; }
+    .names-icon-button:hover { border-color: #a8a29e; background: #f5f5f4; }
+    .names-primary-button, .names-secondary-button, .names-danger-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border-radius: 12px; padding: 0 15px; font-size: 13px; font-weight: 800; transition: transform .08s ease, filter .08s ease, box-shadow .12s ease, background-color .12s ease; }
+    .names-primary-button { border: 1px solid #000; background: #000; color: white; }
+    .names-secondary-button { border: 1px solid #d6d3d1; background: white; color: #111; }
+    .names-danger-button { border: 1px solid #dc2626; background: #dc2626; color: white; }
+    .names-primary-button:disabled, .names-secondary-button:disabled, .names-danger-button:disabled { cursor: not-allowed; opacity: .42; transform: none; filter: none; box-shadow: none; }
+    @media (hover:hover) and (pointer:fine) {
+      .names-primary-button:not(:disabled):hover, .names-secondary-button:not(:disabled):hover, .names-danger-button:not(:disabled):hover, .names-icon-button:hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+    }
+    .names-spin-button { min-width: 150px; margin-top: 12px; font-size: 15px; }
+    .names-status { min-height: 20px; margin: 8px 0 0; color: #57534e; font-size: 12px; font-weight: 700; text-align: center; }
+    .names-overlay { position: fixed; inset: 0; z-index: 1300; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15,23,42,.72); backdrop-filter: blur(4px); }
+    .names-dialog { width: min(500px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; border-radius: 22px; background: white; padding: 22px; box-shadow: 0 24px 70px rgba(0,0,0,.32); text-align: center; }
+    .names-dialog h2 { margin: 0; color: #111; font-size: 1.2rem; font-weight: 900; line-height: 1.2; }
+    .names-dialog p { margin: 9px 0 0; color: #57534e; font-size: 14px; line-height: 1.45; }
+    .names-dialog-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 18px; }
+    .names-winner { margin: 18px 0 0; color: #111; font-size: clamp(1.45rem, 4vw, 2.4rem); font-weight: 900; letter-spacing: -.035em; line-height: 1.08; }
+    .names-winner span { display: block; }
+    .names-confetti { pointer-events: none; position: fixed; inset: 0; z-index: 1400; overflow: hidden; }
+    .names-confetti span { position: absolute; top: -18px; width: 9px; height: 16px; border-radius: 3px; animation: namesConfettiFall 1.8s cubic-bezier(.15,.65,.4,1) forwards; }
+    @keyframes namesConfettiFall { 0% { opacity: 1; transform: translate3d(0,-5vh,0) rotate(0); } 100% { opacity: 0; transform: translate3d(var(--drift),105vh,0) rotate(680deg); } }
+    @media (prefers-reduced-motion: reduce) { .names-confetti { display: none; } .names-wheel-rotor { transition-duration: .01ms !important; } }
+    @media (max-width: 1100px) { .names-layout { grid-template-columns: 245px minmax(400px, 1fr) 220px; gap: 12px; } }
+    @media (max-width: 850px) { .names-layout { grid-template-columns: 1fr; } .names-wheel-stage { grid-row: 1; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+const { useEffect, useMemo, useRef, useState } = React;
+const CORE = window.NAME_RANDOMISER_CORE;
+const STORAGE_KEY = "mlh-name-randomiser-v1";
+const ASSET = { appIcon: "names-icon.svg", customise: "customise.svg", spin: "spin.mp3" };
+
+function uid(prefix) {
+  if (window.crypto?.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function readPersistence() {
+  try { return CORE.cleanPersistence(JSON.parse(window.localStorage.getItem(STORAGE_KEY))); }
+  catch { return CORE.emptyPersistence(); }
+}
+
+function polarPoint(cx, cy, radius, degrees) {
+  const radians = degrees * Math.PI / 180;
+  return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) };
+}
+
+function wedgePath(start, end) {
+  const centre = { x: 300, y: 300 };
+  const first = polarPoint(300, 300, 260, start);
+  const second = polarPoint(300, 300, 260, end);
+  const large = end - start > 180 ? 1 : 0;
+  return `M ${centre.x} ${centre.y} L ${first.x} ${first.y} A 260 260 0 ${large} 1 ${second.x} ${second.y} Z`;
+}
+
+function wrapName(name, maxChars) {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const lines = [];
+  let line = "";
+  words.forEach((word) => {
+    if (!line) { line = word; return; }
+    if (`${line} ${word}`.length <= maxChars) line += ` ${word}`;
+    else { lines.push(line); line = word; }
+  });
+  if (line) lines.push(line);
+  return lines;
+}
+
+function Wheel({ segments, rotation, spinning, durationMs }) {
+  const count = segments.length;
+  const slice = count ? 360 / count : 360;
+  const fontSize = Math.max(7, Math.min(18, 22 - count * .48));
+  const maxChars = Math.max(7, Math.floor(19 - Math.min(9, count * .35)));
+  return <div className="names-wheel-wrap">
+    <svg className="names-wheel" viewBox="0 0 600 600" role="img" aria-label={count ? `Wheel containing ${count} segments` : "Empty name wheel"}>
+      <g className="names-wheel-rotor" style={{ transform: `rotate(${rotation}deg)`, transition: spinning ? `transform ${durationMs}ms cubic-bezier(.12,.63,.16,1)` : "none" }}>
+        {segments.map((segment, index) => {
+          const start = index * slice;
+          const end = start + slice;
+          const middle = start + slice / 2;
+          const textLines = segment.names.flatMap((name) => wrapName(name, maxChars));
+          const lineHeight = fontSize * 1.12;
+          const firstDy = -((textLines.length - 1) * lineHeight) / 2;
+          return <g key={segment.id}>
+            <path d={wedgePath(start, end)} fill="#fff" stroke="#111" strokeWidth={count > 35 ? 1 : 2} />
+            <g transform={`rotate(${middle} 300 300)`}>
+              <text x="438" y="300" fill="#111" fontSize={fontSize} fontWeight="800" textAnchor="middle" dominantBaseline="middle">
+                {textLines.map((line, lineIndex) => <tspan key={`${line}-${lineIndex}`} x="438" dy={lineIndex === 0 ? firstDy : lineHeight}>{line}</tspan>)}
+              </text>
+            </g>
+          </g>;
+        })}
+        <circle cx="300" cy="300" r="42" fill="#fff" stroke="#111" strokeWidth="3" />
+        <circle cx="300" cy="300" r="10" fill="#111" />
+      </g>
+    </svg>
+    {count === 0 && <div className="names-wheel-empty">Add at least two segments to begin.</div>}
+    <svg className="names-wheel-pointer" viewBox="0 0 58 68" aria-hidden="true"><path d="M56 5 L7 34 L56 63 Z" fill="#111" stroke="#fff" strokeWidth="3" strokeLinejoin="round" /></svg>
+  </div>;
+}
+
+function Confetti({ activeKey }) {
+  if (!activeKey) return null;
+  const colours = ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa", "#f97316"];
+  return <div key={activeKey} className="names-confetti" aria-hidden="true">{Array.from({ length: 64 }, (_, index) => <span key={index} style={{ left: `${(index * 37) % 100}%`, backgroundColor: colours[index % colours.length], animationDelay: `${(index % 12) * .045}s`, animationDuration: `${1.35 + (index % 7) * .13}s`, "--drift": `${((index * 29) % 180) - 90}px` }} />)}</div>;
+}
+
+function Dialog({ title, children, actions, onClose, labelledBy = "names-dialog-title" }) {
+  const dialogRef = useRef(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    dialogRef.current?.querySelector("input, button")?.focus();
+    const onKeyDown = (event) => { if (event.key === "Escape") onClose?.(); };
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("keydown", onKeyDown); previous?.focus?.(); };
+  }, [onClose]);
+  return <div className="names-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
+    <div ref={dialogRef} className="names-dialog" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+      <h2 id={labelledBy}>{title}</h2>
+      {children}
+      <div className="names-dialog-actions">{actions}</div>
+    </div>
+  </div>;
+}
+
+function NameComposer({ draftNames, setDraftNames, addSegment, disabled }) {
+  const valid = draftNames.some((name) => CORE.cleanName(name));
+  return <section className="names-panel" aria-labelledby="add-segment-title">
+    <h2 id="add-segment-title" className="names-panel-title">Add a segment</h2>
+    <p className="names-panel-note">Add another box to put a pair or group in the same segment.</p>
+    <div className="mt-3 flex flex-col gap-2">
+      {draftNames.map((name, index) => <div key={index} className="flex items-center gap-2">
+        <input className="names-field" value={name} disabled={disabled} placeholder={index === 0 ? "Name" : `Name ${index + 1}`} aria-label={`Name ${index + 1} in this segment`} onChange={(event) => setDraftNames((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} onKeyDown={(event) => { if (event.key === "Enter" && valid) addSegment(); }} />
+        {draftNames.length > 1 && <button type="button" className="names-icon-button" disabled={disabled} aria-label={`Remove name box ${index + 1}`} onClick={() => setDraftNames((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>}
+      </div>)}
+    </div>
+    <button type="button" className="names-secondary-button mt-2 w-full" disabled={disabled} onClick={() => setDraftNames((current) => [...current, ""])}>+ Add another name</button>
+    <button type="button" className="names-primary-button mt-2 w-full" disabled={disabled || !valid} onClick={addSegment}>Add to wheel</button>
+  </section>;
+}
+
+function CurrentSegments({ segments, removeSegment, requestClear, disabled }) {
+  return <section className="names-panel mt-3" aria-labelledby="current-segments-title">
+    <div className="flex items-center justify-between gap-3">
+      <div><h2 id="current-segments-title" className="names-panel-title">Current wheel</h2><p className="names-panel-note">{segments.length} {segments.length === 1 ? "segment" : "segments"}</p></div>
+      <button type="button" className="names-secondary-button !min-h-[36px] px-3" disabled={disabled || !segments.length} onClick={requestClear}>Clear</button>
+    </div>
+    <div className="names-segment-list mt-3">
+      {!segments.length && <p className="m-0 rounded-xl border border-dashed border-stone-300 bg-white px-3 py-5 text-center text-xs font-semibold text-stone-500">No segments added yet.</p>}
+      {segments.map((segment, index) => <div key={segment.id} className="names-segment-card">
+        <div className="min-w-0"><div className="mb-1 text-[10px] font-black uppercase tracking-wider text-stone-400">Segment {index + 1}</div><div className="names-segment-people">{segment.names.map((name, nameIndex) => <span key={`${name}-${nameIndex}`}>{name}</span>)}</div></div>
+        <button type="button" className="names-icon-button" disabled={disabled} aria-label={`Remove segment ${index + 1}`} onClick={() => removeSegment(segment.id)}>×</button>
+      </div>)}
+    </div>
+  </section>;
+}
+
+function SavedLists({ lists, activeSavedId, canSave, saveLabel, requestSave, loadList, renameList, deleteList, disabled }) {
+  return <section className="names-panel" aria-labelledby="saved-lists-title">
+    <h2 id="saved-lists-title" className="names-panel-title">Saved lists</h2>
+    <p className="names-panel-note">Stored in this browser on this device.</p>
+    <button type="button" className="names-primary-button mt-3 w-full" disabled={disabled || !canSave} onClick={requestSave}>{saveLabel}</button>
+    <div className="names-saved-list mt-3">
+      {!lists.length && <p className="m-0 rounded-xl border border-dashed border-stone-300 bg-white px-3 py-5 text-center text-xs font-semibold text-stone-500">No saved lists yet.</p>}
+      {lists.map((list) => <div key={list.id} className={`names-saved-card flex-col !items-stretch ${list.id === activeSavedId ? "border-stone-500" : ""}`}>
+        <div className="min-w-0"><div className="truncate text-sm font-black text-stone-900">{list.title}</div><div className="mt-1 text-[11px] font-semibold text-stone-500">{list.segments.length} {list.segments.length === 1 ? "segment" : "segments"}</div></div>
+        <div className="grid grid-cols-3 gap-1.5">
+          <button type="button" className="names-secondary-button !min-h-[36px] px-2" disabled={disabled} onClick={() => loadList(list)}>Load</button>
+          <button type="button" className="names-secondary-button !min-h-[36px] px-2" disabled={disabled} onClick={() => renameList(list)}>Rename</button>
+          <button type="button" className="names-secondary-button !min-h-[36px] px-2" disabled={disabled} onClick={() => deleteList(list)}>Delete</button>
+        </div>
+      </div>)}
+    </div>
+  </section>;
+}
+
+function App() {
+  const initial = useMemo(readPersistence, []);
+  const [segments, setSegments] = useState(initial.currentSegments);
+  const [savedLists, setSavedLists] = useState(initial.savedLists);
+  const [activeSavedId, setActiveSavedId] = useState(initial.activeSavedId);
+  const [draftNames, setDraftNames] = useState(initial.draftNames);
+  const [soundEffects, setSoundEffects] = useState(initial.soundEffects);
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [rotation, setRotation] = useState(0);
+  const [spinning, setSpinning] = useState(false);
+  const [spinDuration, setSpinDuration] = useState(3683);
+  const [winner, setWinner] = useState(null);
+  const [confettiKey, setConfettiKey] = useState(0);
+  const [dialog, setDialog] = useState(null);
+  const [status, setStatus] = useState("Add at least two segments to spin.");
+  const customiseRef = useRef(null);
+  const spinAudioRef = useRef(null);
+  const spinTimerRef = useRef(null);
+
+  window.MLH.useClickOutside?.([customiseRef], [() => customiseOpen && setCustomiseOpen(false)]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, currentSegments: segments, savedLists, activeSavedId, draftNames, soundEffects })); }
+    catch {}
+  }, [segments, savedLists, activeSavedId, draftNames, soundEffects]);
+
+  useEffect(() => () => window.clearTimeout(spinTimerRef.current), []);
+
+  function addSegment() {
+    const clean = draftNames.map(CORE.cleanName).filter(Boolean);
+    if (!clean.length || spinning) return;
+    setSegments((current) => [...current, { id: uid("segment"), names: clean }]);
+    setDraftNames([""]);
+    setStatus("Segment added.");
+  }
+
+  function removeSegment(id) {
+    if (spinning) return;
+    setSegments((current) => CORE.removeSegment(current, id));
+    setStatus("Segment removed.");
+  }
+
+  function performSpin(nextSegments = segments) {
+    if (spinning || nextSegments.length < 2) { setStatus("Add at least two segments to spin."); return; }
+    setWinner(null);
+    setDialog(null);
+    const chosenIndex = CORE.chooseIndex(nextSegments.length);
+    const slice = 360 / nextSegments.length;
+    const target = -(chosenIndex * slice + slice / 2);
+    const currentMod = ((rotation % 360) + 360) % 360;
+    const targetMod = ((target % 360) + 360) % 360;
+    const delta = ((targetMod - currentMod) + 360) % 360;
+    const audio = spinAudioRef.current;
+    let duration = spinDuration;
+    if (audio && Number.isFinite(audio.duration) && audio.duration > .5) duration = Math.round(audio.duration * 1000);
+    setSpinDuration(duration);
+    setSpinning(true);
+    setStatus("Spinning…");
+    setRotation((current) => current + 5 * 360 + delta);
+    if (soundEffects && audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+    window.clearTimeout(spinTimerRef.current);
+    spinTimerRef.current = window.setTimeout(() => {
+      setSpinning(false);
+      const selected = nextSegments[chosenIndex];
+      setWinner(selected);
+      setConfettiKey((key) => key + 1);
+      setStatus(`Selected: ${selected.names.join(" and ")}`);
+      if (soundEffects) window.MLH.playFeedbackSound?.(true, true, "bronze");
+    }, duration + 40);
+  }
+
+  function keepAndSpinAgain() { setWinner(null); window.setTimeout(() => performSpin(segments), 80); }
+
+  function removeAndSpinAgain() {
+    if (!winner) return;
+    const next = CORE.removeSegment(segments, winner.id);
+    setSegments(next);
+    setWinner(null);
+    if (next.length >= 2) window.setTimeout(() => performSpin(next), 80);
+    else setStatus("The selected segment was removed. Add another segment to spin again.");
+  }
+
+  function requestSave() {
+    const active = savedLists.find((list) => list.id === activeSavedId);
+    if (active) {
+      setSavedLists((current) => CORE.saveList(current, { ...active, segments }));
+      setStatus(`${active.title} updated.`);
+      return;
+    }
+    setDialog({ type: "save", value: "" });
+  }
+
+  function confirmSave() {
+    const title = CORE.cleanName(dialog?.value);
+    if (!title) return;
+    const list = { id: uid("list"), title, segments };
+    setSavedLists((current) => CORE.saveList(current, list));
+    setActiveSavedId(list.id);
+    setDialog(null);
+    setStatus(`${title} saved.`);
+  }
+
+  function loadList(list) {
+    const apply = () => { setSegments(CORE.copySegments(list.segments)); setActiveSavedId(list.id); setDialog(null); setStatus(`${list.title} loaded.`); };
+    if (!segments.length) { apply(); return; }
+    setDialog({ type: "load", list, confirm: apply });
+  }
+
+  function confirmRename() {
+    const title = CORE.cleanName(dialog?.value);
+    if (!title) return;
+    setSavedLists((current) => current.map((list) => list.id === dialog.list.id ? { ...list, title } : list));
+    setDialog(null);
+    setStatus("Saved list renamed.");
+  }
+
+  const activeSaved = savedLists.find((list) => list.id === activeSavedId);
+  const saveLabel = activeSaved ? `Update ${activeSaved.title}` : "Save current list";
+
+  return <div className={window.MLH.shell.pageShellClass}>
+    <window.MLH.AppHeader icon={ASSET.appIcon} title="Name Randomiser" subtitle="Randomly select students to perform, participate in activities or answer questions." profileUsesSharedSettings={false} />
+    <div className={`${window.MLH.shell.pageContentClass} !max-w-[1500px]`}>
+      <main className={`${window.MLH.shell.mainShellClass} !min-h-[650px]`}>
+        <window.MLH.AppToolbar left={<div className="hub-menu-anchor relative" ref={customiseRef}>
+          <window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px]" />} onClick={() => setCustomiseOpen((open) => !open)} dataMenuTrigger={true} />
+          {customiseOpen && <window.MLH.MenuPanel title="Customise" position="left-0" variant="customise" dataMenuPanel={true}>
+            <window.MLH.MenuToggleRow glyph={<span aria-hidden="true" className="text-lg">♪</span>} label="Sound effects" checked={soundEffects} onChange={() => setSoundEffects((enabled) => !enabled)} />
+          </window.MLH.MenuPanel>}
+        </div>} feedback={null} right={null} />
+
+        <div className="names-layout pb-4">
+          <div>
+            <NameComposer draftNames={draftNames} setDraftNames={setDraftNames} addSegment={addSegment} disabled={spinning} />
+            <CurrentSegments segments={segments} removeSegment={removeSegment} requestClear={() => setDialog({ type: "clear" })} disabled={spinning} />
+          </div>
+          <section className="names-wheel-stage" aria-label="Name wheel">
+            <Wheel segments={segments} rotation={rotation} spinning={spinning} durationMs={spinDuration} />
+            <button type="button" className="names-primary-button names-spin-button" disabled={spinning || segments.length < 2} onClick={() => performSpin()}>{spinning ? "Spinning…" : "Spin"}</button>
+            <p className="names-status" role="status" aria-live="polite">{status}</p>
+          </section>
+          <SavedLists lists={savedLists} activeSavedId={activeSavedId} canSave={segments.length > 0} saveLabel={saveLabel} requestSave={requestSave} loadList={loadList} renameList={(list) => setDialog({ type: "rename", list, value: list.title })} deleteList={(list) => setDialog({ type: "delete", list })} disabled={spinning} />
+        </div>
+      </main>
+    </div>
+
+    <audio ref={spinAudioRef} src={ASSET.spin} preload="auto" onLoadedMetadata={(event) => { if (event.currentTarget.duration > .5) setSpinDuration(Math.round(event.currentTarget.duration * 1000)); }} />
+    <Confetti activeKey={confettiKey} />
+
+    {winner && <Dialog title="Selected" onClose={() => setWinner(null)} actions={<>
+      <button type="button" className="names-secondary-button" onClick={() => setWinner(null)}>Close</button>
+      <button type="button" className="names-secondary-button" onClick={removeAndSpinAgain}>Remove and spin again</button>
+      <button type="button" className="names-primary-button" onClick={keepAndSpinAgain}>Keep and spin again</button>
+    </>}><div className="names-winner">{winner.names.map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}</div></Dialog>}
+
+    {dialog?.type === "save" && <Dialog title="Save list" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" disabled={!CORE.cleanName(dialog.value)} onClick={confirmSave}>Save</button></>}><p>Give this list a name so you can use it again.</p><input className="names-field mt-4" autoFocus value={dialog.value} placeholder="For example, S2 Music" aria-label="Saved list name" onChange={(event) => setDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") confirmSave(); }} /></Dialog>}
+
+    {dialog?.type === "rename" && <Dialog title="Rename list" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" disabled={!CORE.cleanName(dialog.value)} onClick={confirmRename}>Rename</button></>}><input className="names-field mt-4" autoFocus value={dialog.value} aria-label="Saved list name" onChange={(event) => setDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") confirmRename(); }} /></Dialog>}
+
+    {dialog?.type === "load" && <Dialog title="Load list" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" onClick={dialog.confirm}>Load</button></>}><p>Loading <strong>{dialog.list.title}</strong> will replace the current wheel.</p></Dialog>}
+
+    {dialog?.type === "clear" && <Dialog title="Clear wheel" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-danger-button" onClick={() => { setSegments([]); setActiveSavedId(null); setDialog(null); setStatus("Wheel cleared."); }}>Clear</button></>}><p>This will remove every segment from the current wheel. Saved lists will not be affected.</p></Dialog>}
+
+    {dialog?.type === "delete" && <Dialog title="Delete saved list" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-danger-button" onClick={() => { setSavedLists((current) => current.filter((list) => list.id !== dialog.list.id)); if (activeSavedId === dialog.list.id) setActiveSavedId(null); setDialog(null); setStatus(`${dialog.list.title} deleted.`); }}>Delete</button></>}><p>Delete <strong>{dialog.list.title}</strong>? This cannot be undone.</p></Dialog>}
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+  <script src="./footer.js?v=20260629"></script>
+</body>
+</html>
