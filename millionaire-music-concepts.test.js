@@ -361,15 +361,20 @@ test("the local Question Editor manages 900 permanent concept and difficulty slo
   assert.match(server, /difficulty !== knownQuestion\.difficulty/);
   assert.doesNotMatch(server, /\/api\/question\/(?:delete|restore)/);
   assert.ok(editor.includes('id="question-list"') && editor.includes('id="answer-fields"') && editor.includes('id="save-button"'));
-  assert.ok(editor.includes('id="question-difficulty" disabled') && editor.includes('id="clear-button"') && editor.includes('id="edit-status-filter"'));
+  assert.ok(editor.includes('id="question-difficulty"') && !editor.includes('id="question-difficulty" disabled')
+    && editor.includes('id="clear-button"') && editor.includes('id="edit-status-filter"'));
+  assert.ok(!editor.includes('id="difficulty-filter"'), "Difficulty should be selected inside a concept rather than duplicating concept cards.");
   assert.ok(editor.includes('id="concept-filter"') && editor.includes("All concepts"));
   assert.ok(!editor.includes('id="restore-button"') && !editor.includes('id="show-deleted"'));
   assert.ok(editor.includes('class="game-preview"') && editor.includes('id="preview-description"') && editor.includes('id="preview-answer-3"'));
   assert.match(editorScript, /function updatePreview\(\)/);
+  assert.match(editorScript, /function filteredConcepts\(\)/);
+  assert.match(editorScript, /function selectConcept\(conceptId\)/);
+  assert.match(editorScript, /concepts\.length} concept/);
   assert.match(editorScript, /question\.conceptId !== elements\.concept\.value/);
   assert.match(editorScript, /elements\.clear\.addEventListener\("click"/);
   assert.match(editorScript, /Nothing will change in Millionaire until you save/);
-  assert.match(editorScript, /Blank question — not in game/);
+  assert.match(editorScript, /question\?\.status === "ready" \? "ready" : "blank"/);
   assert.match(editorScript, /• Edited/);
   assert.doesNotMatch(editorScript, /fetch\("\/api\/question\/delete"/);
   assert.match(gameScript, /href="http:\/\/127\.0\.0\.1:4178\/"[^>]*>[^<]*<span[^>]*>Question Editor<\/span>/);

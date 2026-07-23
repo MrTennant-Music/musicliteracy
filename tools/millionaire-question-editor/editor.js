@@ -1,10 +1,17 @@
 "use strict";
 
-const state = { questions: [], selectedId: null, savedSnapshot: "", dirty: false, filterSnapshot: null };
+const state = {
+  questions: [],
+  selectedId: null,
+  preferredDifficulty: "Easy",
+  savedSnapshot: "",
+  dirty: false,
+  filterSnapshot: null,
+};
 const elements = {
   level: document.querySelector("#level-filter"),
-  difficulty: document.querySelector("#difficulty-filter"),
   editStatus: document.querySelector("#edit-status-filter"),
+  poolStatus: document.querySelector("#pool-status-filter"),
   concept: document.querySelector("#concept-filter"),
   search: document.querySelector("#search-filter"),
   count: document.querySelector("#question-count"),
@@ -22,6 +29,7 @@ const elements = {
   answers: document.querySelector("#answer-fields"),
   hint: document.querySelector("#hint"),
   explanation: document.querySelector("#explanation"),
+  useDescriptionAsFeedback: document.querySelector("#use-description-as-feedback"),
   previewDescription: document.querySelector("#preview-description"),
   previewPrompt: document.querySelector("#preview-prompt"),
   previewHint: document.querySelector("#preview-hint"),
@@ -36,25 +44,46 @@ const elements = {
 
 function currentQuestion() { return state.questions.find((question) => question.id === state.selectedId); }
 
-function filteredQuestions() {
+function conceptCompletionState(questions) {
+  if (questions.some((question) => question.completionState === "incomplete")) return "incomplete";
+  if (questions.some((question) => question.completionState === "needs-details")) return "needs-details";
+  return "complete";
+}
+
+function filteredConcepts() {
   const query = elements.search.value.trim().toLocaleLowerCase("en-GB");
-  return state.questions.filter((question) => {
-    if (question.level !== elements.level.value) return false;
-    if (elements.difficulty.value && question.difficulty !== elements.difficulty.value) return false;
-    if (elements.editStatus.value === "edited" && !question.overridden) return false;
-    if (elements.editStatus.value === "unedited" && question.overridden) return false;
-    if (elements.concept.value && question.conceptId !== elements.concept.value) return false;
-    if (!query) return true;
-    return [question.id, question.concept, question.conceptDescription, question.prompt, question.hint, ...(question.answers || [])]
-      .some((value) => String(value).toLocaleLowerCase("en-GB").includes(query));
+  const grouped = new Map();
+  state.questions.forEach((question) => {
+    if (question.level !== elements.level.value) return;
+    if (elements.concept.value && question.conceptId !== elements.concept.value) return;
+    if (!grouped.has(question.conceptId)) {
+      grouped.set(question.conceptId, {
+        conceptId: question.conceptId,
+        concept: question.concept,
+        questions: [],
+      });
+    }
+    grouped.get(question.conceptId).questions.push(question);
   });
+  return [...grouped.values()].filter((group) => {
+    const edited = group.questions.some((question) => question.overridden);
+    if (elements.editStatus.value === "edited" && !edited) return false;
+    if (elements.editStatus.value === "unedited" && edited) return false;
+    const allActive = group.questions.every((question) => question.status === "ready");
+    if (elements.poolStatus.value === "active" && !allActive) return false;
+    if (elements.poolStatus.value === "inactive" && allActive) return false;
+    if (!query) return true;
+    return group.questions.some((question) =>
+      [question.id, question.concept, question.conceptDescription, question.prompt, question.hint, ...(question.answers || [])]
+        .some((value) => String(value).toLocaleLowerCase("en-GB").includes(query)));
+  }).sort((left, right) => left.concept.localeCompare(right.concept, "en-GB"));
 }
 
 function filterValues() {
   return {
     level: elements.level.value,
-    difficulty: elements.difficulty.value,
     editStatus: elements.editStatus.value,
+    poolStatus: elements.poolStatus.value,
     concept: elements.concept.value,
   };
 }
@@ -80,44 +109,61 @@ function populateConceptFilter(preferredConceptId = "") {
 function restoreFilters() {
   if (!state.filterSnapshot) return;
   elements.level.value = state.filterSnapshot.level;
-  elements.difficulty.value = state.filterSnapshot.difficulty;
   elements.editStatus.value = state.filterSnapshot.editStatus;
+  elements.poolStatus.value = state.filterSnapshot.poolStatus;
   populateConceptFilter(state.filterSnapshot.concept);
 }
 
 function renderList() {
-  const questions = filteredQuestions();
-  elements.count.textContent = `${questions.length} question${questions.length === 1 ? "" : "s"}`;
-  elements.list.replaceChildren(...questions.map((question) => {
+  const concepts = filteredConcepts();
+  const selectedConceptId = currentQuestion()?.conceptId;
+  elements.count.textContent = `${concepts.length} concept${concepts.length === 1 ? "" : "s"}`;
+  elements.list.replaceChildren(...concepts.map((group) => {
+    const selected = group.conceptId === selectedConceptId;
+    const edited = group.questions.some((question) => question.overridden);
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `question-list-item${question.id === state.selectedId ? " is-selected" : ""}`;
+    const completionState = conceptCompletionState(group.questions);
+    button.className = `question-list-item is-${completionState}${selected ? " is-selected" : ""}`;
     button.setAttribute("role", "option");
-    button.setAttribute("aria-selected", question.id === state.selectedId ? "true" : "false");
+    button.setAttribute("aria-selected", selected ? "true" : "false");
     const heading = document.createElement("span");
     heading.className = "list-heading";
     const concept = document.createElement("span");
-    concept.textContent = question.concept;
-    if (question.overridden) {
-      const edited = document.createElement("span");
-      edited.className = "list-edited";
-      edited.textContent = "• Edited";
-      concept.append(edited);
+    concept.textContent = group.concept;
+    if (edited) {
+      const editedLabel = document.createElement("span");
+      editedLabel.className = "list-edited";
+      editedLabel.textContent = "• Edited";
+      concept.append(editedLabel);
     }
-    const difficulty = document.createElement("span");
-    difficulty.className = "list-difficulty";
-    difficulty.textContent = question.difficulty;
-    heading.append(concept, difficulty);
+    const difficultySummary = document.createElement("span");
+    difficultySummary.className = "list-difficulty-summary";
+    difficultySummary.textContent = "3 slots";
+    heading.append(concept, difficultySummary);
     const copy = document.createElement("span");
     copy.className = "list-copy";
-    copy.textContent = question.conceptDescription || question.prompt || "Blank question — not in game";
+    copy.textContent = ["Easy", "Medium", "Hard"].map((difficulty) => {
+      const question = group.questions.find((candidate) => candidate.difficulty === difficulty);
+      return `${difficulty} ${question?.completionState === "complete" ? "complete" : question?.completionState === "needs-details" ? "needs details" : "inactive"}`;
+    }).join(" • ");
     const id = document.createElement("span");
     id.className = "list-id";
-    id.textContent = question.id;
+    id.textContent = group.conceptId;
     button.append(heading, copy, id);
-    button.addEventListener("click", () => selectQuestion(question.id));
+    button.addEventListener("click", () => selectConcept(group.conceptId));
     return button;
   }));
+}
+
+function selectConcept(conceptId) {
+  const selected = currentQuestion();
+  if (selected?.conceptId === conceptId) return;
+  const questions = state.questions.filter((question) => question.conceptId === conceptId);
+  const question = questions.find((candidate) => candidate.difficulty === state.preferredDifficulty)
+    || questions.find((candidate) => candidate.difficulty === "Easy")
+    || questions[0];
+  if (question) selectQuestion(question.id);
 }
 
 function formValue() {
@@ -130,11 +176,21 @@ function formValue() {
     answers: [...elements.answers.querySelectorAll('input[type="text"]')].map((input) => input.value),
     correctAnswer: Number(elements.answers.querySelector('input[type="radio"]:checked')?.value ?? -1),
     hint: elements.hint.value,
-    explanation: description.trim() ? description : elements.explanation.value,
+    explanation: elements.explanation.value,
+    useDescriptionAsFeedback: elements.useDescriptionAsFeedback.checked,
   };
 }
 
 function snapshot() { return JSON.stringify(formValue()); }
+
+function resizeTextarea(textarea) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+function resizeTextareas() {
+  elements.form.querySelectorAll("textarea").forEach(resizeTextarea);
+}
 
 function updatePreview() {
   if (!state.selectedId) return;
@@ -152,16 +208,20 @@ function updatePreview() {
 
 function updateDirtyState() {
   if (!state.selectedId) return;
-  if (elements.description.value.trim()) {
+  const hasDescription = Boolean(elements.description.value.trim());
+  elements.useDescriptionAsFeedback.disabled = !hasDescription;
+  if (!hasDescription) elements.useDescriptionAsFeedback.checked = false;
+  if (elements.useDescriptionAsFeedback.checked) {
     elements.explanation.value = elements.description.value;
     elements.explanation.readOnly = true;
   } else {
     elements.explanation.readOnly = false;
   }
   updatePreview();
+  resizeTextareas();
   state.dirty = snapshot() !== state.savedSnapshot;
   elements.save.disabled = !state.dirty;
-  elements.save.textContent = state.dirty ? "Save Question" : "Saved";
+  elements.save.textContent = state.dirty ? "Save" : "Saved";
 }
 
 function showMessage(text, kind) {
@@ -179,10 +239,11 @@ function selectQuestion(id, force = false) {
   state.selectedId = id;
   const question = currentQuestion();
   if (!question) return;
+  state.preferredDifficulty = question.difficulty;
   elements.empty.hidden = true;
   elements.form.hidden = false;
   elements.heading.textContent = question.concept;
-  elements.meta.textContent = `${question.level} • ${question.difficulty} • ${question.category}`;
+  elements.meta.textContent = question.level;
   elements.id.textContent = `${question.id} • ${question.factId}`;
   elements.badge.hidden = !question.overridden;
   elements.badge.textContent = "Manually edited";
@@ -211,18 +272,19 @@ function selectQuestion(id, force = false) {
     return row;
   }));
   elements.hint.value = question.hint;
-  elements.explanation.value = question.conceptDescription || question.explanation;
-  elements.explanation.readOnly = Boolean(question.conceptDescription);
-  elements.saveNote.textContent = question.status === "ready"
-    ? "Saving regenerates and checks the question bank automatically."
-    : "This slot is incomplete and is not currently included in Millionaire.";
+  elements.explanation.value = question.explanation;
+  elements.useDescriptionAsFeedback.checked = question.useDescriptionAsFeedback ?? Boolean(
+    question.conceptDescription && question.explanation === question.conceptDescription,
+  );
+  elements.explanation.readOnly = false;
+  elements.saveNote.textContent = "";
   elements.openGame.href = `/game/millionaire.html?level=${encodeURIComponent(question.levelCode)}&editor=${Date.now()}`;
   clearMessage();
+  updateDirtyState();
   state.savedSnapshot = snapshot();
   state.dirty = false;
   elements.save.disabled = true;
   elements.save.textContent = "Saved";
-  updatePreview();
   renderList();
 }
 
@@ -238,12 +300,30 @@ async function loadQuestions(selectedId = state.selectedId) {
 }
 
 elements.form.addEventListener("input", updateDirtyState);
-elements.form.addEventListener("change", updateDirtyState);
+elements.form.addEventListener("change", (event) => {
+  if (event.target !== elements.questionDifficulty) updateDirtyState();
+});
+elements.questionDifficulty.addEventListener("change", () => {
+  const question = currentQuestion();
+  if (!question) return;
+  const nextQuestion = state.questions.find((candidate) =>
+    candidate.conceptId === question.conceptId
+    && candidate.difficulty === elements.questionDifficulty.value);
+  if (!nextQuestion) {
+    elements.questionDifficulty.value = question.difficulty;
+    return;
+  }
+  if (state.dirty && !window.confirm("Discard the unsaved changes to this question?")) {
+    elements.questionDifficulty.value = question.difficulty;
+    return;
+  }
+  selectQuestion(nextQuestion.id, true);
+});
 elements.form.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearMessage();
   elements.save.disabled = true;
-  elements.save.textContent = "Saving and checking…";
+  elements.save.textContent = "Saving…";
   try {
     const response = await fetch("/api/question", {
       method: "POST",
@@ -253,16 +333,15 @@ elements.form.addEventListener("submit", async (event) => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "The question could not be saved.");
     await loadQuestions(state.selectedId);
-    showMessage(result.message, "success");
     elements.openGame.href = `/game/millionaire.html?level=${encodeURIComponent(currentQuestion().levelCode)}&editor=${Date.now()}`;
   } catch (error) {
     showMessage(error.message, "error");
     elements.save.disabled = false;
-    elements.save.textContent = "Save Question";
+    elements.save.textContent = "Save";
   }
 });
 
-[elements.level, elements.difficulty, elements.editStatus, elements.concept].forEach((element) => element.addEventListener("change", () => {
+[elements.level, elements.editStatus, elements.poolStatus, elements.concept].forEach((element) => element.addEventListener("change", () => {
   if (state.dirty && !window.confirm("Discard the unsaved changes to this question?")) {
     restoreFilters();
     return;
@@ -288,8 +367,9 @@ elements.clear.addEventListener("click", () => {
   elements.hint.value = "";
   elements.explanation.value = "";
   elements.explanation.readOnly = false;
+  elements.useDescriptionAsFeedback.checked = false;
   updateDirtyState();
-  elements.saveNote.textContent = "The fields are clear. Select Save Question to keep this slot blank and remove it from Millionaire.";
+  elements.saveNote.textContent = "";
 });
 elements.stop.addEventListener("click", async () => {
   if (state.dirty && !window.confirm("Stop the editor and discard your unsaved changes?")) return;
@@ -298,6 +378,7 @@ elements.stop.addEventListener("click", async () => {
   }
 });
 window.addEventListener("beforeunload", (event) => { if (state.dirty) { event.preventDefault(); event.returnValue = ""; } });
+window.addEventListener("resize", resizeTextareas);
 
 loadQuestions().catch((error) => {
   elements.empty.innerHTML = `<h2>Question bank unavailable</h2><p>${error.message}</p>`;

@@ -217,6 +217,16 @@ function validateQuestion(question, fileLevel, context, errors) {
   if (question.concept !== concept.concept) errors.push(`${label}: concept name does not match the knowledge bank.`);
   if (question.category !== concept.primary_element) errors.push(`${label}: category does not match primary_element.`);
   if (JSON.stringify(question.categories) !== JSON.stringify(concept.categories)) errors.push(`${label}: categories do not match the knowledge bank.`);
+  const editorOverride = MANUAL_OVERRIDES.questions[question.id];
+  if (editorOverride && (editorOverride.completionState === "needs-details" || editorOverride.status === "draft")) {
+    if (!question.question?.trim()) errors.push(`${label}: active question stem is blank.`);
+    if (!Array.isArray(question.answers) || question.answers.length !== 4 || question.answers.some((answer) => !String(answer?.text || "").trim())) {
+      errors.push(`${label}: active questions need four non-empty answers.`);
+    } else if (question.answers.filter((answer) => answer?.correct === true).length !== 1) {
+      errors.push(`${label}: active questions need one correct answer.`);
+    }
+    return;
+  }
   const conceptAnswerQuestion = question.answerMode === "concept";
   const notFeatureQuestion = question.answerMode === "not_feature";
   const customQuestion = question.answerMode === "custom";
@@ -326,7 +336,9 @@ function validateQuestion(question, fileLevel, context, errors) {
     conceptDescription: manualPresentation.conceptDescription || null,
     prompt: manualPresentation.prompt,
   } : conceptQuestionPresentation(question);
-  if (presentation.conceptDescription && question.explanation !== presentation.conceptDescription) {
+  const useDescriptionAsFeedback = manualPresentation?.useDescriptionAsFeedback === true
+    || (manualPresentation?.useDescriptionAsFeedback == null && question.difficulty === "Easy");
+  if (useDescriptionAsFeedback && presentation.conceptDescription && question.explanation !== presentation.conceptDescription) {
     errors.push(`${label}: description-question feedback must exactly match its displayed description.`);
   }
   if (/^A second useful clue is:/i.test(question.hint || "")) errors.push(`${label}: hint contains redundant introductory wording.`);
@@ -471,6 +483,7 @@ function validateEditorSlots(bank, errors) {
     }
     if (!Number.isInteger(slot?.correctAnswer) || slot.correctAnswer < -1 || slot.correctAnswer > 3) errors.push(`${label}: editor correctAnswer is invalid.`);
     if (slot?.status !== "ready" && slot?.status !== "draft") errors.push(`${label}: editor slot status is invalid.`);
+    if (!["complete", "needs-details", "incomplete"].includes(slot?.completionState)) errors.push(`${label}: editor completion state is invalid.`);
     if (typeof slot?.overridden !== "boolean") errors.push(`${label}: editor slot overridden flag is invalid.`);
     if (slot?.status === "ready") readyIds.add(slot.id);
   });

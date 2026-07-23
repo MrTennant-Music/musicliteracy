@@ -59,7 +59,13 @@ function allQuestions() {
     correctAnswer: Number.isInteger(slot.correctAnswer) ? slot.correctAnswer : -1,
     hint: String(slot.hint || ""),
     explanation: String(slot.explanation || ""),
+    useDescriptionAsFeedback: slot.useDescriptionAsFeedback === true
+      || (slot.useDescriptionAsFeedback == null
+        && Boolean(slot.conceptDescription) && slot.explanation === slot.conceptDescription),
     status: slot.status === "ready" ? "ready" : "draft",
+    completionState: ["complete", "needs-details", "incomplete"].includes(slot.completionState)
+      ? slot.completionState
+      : slot.status === "ready" ? "complete" : "incomplete",
     overridden: Boolean(slot.overridden),
   })).sort((left, right) => levelOrder.get(left.level) - levelOrder.get(right.level)
     || left.concept.localeCompare(right.concept, "en-GB")
@@ -90,26 +96,28 @@ function normaliseQuestionOverride(value, knownQuestion = null) {
   if (!Number.isInteger(correctAnswer) || correctAnswer < -1 || correctAnswer > 3) throw new Error("The selected correct answer is not valid.");
   const hint = optionalText(value.hint, "Hint", 240);
   const suppliedExplanation = optionalText(value.explanation, "Explanation", 600);
-  const explanation = conceptDescription || suppliedExplanation;
+  const useDescriptionAsFeedback = value.useDescriptionAsFeedback === true;
+  if (useDescriptionAsFeedback && !conceptDescription) {
+    throw new Error("Add a description before using it as feedback.");
+  }
+  const explanation = useDescriptionAsFeedback ? conceptDescription : suppliedExplanation;
   const difficulty = requiredText(value.difficulty, "Difficulty", 20);
   if (!DIFFICULTIES.includes(difficulty)) throw new Error("Choose Easy, Medium or Hard difficulty.");
   if (knownQuestion && difficulty !== knownQuestion.difficulty) {
     throw new Error("This slot's difficulty is fixed and cannot be changed.");
   }
   const normalisedAnswers = answers.map(normaliseText);
+  const canEnterPool = Boolean(prompt) && answers.every(Boolean) && correctAnswer >= 0;
   const needsDescription = (knownQuestion?.difficulty || difficulty) === "Easy";
-  const ready = (!needsDescription || Boolean(conceptDescription))
+  const fullyComplete = (!needsDescription || Boolean(conceptDescription))
     && Boolean(prompt) && prompt.endsWith("?")
     && answers.every(Boolean) && new Set(normalisedAnswers).size === 4
     && correctAnswer >= 0
     && Boolean(hint) && Boolean(explanation);
-  if (ready && difficulty === "Easy" && prompt !== CONCEPT_IDENTIFICATION_PROMPT) {
+  const ready = canEnterPool;
+  const completionState = !ready ? "incomplete" : fullyComplete ? "complete" : "needs-details";
+  if (fullyComplete && difficulty === "Easy" && prompt !== CONCEPT_IDENTIFICATION_PROMPT) {
     throw new Error(`Easy questions must use: ${CONCEPT_IDENTIFICATION_PROMPT}`);
-  }
-  if (ready && difficulty === "Medium") {
-    const expectedPrompt = `Which is NOT a feature of ${knownQuestion?.concept}?`;
-    if (conceptDescription) throw new Error("Medium questions must keep the upper description box blank.");
-    if (prompt !== expectedPrompt) throw new Error(`Medium questions must use: ${expectedPrompt}`);
   }
   const cleared = !conceptDescription && !prompt && answers.every((answer) => !answer)
     && correctAnswer === -1 && !hint && !explanation;
@@ -121,8 +129,10 @@ function normaliseQuestionOverride(value, knownQuestion = null) {
     correctAnswer,
     hint,
     explanation,
+    useDescriptionAsFeedback,
     difficulty,
     status: ready ? "ready" : "draft",
+    completionState,
     cleared,
   };
 }
@@ -186,8 +196,10 @@ function overrideValue(question, override) {
     correctAnswer: override.correctAnswer,
     hint: override.hint,
     explanation: override.explanation,
+    useDescriptionAsFeedback: override.useDescriptionAsFeedback,
     difficulty: override.difficulty,
     status: override.status,
+    completionState: override.completionState,
     cleared: override.cleared,
     editorMetadata,
   };

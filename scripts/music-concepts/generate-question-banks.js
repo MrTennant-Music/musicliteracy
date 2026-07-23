@@ -1653,14 +1653,21 @@ function editableSlotIsComplete(slot) {
   return Boolean(prompt && prompt.endsWith("?")
     && (slot.difficulty !== "Easy"
       || (conceptDescription && prompt === CONCEPT_IDENTIFICATION_PROMPT))
-    && (slot.difficulty !== "Medium"
-      || (!conceptDescription && prompt === `Which is NOT a feature of ${slot.concept}?`))
     && answers.length === 4
     && answerTexts.every(Boolean)
     && new Set(answerTexts).size === 4
     && answers.filter((answer) => answer.correct === true).length === 1
     && String(slot.hint || "").trim()
     && String(slot.explanation || "").trim());
+}
+
+function editableSlotCanEnterPool(slot) {
+  const prompt = String(slot.prompt || "").trim();
+  const answers = Array.isArray(slot.answers) ? slot.answers : [];
+  return Boolean(prompt)
+    && answers.length === 4
+    && answers.every((answer) => String(answer?.text || "").trim())
+    && answers.filter((answer) => answer.correct === true).length === 1;
 }
 
 function blankSlot(slot) {
@@ -1670,7 +1677,9 @@ function blankSlot(slot) {
   slot.answers = Array.from({ length: 4 }, () => ({ text: "", correct: false }));
   slot.hint = "";
   slot.explanation = "";
+  slot.useDescriptionAsFeedback = false;
   slot.complete = false;
+  slot.fullyComplete = false;
   slot.answerMode = "custom";
   slot.questionType = "teacher_authored";
   slot.featureSourceConceptId = null;
@@ -1701,22 +1710,36 @@ function applyFixedSlotOverrides(slots, manualOverrides) {
       } : {}),
     }));
     slot.hint = String(override.hint || "").trim();
-    slot.explanation = slot.difficulty === "Easy"
+    slot.useDescriptionAsFeedback = override.useDescriptionAsFeedback === true
+      || (override.useDescriptionAsFeedback == null
+        && slot.difficulty === "Easy" && Boolean(slot.conceptDescription));
+    slot.explanation = slot.useDescriptionAsFeedback
       ? slot.conceptDescription
       : String(override.explanation || "").trim();
     slot.question = slot.conceptDescription
       ? `${ensureTerminalPunctuation(slot.conceptDescription)} ${slot.prompt}`.trim()
       : slot.prompt;
-    slot.answerMode = slot.difficulty === "Easy" ? "concept" : slot.difficulty === "Medium" ? "not_feature" : "custom";
+    const standardMediumQuestion = slot.difficulty === "Medium"
+      && !slot.conceptDescription
+      && slot.prompt === `Which is NOT a feature of ${slot.concept}?`;
+    slot.answerMode = slot.difficulty === "Easy" ? "concept" : standardMediumQuestion ? "not_feature" : "custom";
     slot.questionType = slot.difficulty === "Easy"
       ? generatedQuestionType
-      : slot.difficulty === "Medium" ? "feature_exclusion" : "teacher_authored";
-    slot.featureSourceConceptId = slot.difficulty === "Medium" ? generatedFeatureSourceConceptId : null;
-    slot.complete = editableSlotIsComplete(slot);
+      : standardMediumQuestion ? "feature_exclusion" : "teacher_authored";
+    slot.featureSourceConceptId = standardMediumQuestion ? generatedFeatureSourceConceptId : null;
+    slot.fullyComplete = editableSlotIsComplete(slot);
+    slot.complete = editableSlotCanEnterPool(slot);
+    if (slot.complete && !slot.fullyComplete) {
+      slot.answerMode = "custom";
+      slot.questionType = "teacher_authored";
+      slot.featureSourceConceptId = null;
+    }
   });
 }
 
 function fixedSlotEditorRecord(slot) {
+  const fullyComplete = slot.fullyComplete === true
+    || (slot.fullyComplete == null && editableSlotIsComplete(slot));
   return {
     id: slot.id,
     level: slot.level,
@@ -1734,21 +1757,37 @@ function fixedSlotEditorRecord(slot) {
     correctAnswer: slot.answers.findIndex((answer) => answer.correct),
     hint: slot.hint,
     explanation: slot.explanation,
+    useDescriptionAsFeedback: slot.useDescriptionAsFeedback === true
+      || (slot.useDescriptionAsFeedback == null
+        && Boolean(slot.conceptDescription) && slot.explanation === slot.conceptDescription),
     status: slot.complete ? "ready" : "draft",
+    completionState: !slot.complete ? "incomplete" : fullyComplete ? "complete" : "needs-details",
     overridden: slot.overridden,
   };
 }
 
 function fixedSlotToCanonicalQuestion(slot) {
+  const isFullyComplete = slot.fullyComplete === true
+    || (slot.fullyComplete == null && editableSlotIsComplete(slot));
   const {
     conceptDescription,
     prompt,
     complete,
+    fullyComplete: _fullyComplete,
+    useDescriptionAsFeedback,
     overridden,
     featureSourceConceptId,
     ...question
   } = slot;
   if (featureSourceConceptId) question.featureSourceConceptId = featureSourceConceptId;
+  if (!isFullyComplete) {
+    const correctAnswer = question.answers.find((answer) => answer.correct === true)?.text || "the selected answer";
+    question.answerMode = "custom";
+    question.questionType = "teacher_authored";
+    delete question.featureSourceConceptId;
+    question.hint = question.hint || "No hint is available for this question.";
+    question.explanation = question.explanation || `The correct answer is ${correctAnswer}.`;
+  }
   return question;
 }
 
@@ -1849,7 +1888,9 @@ function useDescriptionsAsFeedback(records, manualOverrides) {
       conceptDescription: manual.conceptDescription || null,
       prompt: manual.prompt,
     } : conceptQuestionPresentation(record);
-    if (presentation.conceptDescription) record.explanation = presentation.conceptDescription;
+    if (presentation.conceptDescription && manual?.useDescriptionAsFeedback === true) {
+      record.explanation = presentation.conceptDescription;
+    }
   });
 }
 

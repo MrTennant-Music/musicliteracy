@@ -1999,32 +1999,32 @@
     "musicConceptCategories": [
       "Rhythm/tempo"
     ],
-    "questionType": "definition",
-    "answerMode": "concept",
-    "question": "The steady beat is organised into recurring bars containing two, three or four main beats. What is this?",
-    "prompt": "What concept is described?",
-    "conceptDescription": "The steady beat is organised into recurring bars containing two, three or four main beats.",
+    "questionType": "teacher_authored",
+    "answerMode": "custom",
+    "question": "Which is most common?",
+    "prompt": "Which is most common?",
+    "conceptDescription": null,
     "answers": [
       {
         "id": "a",
-        "text": "Beat / pulse"
+        "text": "1 beat per bar"
       },
       {
         "id": "b",
-        "text": "Accent / accented"
+        "text": "5 beats per bar"
       },
       {
         "id": "c",
-        "text": "Adagio"
+        "text": "7 beats per bar"
       },
       {
         "id": "d",
-        "text": "2, 3 or 4 beats in the bar"
+        "text": "4 beats per bar"
       }
     ],
     "correctAnswer": "d",
-    "explanation": "The steady beat is organised into recurring bars containing two, three or four main beats.",
-    "tip": "How many steady taps fit before the next bar line?",
+    "explanation": "4 beats per bar is the most common. A 4/4 time signature is sometimes called common time.",
+    "tip": "Even number",
     "difficulty": "easy",
     "difficultyMin": 1,
     "difficultyMax": 5,
@@ -2065,35 +2065,101 @@
     "musicConceptCategories": [
       "Rhythm/tempo"
     ],
-    "questionType": "feature_exclusion",
-    "answerMode": "not_feature",
-    "question": "Which is NOT a feature of 2, 3 or 4 beats in the bar?",
-    "prompt": "Which is NOT a feature of 2, 3 or 4 beats in the bar?",
+    "questionType": "teacher_authored",
+    "answerMode": "custom",
+    "question": "Which time signature has 3 beats per bar?",
+    "prompt": "Which time signature has 3 beats per bar?",
     "conceptDescription": null,
     "answers": [
       {
         "id": "a",
-        "text": "The steady beat is grouped into bars of two, three or four main beats."
+        "text": "5/4"
       },
       {
         "id": "b",
-        "text": "The first beat of each bar is usually the strongest."
+        "text": "2/4"
       },
       {
         "id": "c",
-        "text": "Common examples include 2/4, 3/4, 4/4, 6/8, 9/8 and 12/8."
+        "text": "4/4"
       },
       {
         "id": "d",
-        "text": "It is a short decoration played around the end of a phrase on drum kit."
+        "text": "3/4"
       }
     ],
     "correctAnswer": "d",
-    "explanation": "The statement “It is a short decoration played around the end of a phrase on drum kit” describes Drum fill, not 2, 3 or 4 beats in the bar. The steady beat is organised into recurring bars containing two, three or four main beats.",
-    "tip": "A brief kit flourish between phrases.",
+    "explanation": "3/4 has 3 beats per par.",
+    "tip": "The first number tells you how many beats per bar there are.",
     "difficulty": "medium",
     "difficultyMin": 6,
     "difficultyMax": 10,
+    "type": "text",
+    "audioSrc": "",
+    "notationData": null,
+    "literacyLink": {
+      "relationship": "time_signature_and_beat_grouping",
+      "targets": [
+        {
+          "sourceFile": "timesig.html",
+          "localIds": [
+            "2/4",
+            "3/4",
+            "4/4"
+          ],
+          "matchKind": "exact-component-id"
+        }
+      ],
+      "targetLiteracyIds": [
+        "2/4",
+        "3/4",
+        "4/4"
+      ]
+    }
+  },
+  {
+    "id": "MCQ-N3-MC0020-F01-H-001",
+    "level": "N3",
+    "category": "concepts",
+    "concept": "2, 3 or 4 beats in the bar",
+    "conceptId": "MC-0020",
+    "factId": "MC-0020-F01",
+    "supportingFactIds": [],
+    "senseId": null,
+    "comparisonGroupId": null,
+    "musicConceptCategory": "Rhythm/tempo",
+    "musicConceptCategories": [
+      "Rhythm/tempo"
+    ],
+    "questionType": "teacher_authored",
+    "answerMode": "custom",
+    "question": "How many beats per bar does a Waltz have?",
+    "prompt": "How many beats per bar does a Waltz have?",
+    "conceptDescription": null,
+    "answers": [
+      {
+        "id": "a",
+        "text": "3 beats per bar"
+      },
+      {
+        "id": "b",
+        "text": "2 beats per bar"
+      },
+      {
+        "id": "c",
+        "text": "4 beats per bar"
+      },
+      {
+        "id": "d",
+        "text": "5 beats per bar"
+      }
+    ],
+    "correctAnswer": "a",
+    "explanation": "A waltz has 3 beats per bar.",
+    "tip": "Oom pah pah",
+    "difficulty": "hard",
+    "difficultyMin": 11,
+    "difficultyMax": 15,
     "type": "text",
     "audioSrc": "",
     "notationData": null,
@@ -2193,32 +2259,32 @@
     "musicConceptCategories": [
       "Rhythm/tempo"
     ],
-    "questionType": "feature_exclusion",
-    "answerMode": "not_feature",
-    "question": "Which is NOT a feature of Accent / accented?",
-    "prompt": "Which is NOT a feature of Accent / accented?",
+    "questionType": "teacher_authored",
+    "answerMode": "custom",
+    "question": "Which is NOT a feature of an accent?",
+    "prompt": "Which is NOT a feature of an accent?",
     "conceptDescription": null,
     "answers": [
       {
         "id": "a",
-        "text": "A dot beneath a curved arch tells the performer to hold a note longer."
+        "text": "Tells the performer to hold a note longer"
       },
       {
         "id": "b",
-        "text": "A note or beat receives extra emphasis."
+        "text": "A note or beat receives extra emphasis"
       },
       {
         "id": "c",
-        "text": "The sound may be made stronger or louder than those around it."
+        "text": "The sound may be made stronger or louder than those around it"
       },
       {
         "id": "d",
-        "text": "A > sign above or below a note is common notation for it."
+        "text": "A note which sounds forced"
       }
     ],
     "correctAnswer": "a",
     "explanation": "The statement “A dot beneath a curved arch tells the performer to hold a note longer” describes Pause, not Accent / accented. A note or beat receives extra emphasis, so it stands out from those around it.",
-    "tip": "A curved arch and dot: hold it longer.",
+    "tip": "An accent adds extra emphasis to a note.",
     "difficulty": "medium",
     "difficultyMin": 6,
     "difficultyMax": 10,
