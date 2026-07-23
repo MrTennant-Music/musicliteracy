@@ -404,11 +404,24 @@
     groupCounts.set(question.gameLimitGroup, (groupCounts.get(question.gameLimitGroup) || 0) + 1);
   }
 
+  function questionConceptId(question) {
+    return typeof question?.conceptId === "string" && question.conceptId.trim() ? question.conceptId.trim() : null;
+  }
+
+  function preferUnusedConcept(candidates, usedConceptIds) {
+    const withoutRepeatedConcepts = candidates.filter((question) => {
+      const conceptId = questionConceptId(question);
+      return !conceptId || !usedConceptIds.has(conceptId);
+    });
+    return withoutRepeatedConcepts.length ? withoutRepeatedConcepts : candidates;
+  }
+
   // Selection may change category only when a pool is too small. It never
   // crosses the selected course level or the current difficulty block.
   function selectForSchedule(validQuestions, schedule, recentlyUsed, recentlyUsedFingerprints, rng, level, enabledCategories) {
     const used = new Set();
     const usedFingerprints = new Set();
+    const usedConceptIds = new Set();
     const groupCounts = new Map();
     const selected = [];
     for (let stage = 1; stage <= 15; stage += 1) {
@@ -432,12 +445,15 @@
       }
       const fixedForThisStage = candidates.filter((question) => question.fixedStage === stage);
       if (fixedForThisStage.length) candidates = fixedForThisStage;
+      candidates = preferUnusedConcept(candidates, usedConceptIds);
       const fresh = candidates.filter((question) => !recentlyUsed.has(question.id) && !recentlyUsedFingerprints.has(questionFingerprint(question)));
       const preferred = fresh.length ? fresh : candidates;
       const choice = preferred[randomInt(preferred.length, rng)];
       selected.push(choice);
       used.add(choice.id);
       usedFingerprints.add(questionFingerprint(choice));
+      const conceptId = questionConceptId(choice);
+      if (conceptId) usedConceptIds.add(conceptId);
       addToGameLimit(choice, groupCounts);
     }
     return selected;
@@ -475,6 +491,9 @@
     const usedIds = new Set((currentQuestions || []).map((question) => question.id));
     const usedFingerprints = new Set((currentQuestions || []).map(questionFingerprint));
     const currentQuestion = (currentQuestions || [])[stage - 1];
+    const usedConceptIds = new Set((currentQuestions || [])
+      .filter((question, index) => index !== stage - 1 && questionConceptId(question))
+      .map(questionConceptId));
     const groupCounts = new Map();
     (currentQuestions || []).forEach((question, index) => {
       if (index !== stage - 1) addToGameLimit(question, groupCounts);
@@ -491,6 +510,7 @@
     let candidates = sameCategory.length ? sameCategory : eligible;
     const fixedForThisStage = candidates.filter((question) => question.fixedStage === stage);
     if (fixedForThisStage.length) candidates = fixedForThisStage;
+    candidates = preferUnusedConcept(candidates, usedConceptIds);
     if (!candidates.length) return null;
     const replacement = candidates[randomInt(candidates.length, rng)];
     const correctLetter = LETTERS[randomInt(LETTERS.length, rng)];

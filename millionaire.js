@@ -54,9 +54,15 @@ const MILLIONAIRE_LEVELS = {
 const CATEGORY_LABELS = { listening: "Listening", literacy: "Music literacy", concepts: "Music concepts" };
 const QUESTION_TYPE_OPTIONS = [
   { id: "literacy", categories: ["literacy"], label: "Music Literacy", glyph: "\uE050", notationGlyph: true },
-  { id: "concepts", categories: ["concepts", "listening"], label: "Music Concepts", icon: "worksheet.svg", iconSize: "h-[26px] w-[26px]" },
+  { id: "concepts", categories: ["concepts"], label: "Music Concepts", icon: "worksheet.svg", iconSize: "h-[26px] w-[26px]" },
 ];
-const selectedQuestionCategories = (settings) => settings.audioQuestions ? settings.questionTypes : settings.questionTypes.filter((category) => category !== "listening");
+const categoryAvailableAtLevel = (level, category) => CORE.DIFFICULTIES
+  .every((difficulty) => (QUESTION_POOLS[level]?.[difficulty]?.[category]?.length || 0) >= 5);
+const selectedQuestionCategories = (settings) => {
+  const categories = settings.questionTypes.filter((category) => category !== "listening");
+  if (settings.audioQuestions && categories.includes("concepts") && categoryAvailableAtLevel(settings.level, "listening")) categories.push("listening");
+  return [...new Set(categories)];
+};
 const LIFELINE_RESULTS = [
   { key: "fifty", icon: "50.50.svg", label: "50:50" },
   { key: "hint", icon: "hint.svg", label: "Hint" },
@@ -2456,11 +2462,10 @@ function App() {
     const queryLevel = new URLSearchParams(window.location.search).get("level");
     const level = CORE.SUPPORTED_LEVELS.includes(queryLevel) ? queryLevel
       : CORE.SUPPORTED_LEVELS.includes(saved.level) ? saved.level : DEFAULT_SETTINGS.level;
-    const availableTypes = CORE.CATEGORIES.filter((category) => CORE.DIFFICULTIES.every((difficulty) => (QUESTION_POOLS[level]?.[difficulty]?.[category]?.length || 0) >= 5));
+    const availableTypes = ["literacy", "concepts"].filter((category) => categoryAvailableAtLevel(level, category));
     const selectedTypes = savedTypes.filter((category) => availableTypes.includes(category));
-    const selectedOptions = QUESTION_TYPE_OPTIONS.filter((option) => option.categories.some((category) => selectedTypes.includes(category)) && option.categories.every((category) => availableTypes.includes(category)));
-    const groupedSelectedTypes = selectedOptions.flatMap((option) => option.categories);
-    return { ...DEFAULT_SETTINGS, ...saved, level, questionTypes: selectedTypes.length ? [...new Set(groupedSelectedTypes)] : availableTypes };
+    const defaultTypes = DEFAULT_SETTINGS.questionTypes.filter((category) => availableTypes.includes(category));
+    return { ...DEFAULT_SETTINGS, ...saved, level, questionTypes: selectedTypes.length ? selectedTypes : (defaultTypes.length ? defaultTypes : availableTypes) };
   });
   const [levelOpen, setLevelOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
@@ -2596,7 +2601,7 @@ function App() {
   }
 
   function toggleQuestionType(option) {
-    const availableTypes = CORE.CATEGORIES.filter((item) => CORE.DIFFICULTIES.every((difficulty) => (QUESTION_POOLS[settings.level]?.[difficulty]?.[item]?.length || 0) >= 5));
+    const availableTypes = ["literacy", "concepts"].filter((item) => categoryAvailableAtLevel(settings.level, item));
     if (!option.categories.every((category) => availableTypes.includes(category))) return;
     setSettings((current) => {
       const enabled = option.categories.every((category) => current.questionTypes.includes(category));
@@ -3000,6 +3005,7 @@ function App() {
       <p className="millionaire-screen-copy millionaire-opening-copy">Test your musical knowledge and climb the prize ladder to £1 million.</p>
       <div className="millionaire-opening-actions">
         <button type="button" className="millionaire-secondary millionaire-play millionaire-opening-play" disabled={openingZooming} onClick={() => setScreen("rules")}><span className="millionaire-opening-play-label">How to Play</span></button>
+        <a className="millionaire-secondary millionaire-play millionaire-opening-play millionaire-editor-link" href="http://127.0.0.1:4178/" target="_blank" rel="noopener"><span className="millionaire-opening-play-label">Question Editor</span></a>
         <button type="button" className="millionaire-primary millionaire-play millionaire-opening-play" disabled={openingZooming} onClick={startGame}><span className="millionaire-opening-play-label">Start</span></button>
       </div>
     </section>;
@@ -3040,6 +3046,8 @@ function App() {
   function GameScreen() {
     if (!question) return null;
     const earnedReward = revealed === "correct" && currentIndex < 14 ? QUESTION_REWARDS[currentIndex + 1] : null;
+    const conceptDescription = question.category === "concepts" ? question.conceptDescription : null;
+    const showConceptDescription = Boolean(conceptDescription && !earnedReward);
     const milestoneIsShowing = Boolean(earnedReward && milestone?.stage === currentIndex + 1);
     const autoAdvancingMilestone = Boolean(milestoneIsShowing && milestone?.autoAdvance);
     const earnedPrize = CORE.PRIZE_LADDER[currentIndex] === 1000000 ? "£1 MILLION" : CORE.formatPrize(CORE.PRIZE_LADDER[currentIndex]);
@@ -3050,8 +3058,8 @@ function App() {
         {settings.timer && !revealed && !earnedReward && <QuestionTimer seconds={timeRemaining} />}
         <div className="millionaire-question-panel">
           {hintVisible && <div className="millionaire-inline-hint" role="note"><strong>Hint</strong><span><HintText question={question} /></span></div>}
-          <div className="millionaire-question-media">{earnedReward ? <MilestoneCelebration reward={earnedReward} /> : renderQuestionMedia(question, outcome === "incorrect")}</div>
-          <div className="millionaire-question-rail"><div className="millionaire-question-bar"><h2 className={showWonAmount ? "is-milestone-amount" : undefined}>{showWonAmount ? <span className="millionaire-milestone-amount" aria-label={earnedPrize}><span aria-hidden="true">◆</span><span>{earnedPrize}</span><span aria-hidden="true">◆</span></span> : question.question}</h2></div></div>
+          <div className={`millionaire-question-media${showConceptDescription ? " has-concept-description" : ""}`}>{earnedReward ? <MilestoneCelebration reward={earnedReward} /> : showConceptDescription ? <p className="millionaire-concept-description">{conceptDescription}</p> : renderQuestionMedia(question, outcome === "incorrect")}</div>
+          <div className="millionaire-question-rail"><div className="millionaire-question-bar"><h2 className={showWonAmount ? "is-milestone-amount" : undefined}>{showWonAmount ? <span className="millionaire-milestone-amount" aria-label={earnedPrize}><span aria-hidden="true">◆</span><span>{earnedPrize}</span><span aria-hidden="true">◆</span></span> : question.prompt || question.question}</h2></div></div>
         </div>
         <div className="millionaire-answers" role="group" aria-label="Answer choices">
           {[question.answers.slice(0, 2), question.answers.slice(2, 4)].map((answerRow, rowIndex) => <div className="millionaire-answer-row" role="presentation" key={rowIndex}>{answerRow.map((answer) => {
@@ -3155,7 +3163,7 @@ function App() {
         <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
           <div className="hub-menu-anchor relative" ref={levelRef}>
             <window.MLH.LevelButton icon={<img src="levels.svg" alt="" className="h-[26px] w-[26px]" />} activeLevel={settings.level} activeLabel={activeLevelLabel} onClick={() => { setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />
-            {levelOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={settings.level} onSelect={(level) => { const availableTypes = CORE.CATEGORIES.filter((category) => CORE.DIFFICULTIES.every((difficulty) => (QUESTION_POOLS[level]?.[difficulty]?.[category]?.length || 0) >= 5)); setSettings((current) => ({ ...current, level, questionTypes: availableTypes })); setLevelOpen(false); }} levels={MILLIONAIRE_LEVELS} /></window.MLH.MenuPanel>}
+            {levelOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={settings.level} onSelect={(level) => { const availableTypes = ["literacy", "concepts"].filter((category) => categoryAvailableAtLevel(level, category)); setSettings((current) => { const retainedTypes = current.questionTypes.filter((category) => availableTypes.includes(category)); return { ...current, level, questionTypes: retainedTypes.length ? retainedTypes : availableTypes.slice(0, 1) }; }); setLevelOpen(false); }} levels={MILLIONAIRE_LEVELS} /></window.MLH.MenuPanel>}
           </div>
         </fieldset>
         <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
@@ -3166,7 +3174,7 @@ function App() {
               {QUESTION_TYPE_OPTIONS.map((option) => { const available = option.categories.every((category) => CORE.DIFFICULTIES.every((difficulty) => (QUESTION_POOLS[settings.level]?.[difficulty]?.[category]?.length || 0) >= 5)); const checked = option.categories.every((category) => settings.questionTypes.includes(category)); const enabledOptionCount = QUESTION_TYPE_OPTIONS.filter((candidate) => candidate.categories.some((category) => settings.questionTypes.includes(category))).length; return <window.MLH.MenuToggleRow key={option.id} glyph={<QuestionTypeGlyph option={option} />} label={option.label} checked={checked} disabled={!available || (checked && enabledOptionCount === 1)} onChange={() => toggleQuestionType(option)} />; })}
               <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
               <window.MLH.MenuToggleRow glyph={<img src="30timer.svg" alt="" aria-hidden="true" className="h-[21px] w-[21px] object-contain" />} label="Timer" checked={settings.timer} onChange={() => setSettings((current) => ({ ...current, timer: !current.timer }))} />
-              <window.MLH.MenuToggleRow glyph={<img src="audio-svgrepo-com.svg?v=20260722-smaller15" alt="" aria-hidden="true" className="h-[42px] w-[42px] object-contain" />} label="Audio Questions" checked={settings.audioQuestions} disabled={!settings.questionTypes.includes("concepts")} onChange={() => setSettings((current) => ({ ...current, audioQuestions: !current.audioQuestions }))} />
+              <window.MLH.MenuToggleRow glyph={<img src="audio-svgrepo-com.svg?v=20260722-smaller15" alt="" aria-hidden="true" className="h-[42px] w-[42px] object-contain" />} label="Audio Questions" checked={settings.audioQuestions && categoryAvailableAtLevel(settings.level, "listening")} disabled={!settings.questionTypes.includes("concepts") || !categoryAvailableAtLevel(settings.level, "listening")} onChange={() => setSettings((current) => ({ ...current, audioQuestions: !current.audioQuestions }))} />
               <p className="-mt-1 mb-2 ml-2 w-[256px] text-xs leading-snug text-stone-500">Turn this off to remove questions that require you to hear the audio to answer.</p>
             </window.MLH.MenuPanel>}
           </div>

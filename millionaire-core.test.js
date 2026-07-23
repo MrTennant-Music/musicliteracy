@@ -13,7 +13,7 @@ function seeded(seed) {
   };
 }
 
-test("question bank contains completed Music Literacy pools only", () => {
+test("question bank contains completed Music Literacy and Music Concept pools", () => {
   assert.ok(BANK.length >= 400);
   assert.equal(new Set(BANK.map((question) => question.id)).size, BANK.length);
   assert.deepEqual(CORE.validateQuestionBank(BANK), []);
@@ -23,7 +23,7 @@ test("question bank contains completed Music Literacy pools only", () => {
     for (const difficulty of CORE.DIFFICULTIES) {
       for (const category of CORE.CATEGORIES) {
         const pool = BANK.pools[level][difficulty][category];
-        if (category === "literacy") assert.ok(pool.length >= 5, `${level}/${difficulty}/literacy should contain a complete question pool`);
+        if (["literacy", "concepts"].includes(category)) assert.ok(pool.length >= 5, `${level}/${difficulty}/${category} should contain a complete question pool`);
         else assert.equal(pool.length, 0, `${level}/${difficulty}/${category} should remain unavailable`);
         assert.ok(pool.every((question) => question.level === level && question.difficulty === difficulty && question.category === category));
       }
@@ -32,7 +32,7 @@ test("question bank contains completed Music Literacy pools only", () => {
   const national3 = BANK.filter((question) => question.level === "N3");
   assert.ok(national3.length >= 60);
   assert.ok(national3.every((question) => !question.placeholder));
-  assert.ok(national3.every((question) => question.category === "literacy"));
+  assert.ok(national3.every((question) => ["literacy", "concepts"].includes(question.category)));
   const n3Literacy = BANK.filter((question) => question.level === "N3" && question.category === "literacy");
   assert.ok(n3Literacy.length >= 46);
   assert.ok(n3Literacy.every((question) => ["easy", "medium", "hard"].includes(question.difficulty)));
@@ -243,8 +243,8 @@ test("question bank contains completed Music Literacy pools only", () => {
   }
 });
 
-test("question bank contains no non-literacy or placeholder records", () => {
-  assert.ok(BANK.every((question) => question.category === "literacy"));
+test("question bank contains only the completed non-audio categories and no placeholder records", () => {
+  assert.ok(BANK.every((question) => ["literacy", "concepts"].includes(question.category)));
   assert.ok(BANK.every((question) => !question.placeholder && !question.fallback));
 });
 
@@ -317,7 +317,9 @@ test("Music Literacy games use 15 unique questions and get harder", () => {
 
 test("unavailable question types fail safely instead of creating placeholders", () => {
   assert.throws(() => CORE.composeGame(BANK, [], seeded(400), { level: "N3", categories: ["listening"] }), /question pool is empty/);
-  assert.throws(() => CORE.composeGame(BANK, [], seeded(401), { level: "N3", categories: ["concepts"] }), /question pool is empty/);
+  const conceptGame = CORE.composeGame(BANK, [], seeded(401), { level: "N3", categories: ["concepts"] });
+  assert.equal(conceptGame.length, 15);
+  assert.ok(conceptGame.every((question) => question.category === "concepts"));
 });
 
 test("invalid, empty and incomplete pools fail safely without crossing level or difficulty", () => {
@@ -418,7 +420,7 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('onClick={() => setScreen("title")}><span className="millionaire-back-button-label">Back</span></button>'), "The rules button should show Back in title case.");
   assert.ok(!script.includes('className="millionaire-back-icon"'), "The rules Back button should not show an icon.");
   assert.ok(html.includes("bravura-symbols.js") && html.includes("shared-notation-config.js"), "Millionaire notation should use the shared Bravura symbols and notation settings.");
-  assert.ok(html.includes("millionaire.css?v=20260721-literacy-only") && html.includes("millionaire-core.js?v=20260721-literacy-only") && html.includes("millionaire-question-bank.js?v=20260721-literacy-only") && html.includes("millionaire.js?v=20260722-smaller-shared-audio-icon"), "The Millionaire files should use current cache-version tags.");
+  assert.ok(html.includes("millionaire.css?v=20260722-centred-concept-description") && html.includes("millionaire-core.js?v=20260722-centred-concept-description") && html.includes("millionaire-music-concept-bank.js?v=20260722-centred-concept-description") && html.includes("millionaire-question-bank.js?v=20260722-centred-concept-description") && html.includes("millionaire.js?v=20260722-centred-concept-description"), "The Millionaire files should use current cache-version tags.");
   assert.ok(script.includes('glyph={<img src="30timer.svg"') && script.includes('className="h-[21px] w-[21px] object-contain"') && !script.includes('glyph={<img src="timer.svg"'), "The Customise menu should use the supplied timer icon at its requested 21px size.");
   assert.ok(!css.includes('background-lossless.webp'), "The menu, How to Play and Review screens should use the built-in Millionaire background rather than a separate picture.");
   assert.ok(css.includes('.millionaire-opening-copy { max-width: none; font-size: 24px; text-shadow: 0 2px 5px rgba(0,0,0,.85);'), "The main-menu introduction should have a restrained shadow for contrast over the artwork.");
@@ -574,7 +576,7 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('const SETTINGS_KEY = "mlh-millionaire-settings-v3";'), "The settings version should apply the new defaults once.");
   assert.match(script, /const DEFAULT_SETTINGS = \{[^}]*soundEffects:\s*true,[^}]*backgroundMusic:\s*true,/s, "Sound Effects and Background Music should both default to on.");
   assert.match(script, /const DEFAULT_SETTINGS = \{[^}]*timer:\s*true,/, "The 30-second question timer should default to on.");
-  assert.match(script, /const DEFAULT_SETTINGS = \{[^}]*audioQuestions:\s*true,/, "Audio-based questions should default to on.");
+  assert.match(script, /const DEFAULT_SETTINGS = \{[^}]*audioQuestions:\s*true,/, "Audio-based questions should preserve their existing default for future listening banks.");
   assert.ok(script.includes("Test your musical knowledge and climb the prize ladder to £1 million."), "The opening screen should repeat the page subtitle.");
   assert.match(css, /\.millionaire-opening-copy\s*\{[^}]*font-size:\s*24px;[^}]*white-space:\s*nowrap;/s, "The opening subtitle should be 24px and remain on one line.");
   assert.match(css, /\.millionaire-opening-play\s*\{[^}]*font-size:\s*30px;[^}]*line-height:\s*1;[^}]*text-transform:\s*none;/s, "Opening Rules and Start should use title case and fill their button height.");
@@ -676,7 +678,7 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(!script.includes("millionaire-quit") && !script.includes(">QUIT</button>"), "The old bottom-left Quit button should be removed.");
   assert.match(css, /\.millionaire-ladder\s*\{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto repeat\(15, minmax\(0, 1fr\)\);/s, "The 15 prize rows should expand evenly to fill the ladder.");
   assert.match(css, /\.millionaire-prize-row\s*\{[^}]*min-height:\s*0;/s, "Prize rows should be free to share the full ladder height evenly.");
-  assert.ok(script.includes('className="millionaire-question-media"'), "Question media should have a separate area above the question bar.");
+  assert.ok(script.includes("millionaire-question-media") && script.includes("has-concept-description"), "Question media should have a separate area above the question bar and support the concept-description panel.");
   assert.ok(script.includes('className="millionaire-question-rail"'), "The question should use a connected outlined rail.");
   assert.ok(script.includes('className="millionaire-answer-row"'), "Answers should be arranged in two connected rows.");
   assert.match(css, /\.millionaire-question-rail::before\s*\{[^}]*background:\s*#fff;/s, "The question rail should use a white outline colour.");
@@ -757,21 +759,21 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(script.includes('src="50.50.svg"') && script.includes('src="hint.svg"') && script.includes('src="switch.svg"'), "The three lifelines should use the supplied SVG icons.");
   assert.ok(script.includes("<window.MLH.CustomiseButton") && script.includes("<window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>"), "Customise should use the shared Hub menu and Question Types heading.");
   ["Music Literacy", "Music Concepts"].forEach((label) => assert.ok(script.includes(`label: "${label}"`), `Customise should include ${label}.`));
-  assert.match(script, /const QUESTION_TYPE_OPTIONS = \[[\s\S]*id: "literacy", categories: \["literacy"\][\s\S]*id: "concepts", categories: \["concepts", "listening"\]/, "Customise should group audio and non-audio concepts behind one Music Concepts toggle.");
+  assert.match(script, /const QUESTION_TYPE_OPTIONS = \[[\s\S]*id: "literacy", categories: \["literacy"\][\s\S]*id: "concepts", categories: \["concepts"\]/, "Customise should expose the production non-audio Music Concepts bank through one toggle.");
   assert.ok(!script.includes('label: "Music Concepts - Audio"') && !script.includes('label: "Music Concepts - No Audio"'), "Customise should not show separate audio and non-audio concept toggles.");
   assert.ok(script.includes('glyph: "\\uE050", notationGlyph: true'), "Music Literacy should use the Bravura treble clef glyph.");
   assert.ok(script.includes('icon: "worksheet.svg", iconSize: "h-[26px] w-[26px]"'), "Music Concepts should use a larger worksheet.svg icon.");
   assert.ok(script.includes('label: "Music Concepts", icon: "worksheet.svg"'), "The combined Music Concepts toggle should retain the worksheet glyph.");
-  assert.ok(script.includes('src="audio-svgrepo-com.svg?v=20260722-smaller15"') && script.includes('className="h-[42px] w-[42px] object-contain"') && script.includes('label="Audio Questions"') && script.includes('checked={settings.audioQuestions}'), "Options should provide a saved Audio Questions toggle using the shared audio glyph.");
+  assert.ok(script.includes('src="audio-svgrepo-com.svg?v=20260722-smaller15"') && script.includes('className="h-[42px] w-[42px] object-contain"') && script.includes('label="Audio Questions"') && script.includes('checked={settings.audioQuestions && categoryAvailableAtLevel(settings.level, "listening")}'), "Options should provide a saved Audio Questions toggle using the shared audio glyph and disable its checked state while no listening pool exists.");
   assert.ok(audioIcon.includes('viewBox="-227.451 -227.451 1254.902 1254.902"'), "The shared audio artwork should render 15 percent smaller than its previous Hub size.");
   assert.ok(script.includes("Turn this off to remove questions that require you to hear the audio to answer."), "The Audio Questions option should explain clearly what switching it off does.");
   assert.ok(script.indexOf('label="Timer"') < script.indexOf('label="Audio Questions"') && script.includes('className="-mt-1 mb-2 ml-2 w-[256px] text-xs'), "Timer should appear before Audio Questions and its description should share the section-header inset and right edge.");
-  assert.ok(script.includes('settings.audioQuestions ? settings.questionTypes : settings.questionTypes.filter((category) => category !== "listening")'), "Turning off Audio Questions should remove only the listening pool.");
+  assert.ok(script.includes('if (settings.audioQuestions && categories.includes("concepts") && categoryAvailableAtLevel(settings.level, "listening")) categories.push("listening");'), "Audio Questions should add the listening pool only when a real listening bank is available.");
   assert.ok(script.includes("const enabledCategories = selectedQuestionCategories(settings);") && script.includes("enabledCategories.includes(item.category)"), "Switch should respect the Audio Questions setting.");
   assert.ok(!script.includes("Only completed question types can be selected."), "Customise menus should not show the completed-question-types note.");
   assert.match(css, /\.millionaire-question-type-clef\s*\{[^}]*font-family:\s*"Bravura", serif;[^}]*font-size:\s*20px;[^}]*font-weight:\s*400;[^}]*transform:\s*translateY\(4px\);/s, "The Music Literacy glyph should use smaller regular-weight Bravura notation with the requested vertical alignment.");
   assert.ok(script.includes("if (enabled && enabledOptionCount === 1) return current;"), "At least one visible question-type toggle should always remain enabled.");
-  assert.ok(script.includes("const checked = option.categories.every") && script.includes("disabled={!available || (checked && enabledOptionCount === 1)}"), "The combined concept pools should share one visible toggle state.");
+  assert.ok(script.includes("const checked = option.categories.every") && script.includes("disabled={!available || (checked && enabledOptionCount === 1)}"), "Each visible question type should have one reliable toggle state.");
   assert.ok(!coreScript.includes("audienceVotes") && !css.includes("millionaire-audience"), "Unused audience-vote code and styling should be removed.");
   assert.ok(script.includes('const customiseUnavailable = openingZooming || screen === "game" || screen === "milestone";') && script.includes("<fieldset disabled={customiseUnavailable}"), "Customise should be unavailable during the opening transition and while a game is active.");
   assert.ok(script.includes('level: settings.level, categories'), "The next game should use the selected question types.");

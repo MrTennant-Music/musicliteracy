@@ -4,7 +4,8 @@
   // MILLIONAIRE QUESTION BANK
   // -------------------------
   // Questions are organised by course level, difficulty and question category.
-  // Only completed Music Literacy questions are currently included.
+  // Music Literacy records live in this hand-authored file. Music Concept
+  // records are generated from the validated per-level JSON banks.
 
   const LEVELS = {
     N3: { slug: "n3", label: "National 3" },
@@ -846,31 +847,50 @@
   const n5LiteracyPools = groupQuestionsByDifficultyRange(n5Literacy);
   const higherLiteracyPools = groupQuestionsByDifficultyRange(higherLiteracy);
   const advancedHigherLiteracyPools = groupQuestionsByDifficultyRange(advancedHigherLiteracy);
+  const musicConceptQuestions = root.MILLIONAIRE_MUSIC_CONCEPT_QUESTION_BANK
+    || (typeof module === "object" && module.exports ? require("./millionaire-music-concept-bank.js") : []);
+  const conceptPool = (level, difficulty) => {
+    const direct = musicConceptQuestions.filter((question) => question.level === level && question.difficulty === difficulty);
+    if (difficulty !== "hard") return direct;
+    const conceptsWithAuthoredHardQuestions = new Set(direct.map((question) => question.conceptId));
+    const temporaryMediumFallbacks = musicConceptQuestions
+      .filter((question) => question.level === level && question.difficulty === "medium"
+        && !conceptsWithAuthoredHardQuestions.has(question.conceptId))
+      .map((question) => ({
+        ...question,
+        id: `${question.id}-hard-fallback`,
+        difficulty: "hard",
+        difficultyMin: DIFFICULTIES.hard.min,
+        difficultyMax: DIFFICULTIES.hard.max,
+        temporaryMediumFallback: true,
+      }));
+    return direct.concat(temporaryMediumFallbacks);
+  };
   const questionPools = {
     N3: Object.fromEntries(Object.keys(DIFFICULTIES).map((difficulty) => [difficulty, {
       listening: [],
       literacy: n3Literacy[difficulty],
-      concepts: [],
+      concepts: conceptPool("N3", difficulty),
     }])),
     N4: Object.fromEntries(Object.keys(DIFFICULTIES).map((difficulty) => [difficulty, {
       listening: [],
       literacy: n4LiteracyPools[difficulty],
-      concepts: [],
+      concepts: conceptPool("N4", difficulty),
     }])),
     N5: Object.fromEntries(Object.keys(DIFFICULTIES).map((difficulty) => [difficulty, {
       listening: [],
       literacy: n5LiteracyPools[difficulty],
-      concepts: [],
+      concepts: conceptPool("N5", difficulty),
     }])),
     H: Object.fromEntries(Object.keys(DIFFICULTIES).map((difficulty) => [difficulty, {
       listening: [],
       literacy: higherLiteracyPools[difficulty],
-      concepts: [],
+      concepts: conceptPool("H", difficulty),
     }])),
     AH: Object.fromEntries(Object.keys(DIFFICULTIES).map((difficulty) => [difficulty, {
       listening: [],
       literacy: advancedHigherLiteracyPools[difficulty],
-      concepts: [],
+      concepts: conceptPool("AH", difficulty),
     }])),
   };
 
