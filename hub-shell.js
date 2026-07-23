@@ -178,7 +178,7 @@
     return ({ N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher" })[level] || "Custom";
   }
 
-  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, profileUsesSharedSettings = true, profileShowLabel = true, worksheetConfig, worksheetMode = false }) {
+  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, profileUsesSharedSettings = true, profileShowLabel = true, profileShareDisabled = false, worksheetConfig, worksheetMode = false }) {
     const [qrOpen, setQrOpen] = React.useState(false);
     const [worksheetOpening, setWorksheetOpening] = React.useState(false);
     const [, setProfileRevision] = React.useState(0);
@@ -288,7 +288,7 @@
               React.createElement("div", { className: "flex h-14 flex-col justify-center" },
                 React.createElement("h1", { className: "relative top-[1px] inline-flex items-center gap-2 text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl" },
                   displayedTitle,
-                  React.createElement(ProfileQrButton, { disabled: activeWorksheetMode, onClick: () => setQrOpen(true) }),
+                  React.createElement(ProfileQrButton, { disabled: activeWorksheetMode || profileShareDisabled, onClick: () => setQrOpen(true) }),
                   React.createElement(WorksheetButton, { enabled: worksheetEnabled && !worksheetOpening, selected: activeWorksheetMode, returnLabel: typeof displayedTitle === "string" ? displayedTitle : "activity", onClick: activeWorksheetMode ? worksheetHeader?.onExit : createWorksheet })
                 ),
                 React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap" }, displayedSubtitle)
