@@ -44,8 +44,8 @@
     }, [refs, handlers]);
   }
 
-  function MenuPanel({ title, children, position = "left-0", variant = "level", dataMenuPanel = false }) {
-    const className = `${variant === "customise" ? CUSTOMISE_MENU_PANEL_CLASS : MENU_PANEL_CLASS} ${position}`;
+  function MenuPanel({ title, children, position = "left-0", variant = "level", dataMenuPanel = false, className: extraClass = "" }) {
+    const panelClassName = `${variant === "customise" ? CUSTOMISE_MENU_PANEL_CLASS : MENU_PANEL_CLASS} ${position} ${extraClass}`.trim();
     const anchorRef = useRef(null);
     const panelRef = useRef(null);
     const [floatingStyle, setFloatingStyle] = useState(null);
@@ -76,7 +76,7 @@
       };
     }, [isFloatingCustomise]);
 
-    const props = { className };
+    const props = { className: panelClassName };
     if (dataMenuPanel || isFloatingCustomise) props["data-menu-panel"] = true;
     const panel = e(
       "div",
@@ -85,7 +85,7 @@
         ref: isFloatingCustomise ? panelRef : undefined,
         style: isFloatingCustomise ? floatingStyle || { left: "-9999px", top: "-9999px" } : undefined,
       },
-      e(
+      title != null && e(
         "div",
         { className: MENU_TITLE_CLASS },
         e("div", { className: "hub-menu-title-text" }, title),

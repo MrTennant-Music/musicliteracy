@@ -65,7 +65,7 @@ function CreatorFrame({ title, subtitle, onBack, children, actions = null, popov
     </div>}
   </>;
   return <section className={`millionaire-creator-screen${popover ? " is-popover" : ""}`}>
-    {popover ? <div className="millionaire-setup-card millionaire-creator-library-card">{content}</div> : content}
+    {popover ? <div className="millionaire-setup-card millionaire-rules-card millionaire-creator-library-card">{content}</div> : content}
   </section>;
 }
 
@@ -179,33 +179,26 @@ function MediaEditor({ kind, media, altText, onChange, onAltChange, onError, onD
   </fieldset>;
 }
 
-function CreatorInlineMedia({ question, onEditMedia, onUpdate, onError }) {
+function CreatorInlineMedia({ question, onEditYoutube, onUpdate, onError }) {
   const imageInputRef = React.useRef(null);
-  const audioInputRef = React.useRef(null);
   const [dragging, setDragging] = React.useState(false);
   const imageUrl = React.useMemo(
     () => question.type === "image" && question.image?.blob instanceof Blob ? URL.createObjectURL(question.image.blob) : "",
     [question.type, question.image?.blob],
   );
-  const audioUrl = React.useMemo(
-    () => question.type === "audio" && question.audio?.blob instanceof Blob ? URL.createObjectURL(question.audio.blob) : "",
-    [question.type, question.audio?.blob],
-  );
   React.useEffect(() => () => { if (imageUrl) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
-  React.useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
   const youtubeUrl = question.type === "youtube" ? CUSTOM_SETS.youtubeEmbedUrl(question.youtubeUrl) : "";
 
   function useFile(file) {
     if (!file) return;
     const isImage = CUSTOM_SETS.IMAGE_MIME_TYPES.includes(file.type);
-    const isAudio = CUSTOM_SETS.AUDIO_MIME_TYPES.includes(file.type);
-    if (!isImage && !isAudio) {
-      onError("Choose a supported image or audio file.");
+    if (!isImage) {
+      onError("Choose a supported image file.");
       return;
     }
-    const limit = isImage ? CUSTOM_SETS.LIMITS.imageBytes : CUSTOM_SETS.LIMITS.audioBytes;
+    const limit = CUSTOM_SETS.LIMITS.imageBytes;
     if (!file.size || file.size > limit) {
-      onError(`${isImage ? "Image" : "Audio"} files must be smaller than ${Math.round(limit / 1024 / 1024)} MB.`);
+      onError(`Image files must be smaller than ${Math.round(limit / 1024 / 1024)} MB.`);
       return;
     }
     const media = {
@@ -216,9 +209,7 @@ function CreatorInlineMedia({ question, onEditMedia, onUpdate, onError }) {
       duration: null,
       blob: file,
     };
-    onUpdate(isImage
-      ? { type: "image", image: media, audio: null, youtubeUrl: "" }
-      : { type: "audio", audio: media, image: null, imageAlt: "", youtubeUrl: "" });
+    onUpdate({ type: "image", image: media, audio: null, youtubeUrl: "" });
   }
 
   function useYoutubeLink(value) {
@@ -242,7 +233,7 @@ function CreatorInlineMedia({ question, onEditMedia, onUpdate, onError }) {
       return;
     }
     const link = event.dataTransfer.getData("text/uri-list") || event.dataTransfer.getData("text/plain");
-    if (!useYoutubeLink(link)) onError("Drop a supported image, audio file or valid YouTube link.");
+    if (!useYoutubeLink(link)) onError("Drop a supported image file or valid YouTube link.");
   }
 
   function handlePaste(event) {
@@ -251,9 +242,8 @@ function CreatorInlineMedia({ question, onEditMedia, onUpdate, onError }) {
     event.preventDefault();
   }
 
-  if (imageUrl) return <button type="button" className="millionaire-creator-media-preview" onClick={onEditMedia} aria-label="Edit question image"><img src={imageUrl} alt={question.imageAlt || "Question image preview"} /></button>;
-  if (audioUrl) return <div className="millionaire-creator-media-preview is-audio"><audio controls preload="metadata" src={audioUrl} aria-label="Preview question audio" /><button type="button" className="millionaire-secondary" onClick={onEditMedia}>Edit Audio</button></div>;
-  if (youtubeUrl) return <div className="millionaire-creator-media-preview is-youtube"><iframe src={youtubeUrl} title="Question video preview" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /><button type="button" className="millionaire-secondary" onClick={onEditMedia}>Edit Video</button></div>;
+  if (imageUrl) return <div className="millionaire-creator-media-preview"><img src={imageUrl} alt={question.imageAlt || "Question image preview"} /></div>;
+  if (youtubeUrl) return <div className="millionaire-creator-media-preview is-youtube"><iframe src={youtubeUrl} title="Question video preview" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /><button type="button" className="millionaire-secondary" onClick={onEditYoutube}>Edit YouTube link</button></div>;
   return <div
     className={`millionaire-creator-empty-media${dragging ? " is-dragging" : ""}`}
     tabIndex="0"
@@ -262,15 +252,13 @@ function CreatorInlineMedia({ question, onEditMedia, onUpdate, onError }) {
     onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }}
     onDrop={handleDrop}
     onPaste={handlePaste}
-    aria-label="Add image, audio or YouTube link"
+    aria-label="Add an image or YouTube link"
   >
     <input ref={imageInputRef} type="file" accept={CUSTOM_SETS.IMAGE_MIME_TYPES.join(",")} hidden onChange={chooseFile} />
-    <input ref={audioInputRef} type="file" accept={CUSTOM_SETS.AUDIO_MIME_TYPES.join(",")} hidden onChange={chooseFile} />
-    <p className="millionaire-creator-drop-heading">Drag an image, audio file or YouTube link here</p>
+    <p className="millionaire-creator-drop-heading">Drag an image or YouTube link here</p>
     <div className="millionaire-creator-media-kinds">
       <button type="button" onClick={() => imageInputRef.current?.click()}><img src="image.svg" alt="" /><span>Image</span></button>
-      <button type="button" onClick={() => audioInputRef.current?.click()}><img src="audio.svg" alt="" /><span>Audio</span></button>
-      <button type="button" onClick={() => { onUpdate({ type: "youtube", youtubeUrl: "", image: null, imageAlt: "", audio: null }); onEditMedia("youtube"); }}><img src="youtube.svg" alt="" /><span>YouTube</span></button>
+      <button type="button" onClick={() => { onUpdate({ type: "youtube", youtubeUrl: "", image: null, imageAlt: "", audio: null }); onEditYoutube(); }}><img src="youtube.svg" alt="" /><span>YouTube</span></button>
     </div>
   </div>;
 }
@@ -278,27 +266,26 @@ function CreatorInlineMedia({ question, onEditMedia, onUpdate, onError }) {
 function CreatorInlineEditor({
   set,
   questionIndex,
+  variantIndex,
+  setVariantIndex,
   setQuestionIndex,
   updateTitle,
   updateQuestion,
   onSave,
   onExit,
-  onEditMedia,
+  onEditYoutube,
   onMediaError,
   onClear,
-  onAddReserve,
-  onDeleteReserve,
+  onAddVariant,
+  onToggleShuffle,
   PrizeLadderComponent,
 }) {
-  const question = set.questions[questionIndex];
+  const variants = [set.questions[questionIndex], ...(set.variants?.[questionIndex] || [])];
+  const question = variants[variantIndex] || variants[0];
   const completedStages = set.questions.slice(0, CUSTOM_SETS.QUESTION_COUNT)
-    .flatMap((item, index) => {
-      const hasQuestion = Boolean(String(item.prompt || "").trim());
-      const hasHint = Boolean(String(item.hint || "").trim());
-      const hasFourAnswers = Array.isArray(item.answers) && item.answers.length === 4 && item.answers.every((answer) => String(answer || "").trim());
-      const hasCorrectAnswer = Number.isInteger(item.correctAnswerIndex) && item.correctAnswerIndex >= 0 && item.correctAnswerIndex < 4;
-      return hasQuestion && hasHint && hasFourAnswers && hasCorrectAnswer ? [index + 1] : [];
-    });
+    .flatMap((item, index) => [item, ...(set.variants?.[index] || [])].filter((variant) => CUSTOM_SETS.validateQuestion(variant).length === 0).length >= CUSTOM_SETS.MIN_COMPLETE_VARIANTS ? [index + 1] : []);
+  const incompleteStages = set.questions.slice(0, CUSTOM_SETS.QUESTION_COUNT)
+    .flatMap((item, index) => [item, ...(set.variants?.[index] || [])].some(CUSTOM_SETS.hasQuestionContent) && !completedStages.includes(index + 1) ? [index + 1] : []);
   const [toolbarReady, setToolbarReady] = React.useState(false);
   const [titleDraft, setTitleDraft] = React.useState(set.title);
   const [saveConfirmed, setSaveConfirmed] = React.useState(false);
@@ -307,11 +294,10 @@ function CreatorInlineEditor({
   React.useEffect(() => { setTitleDraft(set.title); }, [set.id, set.title]);
   React.useEffect(() => () => window.clearTimeout(saveConfirmationTimerRef.current), []);
   const leftTarget = toolbarReady ? document.getElementById("millionaire-creator-toolbar-left") : null;
-  const centreTarget = toolbarReady ? document.getElementById("millionaire-creator-toolbar-centre") : null;
   const rightTarget = toolbarReady ? document.getElementById("millionaire-creator-toolbar-right") : null;
-  const reserveQuestions = set.questions.slice(CUSTOM_SETS.QUESTION_COUNT);
-  const isReserve = questionIndex >= CUSTOM_SETS.QUESTION_COUNT;
-  const reserveNumber = isReserve ? questionIndex - CUSTOM_SETS.QUESTION_COUNT + 1 : null;
+  const hasInsertedMedia = (question.type === "image" && Boolean(question.image?.blob))
+    || (question.type === "audio" && Boolean(question.audio?.blob))
+    || (question.type === "youtube" && Boolean(CUSTOM_SETS.youtubeVideoId(question.youtubeUrl)));
   const hintEditorId = `millionaire-creator-hint-${question.id}`;
   const hintEditorRef = React.useRef(null);
   React.useLayoutEffect(() => {
@@ -331,44 +317,34 @@ function CreatorInlineEditor({
 
   const toolbar = <>
     {leftTarget && ReactDOM.createPortal(
-      <label className="millionaire-creator-toolbar-name">
-        <input
-          className={`millionaire-creator-toolbar-title${titleDraft.length > 48 ? " is-very-long" : titleDraft.length > 30 ? " is-long" : ""}`}
-          type="text"
-          value={titleDraft}
-          aria-label="Question set title"
-          title="Edit the question set name"
-          onChange={(event) => setTitleDraft(event.target.value)}
-          onBlur={(event) => {
-            const title = event.target.value.trim() || "Untitled Set";
-            setTitleDraft(title);
-            if (title !== set.title) updateTitle(title);
-          }}
-          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-        />
-      </label>,
+      <>
+        <label className="millionaire-creator-toolbar-name">
+          <span className="millionaire-creator-toolbar-name-label">Name</span>
+          <input
+            className={`millionaire-creator-toolbar-title${titleDraft.length > 48 ? " is-very-long" : titleDraft.length > 30 ? " is-long" : ""}`}
+            type="text"
+            value={titleDraft}
+            aria-label="Question set title"
+            title="Edit the question set name"
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onBlur={(event) => {
+              const title = event.target.value.trim() || "Untitled Set";
+              setTitleDraft(title);
+              if (title !== set.title) updateTitle(title);
+            }}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+          />
+        </label>
+      </>,
       leftTarget,
     )}
     {rightTarget && ReactDOM.createPortal(
       <div className="millionaire-creator-toolbar-actions">
-        <button type="button" className="millionaire-add-reserve-button" onClick={onAddReserve}>Question Bank</button>
-        <button type="button" className="is-danger millionaire-creator-toolbar-clear" disabled={!CUSTOM_SETS.hasQuestionContent(question)} onClick={onClear} aria-label="Clear question">Clear</button>
+        <button type="button" className="millionaire-creator-toolbar-clear" disabled={!CUSTOM_SETS.hasQuestionContent(question)} onClick={onClear}>Clear</button>
         <button type="button" className={`is-primary millionaire-creator-toolbar-save${saveConfirmed ? " is-saved" : ""}`} onClick={handleSave}>{!saveConfirmed && <img src="save.svg" alt="" aria-hidden="true" />}<span>{saveConfirmed ? "Saved!" : "Save"}</span></button>
         <button type="button" className="is-primary millionaire-creator-toolbar-exit" onClick={onExit}>Exit</button>
       </div>,
       rightTarget,
-    )}
-    {centreTarget && ReactDOM.createPortal(
-      <div className="millionaire-creator-toolbar-navigation millionaire-reserve-navigation">
-        {reserveQuestions.length > 0 && <select aria-label="Reserve questions" value={isReserve ? questionIndex : ""} onChange={(event) => {
-          if (event.target.value !== "") setQuestionIndex(Number(event.target.value));
-        }}>
-          <option value="">Reserve questions</option>
-          {reserveQuestions.map((item, index) => <option value={CUSTOM_SETS.QUESTION_COUNT + index} key={item.id}>Reserve {index + 1}</option>)}
-        </select>}
-        {isReserve && <button type="button" className="is-danger millionaire-delete-reserve-button" onClick={onDeleteReserve} aria-label="Delete reserve question" title="Delete reserve question"><img src="bin.svg" alt="" aria-hidden="true" /></button>}
-      </div>,
-      centreTarget,
     )}
   </>;
 
@@ -381,16 +357,16 @@ function CreatorInlineEditor({
 
   return <>
     {toolbar}
-    <section className="millionaire-creator-game-editor" aria-label={`Editing ${set.title}, ${isReserve ? `Reserve Question ${reserveNumber}` : `Question ${questionIndex + 1}`}`}>
+    <section className="millionaire-creator-game-editor" aria-label={`Editing ${set.title}, Question ${questionIndex + 1}, Variant ${variantIndex + 1}`}>
       <div className="millionaire-game-grid">
         <section className="millionaire-play-area">
           <div className="millionaire-question-panel">
-            {isReserve && <p className="millionaire-reserve-question-label">Reserve question {reserveNumber}</p>}
             <label className="millionaire-inline-hint millionaire-creator-inline-hint-editor" htmlFor={hintEditorId}>
               <strong>Hint</strong>
               <textarea ref={hintEditorRef} id={hintEditorId} rows="1" value={question.hint} onChange={(event) => updateQuestion({ hint: event.target.value })} placeholder="Type the hint here" />
             </label>
-            <div className="millionaire-question-media"><CreatorInlineMedia question={question} onEditMedia={onEditMedia} onUpdate={updateQuestion} onError={onMediaError} /></div>
+            <div className="millionaire-question-media"><CreatorInlineMedia question={question} onEditYoutube={onEditYoutube} onUpdate={updateQuestion} onError={onMediaError} /></div>
+            {hasInsertedMedia && <button type="button" className="millionaire-creator-remove-media" onClick={() => updateQuestion({ type: "text", image: null, imageAlt: "", audio: null, youtubeUrl: "" })}>Remove</button>}
             <div className="millionaire-question-rail"><div className="millionaire-question-bar">
               <textarea className="millionaire-creator-inline-question" aria-label="Question text" rows="1" value={question.prompt} onChange={(event) => updateQuestion({ prompt: event.target.value })} placeholder="Type the question here" />
             </div></div>
@@ -418,13 +394,13 @@ function CreatorInlineEditor({
               </div>;
             })}</div>)}
           </div>
-          <div className="millionaire-actions millionaire-final-answer-actions millionaire-creator-bottom-actions">
-            <span aria-hidden="true" />
-            <button type="button" className="millionaire-primary millionaire-final-answer" disabled><span className="millionaire-final-answer-label">Final Answer</span></button>
-            <span aria-hidden="true" />
+          <div className="millionaire-creator-variant-bar" aria-label="Question variants">
+            {variants.map((item, index) => <button type="button" key={item.id} className={index === variantIndex ? "is-current" : ""} onClick={() => setVariantIndex(index)}>Variant {index + 1}</button>)}
+            {variants.length < CUSTOM_SETS.MAX_VARIANTS && <button type="button" className="millionaire-creator-add-variant" onClick={onAddVariant}><img src="plus.svg" alt="" aria-hidden="true" />Add variant</button>}
+            <label className="millionaire-creator-shuffle-variants"><input type="checkbox" checked={Boolean(set.shuffleVariants?.[questionIndex])} onChange={(event) => onToggleShuffle(event.target.checked)} />Shuffle between variants</label>
           </div>
         </section>
-        {PrizeLadderComponent && <PrizeLadderComponent currentIndex={questionIndex} correctCount={0} completedStages={completedStages} controls={lifelines} onSelect={setQuestionIndex} />}
+        {PrizeLadderComponent && <PrizeLadderComponent currentIndex={questionIndex} correctCount={0} completedStages={completedStages} incompleteStages={incompleteStages} controls={lifelines} onSelect={setQuestionIndex} />}
       </div>
     </section>
   </>;
@@ -437,6 +413,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
   const [currentSet, setCurrentSet] = React.useState(null);
   const currentSetRef = React.useRef(null);
   const [questionIndex, setQuestionIndex] = React.useState(0);
+  const [variantIndex, setVariantIndex] = React.useState(0);
   const [previewIndex, setPreviewIndex] = React.useState(0);
   const [dialog, setDialog] = React.useState(null);
   const [status, setStatus] = React.useState("Loading question sets…");
@@ -446,6 +423,10 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
   const [readinessOpenId, setReadinessOpenId] = React.useState(null);
   const importInputRef = React.useRef(null);
   const saveTimerRef = React.useRef(null);
+  const enterEditor = () => {
+    onEditingChange?.(true);
+    setScreen("editor");
+  };
 
   React.useEffect(() => { currentSetRef.current = currentSet; }, [currentSet]);
   React.useEffect(() => { onEditingChange?.(screen === "editor"); }, [screen, onEditingChange]);
@@ -468,7 +449,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
         setDirtyVersion(0);
         setSaveState("Saved.");
         setStatus(`Editing “${set.title}”.`);
-        setScreen("editor");
+        enterEditor();
       } catch (error) {
         clearCreatorResume();
         handleError(error, "The game you were editing could not be reopened.");
@@ -533,7 +514,10 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
   function updateQuestion(patch) {
     updateCurrent((set) => ({
       ...set,
-      questions: set.questions.map((question, index) => index === questionIndex ? { ...question, ...patch } : question),
+      questions: set.questions.map((question, index) => index === questionIndex && variantIndex === 0 ? { ...question, ...patch } : question),
+      variants: (set.variants || []).map((stageVariants, index) => index === questionIndex && variantIndex > 0
+        ? stageVariants.map((question, index) => index === variantIndex - 1 ? { ...question, ...patch } : question)
+        : stageVariants),
     }));
   }
 
@@ -577,7 +561,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
       setSaveState("Saved.");
       setStatus(`Editing “${saved.title}”.`);
       setDialog(null);
-      setScreen("editor");
+      enterEditor();
       localStorage.setItem("mlh-millionaire-last-custom-set", saved.id);
     } catch (error) {
       handleError(error);
@@ -594,7 +578,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
       setDirtyVersion(0);
       setSaveState("Saved.");
       setStatus(`Editing “${set.title}”.`);
-      setScreen("editor");
+      enterEditor();
       localStorage.setItem("mlh-millionaire-last-custom-set", set.id);
     } catch (error) {
       handleError(error);
@@ -647,7 +631,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
       if (!set) throw new Error("The question set could not be found.");
       const validation = CUSTOM_SETS.validateSet(set);
       if (!validation.valid) {
-        setStatus(`“${set.title}” cannot be played until all 15 main questions and at least one Question Bank question are complete.`);
+        setStatus(`“${set.title}” cannot be played until every ladder question has two complete variants.`);
         return;
       }
       await onPlay(set);
@@ -679,18 +663,35 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
     onBack();
   }
 
-  function requestClearQuestion() {
-    const question = currentSet.questions[questionIndex];
-    if (!CUSTOM_SETS.hasQuestionContent(question)) return;
-    setDialog({ type: "clear", questionNumber: questionIndex + 1, reserveNumber: questionIndex >= CUSTOM_SETS.QUESTION_COUNT ? questionIndex - CUSTOM_SETS.QUESTION_COUNT + 1 : null });
-  }
-
   function clearQuestion() {
+    const question = variantIndex === 0 ? currentSet.questions[questionIndex] : currentSet.variants?.[questionIndex]?.[variantIndex - 1];
+    if (!CUSTOM_SETS.hasQuestionContent(question)) return;
     updateCurrent((set) => ({
       ...set,
-      questions: set.questions.map((question, index) => index === questionIndex ? CUSTOM_SETS.emptyQuestion(index + 1) : question),
+      questions: set.questions.map((item, index) => index === questionIndex && variantIndex === 0 ? CUSTOM_SETS.emptyQuestion(index + 1) : item),
+      variants: (set.variants || []).map((stageVariants, index) => index === questionIndex && variantIndex > 0
+        ? stageVariants.map((item, index) => index === variantIndex - 1 ? CUSTOM_SETS.emptyQuestion(questionIndex + 1) : item)
+        : stageVariants),
     }));
-    setDialog(null);
+  }
+
+  function addVariant() {
+    const stage = questionIndex;
+    const nextVariantIndex = (currentSetRef.current.variants?.[stage] || []).length + 1;
+    updateCurrent((set) => ({
+      ...set,
+      variants: (set.variants || []).map((stageVariants, index) => index === stage
+        ? [...stageVariants, CUSTOM_SETS.emptyQuestion(stage + 1)]
+        : stageVariants),
+    }));
+    setVariantIndex(nextVariantIndex);
+  }
+
+  function toggleShuffleVariants(checked) {
+    updateCurrent((set) => ({
+      ...set,
+      shuffleVariants: (set.shuffleVariants || []).map((value, index) => index === questionIndex ? checked : value),
+    }));
   }
 
   function requestDuplicateQuestion() {
@@ -708,18 +709,14 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
     setStatus(`Added Reserve Question ${nextIndex - CUSTOM_SETS.QUESTION_COUNT + 1}.`);
   }
 
-  function requestDeleteReserveQuestion() {
-    if (questionIndex < CUSTOM_SETS.QUESTION_COUNT) return;
-    setDialog({
-      type: "delete-reserve",
-      questionIndex,
-      reserveNumber: questionIndex - CUSTOM_SETS.QUESTION_COUNT + 1,
-    });
-  }
-
-  function deleteReserveQuestion() {
-    const removedIndex = dialog.questionIndex;
-    const nextIndex = Math.max(CUSTOM_SETS.QUESTION_COUNT - 1, Math.min(removedIndex, currentSetRef.current.questions.length - 2));
+  function deleteReserveQuestion(removedIndex = questionIndex) {
+    if (removedIndex < CUSTOM_SETS.QUESTION_COUNT) return;
+    const reserveNumber = removedIndex - CUSTOM_SETS.QUESTION_COUNT + 1;
+    const nextIndex = removedIndex < questionIndex
+      ? questionIndex - 1
+      : removedIndex === questionIndex
+        ? Math.max(CUSTOM_SETS.QUESTION_COUNT - 1, Math.min(removedIndex, currentSetRef.current.questions.length - 2))
+        : questionIndex;
     updateCurrent((set) => ({
       ...set,
       questions: set.questions
@@ -727,8 +724,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
         .map((question, index) => ({ ...question, number: index + 1 })),
     }));
     setQuestionIndex(nextIndex);
-    setDialog(null);
-    setStatus(`Deleted Reserve Question ${dialog.reserveNumber}.`);
+    setStatus(`Deleted Reserve Question ${reserveNumber}.`);
   }
 
   function duplicateQuestionToDestination() {
@@ -801,7 +797,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
             <p><strong>Create:</strong> Build 15 multiple-choice questions with four answers and one correct answer.</p>
             <p><strong>Add media:</strong> Use text, images, audio or a YouTube video.</p>
             <p><strong>Manage:</strong> Use the buttons beside a game to play, edit, duplicate, download or delete it.</p>
-            <p><strong>Share:</strong> Complete all your questions, download the your game file and share it with students. Pupils choose <strong>Create</strong>, then <strong>Import Game</strong>, select the file and press <strong>Play</strong>.</p>
+            <p><strong>Share:</strong> Complete all your questions, download your game file and share it with students. Pupils choose <strong>Create</strong>, then <strong>Import Game</strong>, select the file and press <strong>Play</strong>.</p>
             <p><strong>Save:</strong> Games are saved in this browser, so download your game sets before clearing browser data or moving to another device.</p>
           </div>
         </section>
@@ -833,7 +829,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
                     </div>}
                 </div>
                 <div className="millionaire-set-actions">
-                  <button type="button" className="millionaire-primary millionaire-set-icon-button" disabled={!summary.playable} aria-label="Play" title={!summary.playable ? "Complete all 15 main questions and at least one Question Bank question before playing." : "Play"} onClick={() => playSet(set.id)}><img className="millionaire-set-action-icon" src="play.svg" alt="" /></button>
+                  <button type="button" className="millionaire-primary millionaire-set-icon-button" disabled={!summary.playable} aria-label="Play" title={!summary.playable ? "Complete two variants for each of the 15 questions before playing." : "Play"} onClick={() => playSet(set.id)}><img className="millionaire-set-action-icon" src="play.svg" alt="" /></button>
                   <button type="button" className="millionaire-secondary millionaire-set-icon-button" aria-label="Edit" title="Edit" onClick={() => editSet(set.id)}><img className="millionaire-set-action-icon" src="rename.svg" alt="" /></button>
                   <button type="button" className="millionaire-secondary millionaire-set-icon-button" aria-label="Duplicate" title="Duplicate" onClick={() => duplicateSet(set.id)}><img className="millionaire-set-action-icon" src="copy.svg" alt="" /></button>
                   <button type="button" className="millionaire-secondary millionaire-set-icon-button" aria-label="Download" title="Download" onClick={() => downloadSet(set.id)}><img className="millionaire-set-action-icon" src="download.svg" alt="" /></button>
@@ -910,7 +906,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
         <button type="button" className="millionaire-secondary" disabled={questionIndex === 0} onClick={() => setQuestionIndex((index) => index - 1)}>Previous Question</button>
         <button type="button" className="millionaire-secondary" disabled={questionIndex === currentSet.questions.length - 1} onClick={() => setQuestionIndex((index) => index + 1)}>Next Question</button>
         <button type="button" className="millionaire-secondary" onClick={requestDuplicateQuestion}>Duplicate Question</button>
-        <button type="button" className="millionaire-secondary is-danger" disabled={!CUSTOM_SETS.hasQuestionContent(question)} onClick={requestClearQuestion}>Clear Question</button>
+        <button type="button" className="millionaire-secondary is-danger" disabled={!CUSTOM_SETS.hasQuestionContent(question)} onClick={clearQuestion}>Clear Question</button>
         <button type="button" className="millionaire-secondary" onClick={() => { setPreviewIndex(questionIndex); setScreen("preview-question"); }}>Preview Question</button>
         <button type="button" className="millionaire-secondary" onClick={() => setScreen("preview-set")}>Preview Full Set</button>
         <button type="button" className="millionaire-primary" onClick={saveAndExit}>Save and Exit</button>
@@ -924,7 +920,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
       <QuestionPreview question={currentSet.questions[previewIndex]} number={previewIndex + 1} />
       <div className="millionaire-preview-actions">
         <button type="button" className="millionaire-secondary" disabled={previewIndex === 0} onClick={() => setPreviewIndex((index) => index - 1)}>Previous Question</button>
-        <button type="button" className="millionaire-secondary" onClick={() => { setQuestionIndex(previewIndex); setScreen("editor"); }}>Back to Editor</button>
+        <button type="button" className="millionaire-secondary" onClick={() => { setQuestionIndex(previewIndex); enterEditor(); }}>Back to Editor</button>
         <button type="button" className="millionaire-secondary" disabled={previewIndex === currentSet.questions.length - 1} onClick={() => setPreviewIndex((index) => index + 1)}>Next Question</button>
       </div>
     </CreatorFrame>;
@@ -933,7 +929,7 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
   function PreviewSetScreen() {
     return <CreatorFrame title="Preview Full Set" subtitle={`“${currentSet.title}” • Preview does not affect scores or progress.`} onBack={backToMain}>
       <div className="millionaire-full-set-preview">{currentSet.questions.map((question, index) => <QuestionPreview compact question={question} number={index + 1} key={question.id} />)}</div>
-      <div className="millionaire-preview-actions"><button type="button" className="millionaire-secondary" onClick={() => setScreen("editor")}>Back to Editor</button></div>
+      <div className="millionaire-preview-actions"><button type="button" className="millionaire-secondary" onClick={enterEditor}>Back to Editor</button></div>
     </CreatorFrame>;
   }
 
@@ -966,16 +962,18 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
   const renderedScreen = screen === "editor" && currentSet ? <CreatorInlineEditor
     set={currentSet}
     questionIndex={questionIndex}
-    setQuestionIndex={setQuestionIndex}
+    variantIndex={variantIndex}
+    setVariantIndex={setVariantIndex}
+    setQuestionIndex={(index) => { setQuestionIndex(index); setVariantIndex(0); }}
     updateTitle={updateTitle}
     updateQuestion={updateQuestion}
     onSave={saveOnly}
     onExit={saveAndExit}
-    onEditMedia={() => setDialog({ type: "media" })}
+    onEditYoutube={() => setDialog({ type: "youtube" })}
     onMediaError={setStatus}
-    onClear={requestClearQuestion}
-    onAddReserve={addReserveQuestion}
-    onDeleteReserve={requestDeleteReserveQuestion}
+    onClear={clearQuestion}
+    onAddVariant={addVariant}
+    onToggleShuffle={toggleShuffleVariants}
     PrizeLadderComponent={PrizeLadderComponent}
   />
     : screen === "preview-question" && currentSet ? PreviewQuestionScreen()
@@ -992,12 +990,6 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
     {dialog?.type === "delete" && <CreatorDialog destructive title="Delete Set" onClose={() => setDialog(null)} actions={<><button type="button" className="millionaire-secondary" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="millionaire-primary is-danger" onClick={deleteSet}>Delete</button></>}>
       <p>Delete “{dialog.title}”? This cannot be undone unless you have downloaded a copy.</p>
     </CreatorDialog>}
-    {dialog?.type === "clear" && <CreatorDialog destructive title="Clear Question" onClose={() => setDialog(null)} actions={<><button type="button" className="millionaire-secondary" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="millionaire-primary is-danger" onClick={clearQuestion}>Clear Question</button></>}>
-      <p>Clear {dialog.reserveNumber ? `Reserve Question ${dialog.reserveNumber}` : `Question ${dialog.questionNumber}`}? Its text, answers and media will be removed.</p>
-    </CreatorDialog>}
-    {dialog?.type === "delete-reserve" && <CreatorDialog destructive title="Delete Reserve Question" onClose={() => setDialog(null)} actions={<><button type="button" className="millionaire-secondary" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="millionaire-primary is-danger" onClick={deleteReserveQuestion}>Delete Reserve</button></>}>
-      <p>Delete Reserve Question {dialog.reserveNumber}? This cannot be undone.</p>
-    </CreatorDialog>}
     {dialog?.type === "duplicate-question" && <CreatorDialog title="Duplicate Question" onClose={() => setDialog(null)} actions={<><button type="button" className="millionaire-secondary" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="millionaire-primary" onClick={duplicateQuestionToDestination}>{dialog.replaceConfirmed ? "Replace Question" : "Duplicate Question"}</button></>}>
       <label className="millionaire-creator-field">Destination
         <select value={dialog.destination} onChange={(event) => setDialog({ ...dialog, destination: Number(event.target.value), replaceConfirmed: false })}>
@@ -1006,39 +998,16 @@ function MillionaireCreator({ onBack, onPlay, PrizeLadderComponent, onEditingCha
       </label>
       {dialog.replaceConfirmed && <p className="millionaire-field-error" role="alert">Question {Number(dialog.destination) + 1} already contains content. Select Replace Question to overwrite it.</p>}
     </CreatorDialog>}
-    {dialog?.type === "media" && currentSet && (() => {
+    {dialog?.type === "youtube" && currentSet && (() => {
       const question = currentSet.questions[questionIndex];
-      const youtubeInvalid = question.type === "youtube" && question.youtubeUrl && !CUSTOM_SETS.youtubeVideoId(question.youtubeUrl);
-      if (question.type === "youtube") {
-        return <CreatorDialog title="YouTube" onClose={() => setDialog(null)} actions={<button type="button" className="millionaire-primary" onClick={() => setDialog(null)}>Done</button>}>
-          <div className="millionaire-youtube-editor">
-            <label className="millionaire-creator-field">Paste URL below:
-              <input type="url" value={question.youtubeUrl} onChange={(event) => updateQuestion({ type: "youtube", youtubeUrl: event.target.value, image: null, imageAlt: "", audio: null })} placeholder="https://www.youtube.com/watch?v=…" />
-            </label>
-            {youtubeInvalid && <p className="millionaire-field-error" role="alert">Enter a valid YouTube video link.</p>}
-          </div>
-        </CreatorDialog>;
-      }
-      const selectMediaType = (type) => updateQuestion({
-        type,
-        image: type === "image" ? question.image : null,
-        imageAlt: type === "image" ? question.imageAlt : "",
-        audio: type === "audio" ? question.audio : null,
-        youtubeUrl: type === "youtube" ? question.youtubeUrl : "",
-      });
-      return <CreatorDialog title="Question Media" onClose={() => setDialog(null)} actions={<button type="button" className="millionaire-primary" onClick={() => setDialog(null)}>Done</button>}>
-        <fieldset className="millionaire-creator-media-choice">
-          <legend>Choose one media type</legend>
-          {[
-            ["text", "No media"],
-            ["image", "Image"],
-            ["audio", "Audio"],
-            ["youtube", "YouTube video"],
-          ].map(([value, label]) => <label key={value}><input type="radio" name="creator-media-type" checked={question.type === value} onChange={() => selectMediaType(value)} /> <span>{label}</span></label>)}
-        </fieldset>
-        {question.type === "text" && <p className="millionaire-media-empty-note">This question will show only the question and answer options.</p>}
-        {question.type === "image" && <MediaEditor kind="image" media={question.image} altText={question.imageAlt} onAltChange={(imageAlt) => updateQuestion({ imageAlt })} onChange={(image) => updateQuestion({ type: "image", image, audio: null, youtubeUrl: "" })} onError={setStatus} onDuration={() => {}} />}
-        {question.type === "audio" && <MediaEditor kind="audio" media={question.audio} altText="" onAltChange={() => {}} onChange={(audio) => updateQuestion({ type: "audio", audio, image: null, imageAlt: "", youtubeUrl: "" })} onError={setStatus} onDuration={(duration) => updateQuestion({ audio: { ...question.audio, duration } })} />}
+      const youtubeInvalid = question.youtubeUrl && !CUSTOM_SETS.youtubeVideoId(question.youtubeUrl);
+      return <CreatorDialog title="YouTube" onClose={() => setDialog(null)} actions={<button type="button" className="millionaire-primary" onClick={() => setDialog(null)}>Done</button>}>
+        <div className="millionaire-youtube-editor">
+          <label className="millionaire-creator-field">Paste URL below:
+            <input type="url" value={question.youtubeUrl} onChange={(event) => updateQuestion({ type: "youtube", youtubeUrl: event.target.value, image: null, imageAlt: "", audio: null })} placeholder="https://www.youtube.com/watch?v=…" />
+          </label>
+          {youtubeInvalid && <p className="millionaire-field-error" role="alert">Enter a valid YouTube video link.</p>}
+        </div>
       </CreatorDialog>;
     })()}
   </>;

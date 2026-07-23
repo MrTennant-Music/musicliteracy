@@ -4,7 +4,8 @@
   const FORMAT = "millionaire-question-set";
   const FORMAT_VERSION = 1;
   const QUESTION_COUNT = 15;
-  const MIN_RESERVE_COUNT = 1;
+  const MAX_VARIANTS = 10;
+  const MIN_COMPLETE_VARIANTS = 2;
   const DB_NAME = "mlh-millionaire-custom-sets";
   const DB_VERSION = 1;
   const STORE_NAME = "questionSets";
@@ -97,6 +98,8 @@
       updatedAt: now,
       includeInRandom: true,
       questions: Array.from({ length: QUESTION_COUNT }, (_, index) => emptyQuestion(index + 1)),
+      variants: Array.from({ length: QUESTION_COUNT }, () => []),
+      shuffleVariants: Array.from({ length: QUESTION_COUNT }, () => false),
     };
   }
 
@@ -105,7 +108,7 @@
     const regenerateIds = Boolean(options.regenerateIds);
     const now = new Date().toISOString();
     const sourceQuestions = Array.isArray(source.questions) ? source.questions : [];
-    const questionCount = Math.max(QUESTION_COUNT, sourceQuestions.length);
+    const sourceVariants = Array.isArray(source.variants) ? source.variants : [];
     return {
       format: FORMAT,
       formatVersion: FORMAT_VERSION,
@@ -114,7 +117,16 @@
       createdAt: regenerateIds ? now : (typeof source.createdAt === "string" ? source.createdAt : now),
       updatedAt: regenerateIds ? now : (typeof source.updatedAt === "string" ? source.updatedAt : now),
       includeInRandom: source.includeInRandom !== false,
-      questions: Array.from({ length: questionCount }, (_, index) => normaliseQuestion(sourceQuestions[index], index + 1, regenerateIds)),
+      // Older Question Bank entries are intentionally not carried forward. Variants
+      // belong to a specific ladder question, so only the first 15 legacy questions
+      // become Variant 1.
+      questions: Array.from({ length: QUESTION_COUNT }, (_, index) => normaliseQuestion(sourceQuestions[index], index + 1, regenerateIds)),
+      variants: Array.from({ length: QUESTION_COUNT }, (_, stageIndex) => {
+        const sourceStageVariants = Array.isArray(sourceVariants[stageIndex]) ? sourceVariants[stageIndex] : [];
+        return sourceStageVariants.slice(0, MAX_VARIANTS - 1)
+          .map((question) => normaliseQuestion(question, stageIndex + 1, regenerateIds));
+      }),
+      shuffleVariants: Array.from({ length: QUESTION_COUNT }, (_, index) => Boolean(source.shuffleVariants?.[index])),
     };
   }
 
@@ -203,39 +215,30 @@
     }
     let completeCount = 0;
     let mainCompleteCount = 0;
-    let reserveCompleteCount = 0;
-    questions.forEach((question, index) => {
-      const questionIssues = validateQuestion(question);
-      if (!questionIssues.length) {
-        completeCount += 1;
-        if (index < QUESTION_COUNT) mainCompleteCount += 1;
-        else reserveCompleteCount += 1;
-      }
-      if (index < QUESTION_COUNT) {
-        questionIssues.forEach((issue) => issues.push({
-          ...issue,
+    const completeVariantsByQuestion = [];
+    for (let index = 0; index < QUESTION_COUNT; index += 1) {
+      const variants = [questions[index], ...(Array.isArray(set?.variants?.[index]) ? set.variants[index] : [])];
+      const completedVariants = variants.filter((question) => validateQuestion(question).length === 0);
+      completeVariantsByQuestion.push(completedVariants.length);
+      completeCount += completedVariants.length;
+      if (completedVariants.length >= MIN_COMPLETE_VARIANTS) mainCompleteCount += 1;
+      if (completedVariants.length < MIN_COMPLETE_VARIANTS) {
+        issues.push({
           questionNumber: index + 1,
-          message: `Question ${index + 1} ${issue.message}.`,
-        }));
+          field: "variants",
+          message: `Question ${index + 1} needs ${MIN_COMPLETE_VARIANTS} complete variants for the Switch lifeline.`,
+        });
       }
-    });
-    const reserveCount = Math.max(0, questions.length - QUESTION_COUNT);
-    if (reserveCompleteCount < MIN_RESERVE_COUNT) {
-      issues.push({
-        questionNumber: null,
-        field: "reserve",
-        message: `Add at least ${MIN_RESERVE_COUNT} complete reserve question for the Switch lifeline.`,
-      });
     }
-    const incompleteCount = Math.max(0, QUESTION_COUNT - mainCompleteCount)
-      + Math.max(0, MIN_RESERVE_COUNT - reserveCompleteCount);
+    const incompleteCount = QUESTION_COUNT - mainCompleteCount;
     return {
       valid: issues.length === 0,
       completeCount,
       incompleteCount,
       mainCompleteCount,
-      reserveCompleteCount,
-      reserveCount,
+      completeVariantsByQuestion,
+      reserveCompleteCount: 0,
+      reserveCount: 0,
       issues,
     };
   }
@@ -250,8 +253,9 @@
       completeCount: validation.completeCount,
       incompleteCount: validation.incompleteCount,
       mainCompleteCount: validation.mainCompleteCount,
-      reserveCompleteCount: validation.reserveCompleteCount,
-      reserveCount: validation.reserveCount,
+      completeVariantsByQuestion: validation.completeVariantsByQuestion,
+      reserveCompleteCount: 0,
+      reserveCount: 0,
       playable: validation.valid,
       hasImage: set.questions.some((question) => Boolean(question.image)),
       hasAudio: set.questions.some((question) => Boolean(question.audio)),
@@ -389,20 +393,21 @@
       updatedAt: value.updatedAt,
       includeInRandom: value.includeInRandom,
       questions: [],
+      variants: [],
+      shuffleVariants: value.shuffleVariants,
     };
-    for (let index = 0; index < value.questions.length; index += 1) {
-      const question = value.questions[index];
+    async function serialiseQuestion(question, stage, variant) {
       const type = TYPES[question.type] ? question.type : "text";
-      const number = String(index + 1).padStart(2, "0");
+      const number = `${String(stage + 1).padStart(2, "0")}-v${variant + 1}`;
       const imageRelevant = TYPES[type].image && mediaReadable(question.image, IMAGE_MIME_TYPES);
       const audioRelevant = TYPES[type].audio && mediaReadable(question.audio, AUDIO_MIME_TYPES);
       const imagePath = imageRelevant ? `images/question-${number}.${safeExtension(question.image.name, "bin")}` : null;
       const audioPath = audioRelevant ? `audio/question-${number}.${safeExtension(question.audio.name, "bin")}` : null;
       if (imagePath) zip.file(imagePath, await question.image.blob.arrayBuffer());
       if (audioPath) zip.file(audioPath, await question.audio.blob.arrayBuffer());
-      manifest.questions.push({
+      return {
         id: question.id,
-        number: index + 1,
+        number: stage + 1,
         type,
         prompt: question.prompt,
         answers: [...question.answers],
@@ -412,7 +417,11 @@
         image: imagePath ? { path: imagePath, name: question.image.name, type: question.image.type, size: question.image.size } : null,
         audio: audioPath ? { path: audioPath, name: question.audio.name, type: question.audio.type, size: question.audio.size, duration: question.audio.duration } : null,
         youtubeUrl: type === "youtube" ? question.youtubeUrl : "",
-      });
+      };
+    }
+    for (let stage = 0; stage < QUESTION_COUNT; stage += 1) {
+      manifest.questions.push(await serialiseQuestion(value.questions[stage], stage, 0));
+      manifest.variants.push(await Promise.all((value.variants[stage] || []).map((question, variant) => serialiseQuestion(question, stage, variant + 1))));
     }
     zip.file("manifest.json", JSON.stringify(manifest, null, 2));
     const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
@@ -470,8 +479,15 @@
     let audioCount = 0;
     let youtubeCount = 0;
     const questions = [];
-    for (let index = 0; index < manifest.questions.length; index += 1) {
-      const source = manifest.questions[index];
+    const variants = [];
+    const sourcesByStage = Array.from({ length: QUESTION_COUNT }, (_, index) => [
+      manifest.questions[index],
+      ...(Array.isArray(manifest.variants?.[index]) ? manifest.variants[index] : []),
+    ]);
+    for (let index = 0; index < sourcesByStage.length; index += 1) {
+      const stageQuestions = [];
+      for (let variant = 0; variant < sourcesByStage[index].length; variant += 1) {
+        const source = sourcesByStage[index][variant];
       if (!source || typeof source !== "object") throw new Error(`Question ${index + 1} is malformed.`);
       if (!Array.isArray(source.answers) || source.answers.length !== 4 || source.answers.some((answer) => typeof answer !== "string")) {
         throw new Error(`Question ${index + 1} must contain four text answers.`);
@@ -508,9 +524,12 @@
         if (mediaKind === "image") imageCount += 1;
         else audioCount += 1;
       }
-      questions.push(question);
+        stageQuestions.push(question);
+      }
+      questions.push(stageQuestions[0]);
+      variants.push(stageQuestions.slice(1));
     }
-    const set = normaliseSet({ ...manifest, questions });
+    const set = normaliseSet({ ...manifest, questions, variants });
     const validation = validateSet(set);
     return {
       set,
@@ -540,11 +559,7 @@
     }
     const objectUrls = [];
     const letters = ["A", "B", "C", "D"];
-    const playableQuestions = [
-      ...set.questions.slice(0, QUESTION_COUNT),
-      ...set.questions.slice(QUESTION_COUNT).filter((question) => validateQuestion(question).length === 0),
-    ];
-    const runtimeQuestions = playableQuestions.map((question, index) => {
+    const toRuntimeQuestion = (question, stage, variantIndex) => {
       const imageUrl = TYPES[question.type].image ? globalScope.URL.createObjectURL(question.image.blob) : "";
       const audioUrl = TYPES[question.type].audio ? globalScope.URL.createObjectURL(question.audio.blob) : "";
       const youtubeUrl = TYPES[question.type].youtube ? youtubeEmbedUrl(question.youtubeUrl) : "";
@@ -554,10 +569,10 @@
         id: `custom-${set.id}-${question.id}`,
         level: "N3",
         category: "literacy",
-        difficulty: index < 5 ? "easy" : index < 10 ? "medium" : "hard",
-        difficultyMin: index < 5 ? 1 : index < 10 ? 6 : 11,
-        difficultyMax: index < 5 ? 5 : index < 10 ? 10 : 15,
-        fixedStage: index < QUESTION_COUNT ? index + 1 : null,
+        difficulty: stage < 5 ? "easy" : stage < 10 ? "medium" : "hard",
+        difficultyMin: stage < 5 ? 1 : stage < 10 ? 6 : 11,
+        difficultyMax: stage < 5 ? 5 : stage < 10 ? 10 : 15,
+        fixedStage: stage + 1,
         concept: "custom-question",
         question: question.prompt,
         prompt: question.prompt,
@@ -575,15 +590,27 @@
         image: imageUrl ? { src: imageUrl, alt: question.imageAlt || "Question image" } : null,
         audioSrc: audioUrl,
         audio: null,
-        youtube: youtubeUrl ? { src: youtubeUrl, title: index < QUESTION_COUNT ? `Video for Question ${index + 1}` : `Video for Reserve Question ${index - QUESTION_COUNT + 1}` } : null,
+        youtube: youtubeUrl ? { src: youtubeUrl, title: `Video for Question ${stage + 1}` } : null,
         notationData: null,
         customSetId: set.id,
-        customReserve: index >= QUESTION_COUNT,
+        customStage: stage,
+        customVariant: variantIndex,
       };
+    };
+    const variants = Array.from({ length: QUESTION_COUNT }, (_, stage) => [
+      set.questions[stage],
+      ...(set.variants?.[stage] || []),
+    ].filter((question) => validateQuestion(question).length === 0)
+      .map((question, variantIndex) => toRuntimeQuestion(question, stage, variantIndex)));
+    const questions = variants.map((stageVariants, stage) => {
+      const selectedIndex = set.shuffleVariants?.[stage]
+        ? Math.floor(Math.random() * stageVariants.length)
+        : 0;
+      return stageVariants[selectedIndex];
     });
     return {
-      questions: runtimeQuestions.slice(0, QUESTION_COUNT),
-      reserveQuestions: runtimeQuestions.slice(QUESTION_COUNT),
+      questions,
+      variants,
       revoke() {
         objectUrls.splice(0).forEach((url) => globalScope.URL.revokeObjectURL(url));
       },
@@ -594,7 +621,8 @@
     FORMAT,
     FORMAT_VERSION,
     QUESTION_COUNT,
-    MIN_RESERVE_COUNT,
+    MAX_VARIANTS,
+    MIN_COMPLETE_VARIANTS,
     TYPES,
     LIMITS,
     IMAGE_MIME_TYPES,

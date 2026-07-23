@@ -2398,21 +2398,22 @@ function FinalConfetti() {
   }} />)}</div>;
 }
 
-function PrizeLadder({ currentIndex, correctCount, completedStages = [], controls, onSelect }) {
+function PrizeLadder({ currentIndex, correctCount, completedStages = [], incompleteStages = [], controls, onSelect }) {
   return <aside className="millionaire-ladder" aria-label="Prize ladder">
     {controls}
     {[...CORE.PRIZE_LADDER].map((value, index) => ({ value, stage: index + 1 })).reverse().map(({ value, stage }) => {
       const classes = ["millionaire-prize-row"];
       const reward = QUESTION_REWARDS[stage];
       const isEditorComplete = completedStages.includes(stage);
+      const isEditorIncomplete = incompleteStages.includes(stage);
       if (reward && stage !== 3) classes.push("is-reward");
       if (stage === currentIndex + 1) classes.push("is-current");
       if (stage <= correctCount) classes.push("is-complete");
       if (onSelect) classes.push("is-selectable");
       const prizeLabel = value === 1000000 ? "£1 MILLION" : CORE.formatPrize(value);
-      const content = <><span className="millionaire-prize-number">{stage}</span><span className="millionaire-prize-diamond" aria-hidden="true">◆</span><span className="millionaire-prize-value-wrap"><span className="millionaire-prize-value">{prizeLabel}</span>{reward && <img className="millionaire-prize-reward" src={reward.icon} alt={reward.label} />}{isEditorComplete && <img className="millionaire-prize-completion-tick" src="tick.svg" alt="Question complete" />}</span></>;
+      const content = <><span className="millionaire-prize-number">{stage}</span><span className="millionaire-prize-diamond" aria-hidden="true">◆</span><span className="millionaire-prize-value-wrap"><span className="millionaire-prize-value">{prizeLabel}</span>{onSelect && (isEditorComplete ? <img className="millionaire-prize-completion-tick" src="tick.svg" alt="Question complete" /> : isEditorIncomplete ? <img className="millionaire-prize-completion-warning" src="warning.svg" alt="Question incomplete" /> : <span className="millionaire-prize-completion-placeholder" aria-hidden="true">–</span>)}</span></>;
       return onSelect
-        ? <button type="button" key={stage} className={classes.join(" ")} aria-current={stage === currentIndex + 1 ? "step" : undefined} aria-label={`Edit Question ${stage}, ${prizeLabel}${isEditorComplete ? ", complete" : ""}`} onClick={() => onSelect(stage - 1)}>{content}</button>
+        ? <button type="button" key={stage} className={classes.join(" ")} aria-current={stage === currentIndex + 1 ? "step" : undefined} aria-label={`Edit Question ${stage}, ${prizeLabel}${isEditorComplete ? ", complete" : isEditorIncomplete ? ", incomplete" : ""}`} onClick={() => onSelect(stage - 1)}>{content}</button>
         : <div key={stage} className={classes.join(" ")} aria-current={stage === currentIndex + 1 ? "step" : undefined}>{content}</div>;
     })}
   </aside>;
@@ -2466,13 +2467,7 @@ function App() {
       return "title";
     }
   });
-  const [creatorEditing, setCreatorEditing] = useState(() => {
-    try {
-      return Boolean(localStorage.getItem("mlh-millionaire-creator-resume"));
-    } catch {
-      return false;
-    }
-  });
+  const [creatorEditing, setCreatorEditing] = useState(false);
   const [settings, setSettings] = useState(() => {
     const saved = safeRead(SETTINGS_KEY, {});
     const queryLevel = new URLSearchParams(window.location.search).get("level");
@@ -2745,7 +2740,7 @@ function App() {
       setPreviousPerformance({ bestWinMs: null, highestQuestion: 0, bestAmount: 0, bestTimesByQuestion: {} });
       audioDirector.current.configure(settings);
       audioDirector.current.startGame();
-      setActiveCustomSet({ id: set.id, title: set.title, reserveQuestions: prepared.reserveQuestions });
+      setActiveCustomSet({ id: set.id, title: set.title, variants: prepared.variants, shuffleVariants: set.shuffleVariants || [] });
       beginPreparedGame(prepared.questions);
     } catch (error) {
       console.error("Custom Millionaire game could not start.", error);
@@ -2946,16 +2941,18 @@ function App() {
   function useSwitch() {
     if (!lifelines.switch || locked || transitioning || !question) return;
     if (activeCustomSet) {
-      const reserveQuestions = activeCustomSet.reserveQuestions || [];
-      if (!reserveQuestions.length) {
-        setDialog({ type: "error", message: "This custom game has no reserve question available for the Switch lifeline." });
+      const stageVariants = activeCustomSet.variants?.[currentIndex] || [];
+      const replacement = activeCustomSet.shuffleVariants?.[currentIndex]
+        ? stageVariants.filter((item) => item.id !== question.id)[Math.floor(Math.random() * Math.max(1, stageVariants.filter((item) => item.id !== question.id).length))]
+        : stageVariants[0];
+      if (!replacement) {
+        setDialog({ type: "error", message: "This custom question needs another complete variant before the Switch lifeline can be used." });
         return;
       }
-      const replacement = reserveQuestions[Math.floor(Math.random() * reserveQuestions.length)];
       resetQuestionState();
       setQuestions((current) => current.map((item, index) => index === currentIndex ? replacement : item));
       setLifelines((current) => ({ ...current, switch: false }));
-      setAnnouncement(`Switch used. Question ${currentIndex + 1} has been replaced by a reserve question from ${activeCustomSet.title}.`);
+      setAnnouncement(`Switch used. Question ${currentIndex + 1} has been replaced by another variant from ${activeCustomSet.title}.`);
       audioDirector.current.playLifeline();
       return;
     }
@@ -3209,7 +3206,7 @@ function App() {
   return <div className={window.MLH.shell.pageShellClass} style={{ overflowX: "clip" }}>
     <window.MLH.AppHeader icon="millionaire-icon.svg" title="Who Wants to Be a Millionaire?" subtitle="Test your musical knowledge and climb the prize ladder to £1 million." profileLabel={activeLevelLabel} profileUsesSharedSettings={false} profileShareDisabled={screen === "creator"} />
     <div className="millionaire-page-content"><main className="millionaire-main-shell">
-      {screen === "creator" && !creatorEditing && <div className="millionaire-creator-global-toolbar"><window.MLH.AppToolbar left={<div className="flex items-center gap-2">
+      {screen === "creator" && !creatorEditing && <div className="millionaire-creator-global-toolbar millionaire-toolbar-wrap"><window.MLH.AppToolbar left={<div className="flex items-center gap-2">
         <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
           <div className="hub-menu-anchor relative" ref={levelRef}>
             <window.MLH.LevelButton icon={<img src="levels.svg" alt="" className="h-[26px] w-[26px]" />} activeLevel={settings.level} activeLabel={activeLevelLabel} onClick={() => { setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />
@@ -3228,7 +3225,7 @@ function App() {
           </div>
         </fieldset>
       </div>} right={<button type="button" className="millionaire-toolbar-reset flex h-10 w-[58px] items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5" aria-label="Reset game and return to opening screen" disabled={true} onClick={resetGame}><img src="restart.svg" alt="" className="h-[20px] w-[20px]" /><span className="hidden sm:relative sm:-left-[1.5px] sm:inline">Reset</span></button>} /></div>}
-      <div className="millionaire-toolbar-wrap"><window.MLH.AppToolbar left={screen === "creator" ? <div id="millionaire-creator-toolbar-left" /> : <div className="flex items-center gap-2">
+      {(screen !== "creator" || creatorEditing) && <div className="millionaire-toolbar-wrap"><window.MLH.AppToolbar left={screen === "creator" ? <div id="millionaire-creator-toolbar-left" /> : <div className="flex items-center gap-2">
         <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
           <div className="hub-menu-anchor relative" ref={levelRef}>
             <window.MLH.LevelButton icon={<img src="levels.svg" alt="" className="h-[26px] w-[26px]" />} activeLevel={settings.level} activeLabel={activeLevelLabel} onClick={() => { setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />
@@ -3246,11 +3243,11 @@ function App() {
             </window.MLH.MenuPanel>}
           </div>
         </fieldset>
-      </div>} feedback={screen === "creator" ? <div id="millionaire-creator-toolbar-centre" /> : null} right={screen === "creator" ? <div id="millionaire-creator-toolbar-right" /> : <button type="button" className="millionaire-toolbar-reset flex h-10 w-[58px] items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5" aria-label="Reset game and return to opening screen" disabled={screen !== "game"} onClick={resetGame}><img src="restart.svg" alt="" className="h-[20px] w-[20px]" /><span className="hidden sm:relative sm:-left-[1.5px] sm:inline">Reset</span></button>} /></div>
+      </div>} feedback={screen === "creator" ? <div id="millionaire-creator-toolbar-centre" /> : null} right={screen === "creator" ? <div id="millionaire-creator-toolbar-right" /> : <button type="button" className="millionaire-toolbar-reset flex h-10 w-[58px] items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5" aria-label="Reset game and return to opening screen" disabled={screen !== "game"} onClick={resetGame}><img src="restart.svg" alt="" className="h-[20px] w-[20px]" /><span className="hidden sm:relative sm:-left-[1.5px] sm:inline">Reset</span></button>} /></div>}
       <div className={`millionaire-scroll${screen === "creator" ? " is-creator" : ""}`}><div className={`millionaire-stage${screen === "creator" ? " is-creator" : ""}`}><div className={`millionaire-board${screen === "creator" ? " is-creator" : ""}`}>
-        <button type="button" className="millionaire-audio-toggle" aria-label={settings.backgroundMusic && settings.soundEffects ? "Turn off game audio" : "Turn on game audio"} aria-pressed={settings.backgroundMusic && settings.soundEffects} onClick={toggleGameAudio}>
+        {screen !== "creator" && <button type="button" className="millionaire-audio-toggle" aria-label={settings.backgroundMusic && settings.soundEffects ? "Turn off game audio" : "Turn on game audio"} aria-pressed={settings.backgroundMusic && settings.soundEffects} onClick={toggleGameAudio}>
           <img src="audio-svgrepo-com.svg?v=20260722-smaller15" alt="" aria-hidden="true" />
-        </button>
+        </button>}
         {CurrentScreen()}
         {openingZooming && TitleScreen()}
         {openingZooming && <span className="millionaire-opening-flash" aria-hidden="true" />}

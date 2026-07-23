@@ -13,13 +13,13 @@ function completeSet(title = "Test Set") {
     correctAnswerIndex: index % 4,
     hint: `Hint ${index + 1}`,
   }));
-  set.questions.push({
-    ...customSets.emptyQuestion(16),
-    prompt: "Reserve question?",
-    answers: ["Reserve A", "Reserve B", "Reserve C", "Reserve D"],
-    correctAnswerIndex: 0,
-    hint: "Reserve hint",
-  });
+  set.variants = set.variants.map((stageVariants, index) => ([{
+    ...customSets.emptyQuestion(index + 1),
+    prompt: `Question ${index + 1}, variation 2?`,
+    answers: ["Answer A", "Answer B", "Answer C", "Answer D"],
+    correctAnswerIndex: index % 4,
+    hint: `Variation hint ${index + 1}`,
+  }]));
   return set;
 }
 
@@ -32,64 +32,41 @@ test("new custom sets contain exactly 15 stable question slots", () => {
   const validation = customSets.validateSet(set);
   assert.equal(validation.completeCount, 0);
   assert.equal(validation.valid, false);
-  assert.ok(validation.issues.some((issue) => issue.field === "reserve"));
+  assert.ok(validation.issues.some((issue) => issue.field === "variants"));
 });
 
-test("legacy sets with 15 complete main questions remain readable but need a reserve question", () => {
+test("legacy sets keep their first 15 questions as Variant 1 and discard Question Bank entries", () => {
   const set = completeSet("Legacy");
   set.questions = set.questions.slice(0, 15);
+  delete set.variants;
   const normalised = customSets.normaliseSet(set);
   const validation = customSets.validateSet(normalised);
   assert.equal(normalised.questions.length, 15);
-  assert.equal(validation.mainCompleteCount, 15);
-  assert.equal(validation.incompleteCount, 1);
-  assert.equal(validation.reserveCount, 0);
+  assert.equal(normalised.variants.every((variants) => variants.length === 0), true);
+  assert.equal(validation.mainCompleteCount, 0);
+  assert.equal(validation.incompleteCount, 15);
   assert.equal(validation.valid, false);
-  assert.ok(validation.issues.some((issue) => issue.field === "reserve"));
+  assert.ok(validation.issues.some((issue) => issue.field === "variants"));
 });
 
 test("validation requires four answers, one correct answer and type-specific media", () => {
-  const set = completeSet();
-  assert.equal(customSets.validateSet(set).valid, true);
-
-  set.questions[3].answers[2] = " ";
-  set.questions[6].correctAnswerIndex = null;
-  set.questions[8].type = "image";
-  set.questions[11].type = "audio";
-  const validation = customSets.validateSet(set);
-
-  assert.equal(validation.valid, false);
-  assert.equal(validation.completeCount, 12);
-  assert.equal(validation.mainCompleteCount, 11);
-  assert.equal(validation.reserveCompleteCount, 1);
-  assert.equal(validation.incompleteCount, 4);
-  assert.ok(validation.issues.some((issue) => issue.message === "Question 4 has an empty answer option."));
-  assert.ok(validation.issues.some((issue) => issue.message === "Question 7 has no correct answer."));
-  assert.ok(validation.issues.some((issue) => issue.message === "Question 9 requires an image."));
-  assert.ok(validation.issues.some((issue) => issue.message === "Question 12 requires audio."));
+  const question = customSets.emptyQuestion(1);
+  assert.ok(customSets.validateQuestion(question).length > 0);
+  const complete = { ...question, prompt: "Question", hint: "Hint", answers: ["A", "B", "C", "D"], correctAnswerIndex: 0 };
+  assert.equal(customSets.validateQuestion(complete).length, 0);
+  assert.ok(customSets.validateQuestion({ ...complete, type: "image" }).some((issue) => issue.field === "image"));
 });
 
-test("validation ignores unfinished extra reserve questions once one reserve is complete", () => {
+test("a set needs two complete variants for every ladder question", () => {
   const set = completeSet();
-  set.questions.push({
-    ...customSets.emptyQuestion(17),
-    prompt: "Second reserve?",
-    answers: ["A", "B", "C", "D"],
-    correctAnswerIndex: 1,
-    hint: "Second reserve hint",
-  });
   let validation = customSets.validateSet(set);
   assert.equal(validation.valid, true);
-  assert.equal(validation.reserveCount, 2);
-  assert.equal(validation.reserveCompleteCount, 2);
-
-  set.questions[16].prompt = "";
-  set.questions[16].hint = "";
+  set.variants[3][0].prompt = "";
+  set.variants[3][0].hint = "";
   validation = customSets.validateSet(set);
-  assert.equal(validation.valid, true);
-  assert.equal(validation.reserveCompleteCount, 1);
-  assert.equal(validation.incompleteCount, 0);
-  assert.equal(validation.issues.length, 0);
+  assert.equal(validation.valid, false);
+  assert.equal(validation.mainCompleteCount, 14);
+  assert.equal(validation.completeVariantsByQuestion[3], 1);
 });
 
 test("duplicating a set regenerates set, question and media IDs without changing the original", () => {
@@ -153,19 +130,19 @@ test("export and import preserve all question fields and packaged media", async 
     type: "youtube",
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
   };
-  source.questions.push({
-    ...customSets.emptyQuestion(17),
-    prompt: "Second reserve?",
+  source.variants[0].push({
+    ...customSets.emptyQuestion(1),
+    prompt: "Question 1, variation 3?",
     answers: ["A", "B", "C", "D"],
     correctAnswerIndex: 2,
-    hint: "Second reserve hint",
+    hint: "Variation 3 hint",
   });
 
   const exported = await customSets.exportSet(source, JSZip);
   assert.equal(exported.filename, "round-trip.millionaire-set");
   const imported = await customSets.importPackage(exported.blob, JSZip);
 
-  assert.equal(imported.summary.questionCount, 17);
+  assert.equal(imported.summary.questionCount, 15);
   assert.equal(imported.summary.imageCount, 1);
   assert.equal(imported.summary.audioCount, 1);
   assert.equal(imported.summary.youtubeCount, 1);
@@ -180,25 +157,16 @@ test("export and import preserve all question fields and packaged media", async 
   assert.equal(imported.set.questions[1].audio.blob.size, 7);
   assert.equal(imported.set.questions[1].image, null);
   assert.equal(imported.set.questions[2].youtubeUrl, source.questions[2].youtubeUrl);
-  assert.equal(imported.set.questions[15].prompt, "Reserve question?");
-  assert.equal(imported.set.questions[16].prompt, "Second reserve?");
+  assert.equal(imported.set.variants[0][1].prompt, "Question 1, variation 3?");
 });
 
-test("runtime keeps the 15-question ladder separate from all reserve Switch questions", () => {
+test("runtime keeps each ladder question's variants together for the Switch lifeline", () => {
   const source = completeSet("Runtime");
-  source.questions.push({
-    ...customSets.emptyQuestion(17),
-    prompt: "Second reserve?",
-    answers: ["A", "B", "C", "D"],
-    correctAnswerIndex: 2,
-    hint: "Second reserve hint",
-  });
-  source.questions.push(customSets.emptyQuestion(18));
   const runtime = customSets.runtimeSet(source);
   assert.equal(runtime.questions.length, 15);
-  assert.equal(runtime.reserveQuestions.length, 2);
-  assert.equal(runtime.questions.some((question) => question.customReserve), false);
-  assert.equal(runtime.reserveQuestions.every((question) => question.customReserve), true);
+  assert.equal(runtime.variants.length, 15);
+  assert.equal(runtime.variants.every((variants) => variants.length === 2), true);
+  assert.equal(runtime.questions.every((question) => Number.isInteger(question.customStage)), true);
   runtime.revoke();
 });
 
@@ -222,10 +190,15 @@ test("Millionaire page integrates the creator and uses local runtime dependencie
   assert.doesNotMatch(game, /millionaire-create-questions-menu/);
   assert.ok(game.includes("MILLIONAIRE_CUSTOM_SETS.runtimeSet(set)"));
   assert.ok(game.includes('<window.MillionaireCreator'));
-  assert.ok(game.includes("activeCustomSet.reserveQuestions"));
+  assert.ok(game.includes("activeCustomSet.variants"));
   assert.ok(game.includes("completedStages = []"));
   assert.ok(game.includes("millionaire-prize-completion-tick"));
   assert.ok(game.includes("millionaire-creator-global-toolbar"));
+  assert.ok(creator.includes('millionaire-setup-card millionaire-rules-card millionaire-creator-library-card'));
+  assert.ok(creator.includes("download your game file and share it with students."));
+  assert.ok(creator.includes('const enterEditor = () => {') && creator.includes('onEditingChange?.(true);') && creator.includes('enterEditor();'), "The editor should enable its toolbar placeholders before opening or restoring an editor.");
+  assert.ok(creator.includes('millionaire-creator-toolbar-clear'), "The editor Clear action should sit beside Save.");
+  assert.ok(creator.includes('millionaire-creator-variant-bar') && creator.includes('Add variant') && creator.includes('Shuffle between variants'), "Variants should be managed beneath the question editor.");
   assert.ok(game.includes('screen === "creator" && !creatorEditing'));
   assert.doesNotMatch(game, /Boolean\(activeCustomSet\)/);
   assert.ok(game.includes('recordQuestion.type === "youtube"'));
@@ -237,10 +210,10 @@ test("Millionaire page integrates the creator and uses local runtime dependencie
   assert.ok(creator.includes('src="tick.svg"'));
   assert.ok(creator.includes("millionaire-creator-correct-tick"));
   assert.ok(creator.includes("completedStages={completedStages}"));
-  assert.ok(creator.includes("Choose one media type"));
-  assert.ok(creator.includes("YouTube video"));
+  assert.ok(!creator.includes("Choose one media type"));
+  assert.ok(creator.includes('dialog?.type === "youtube"') && creator.includes("Edit YouTube link"));
   assert.ok(creator.includes("Switch lifeline preview"));
-  assert.ok(creator.includes("Question Bank"));
+  assert.ok(creator.includes("Shuffle between variants"));
   assert.ok(creator.includes("mlh-millionaire-creator-resume"));
   assert.ok(creator.includes("restoredQuestionIndex"));
   assert.ok(creator.includes("Import Game"));
@@ -253,12 +226,11 @@ test("Millionaire page integrates the creator and uses local runtime dependencie
   assert.ok(creator.includes('saveConfirmationTimerRef'));
   assert.ok(creator.includes('"Saved!"'));
   assert.ok(creator.includes(">Exit</"));
-  assert.ok(creator.includes("Delete reserve"));
   assert.ok(creator.includes("millionaire-creator-inline-hint-editor"));
   assert.ok(creator.includes('editor.style.height = `${editor.scrollHeight}px`'));
-  assert.ok(creator.includes("Drag an image, audio file or YouTube link here"));
+  assert.ok(creator.includes("Drag an image or YouTube link here"));
   assert.ok(creator.includes('src="image.svg"'));
-  assert.ok(creator.includes('src="audio.svg"'));
+  assert.ok(!creator.includes('onClick={() => audioInputRef.current?.click()}'));
   assert.ok(creator.includes('src="youtube.svg"'));
   assert.doesNotMatch(creator, /Choose Files/);
   assert.ok(creator.includes("onDrop={handleDrop}"));
