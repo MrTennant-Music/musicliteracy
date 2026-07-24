@@ -2365,8 +2365,9 @@ function AudioCard({ playsUsed, playing, onPlay, onStop, learning = false }) {
 
 const MILESTONE_CONFETTI_COLOURS = ["#f6c453", "#38bdf8", "#ffffff", "#a78bfa", "#4ade80"];
 
-function MilestoneCelebration({ reward, showBurst = true }) {
-  return <div className="millionaire-milestone-reveal" role="img" aria-label={`${reward.label} earned`}>
+function MilestoneCelebration({ reward, prize, showBurst = true }) {
+  const prizeLabel = prize === 1000000 ? "£1 MILLION" : CORE.formatPrize(prize);
+  return <div className={`millionaire-milestone-reveal${prize ? " is-prize-only" : ""}`} role="img" aria-label={prize ? `${prizeLabel} won` : `${reward.label} earned`}>
     {showBurst && <div className="millionaire-milestone-confetti" aria-hidden="true">
       {Array.from({ length: 28 }, (_, index) => {
         const angle = (index / 28) * Math.PI * 2;
@@ -2380,8 +2381,10 @@ function MilestoneCelebration({ reward, showBurst = true }) {
         }} />;
       })}
     </div>}
-    <img className="millionaire-milestone-medal" src={reward.celebrationIcon} alt="" aria-hidden="true" />
-    <span className="millionaire-milestone-shine" style={{ "--millionaire-medal-mask": `url("${reward.celebrationIcon}")` }} aria-hidden="true" />
+    {prize ? <span className="millionaire-milestone-prize">{prizeLabel}</span> : <>
+      <img className="millionaire-milestone-medal" src={reward.celebrationIcon} alt="" aria-hidden="true" />
+      <span className="millionaire-milestone-shine" style={{ "--millionaire-medal-mask": `url("${reward.celebrationIcon}")` }} aria-hidden="true" />
+    </>}
   </div>;
 }
 
@@ -2398,7 +2401,16 @@ function FinalConfetti() {
   }} />)}</div>;
 }
 
-function PrizeLadder({ currentIndex, correctCount, completedStages = [], incompleteStages = [], controls, onSelect }) {
+function PrizeLadder({ currentIndex, correctCount, completedStages = [], incompleteStages = [], warningDetails = {}, controls, onSelect, showRewards = true }) {
+  const [visibleWarningStage, setVisibleWarningStage] = React.useState(null);
+  React.useEffect(() => {
+    if (visibleWarningStage === null) return undefined;
+    const dismissWarning = (event) => {
+      if (!event.target.closest(".millionaire-prize-warning-control")) setVisibleWarningStage(null);
+    };
+    document.addEventListener("pointerdown", dismissWarning);
+    return () => document.removeEventListener("pointerdown", dismissWarning);
+  }, [visibleWarningStage]);
   return <aside className="millionaire-ladder" aria-label="Prize ladder">
     {controls}
     {[...CORE.PRIZE_LADDER].map((value, index) => ({ value, stage: index + 1 })).reverse().map(({ value, stage }) => {
@@ -2406,12 +2418,13 @@ function PrizeLadder({ currentIndex, correctCount, completedStages = [], incompl
       const reward = QUESTION_REWARDS[stage];
       const isEditorComplete = completedStages.includes(stage);
       const isEditorIncomplete = incompleteStages.includes(stage);
-      if (reward && stage !== 3) classes.push("is-reward");
+      if (showRewards && reward && stage !== 3) classes.push("is-reward");
       if (stage === currentIndex + 1) classes.push("is-current");
       if (stage <= correctCount) classes.push("is-complete");
       if (onSelect) classes.push("is-selectable");
       const prizeLabel = value === 1000000 ? "£1 MILLION" : CORE.formatPrize(value);
-      const content = <><span className="millionaire-prize-number">{stage}</span><span className="millionaire-prize-diamond" aria-hidden="true">◆</span><span className="millionaire-prize-value-wrap"><span className="millionaire-prize-value">{prizeLabel}</span>{onSelect && (isEditorComplete ? <img className="millionaire-prize-completion-tick" src="tick.svg" alt="Question complete" /> : isEditorIncomplete ? <img className="millionaire-prize-completion-warning" src="warning.svg" alt="Question incomplete" /> : <span className="millionaire-prize-completion-placeholder" aria-hidden="true">–</span>)}</span></>;
+      const warningItems = warningDetails[stage]?.length ? warningDetails[stage] : ["Missing information"];
+      const content = <><span className="millionaire-prize-number">{stage}</span><span className="millionaire-prize-diamond" aria-hidden="true">◆</span><span className="millionaire-prize-value-wrap"><span className="millionaire-prize-value">{prizeLabel}</span>{onSelect && (isEditorComplete ? <img className="millionaire-prize-completion-tick" src="tick.svg" alt="Question complete" /> : isEditorIncomplete ? <span className="millionaire-prize-warning-control" onMouseEnter={() => setVisibleWarningStage(stage)} onMouseLeave={() => setVisibleWarningStage(null)} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVisibleWarningStage(stage); }}><img className="millionaire-prize-completion-warning" src="warning.svg" alt="Question incomplete — show issues" />{visibleWarningStage === stage && <span className="millionaire-prize-warning-tooltip" role="tooltip"><ul>{warningItems.map((item) => <li key={item}>{item}</li>)}</ul></span>}</span> : <span className="millionaire-prize-completion-placeholder" aria-hidden="true">–</span>)}</span></>;
       return onSelect
         ? <button type="button" key={stage} className={classes.join(" ")} aria-current={stage === currentIndex + 1 ? "step" : undefined} aria-label={`Edit Question ${stage}, ${prizeLabel}${isEditorComplete ? ", complete" : isEditorIncomplete ? ", incomplete" : ""}`} onClick={() => onSelect(stage - 1)}>{content}</button>
         : <div key={stage} className={classes.join(" ")} aria-current={stage === currentIndex + 1 ? "step" : undefined}>{content}</div>;
@@ -2462,6 +2475,8 @@ function HintText({ question }) {
 function App() {
   const [screen, setScreen] = useState(() => {
     try {
+      const queryLevel = new URLSearchParams(window.location.search).get("level");
+      if (CORE.SUPPORTED_LEVELS.includes(queryLevel)) return "title";
       return localStorage.getItem("mlh-millionaire-creator-resume") ? "creator" : "title";
     } catch {
       return "title";
@@ -2581,7 +2596,7 @@ function App() {
 
   useEffect(() => {
     if (screen === "results" && outcome === "won") audioDirector.current.pauseMusic();
-    else if (["title", "rules", "results"].includes(screen)) audioDirector.current.playOpening();
+    else if (["title", "rules", "results", "creator"].includes(screen)) audioDirector.current.playOpening();
     else if (screen !== "game") audioDirector.current.pauseMusic();
   }, [screen, outcome]);
 
@@ -2835,7 +2850,16 @@ function App() {
       audioDirector.current.playOutcome(15, true, { finishNaturally: true });
       return;
     }
-    if (QUESTION_REWARDS[stage]) {
+    if (isCustomGame && (stage === 5 || stage === 10)) {
+      setMilestone({ stage, prize: CORE.PRIZE_LADDER[currentIndex], nextIndex: currentIndex + 1, autoAdvance: true, prizeOnly: true });
+      setAnnouncement(`Milestone reached. You have won ${CORE.formatPrize(CORE.PRIZE_LADDER[currentIndex])}. Moving to Question ${stage + 1} when the correct-answer audio finishes.`);
+      const stopAfterSeconds = stage === 5 ? 7 : 8;
+      await audioDirector.current.playOutcome(stage, true, { finishNaturally: false, stopAfterSeconds });
+      setMilestone(null);
+      goToQuestion(currentIndex + 1);
+      return;
+    }
+    if (!isCustomGame && QUESTION_REWARDS[stage]) {
       setMilestone({ stage, prize: CORE.PRIZE_LADDER[currentIndex], nextIndex: currentIndex + 1, autoAdvance: true });
       setAnnouncement(`Milestone reached. You have won ${CORE.formatPrize(CORE.PRIZE_LADDER[currentIndex])}. Moving to Question ${stage + 1} when the correct-answer audio finishes.`);
       const stopAfterSeconds = stage === 5 ? 7 : stage === 10 ? 8 : 0;
@@ -2946,13 +2970,13 @@ function App() {
         ? stageVariants.filter((item) => item.id !== question.id)[Math.floor(Math.random() * Math.max(1, stageVariants.filter((item) => item.id !== question.id).length))]
         : stageVariants[0];
       if (!replacement) {
-        setDialog({ type: "error", message: "This custom question needs another complete variant before the Switch lifeline can be used." });
+        setDialog({ type: "error", message: "This prize level needs another complete question before the Switch lifeline can be used." });
         return;
       }
       resetQuestionState();
       setQuestions((current) => current.map((item, index) => index === currentIndex ? replacement : item));
       setLifelines((current) => ({ ...current, switch: false }));
-      setAnnouncement(`Switch used. Question ${currentIndex + 1} has been replaced by another variant from ${activeCustomSet.title}.`);
+      setAnnouncement(`Switch used. Prize level ${currentIndex + 1} has been replaced by another question from ${activeCustomSet.title}.`);
       audioDirector.current.playLifeline();
       return;
     }
@@ -3053,7 +3077,7 @@ function App() {
         <button type="button" className="millionaire-secondary millionaire-play millionaire-opening-play" disabled={openingZooming} onClick={() => setScreen("rules")}><span className="millionaire-opening-play-label">How to Play</span></button>
         <button type="button" className="millionaire-primary millionaire-play millionaire-opening-play" disabled={openingZooming} onClick={startGame}><span className="millionaire-opening-play-label">Play</span></button>
       </div>
-      <button type="button" className="millionaire-play millionaire-opening-play millionaire-opening-create" disabled={openingZooming} onClick={() => setScreen("creator")}><span className="millionaire-opening-play-label">Create</span></button>
+      <button type="button" className="millionaire-play millionaire-opening-play millionaire-opening-create" disabled={openingZooming} onClick={() => { try { localStorage.removeItem("mlh-millionaire-creator-resume"); } catch {} setScreen("creator"); }}><span className="millionaire-opening-play-label">Create &amp; Import</span></button>
     </section>;
   }
 
@@ -3091,20 +3115,20 @@ function App() {
 
   function GameScreen() {
     if (!question) return null;
-    const earnedReward = revealed === "correct" && currentIndex < 14 ? QUESTION_REWARDS[currentIndex + 1] : null;
+    const earnedReward = !isCustomGame && revealed === "correct" && currentIndex < 14 ? QUESTION_REWARDS[currentIndex + 1] : null;
+    const milestoneIsShowing = Boolean((earnedReward || milestone?.prizeOnly) && milestone?.stage === currentIndex + 1);
+    const prizeMilestoneIsShowing = Boolean(milestone?.prizeOnly && milestone.stage === currentIndex + 1);
     const conceptDescription = question.category === "concepts" ? question.conceptDescription : null;
-    const showConceptDescription = Boolean(conceptDescription && !earnedReward);
-    const milestoneIsShowing = Boolean(earnedReward && milestone?.stage === currentIndex + 1);
+    const showConceptDescription = Boolean(conceptDescription && !earnedReward && !prizeMilestoneIsShowing);
     const autoAdvancingMilestone = Boolean(milestoneIsShowing && milestone?.autoAdvance);
     const earnedPrize = CORE.PRIZE_LADDER[currentIndex] === 1000000 ? "£1 MILLION" : CORE.formatPrize(CORE.PRIZE_LADDER[currentIndex]);
     const showWonAmount = revealed === "correct";
-    const ranOutOfTime = revealed === "incorrect" && settings.timer && !selectedLetter;
     return <div className="millionaire-game-grid">
       <section className="millionaire-play-area">
         {settings.timer && !revealed && !earnedReward && <QuestionTimer seconds={timeRemaining} />}
         <div className="millionaire-question-panel">
           {hintVisible && <div className="millionaire-inline-hint" role="note"><strong>Hint</strong><span><HintText question={question} /></span></div>}
-          <div className={`millionaire-question-media${showConceptDescription ? " has-concept-description" : ""}`}>{earnedReward ? <MilestoneCelebration reward={earnedReward} /> : showConceptDescription ? <p className="millionaire-concept-description">{conceptDescription}</p> : renderQuestionMedia(question, outcome === "incorrect")}</div>
+          <div className={`millionaire-question-media${showConceptDescription ? " has-concept-description" : ""}`}>{earnedReward ? <MilestoneCelebration reward={earnedReward} /> : prizeMilestoneIsShowing ? <MilestoneCelebration prize={CORE.PRIZE_LADDER[currentIndex]} /> : showConceptDescription ? <p className="millionaire-concept-description">{conceptDescription}</p> : renderQuestionMedia(question, outcome === "incorrect")}</div>
           <div className="millionaire-question-rail"><div className="millionaire-question-bar"><h2 className={showWonAmount ? "is-milestone-amount" : undefined}>{showWonAmount ? <span className="millionaire-milestone-amount" aria-label={earnedPrize}><span aria-hidden="true">◆</span><span>{earnedPrize}</span><span aria-hidden="true">◆</span></span> : question.prompt || question.question}</h2></div></div>
         </div>
         <div className="millionaire-answers" role="group" aria-label="Answer choices">
@@ -3125,7 +3149,6 @@ function App() {
           })}</div>)}
         </div>
         {revealed === "incorrect" ? <>
-          <div className="millionaire-explanation"><strong>{ranOutOfTime ? "You ran out of time" : "Incorrect answer"}</strong>{question.explanation}</div>
           <div className="millionaire-actions"><button type="button" className="millionaire-primary millionaire-final-answer" onClick={() => finishGame("incorrect", finalPrize)}><span className="millionaire-final-answer-label">Review</span></button></div>
         </> : <div className="millionaire-actions millionaire-final-answer-actions">
           <button type="button" className="millionaire-primary millionaire-final-answer" disabled={autoAdvancingMilestone || !selectedLetter || locked || transitioning} onClick={lockAnswer}><span className="millionaire-final-answer-label">Final Answer</span></button>
@@ -3143,7 +3166,7 @@ function App() {
     return <section className="millionaire-screen millionaire-celebration">
       <FinalConfetti />
       <div className="millionaire-celebration-centre">
-        <MilestoneCelebration reward={QUESTION_REWARDS[15]} showBurst={false} />
+        {isCustomGame ? <MilestoneCelebration prize={1000000} showBurst={false} /> : <MilestoneCelebration reward={QUESTION_REWARDS[15]} showBurst={false} />}
         <h2>£1 MILLION</h2>
         <p className="millionaire-celebration-message">Congratulations!</p>
       </div>
@@ -3165,10 +3188,10 @@ function App() {
     return <section className="millionaire-screen millionaire-results">
       {outcome === "won" && <FinalConfetti />}
       <h2>Review</h2>
-      <div className="millionaire-results-grid">
+      <div className={`millionaire-results-grid${isCustomGame ? " is-custom-game" : ""}`}>
         <ResultStat label="Question" previous={`Previous best: ${previousPerformance.highestQuestion ? `${previousPerformance.highestQuestion} / 15` : "—"}`}>{reachedQuestionNumber} / 15</ResultStat>
         <ResultStat label="Amount" valueClassName="millionaire-result-amount" previous={<React.Fragment>Previous best: <span className="millionaire-result-previous-amount">{previousPerformance.highestQuestion ? previousPrize : "—"}</span></React.Fragment>}>{lastCorrectRecord ? reviewPrize : "—"}</ResultStat>
-        <ResultStat label="Award"><span className="millionaire-result-medal">{earnedMedal ? <img src={earnedMedal.icon} alt={earnedMedal.label} /> : "—"}</span></ResultStat>
+        {!isCustomGame && <ResultStat label="Award"><span className="millionaire-result-medal">{earnedMedal ? <img src={earnedMedal.icon} alt={earnedMedal.label} /> : "—"}</span></ResultStat>}
         <ResultStat label="Time" previous={`Previous best for ${reachedQuestionNumber}/15: ${previousQuestionBestMs == null ? "—" : formatTime(previousQuestionBestMs)}`}>{formatTime(elapsedMs)}</ResultStat>
         <ResultStat label="Lifelines used"><span className="millionaire-result-lifelines">{usedLifelines.length ? usedLifelines.map(({ key, icon, label }) => <img key={key} src={icon} alt={label} />) : "—"}</span></ResultStat>
       </div>
@@ -3184,7 +3207,6 @@ function App() {
         <h3>{record.question.question}</h3>
         {(record.question.notation || record.question.image) && <div>{record.question.notation ? <NotationView notation={record.question.notation} whatNoteQuestion={isWhatNoteQuestion(record.question)} className={[isNoteValueNameQuestion(record.question) ? "is-name-note-question is-note-name-question" : "", isWhatNoteQuestion(record.question) ? "is-what-note-question" : "", record.question.notation.kind === "melody" ? "is-name-note-question" : "", isSingleNoteBeatsQuestion(record.question) ? "is-note-name-question" : "", isBeatTotalQuestion(record.question) ? "is-beat-total-question" : "", isTopNumberTimeSignatureQuestion(record.question) ? "is-time-signature-question" : "", isDottedMinimNameQuestion(record.question) ? "is-dotted-minim-name-question" : "", isDottedMinimBeatsQuestion(record.question) ? "is-dotted-minim-beats-question" : "", isDynamicSymbolQuestion(record.question) ? "is-dynamic-symbol-question" : "", isSymbolMeaningQuestion(record.question) ? "is-symbol-meaning-question" : "", isTimeSignatureBarCompletionQuestion(record.question) ? "is-time-signature-bar-completion" : ""].filter(Boolean).join(" ")} /> : <QuestionImage image={record.question.image} />}</div>}
         <ul className="millionaire-review-options">{record.question.answers.map((answer) => <li key={answer.letter} className={`millionaire-review-option ${answer.letter === record.pupilLetter ? "is-pupil" : ""} ${answer.letter === record.correctLetter ? "is-right" : ""}`}>{answer.letter}: {answer.text}{answer.letter === record.pupilLetter ? " — your answer" : ""}{answer.letter === record.correctLetter ? " — correct" : ""}</li>)}</ul>
-        <p className="millionaire-review-explanation"><strong>{record.correct ? "Correct." : "Incorrect."}</strong> {record.question.explanation}</p>
         {hasQuestionAudio(record.question) && <div className="millionaire-review-audio"><button type="button" className="millionaire-secondary" onClick={() => playQuestionExcerpt(record.question, () => {})}>Replay excerpt</button></div>}
       </article>)}</div>
     </section>;
@@ -3202,21 +3224,22 @@ function App() {
 
   const customiseUnavailable = openingZooming || screen === "game" || screen === "milestone" || screen === "creator";
   const activeLevelLabel = MILLIONAIRE_LEVELS[settings.level]?.label || "National 3";
+  const isCustomGame = Boolean(activeCustomSet);
 
   return <div className={window.MLH.shell.pageShellClass} style={{ overflowX: "clip" }}>
     <window.MLH.AppHeader icon="millionaire-icon.svg" title="Who Wants to Be a Millionaire?" subtitle="Test your musical knowledge and climb the prize ladder to £1 million." profileLabel={activeLevelLabel} profileUsesSharedSettings={false} profileShareDisabled={screen === "creator"} />
     <div className="millionaire-page-content"><main className="millionaire-main-shell">
       {screen === "creator" && !creatorEditing && <div className="millionaire-creator-global-toolbar millionaire-toolbar-wrap"><window.MLH.AppToolbar left={<div className="flex items-center gap-2">
-        <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
+        {!isCustomGame && <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
           <div className="hub-menu-anchor relative" ref={levelRef}>
             <window.MLH.LevelButton icon={<img src="levels.svg" alt="" className="h-[26px] w-[26px]" />} activeLevel={settings.level} activeLabel={activeLevelLabel} onClick={() => { setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />
             {levelOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={settings.level} onSelect={(level) => { setSettings((current) => ({ ...current, level, questionTypes: ["literacy"], audioQuestions: false })); setLevelOpen(false); }} levels={MILLIONAIRE_LEVELS} /></window.MLH.MenuPanel>}
           </div>
-        </fieldset>
+        </fieldset>}
         <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
           <div className="hub-menu-anchor relative" ref={customiseRef}>
             <window.MLH.CustomiseButton icon={<img src="customise.svg" alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} onClick={() => { setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />
-            {customiseOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}>
+            {customiseOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true} className="millionaire-opening-customise-menu">
               <window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>
               <window.MLH.MenuToggleRow glyph={<QuestionTypeGlyph option={QUESTION_TYPE_OPTIONS[0]} />} label="Music Literacy" checked={true} onChange={() => {}} />
               <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
@@ -3226,28 +3249,28 @@ function App() {
         </fieldset>
       </div>} right={<button type="button" className="millionaire-toolbar-reset flex h-10 w-[58px] items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5" aria-label="Reset game and return to opening screen" disabled={true} onClick={resetGame}><img src="restart.svg" alt="" className="h-[20px] w-[20px]" /><span className="hidden sm:relative sm:-left-[1.5px] sm:inline">Reset</span></button>} /></div>}
       {(screen !== "creator" || creatorEditing) && <div className="millionaire-toolbar-wrap"><window.MLH.AppToolbar left={screen === "creator" ? <div id="millionaire-creator-toolbar-left" /> : <div className="flex items-center gap-2">
-        <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
+        {!isCustomGame && <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
           <div className="hub-menu-anchor relative" ref={levelRef}>
             <window.MLH.LevelButton icon={<img src="levels.svg" alt="" className="h-[26px] w-[26px]" />} activeLevel={settings.level} activeLabel={activeLevelLabel} onClick={() => { setCustomiseOpen(false); setLevelOpen((open) => !open); }} dataMenuTrigger={true} />
             {levelOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={settings.level} onSelect={(level) => { setSettings((current) => ({ ...current, level, questionTypes: ["literacy"], audioQuestions: false })); setLevelOpen(false); }} levels={MILLIONAIRE_LEVELS} /></window.MLH.MenuPanel>}
           </div>
-        </fieldset>
-        <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
+        </fieldset>}
+        {!isCustomGame && <fieldset disabled={customiseUnavailable} className="millionaire-customise-fieldset m-0 min-w-0 border-0 p-0">
           <div className="hub-menu-anchor relative" ref={customiseRef}>
             <window.MLH.CustomiseButton icon={<img src="customise.svg" alt="" aria-hidden="true" className="h-[26px] w-[26px] object-contain" />} onClick={() => { setLevelOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />
-            {customiseOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}>
+            {customiseOpen && !customiseUnavailable && <window.MLH.MenuPanel title="Customise" position="-left-[66px] sm:left-0" variant="customise" dataMenuPanel={true} className="millionaire-opening-customise-menu">
               <window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>
               <window.MLH.MenuToggleRow glyph={<QuestionTypeGlyph option={QUESTION_TYPE_OPTIONS[0]} />} label="Music Literacy" checked={true} onChange={() => {}} />
               <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
               <window.MLH.MenuToggleRow glyph={<img src="timer.svg" alt="" aria-hidden="true" className="h-5 w-5 object-contain" />} label="Timer" checked={settings.timer} onChange={() => setSettings((current) => ({ ...current, timer: !current.timer }))} />
             </window.MLH.MenuPanel>}
           </div>
-        </fieldset>
+        </fieldset>}
       </div>} feedback={screen === "creator" ? <div id="millionaire-creator-toolbar-centre" /> : null} right={screen === "creator" ? <div id="millionaire-creator-toolbar-right" /> : <button type="button" className="millionaire-toolbar-reset flex h-10 w-[58px] items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5" aria-label="Reset game and return to opening screen" disabled={screen !== "game"} onClick={resetGame}><img src="restart.svg" alt="" className="h-[20px] w-[20px]" /><span className="hidden sm:relative sm:-left-[1.5px] sm:inline">Reset</span></button>} /></div>}
       <div className={`millionaire-scroll${screen === "creator" ? " is-creator" : ""}`}><div className={`millionaire-stage${screen === "creator" ? " is-creator" : ""}`}><div className={`millionaire-board${screen === "creator" ? " is-creator" : ""}`}>
-        {screen !== "creator" && <button type="button" className="millionaire-audio-toggle" aria-label={settings.backgroundMusic && settings.soundEffects ? "Turn off game audio" : "Turn on game audio"} aria-pressed={settings.backgroundMusic && settings.soundEffects} onClick={toggleGameAudio}>
+        <button type="button" className="millionaire-audio-toggle" aria-label={settings.backgroundMusic && settings.soundEffects ? "Turn off game audio" : "Turn on game audio"} aria-pressed={settings.backgroundMusic && settings.soundEffects} onClick={toggleGameAudio}>
           <img src="audio-svgrepo-com.svg?v=20260722-smaller15" alt="" aria-hidden="true" />
-        </button>}
+        </button>
         {CurrentScreen()}
         {openingZooming && TitleScreen()}
         {openingZooming && <span className="millionaire-opening-flash" aria-hidden="true" />}

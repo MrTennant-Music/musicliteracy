@@ -404,7 +404,8 @@ test("interface includes the required screens, controls and protections", () => 
   assert.ok(!script.includes("requestWalkAway"), "Walk Away behaviour should be removed");
   assert.ok(!script.includes("Return to Hub"), "Return to Hub option should not be shown on the results screen");
   assert.ok(!script.includes("Review Answers"), "Review Answers option should not be shown on the results screen");
-  assert.ok(script.includes('const [screen, setScreen] = useState("title");'), "A refreshed page should initialise on the title screen.");
+  assert.ok(script.includes('localStorage.removeItem("mlh-millionaire-creator-resume")'), "The Create button should open the creator without resuming an earlier edit.");
+  assert.ok(script.includes('const [screen, setScreen] = useState(() => {') && script.includes('if (CORE.SUPPORTED_LEVELS.includes(queryLevel)) return "title";'), "A level link should always initialise on the title screen.");
   assert.ok(script.includes('["title", "rules", "results"].includes(screen)) audioDirector.current.playOpening();'), "Opening-menu audio should start when the Review screen opens.");
   assert.ok(script.includes('const [hintVisible, setHintVisible] = useState(false);'), "Hint visibility should be managed inside the question screen.");
   assert.ok(script.includes('setHintVisible(true);') && script.includes('setAnnouncement(`Hint: ${question.tip}`);'), "Using Hint should reveal and announce the in-page clue.");
