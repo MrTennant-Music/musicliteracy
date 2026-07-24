@@ -138,7 +138,7 @@
       "aria-label": selected ? `Return to ${returnLabel} activity` : "Create worksheet from current settings",
       "aria-pressed": selected,
       title: selected ? `Return to ${returnLabel}` : "Create worksheet",
-    }, React.createElement("img", { src: "worksheet.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain", style: selected ? { filter: "invert(1)" } : undefined }));
+    }, React.createElement("img", { src: "worksheet.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain", style: selected ? { filter: "invert(1)" } : !enabled ? { filter: "grayscale(1)", opacity: 0.5 } : undefined }));
   }
 
   function ProfileQrOverlay({ title, subtitle, shareUrl, onClose }) {

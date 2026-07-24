@@ -27,6 +27,8 @@ test("new custom sets contain exactly 15 stable question slots", () => {
   const set = customSets.createSet("  Classroom Set  ");
   assert.equal(set.title, "Classroom Set");
   assert.equal(set.questions.length, 15);
+  assert.equal(customSets.MAX_VARIANTS, 4);
+  assert.equal(set.variants.every((variants) => variants.length === 1), true);
   assert.equal(new Set(set.questions.map((question) => question.id)).size, 15);
   assert.deepEqual(set.questions.map((question) => question.number), Array.from({ length: 15 }, (_, index) => index + 1));
   const validation = customSets.validateSet(set);
@@ -35,14 +37,14 @@ test("new custom sets contain exactly 15 stable question slots", () => {
   assert.ok(validation.issues.some((issue) => issue.field === "variants"));
 });
 
-test("legacy sets keep their first 15 questions as Variant 1 and discard Question Bank entries", () => {
+test("legacy sets receive an empty Variant 1 and discard Question Bank entries", () => {
   const set = completeSet("Legacy");
   set.questions = set.questions.slice(0, 15);
   delete set.variants;
   const normalised = customSets.normaliseSet(set);
   const validation = customSets.validateSet(normalised);
   assert.equal(normalised.questions.length, 15);
-  assert.equal(normalised.variants.every((variants) => variants.length === 0), true);
+  assert.equal(normalised.variants.every((variants) => variants.length === 1), true);
   assert.equal(validation.mainCompleteCount, 0);
   assert.equal(validation.incompleteCount, 15);
   assert.equal(validation.valid, false);
@@ -197,8 +199,10 @@ test("Millionaire page integrates the creator and uses local runtime dependencie
   assert.ok(creator.includes('millionaire-setup-card millionaire-rules-card millionaire-creator-library-card'));
   assert.ok(creator.includes("download your game file and share it with students."));
   assert.ok(creator.includes('const enterEditor = () => {') && creator.includes('onEditingChange?.(true);') && creator.includes('enterEditor();'), "The editor should enable its toolbar placeholders before opening or restoring an editor.");
-  assert.ok(creator.includes('millionaire-creator-toolbar-clear'), "The editor Clear action should sit beside Save.");
-  assert.ok(creator.includes('millionaire-creator-variant-bar') && creator.includes('Add variant') && creator.includes('Shuffle between variants'), "Variants should be managed beneath the question editor.");
+  assert.doesNotMatch(creator, /millionaire-creator-toolbar-clear/);
+  assert.ok(creator.includes('millionaire-creator-variant-bar') && creator.includes('aria-label="Add variant"'), "Variants should be managed beneath the question editor.");
+  assert.ok(creator.includes('millionaire-creator-toolbar-customise') && creator.includes('millionaire-creator-shuffle-toggle'), "Shuffle should be available from the Customise menu.");
+  assert.ok(creator.includes('aria-label={`Clear ${label}`}') && creator.includes('onClearVariant={clearQuestion}'), "Each populated variant should offer a clear-content bin.");
   assert.ok(game.includes('screen === "creator" && !creatorEditing'));
   assert.doesNotMatch(game, /Boolean\(activeCustomSet\)/);
   assert.ok(game.includes('recordQuestion.type === "youtube"'));
@@ -213,7 +217,7 @@ test("Millionaire page integrates the creator and uses local runtime dependencie
   assert.ok(!creator.includes("Choose one media type"));
   assert.ok(creator.includes('dialog?.type === "youtube"') && creator.includes("Edit YouTube link"));
   assert.ok(creator.includes("Switch lifeline preview"));
-  assert.ok(creator.includes("Shuffle between variants"));
+  assert.ok(creator.includes("Randomly choose between the original question and its variants"));
   assert.ok(creator.includes("mlh-millionaire-creator-resume"));
   assert.ok(creator.includes("restoredQuestionIndex"));
   assert.ok(creator.includes("Import Game"));
@@ -228,9 +232,10 @@ test("Millionaire page integrates the creator and uses local runtime dependencie
   assert.ok(creator.includes(">Exit</"));
   assert.ok(creator.includes("millionaire-creator-inline-hint-editor"));
   assert.ok(creator.includes('editor.style.height = `${editor.scrollHeight}px`'));
-  assert.ok(creator.includes("Drag an image or YouTube link here"));
+  assert.doesNotMatch(creator, /Drag an image or YouTube link here/);
   assert.ok(creator.includes('src="image.svg"'));
-  assert.ok(!creator.includes('onClick={() => audioInputRef.current?.click()}'));
+  assert.ok(creator.includes('onClick={() => audioInputRef.current?.click()}'));
+  assert.ok(creator.includes('src="audio.svg"'));
   assert.ok(creator.includes('src="youtube.svg"'));
   assert.doesNotMatch(creator, /Choose Files/);
   assert.ok(creator.includes("onDrop={handleDrop}"));
@@ -256,6 +261,9 @@ test("Millionaire page integrates the creator and uses local runtime dependencie
   assert.ok(creator.includes("<CreatorFrame popover title=\"Create\""));
   assert.ok(creator.includes('<span className="millionaire-opening-play-label">Back</span>'));
   assert.ok(creator.indexOf("{children}") < creator.indexOf("millionaire-creator-library-back-actions"));
-  assert.ok(creator.includes("Replace Existing Set"));
-  assert.ok(creator.includes("Import as a Copy"));
+  assert.ok(creator.includes("if (collision)"));
+  assert.ok(creator.includes('normaliseSet(set, { regenerateIds: true })'));
+  assert.ok(creator.includes('setImported(true)'));
+  assert.ok(creator.includes('setTimeout(() => setImported(false), 1000)'));
+  assert.doesNotMatch(creator, /Review this package before saving/);
 });

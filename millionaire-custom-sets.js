@@ -4,7 +4,7 @@
   const FORMAT = "millionaire-question-set";
   const FORMAT_VERSION = 1;
   const QUESTION_COUNT = 15;
-  const MAX_VARIANTS = 10;
+  const MAX_VARIANTS = 4;
   const MIN_COMPLETE_VARIANTS = 2;
   const DB_NAME = "mlh-millionaire-custom-sets";
   const DB_VERSION = 1;
@@ -98,7 +98,7 @@
       updatedAt: now,
       includeInRandom: true,
       questions: Array.from({ length: QUESTION_COUNT }, (_, index) => emptyQuestion(index + 1)),
-      variants: Array.from({ length: QUESTION_COUNT }, () => []),
+      variants: Array.from({ length: QUESTION_COUNT }, (_, index) => [emptyQuestion(index + 1)]),
       shuffleVariants: Array.from({ length: QUESTION_COUNT }, () => false),
     };
   }
@@ -123,8 +123,9 @@
       questions: Array.from({ length: QUESTION_COUNT }, (_, index) => normaliseQuestion(sourceQuestions[index], index + 1, regenerateIds)),
       variants: Array.from({ length: QUESTION_COUNT }, (_, stageIndex) => {
         const sourceStageVariants = Array.isArray(sourceVariants[stageIndex]) ? sourceVariants[stageIndex] : [];
-        return sourceStageVariants.slice(0, MAX_VARIANTS - 1)
+        const variants = sourceStageVariants.slice(0, MAX_VARIANTS - 1)
           .map((question) => normaliseQuestion(question, stageIndex + 1, regenerateIds));
+        return variants.length ? variants : [emptyQuestion(stageIndex + 1)];
       }),
       shuffleVariants: Array.from({ length: QUESTION_COUNT }, (_, index) => Boolean(source.shuffleVariants?.[index])),
     };
