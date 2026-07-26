@@ -8,7 +8,6 @@
   const MULTI_SEGMENT_COLOUR = "multi";
   const WHITE_SEGMENT_COLOUR = "#ffffff";
   const DEFAULT_SEGMENT_COLOUR = MULTI_SEGMENT_COLOUR;
-  const MULTI_CONTROL_COLOUR = "#ffffff";
   const MULTI_SEGMENT_PALETTE = Object.freeze(["#fee2e2", "#ffedd5", "#fef9c3", "#dcfce7", "#dbeafe", "#ede9fe"]);
   const SEGMENT_COLOURS = Object.freeze([
     { id: "multi", label: "Multi", value: MULTI_SEGMENT_COLOUR, palette: MULTI_SEGMENT_PALETTE },
@@ -33,11 +32,8 @@
     return [selected.strongValue, selected.value];
   }
 
-  function spinControlColour(value) {
-    const selected = SEGMENT_COLOURS.find((colour) => colour.value === cleanSegmentColour(value)) || SEGMENT_COLOURS[0];
-    if (selected.value === WHITE_SEGMENT_COLOUR || selected.value === "#111111") return "#111111";
-    if (selected.value === MULTI_SEGMENT_COLOUR) return MULTI_CONTROL_COLOUR;
-    return selected.strongValue;
+  function spinControlColour() {
+    return "#111111";
   }
 
   function cleanRandomiserMethod(value) {
@@ -166,7 +162,6 @@
     STORAGE_VERSION,
     DEFAULT_SEGMENT_COLOUR,
     MULTI_SEGMENT_COLOUR,
-    MULTI_CONTROL_COLOUR,
     MULTI_SEGMENT_PALETTE,
     SEGMENT_COLOURS,
     segmentColourPalette,

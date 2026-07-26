@@ -278,16 +278,29 @@
       .catch(() => {});
   }
 
+  function metronomePulseOffsets(timeSignature) {
+    const signatureParts = String(timeSignature?.id ?? "").split("/");
+    const numerator = Number(timeSignature?.top ?? signatureParts[0]);
+    const denominator = Number(timeSignature?.bottom ?? signatureParts[1]);
+    if (denominator === 8 && numerator >= 6 && numerator % 3 === 0) {
+      return Array.from({ length: numerator / 3 }, (_, index) => index * 1.5);
+    }
+    const beats = Math.max(1, Math.round(Number(timeSignature?.beats ?? numerator ?? 4)));
+    return Array.from({ length: beats }, (_, index) => index);
+  }
+
   MLH.audio = {
     ...(MLH.audio || {}),
     playFeedbackSound,
     getStreakMedal,
     playMetronomeClick,
+    metronomePulseOffsets,
     playPianoFrequency,
   };
   MLH.playFeedbackSound = playFeedbackSound;
   MLH.getStreakMedal = getStreakMedal;
   MLH.playMetronomeClick = playMetronomeClick;
+  MLH.metronomePulseOffsets = metronomePulseOffsets;
   MLH.playPianoFrequency = playPianoFrequency;
   window.MLH = MLH;
 })();

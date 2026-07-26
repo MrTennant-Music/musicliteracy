@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=1280, initial-scale=1.0" />
   <link rel="stylesheet" href="./desktop-layout.css?v=3" />
-  <title>Practice Questions</title>
-  <link rel="icon" type="image/svg+xml" href="https://mrtennant-music.github.io/musicliteracy/practice-app-icon.svg" />
-  <link rel="apple-touch-icon" href="https://mrtennant-music.github.io/musicliteracy/practice-app-icon.svg" />
+  <title>Follow the Score</title>
+  <link rel="icon" type="image/svg+xml" href="./stopmusic-icon.svg" />
+  <link rel="apple-touch-icon" href="./stopmusic-icon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="./desktop-layout.js?v=1"></script>
   <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
@@ -32,7 +32,7 @@
     const { useEffect, useMemo, useRef, useState } = React;
 
     const ASSET = {
-      appIcon: "https://mrtennant-music.github.io/musicliteracy/practice-app-icon.svg",
+      appIcon: "./stopmusic-icon.svg",
       level: "https://mrtennant-music.github.io/musicliteracy/levels.svg",
       customise: "https://mrtennant-music.github.io/musicliteracy/customise.svg",
       next: "./next.svg",
@@ -7042,6 +7042,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
     }
 
     function selectedPracticeQuestionTypeIds(enabledQuestionTypes, level = "N5") {
+      if (enabledQuestionTypes?.followScore) return [];
       if (level === "H" || level === "AH") return selectedHigherPracticeQuestionTypeIds(enabledQuestionTypes, level);
       const balancedOptions = practiceQuestionSelectionOptions(enabledQuestionTypes, level);
       if (balancedOptions.length) return randomItem(balancedOptions);
@@ -8215,6 +8216,129 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
     }
 
+    function makeFollowScorePracticeQuestion(level = "N3") {
+      const generationLevel = level === "AH" ? "H" : level;
+      const disabledQuestionTypes = {
+        ...Object.fromEntries(PRACTICE_QUESTION_TYPES.map((type) => [type.id, false])),
+        followScore: true,
+      };
+      return makePracticePaperQuestion(
+        generationLevel,
+        0,
+        disabledQuestionTypes,
+        level,
+      );
+    }
+
+    const FOLLOW_SCORE_APP = true;
+
+    function followScoreRange(length, start = 0) {
+      return Array.from({ length }, (_, index) => start + index);
+    }
+
+    function makeFollowScoreRepeat(level, barCount) {
+      if (Math.random() >= 0.3) return { type: "none", order: followScoreRange(barCount), placements: [] };
+      if (["N3", "N4", "N5", "H"].includes(level)) {
+        const start = randomItem(level === "H" ? [0, 4, 8] : [0, 4]);
+        const end = start + 3;
+        const visiblePlacements = [
+          ...(start === 0 ? [] : [{ symbolId: "start-repeat", barIndex: start, anchor: "start" }]),
+          { symbolId: "end-repeat", barIndex: end, anchor: "end" },
+        ];
+        return {
+          type: "repeat",
+          order: [
+            ...followScoreRange(end + 1),
+            ...followScoreRange(end - start + 1, start),
+            ...followScoreRange(barCount - end - 1, end + 1),
+          ],
+          placements: visiblePlacements,
+          repeatTarget: {
+            symbolId: "repeat-pair",
+            repeatedBars: followScoreRange(end - start + 1, start),
+            placements: [
+              { symbolId: "start-repeat", barIndex: start, anchor: "start" },
+              { symbolId: "end-repeat", barIndex: end, anchor: "end" },
+            ],
+          },
+        };
+      }
+      const [segno, fine] = randomItem([[0, 3], [0, 7], [8, 11]]);
+      const order = [...followScoreRange(barCount), ...followScoreRange(fine - segno + 1, segno)];
+      const placements = [
+        { symbolId: "segno", barIndex: segno, anchor: "above" },
+        { symbolId: "fine", barIndex: fine, anchor: "above" },
+        { symbolId: "ds", barIndex: barCount - 1, anchor: "above" },
+      ];
+      return {
+        type: "ds",
+        order,
+        placements,
+        repeatTarget: {
+          symbolId: "ds-fine",
+          barIndex: barCount - 1,
+          performedBars: order,
+          placements: placements.slice(0, 2),
+          givenPlacements: placements.slice(2),
+        },
+      };
+    }
+
+    function followScoreNoteSounds(bar, note, noteIndex) {
+      const previousNote = bar.notes?.[noteIndex - 1];
+      return !note.rest
+        && !note.tiedFromPrevious
+        && !note.silentAudio
+        && !previousNote?.tieToNext
+        && !previousNote?.audioTieToNext;
+    }
+
+    function makeFollowScoreQuestion(level = "N3") {
+      const generated = makeFollowScorePracticeQuestion(level);
+      const repeat = makeFollowScoreRepeat(level, generated.bars.length);
+      const bars = generated.bars.map((bar) => ({
+        ...bar,
+        notes: bar.notes.map((note, noteIndex) => ({ ...note, noteIndex })),
+      }));
+      const performedNotes = repeat.order.flatMap((barIndex, occurrenceIndex) => bars[barIndex].notes
+        .filter((note, noteIndex) => followScoreNoteSounds(bars[barIndex], note, noteIndex))
+        .map((note) => ({ ...note, barIndex, occurrenceIndex, performedBarIndex: barIndex })));
+      const earliest = Math.max(2, Math.floor(performedNotes.length * 0.22));
+      const stopEventIndex = earliest + Math.floor(Math.random() * Math.max(1, performedNotes.length - earliest - 1));
+      const target = performedNotes[Math.min(stopEventIndex, performedNotes.length - 1)];
+      return {
+        ...generated,
+        id: `follow-score-${Date.now()}-${Math.random()}`,
+        practiceLevel: level,
+        followLevel: level,
+        bars,
+        repeat,
+        repeatTarget: repeat.repeatTarget ?? null,
+        givenRepeatPlacements: repeat.placements,
+        target,
+        exactNote: ["N5", "H", "AH"].includes(level),
+        subquestions: [],
+      };
+    }
+
+    function followScoreStopAfterSeconds(question) {
+      const beatSeconds = 60 / question.tempoBpm;
+      let elapsed = 0;
+      for (let occurrenceIndex = 0; occurrenceIndex < question.repeat.order.length; occurrenceIndex += 1) {
+        const barIndex = question.repeat.order[occurrenceIndex];
+        const bar = question.bars[barIndex];
+        if (occurrenceIndex === question.target.occurrenceIndex && barIndex === question.target.performedBarIndex) {
+          const nextNote = bar.notes?.[question.target.noteIndex + 1];
+          const tiedBeats = (question.target.tieToNext || question.target.audioTieToNext) && !nextNote?.rest
+            ? nextNote?.beats ?? 0
+            : 0;
+          return elapsed + (question.target.beat + (question.target.beats + tiedBeats) * 0.96) * beatSeconds;
+        }
+        elapsed += timeSignatureForBar(question, bar).beats * beatSeconds;
+      }
+      return elapsed;
+    }
+
     const PRACTICE_WORKSHEET_PAPER_COUNT = 20;
     const PRACTICE_WORKSHEET_AUDIO_ONLY_TYPES = new Set(["missing", "rhythmicDictation", "tempoQuestion", "cadence", "repeatSigns", "chord", "accidentals"]);
 
@@ -9114,7 +9238,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       return null;
     }
 
-    function MissingNotesScore({ question, worksheetSystemGapReduction = 0, worksheetSystemGapIncrease = 0, worksheetTranspositionGapReduction = 0, worksheetAhChordGapExtension = 0, worksheetAhChordBoxHeightReduction = 0, worksheetAhChordFollowingStaveOffset = 0, worksheetAhChordGuideRowHeight = 32.5, userNotes, setUserNotes, practiceAnswers = {}, setPracticeAnswers, feedback, activeIndex = 0, setActiveIndex = () => {}, activeNoteId, hoverNote, setHoverNote }) {
+    function MissingNotesScore({ question, worksheetSystemGapReduction = 0, worksheetSystemGapIncrease = 0, worksheetTranspositionGapReduction = 0, worksheetAhChordGapExtension = 0, worksheetAhChordBoxHeightReduction = 0, worksheetAhChordFollowingStaveOffset = 0, worksheetAhChordGuideRowHeight = 32.5, userNotes, setUserNotes, practiceAnswers = {}, setPracticeAnswers, feedback, activeIndex = 0, setActiveIndex = () => {}, activeNoteId, hoverNote, setHoverNote, followSelection = null, followFeedback = null, onFollowSelect = () => {}, showFollowNoteNames = false }) {
       const [draggingNote, setDraggingNote] = useState(null);
       const [hoverBarlineSlot, setHoverBarlineSlot] = useState(null);
       const [hoverRhythmTarget, setHoverRhythmTarget] = useState(null);
@@ -10451,6 +10575,17 @@ function advancedHigherInversionAnswerLabel(inversion) {
             const end = start + barWidth(bar.barIndex);
             const positions = displayPositionsForBar(bar);
             const barTimeSignature = timeSignatureForBar(question, bar);
+            const followMode = Boolean(question.followLevel);
+            const followSelectedBar = followSelection?.barIndex === bar.barIndex;
+            const followTargetBar = question.target?.barIndex === bar.barIndex;
+            const followSelectedNoteIndex = followSelectedBar ? followSelection?.noteIndex : null;
+            const followTargetNoteIndex = followTargetBar ? question.target?.noteIndex : null;
+            const followHighlightColour = (isTarget, isSelected) => {
+              if (!followFeedback) return isSelected ? "#d6a514" : null;
+              if (isTarget) return COLOUR.green;
+              if (isSelected) return COLOUR.red;
+              return null;
+            };
             const restoresOriginalTimeSignature = Boolean(question.timeChangeTarget && bar.barIndex === question.timeChangeTarget.restoreBarIndex);
             const endsTimeChange = Boolean(question.timeChangeTarget && bar.barIndex === question.timeChangeTarget.endBarIndex);
             const isTarget = bar.barIndex === question.targetBar;
@@ -11275,6 +11410,46 @@ function advancedHigherInversionAnswerLabel(inversion) {
             });
             return (
               <g key={bar.barIndex}>
+                {followMode && !question.exactNote && (followSelectedBar || (followFeedback && followTargetBar)) && (
+                  <rect
+                    x={start + 2}
+                    y={top - 53}
+                    width={Math.max(20, end - start - 4)}
+                    height="105"
+                    rx="9"
+                    fill={followHighlightColour(followTargetBar, followSelectedBar)}
+                    fillOpacity="0.09"
+                    stroke={followHighlightColour(followTargetBar, followSelectedBar)}
+                    strokeWidth="2.2"
+                    style={{ filter: `drop-shadow(0 0 7px ${followHighlightColour(followTargetBar, followSelectedBar)}88)` }}
+                    pointerEvents="none"
+                  />
+                )}
+                {followMode && question.exactNote && [followSelectedNoteIndex, followFeedback ? followTargetNoteIndex : null]
+                  .filter((noteIndex, index, values) => Number.isInteger(noteIndex) && values.indexOf(noteIndex) === index)
+                  .map((noteIndex) => {
+                    const isTarget = followTargetBar && noteIndex === followTargetNoteIndex;
+                    const isSelected = followSelectedBar && noteIndex === followSelectedNoteIndex;
+                    const colour = followHighlightColour(isTarget, isSelected);
+                    const note = bar.notes[noteIndex];
+                    if (!colour || !note || note.rest) return null;
+                    return (
+                      <rect
+                        key={`follow-highlight-${bar.barIndex}-${noteIndex}`}
+                        x={(positions[noteIndex] ?? start) - 15}
+                        y={yForStep(displayStep(note, question.clef), top) - 25}
+                        width="30"
+                        height="50"
+                        rx="8"
+                        fill={colour}
+                        fillOpacity="0.09"
+                        stroke={colour}
+                        strokeWidth="2.2"
+                        style={{ filter: `drop-shadow(0 0 7px ${colour}88)` }}
+                        pointerEvents="none"
+                      />
+                    );
+                  })}
                 {isMissingTarget && <rect ref={targetInputRef} x={missingBoxX} y={missingInputTop} width={missingBoxWidth} height={missingInputBottom - missingInputTop} fill="transparent" pointerEvents={notePlacementCanInteract ? "all" : "none"} className="touch-none" style={{ touchAction: "none", WebkitUserSelect: "none", userSelect: "none", overscrollBehavior: "contain" }} onPointerMove={(event) => handleMove(event, notePlacementPart)} onPointerLeave={() => { if (!draggingNote) setHoverNote(null); }} onPointerDown={(event) => handlePointerDown(event, notePlacementPart)} onPointerUp={handlePointerUp} onPointerCancel={() => { setDraggingNote(null); setHoverNote(null); }} />}
                 {isMissingTarget && <MarkingBox x={missingBoxX} y={missingBoxY} width={missingBoxWidth} height={missingBoxHeight} labelSourceId={isIntervalInsertTarget ? "interval" : "missing"} label={isIntervalInsertTarget ? "Interval" : "Notes"} layer="box" />}
                 {keySignatureBoxTarget && <MarkingBox x={keySignatureBoxX} y={keySignatureBoxY} width={keySignatureBoxWidth} labelSourceId="key" label="Key" layer="box" />}
@@ -12168,6 +12343,61 @@ function advancedHigherInversionAnswerLabel(inversion) {
                     />
                   );
                 })}
+                {followMode && showFollowNoteNames && bar.notes.map((note, noteIndex) => !note.rest && (
+                  <text
+                    key={`follow-note-name-${bar.barIndex}-${noteIndex}`}
+                    x={positions[noteIndex]}
+                    y={top + 66}
+                    textAnchor="middle"
+                    fontSize="11"
+                    fontWeight="700"
+                    fill="#57534e"
+                    pointerEvents="none"
+                  >
+                    {note.letter}{note.writtenAccidental === 1 ? "♯" : note.writtenAccidental === -1 ? "♭" : ""}
+                  </text>
+                ))}
+                {followMode && !question.exactNote && (
+                  <rect
+                    x={start + 2}
+                    y={top - 53}
+                    width={Math.max(20, end - start - 4)}
+                    height="105"
+                    rx="9"
+                    fill="transparent"
+                    role="button"
+                    tabIndex={followFeedback ? -1 : 0}
+                    aria-label={`Select bar ${bar.barIndex + 1}`}
+                    pointerEvents={followFeedback ? "none" : "all"}
+                    className={followFeedback ? "follow-score-target" : "follow-score-target cursor-pointer"}
+                    onClick={() => onFollowSelect({ barIndex: bar.barIndex, noteIndex: null })}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      onFollowSelect({ barIndex: bar.barIndex, noteIndex: null });
+                    }}
+                  />
+                )}
+                {followMode && question.exactNote && bar.notes.map((note, noteIndex) => !note.rest && (
+                  <circle
+                    key={`follow-hit-${bar.barIndex}-${noteIndex}`}
+                    cx={positions[noteIndex]}
+                    cy={yForStep(displayStep(note, question.clef), top)}
+                    r="17"
+                    fill="transparent"
+                    role="button"
+                    tabIndex={followFeedback ? -1 : 0}
+                    aria-label={`Select note in bar ${bar.barIndex + 1}`}
+                    pointerEvents={followFeedback ? "none" : "all"}
+                    className={followFeedback ? "follow-score-target" : "follow-score-target cursor-pointer"}
+                    onClick={() => onFollowSelect({ barIndex: bar.barIndex, noteIndex })}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      onFollowSelect({ barIndex: bar.barIndex, noteIndex });
+                    }}
+                  />
+                ))}
               </g>
             );
           })}
@@ -12285,6 +12515,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
           button:active { transform: scale(.96); filter: brightness(.92); }
           button:disabled { cursor: not-allowed; opacity: .5; }
           button:focus-visible { outline: 2px solid rgba(22,163,74,.35); outline-offset: 2px; }
+          .follow-score-target:focus,
+          .follow-score-target:focus-visible { outline: none; }
           @media (hover: hover) and (pointer: fine) {
             button:hover { transform: translateY(-1px) scale(1.01); filter: brightness(1.08); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
           }
@@ -12473,6 +12705,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
 
     function playSound(correct, celebration = false, medal = null) {
       window.MLH?.playFeedbackSound?.(correct, celebration, medal);
+    }
+
+    function followScoreMedalSoundForStreak(streak) {
+      if (streak === 10) return "platinum";
+      if (streak === 6) return "gold";
+      if (streak === 4) return "silver";
+      if (streak === 2) return "bronze";
+      return null;
     }
 
     const PRACTICE_TIMER_SECONDS = 5 * 60;
@@ -13932,14 +14172,14 @@ function advancedHigherInversionAnswerLabel(inversion) {
       useStyles();
       const initialLevel = useMemo(() => {
         const requested = new URLSearchParams(window.location.search).get("level");
-        return LEVELS[requested] ? requested : "AH";
+        return LEVELS[requested] ? requested : "N3";
       }, []);
       const [activeLevel, setActiveLevel] = useState(initialLevel);
       const [tempo, setTempo] = useState("medium");
       const [metronomeOn, setMetronomeOn] = useState(false);
       const [followPlayback, setFollowPlayback] = useState(false);
       const [enabledQuestionTypes, setEnabledQuestionTypes] = useState(() => defaultPracticeQuestionTypesForLevel(initialLevel));
-      const [question, setQuestion] = useState(() => makeInitialPracticeQuestion(initialLevel, defaultPracticeQuestionTypesForLevel(initialLevel)));
+      const [question, setQuestion] = useState(() => makeFollowScoreQuestion(initialLevel));
       const [userNotes, setUserNotes] = useState({});
       const [practiceAnswers, setPracticeAnswers] = useState({});
       const [activePracticePart, setActivePracticePart] = useState(0);
@@ -13953,8 +14193,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const [timerResetKey, setTimerResetKey] = useState(0);
       const [secondsRemaining, setSecondsRemaining] = useState(() => practiceTimerSecondsForLevel(initialLevel));
       const [playsRemaining, setPlaysRemaining] = useState(PRACTICE_PLAYS_PER_QUESTION);
-      const [limitPlays, setLimitPlays] = useState(true);
-      const [timerEnabled, setTimerEnabled] = useState(true);
+      const [limitPlays, setLimitPlays] = useState(false);
+      const [timerEnabled, setTimerEnabled] = useState(false);
       const showAudioQuestionGlyphs = true;
       const [timerPaused, setTimerPaused] = useState(false);
       const [newQuestionConfirmOpen, setNewQuestionConfirmOpen] = useState(false);
@@ -13976,6 +14216,13 @@ function advancedHigherInversionAnswerLabel(inversion) {
       const previousScoreFocusRef = useRef(null);
       const [mainMinHeight, setMainMinHeight] = useState(null);
       const [scoreScrollFade, setScoreScrollFade] = useState({ top: false, bottom: false });
+      const [followSelection, setFollowSelection] = useState(null);
+      const [followPlayedOnce, setFollowPlayedOnce] = useState(false);
+      const [followFeedback, setFollowFeedback] = useState(null);
+      const [followStreak, setFollowStreak] = useState(0);
+      const [followBestStreak, setFollowBestStreak] = useState(0);
+      const [followConfettiKey, setFollowConfettiKey] = useState(0);
+      const [showFollowNoteNames, setShowFollowNoteNames] = useState(false);
 
       useEffect(() => {
         const onPointerDown = (event) => {
@@ -14054,10 +14301,40 @@ function advancedHigherInversionAnswerLabel(inversion) {
         setActiveNoteId(null);
       }
 
+      function advanceAfterFollowScoreFeedback() {
+        if (!followFeedback || followFeedback.correct || feedbackFading) return;
+        clearFeedbackTimers();
+        setFeedbackFading(true);
+        nextTimer.current = window.setTimeout(() => newQuestion(), 180);
+      }
+
       function newQuestion(level = activeLevel, questionTypes = enabledQuestionTypes) {
         if (questionChangeInProgressRef.current) return;
         questionChangeInProgressRef.current = true;
         stopAudio();
+        if (FOLLOW_SCORE_APP) {
+          let nextQuestion;
+          try {
+            nextQuestion = makeFollowScoreQuestion(level);
+          } catch (error) {
+            console.error(error);
+            questionChangeInProgressRef.current = false;
+            setPrompt("A question could not be generated. Press Skip to try again.");
+            return;
+          }
+          setVisible(false);
+          window.setTimeout(() => {
+            setQuestion(nextQuestion);
+            setFollowSelection(null);
+            setFollowPlayedOnce(false);
+            setFollowFeedback(null);
+            setFeedbackFading(false);
+            setPrompt("");
+            setVisible(true);
+            questionChangeInProgressRef.current = false;
+          }, 220);
+          return;
+        }
         let nextQuestion;
         try {
           nextQuestion = makeQuestion(level, 0, questionTypes);
@@ -14134,6 +14411,9 @@ function advancedHigherInversionAnswerLabel(inversion) {
         setActiveLevel(level);
         setEnabledQuestionTypes(nextQuestionTypes);
         setScore({ correct: 0, attempted: 0 });
+        setFollowStreak(0);
+        setFollowBestStreak(0);
+        setFollowConfettiKey(0);
         setTimerResetKey((value) => value + 1);
         const url = new URL(window.location.href);
         url.searchParams.set("level", level);
@@ -15018,7 +15298,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return layers;
       }
 
-      async function playQuestionAudio(startAt = 0, restart = false) {
+      async function playQuestionAudio(startAt = 0, restart = false, stopAfterSeconds = null) {
         if (isPlaying && !restart) {
           stopAudio();
           return;
@@ -15079,7 +15359,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
             playbackMidis.forEach((midi) => {
               playMelodyNote(ctx, master, midi, startTime + audibleStart, audibleDuration, articulationTargetMarking === "accent" ? noteDynamicGain * ARTICULATION_ACCENT_GAIN_SCALE : noteDynamicGain, playbackVelocity, playbackRelease);
             });
-            if (followPlayback) {
+            if (followPlayback || (FOLLOW_SCORE_APP && followFeedback)) {
               const highlightTimer = window.setTimeout(() => {
                 setActiveNoteId(note.id);
               }, Math.max(0, (startTime + audibleStart - ctx.currentTime) * 1000));
@@ -15089,15 +15369,25 @@ function advancedHigherInversionAnswerLabel(inversion) {
           });
         });
 
+        const requestedStop = Number(stopAfterSeconds);
+        const playbackDuration = Number.isFinite(requestedStop)
+          ? clamp(requestedStop, 0, totalDuration)
+          : totalDuration;
         const stopTimer = window.setTimeout(() => {
           stopAudio();
-        }, Math.max(0, (totalDuration - offset) * 1000) + 620);
+          if (FOLLOW_SCORE_APP && Number.isFinite(requestedStop)) setFollowPlayedOnce(true);
+        }, Math.max(0, (playbackDuration - offset) * 1000) + (Number.isFinite(requestedStop) ? 140 : 620));
         timersRef.current.push(stopTimer);
       }
 
       function handlePlayClick() {
         if (isPlaying) {
           stopAudio();
+          return;
+        }
+        if (FOLLOW_SCORE_APP) {
+          setPrompt("");
+          playQuestionAudio(0, false, followScoreStopAfterSeconds(question));
           return;
         }
         if (limitPlays && !practiceReviewMode && playsRemaining <= 0) {
@@ -15192,9 +15482,198 @@ function advancedHigherInversionAnswerLabel(inversion) {
         return () => window.cancelAnimationFrame(animationFrame);
       }, [activePracticePart, hasScrollablePracticeScore, question.id, visible]);
 
+      function selectFollowScoreAnswer(selection) {
+        if (followFeedback) return;
+        setFollowSelection(selection);
+        setPrompt("");
+      }
+
+      function confirmFollowScoreAnswer() {
+        if (!followSelection) {
+          setPrompt(question.exactNote ? "Select the note where the music stopped." : "Select the bar where the music stopped.");
+          return;
+        }
+        if (followFeedback) return;
+        const correct = followSelection.barIndex === question.target.barIndex
+          && (!question.exactNote || followSelection.noteIndex === question.target.noteIndex);
+        const nextStreak = correct ? followStreak + 1 : 0;
+        stopAudio();
+        setScore((current) => ({
+          correct: current.correct + (correct ? 1 : 0),
+          attempted: current.attempted + 1,
+        }));
+        setFollowStreak(nextStreak);
+        setFollowBestStreak((current) => Math.max(current, nextStreak));
+        setFollowFeedback({ correct });
+        setFeedbackFading(false);
+        setPrompt("");
+        playSound(correct);
+        if (correct) {
+          if ([2, 4, 6, 10].includes(nextStreak)) {
+            const medalSound = followScoreMedalSoundForStreak(nextStreak);
+            setFollowConfettiKey((current) => current + 1);
+            window.setTimeout(() => playSound(true, true, medalSound), 180);
+          }
+          fadeTimer.current = window.setTimeout(() => setFeedbackFading(true), 1700);
+          nextTimer.current = window.setTimeout(() => newQuestion(), 2050);
+        }
+      }
+
+      if (FOLLOW_SCORE_APP) {
+        const accuracy = score.attempted ? Math.round((score.correct / score.attempted) * 100) : 0;
+        const exactInstruction = question.exactNote;
+        const scoreView = (
+          <Score
+            question={question}
+            userNotes={userNotes}
+            setUserNotes={setUserNotes}
+            practiceAnswers={practiceAnswers}
+            setPracticeAnswers={setPracticeAnswers}
+            feedback={null}
+            activeIndex={0}
+            setActiveIndex={() => {}}
+            activeNoteId={followFeedback ? activeNoteId : null}
+            hoverNote={null}
+            setHoverNote={() => {}}
+            followSelection={followSelection}
+            followFeedback={followFeedback}
+            onFollowSelect={selectFollowScoreAnswer}
+            showFollowNoteNames={showFollowNoteNames}
+          />
+        );
+        return (
+          <div className="overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12">
+            <window.MLH.AppHeader icon={ASSET.appIcon} title="Follow the Score" subtitle="Listen to the music and follow along identifying where the music stops.">
+              <window.MLH.ScoreStreakPanel
+                assets={ASSET}
+                correct={score.correct}
+                attempted={score.attempted}
+                accuracy={accuracy}
+                streak={followStreak}
+                bestStreak={followBestStreak}
+                resetScore={() => {
+                  setScore({ correct: 0, attempted: 0 });
+                  setFollowStreak(0);
+                  setFollowBestStreak(0);
+                  setFollowConfettiKey(0);
+                  newQuestion();
+                }}
+                confettiKey={followConfettiKey}
+                autoShowMedals={false}
+                medalEligible
+                medalThresholdValues={[2, 4, 6, 10]}
+              />
+            </window.MLH.AppHeader>
+            <div className="mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]">
+              <main
+                ref={mainContainerRef}
+                className="relative flex min-h-0 flex-col overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-3 pt-[10px] shadow-sm sm:px-4 md:px-6 md:pb-6 md:pt-[14px]"
+                onPointerDown={(event) => {
+                  if (!followFeedback || followFeedback.correct) return;
+                  const button = event.target.closest("button");
+                  if (button && !button.closest("[data-feedback-continue]")) return;
+                  if (event.target.closest("[data-menu-trigger],[data-menu-panel]")) return;
+                  advanceAfterFollowScoreFeedback();
+                }}
+              >
+                <div className="relative z-[90] mb-[10px] grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+                  <div className="relative flex items-center gap-2" ref={menuRef}>
+                    <div className="hub-menu-anchor relative">
+                      <window.MLH.LevelButton
+                        icon={<img src={ASSET.level} alt="" aria-hidden="true" className="h-[26px] w-[28px] object-contain" />}
+                        activeLevel={activeLevel}
+                        activeLabel={LEVELS[activeLevel].label}
+                        onClick={() => setMenu(menu === "level" ? null : "level")}
+                        dataMenuTrigger
+                      />
+                      {menu === "level" && (
+                        <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel>
+                          <window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={LEVELS} />
+                        </window.MLH.MenuPanel>
+                      )}
+                    </div>
+                    <div className="hub-menu-anchor relative">
+                      <window.MLH.CustomiseButton
+                        icon={<img src={ASSET.customise} alt="" className="h-[21px] w-[21px]" />}
+                        onClick={() => setMenu(menu === "customise" ? null : "customise")}
+                        dataMenuTrigger
+                      />
+                      {menu === "customise" && (
+                        <window.MLH.MenuPanel title="Customise" position="left-0" variant="customise" dataMenuPanel>
+                          <window.MLH.MenuSubheading>Audio</window.MLH.MenuSubheading>
+                          <window.MLH.MenuToggleRow
+                            glyph={<MenuSvgGlyph src={ASSET.metronome} />}
+                            label="Metronome"
+                            checked={metronomeOn}
+                            onChange={() => {
+                              stopAudio();
+                              setMetronomeOn((current) => !current);
+                            }}
+                          />
+                          <window.MLH.MenuSubheading>Help</window.MLH.MenuSubheading>
+                          <window.MLH.MenuToggleRow
+                            glyph={<span className="inline-flex min-w-[28px] justify-center text-xs font-black">ABC</span>}
+                            label="Show Note Names"
+                            checked={showFollowNoteNames}
+                            onChange={() => setShowFollowNoteNames((current) => !current)}
+                          />
+                        </window.MLH.MenuPanel>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex h-10 min-w-[112px] items-center justify-center sm:min-w-[140px]">
+                    <Feedback feedback={followFeedback} fading={feedbackFading} />
+                  </div>
+                  <div className="flex justify-end">
+                    <window.MLH.SkipButton
+                      onClick={() => newQuestion()}
+                      icon={<img src={ASSET.next} alt="" aria-hidden="true" className="h-[27.8px] w-[27.8px] object-contain" />}
+                    />
+                  </div>
+                </div>
+                <div className={`relative mx-auto mt-0 w-full transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"} ${hasScrollablePracticeScore ? "grid grid-cols-[65px_auto_65px] justify-center gap-2" : "flex items-center justify-center overflow-visible"}`}>
+                  {hasScrollablePracticeScore ? (
+                    <>
+                      <div aria-hidden="true" />
+                      <div ref={scoreScrollRef} className="practice-score-scroll max-h-[560px] max-w-none overflow-x-hidden overflow-y-scroll rounded-xl border border-stone-200 bg-white p-2 md:w-fit">
+                        {scoreView}
+                      </div>
+                      <div className="flex h-[560px] shrink-0 flex-col justify-center gap-2">
+                        <button type="button" onClick={() => scrollPracticeScore("top")} className={`${window.MLH.shell.toolbarButtonClass} !w-[65px] shrink-0 justify-center p-0`} aria-label="Scroll sheet music to top">
+                          <img src={ASSET.next} alt="" aria-hidden="true" className="h-[24px] w-[24px] -rotate-90 object-contain" />
+                        </button>
+                        <button type="button" onClick={() => scrollPracticeScore("bottom")} className={`${window.MLH.shell.toolbarButtonClass} !w-[65px] shrink-0 justify-center p-0`} aria-label="Scroll sheet music to bottom">
+                          <img src={ASSET.next} alt="" aria-hidden="true" className="h-[24px] w-[24px] rotate-90 object-contain" />
+                        </button>
+                      </div>
+                    </>
+                  ) : scoreView}
+                </div>
+                <section className={`relative z-10 mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-md transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}>
+                  <p className="text-base font-semibold leading-tight">
+                    Listen to the music and identify the <strong className="font-black">{exactInstruction ? "exact note" : "bar"}</strong> where the music stops.
+                  </p>
+                  {prompt && <p className="mt-2 text-sm font-medium text-red-700">{prompt}</p>}
+                  <div className={`${window.MLH.PlayClearConfirmRowClass} justify-between`}>
+                    <button type="button" onClick={handlePlayClick} className={window.MLH.PlayButtonClass} aria-label={isPlaying ? "Stop audio" : "Play audio"}>
+                      <span className="text-lg leading-none">{isPlaying ? "■" : "▶"}</span>
+                      <span>{isPlaying ? "Stop" : "Play"}</span>
+                    </button>
+                    <div className={window.MLH.ActionButtonGroupClass}>
+                      <button type="button" disabled={!followSelection || Boolean(followFeedback)} onClick={() => { setFollowSelection(null); setPrompt(""); }} className={window.MLH.ClearButtonClass}>Clear</button>
+                      <window.MLH.ConfirmButton disabled={!followSelection || Boolean(followFeedback)} onClick={confirmFollowScoreAnswer} className={window.MLH.AudioConfirmButtonClass}>Confirm</window.MLH.ConfirmButton>
+                    </div>
+                  </div>
+                </section>
+              </main>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12">
-          <window.MLH.AppHeader icon={ASSET.appIcon} title="Practice Questions" subtitle="Complete exam-style questions combining multiple music literacy concepts." worksheetConfig={() => buildPracticeWorksheetConfig(activeLevel, enabledQuestionTypes)}>
+          <window.MLH.AppHeader icon={ASSET.appIcon} title="Practice Questions" subtitle="Complete exam-style questions combining multiple music literacy concepts.">
             <PracticeScoreTimerPanel
               correct={score.correct}
               attempted={score.attempted}

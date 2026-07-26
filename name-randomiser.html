@@ -13,13 +13,14 @@
   <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=20260629"></script>
-  <script src="./hub-audio.js?v=20260712-metronome-samples"></script>
+  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
   <script src="./hub-shell.js?v=20260717-worksheet-header-cards"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./name-randomiser-core.js?v=20260722-multi-white-arrow"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
     @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+    @font-face { font-family: "Board Marker"; src: url("./board-marker/BoardMarker.ttf") format("truetype"); font-display: swap; }
     :root { color-scheme: light; --names-shared-shadow: 0 12px 20px rgba(28,25,23,.12); }
     body { margin: 0; background: #fafaf9; color: #111827; }
     button { -webkit-tap-highlight-color: transparent; }
@@ -39,14 +40,42 @@
     .names-duplicate-message { position: absolute; top: calc(100% + 7px); left: 0; width: 100%; margin: 0; color: #dc2626; font-size: 12px; font-weight: 800; line-height: 1.2; text-align: center; white-space: nowrap; animation: namesDuplicateShake .38s ease-in-out; }
     .names-wheel-stage { position: relative; box-sizing: border-box; display: flex; min-width: 0; min-height: 610px; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 14px; }
     .names-wheel-wrap { position: relative; width: auto; height: min(calc(100% - 24px), 850px); max-width: 100%; aspect-ratio: 1; margin: 0 auto; }
-    .names-wheel { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(var(--names-shared-shadow)); }
+    .names-wheel { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 18px 20px rgba(28,25,23,.24)); }
     .names-wheel-rotor { transform-origin: 300px 300px; will-change: transform; }
+    .names-vinyl-grooves path { fill: none; stroke: #a8a29e; stroke-width: 1.5; stroke-linecap: round; opacity: .32; }
+    .names-vinyl-grooves.is-populated path { opacity: .06; }
     .names-wheel-centre-glyph { font-family: "Bravura", serif; font-size: 34px; font-weight: 400; }
     .names-wheel-pointer-group { position: absolute; z-index: 5; left: 0; top: 50%; display: flex; align-items: center; gap: 10px; transform: translate(-120px, -50%); }
     .names-wheel-pointer { display: block; width: 73px; height: 62px; flex: none; filter: drop-shadow(var(--names-shared-shadow)); }
-    .names-wheel-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 34px; line-height: 1.4; text-align: center; animation: namesWelcomeSpin 4s ease-in-out infinite; }
-    .names-empty-title { color: #111; font-size: 28px; font-weight: 800; line-height: 1.1; }
-    .names-empty-description { margin-top: 4px; color: #a8a29e; font-size: 14px; font-weight: 400; line-height: 1.3; }
+    .names-vinyl-tonearm { position: relative; top: -103px; left: 66px; display: block; width: 73px; height: 237px; flex: none; overflow: visible; filter: drop-shadow(0 10px 8px rgba(28,25,23,.34)); transform: rotate(32deg); transform-origin: 11px 32px; transition: filter .42s ease-in-out, transform .42s ease-in-out; }
+    .names-vinyl-tonearm.is-playing { filter: drop-shadow(0 2px 2px rgba(28,25,23,0)); transform: rotate(18deg); }
+    .names-vinyl-tonearm.is-editing { cursor: grab; touch-action: none; transition: none; }
+    .names-vinyl-tonearm.is-editing:active { cursor: grabbing; }
+    .names-tonearm-editor { position: absolute; z-index: 8; top: 14px; right: 14px; box-sizing: border-box; width: 310px; border: 1px solid #d6d3d1; border-radius: 16px; background: rgba(255,255,255,.97); padding: 14px; color: #111; box-shadow: var(--names-shared-shadow); }
+    .names-tonearm-editor h2 { margin: 0; font-size: 17px; font-weight: 900; line-height: 1.2; text-align: center; }
+    .names-tonearm-editor-note { margin: 6px 0 12px; color: #57534e; font-size: 12px; line-height: 1.35; text-align: center; }
+    .names-tonearm-editor-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .names-tonearm-editor-tabs button { min-height: 38px; border: 1px solid #d6d3d1; border-radius: 10px; background: #fff; color: #111; font-size: 12px; font-weight: 800; }
+    .names-tonearm-editor-tabs button[aria-pressed="true"] { border-color: #111; background: #111; color: #fff; }
+    .names-tonearm-editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 12px; }
+    .names-tonearm-editor-field { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: #57534e; font-size: 11px; font-weight: 800; }
+    .names-tonearm-editor-field input { box-sizing: border-box; width: 100%; height: 36px; border: 1px solid #d6d3d1; border-radius: 9px; background: #fff; padding: 0 9px; color: #111; font: inherit; font-size: 13px; outline: none; }
+    .names-tonearm-editor-field input:focus-visible { border-color: #111; box-shadow: 0 0 0 2px rgba(0,0,0,.12); }
+    .names-tonearm-editor-slider { grid-column: 1 / -1; }
+    .names-tonearm-editor-slider input { height: 24px; border: 0; padding: 0; accent-color: #111; box-shadow: none; }
+    .names-tonearm-editor-code { box-sizing: border-box; width: 100%; min-height: 92px; margin-top: 12px; resize: vertical; border: 1px solid #d6d3d1; border-radius: 10px; background: #f5f5f4; padding: 9px; color: #111; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; line-height: 1.35; }
+    .names-tonearm-editor-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .names-tonearm-editor-actions button { min-height: 40px; padding: 0 10px; }
+    .names-tonearm-editor-actions .is-wide { grid-column: 1 / -1; }
+    .names-wheel-empty { pointer-events: none; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 34px; line-height: 1.4; text-align: center; }
+    .names-wheel-empty:not(.is-spinning) { animation: namesWelcomeSpin 4s ease-in-out infinite; }
+    .names-wheel-empty.is-spinning { animation: none; }
+    .names-vinyl-sticker { display: block; width: 168px; height: 168px; overflow: visible; }
+    .names-vinyl-label-title { fill: #111; font-size: 25px; font-weight: 800; letter-spacing: .2px; }
+    .names-vinyl-label-description { fill: #111; font-size: 11px; font-weight: 650; letter-spacing: .1px; }
+    .names-vinyl-spindle { fill: none; stroke: #111; stroke-width: 1.25px; }
+    .names-empty-title { display: flex; align-items: center; justify-content: center; color: #111; font-size: 25px; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+    .names-empty-description { width: 126px; margin-top: 10px; color: #57534e; font-size: 12px; font-weight: 600; line-height: 1.25; }
     .names-method-button { min-width: 104px; justify-content: center !important; gap: 8px; }
     .names-method-button-glyph { display: block; width: 26px; height: 26px; flex: none; object-fit: contain; }
     .names-method-anchor > .hub-menu-panel-level { width: 300px; max-width: 300px; }
@@ -70,13 +99,19 @@
     .names-slots-corner-clef.is-top-right { top: 28px; right: 20px; transform: rotate(-20deg); }
     .names-slots-corner-clef.is-bottom-left { bottom: 18px; left: 20px; transform: rotate(-20deg); }
     .names-slots-corner-clef.is-bottom-right { right: 20px; bottom: 18px; transform: rotate(20deg); }
-    .names-slots-row { position: absolute; z-index: 1; left: 18px; display: flex; width: calc(100% - 36px); height: 82px; align-items: center; justify-content: center; border: 1px solid #d6d3d1; border-radius: 14px; color: #111; font: inherit; font-weight: 800; line-height: 1.05; text-align: center; box-shadow: 0 2px 7px rgba(0,0,0,.04); transform-origin: center; }
-    .names-slots-row-content { display: flex; width: 100%; height: 100%; min-width: 0; align-items: center; justify-content: center; padding: 0 18px; }
+    .names-slots-row { position: absolute; z-index: 1; left: 18px; display: flex; width: calc(100% - 36px); height: 82px; align-items: center; justify-content: center; border: 1px solid #a8a29e; border-radius: 12px; background: linear-gradient(180deg, rgba(255,255,255,.66) 0%, rgba(255,255,255,.2) 18%, rgba(255,255,255,.06) 72%, rgba(87,83,78,.16) 90%, rgba(255,255,255,.48) 100%), var(--cassette-case-colour, #e7e5e4); color: #111; font: inherit; font-weight: 800; line-height: 1.05; text-align: center; box-shadow: inset 0 2px 0 rgba(255,255,255,.78), inset 0 -2px 0 rgba(28,25,23,.2), 0 14px 24px rgba(28,25,23,.34), 0 4px 9px rgba(28,25,23,.26); transform-origin: center; }
+    .names-slots-row::before, .names-slots-row::after { position: absolute; top: 50%; width: 8px; height: 8px; border: 1px solid rgba(87,83,78,.48); border-radius: 50%; background: rgba(255,255,255,.78); box-shadow: inset 0 1px 2px rgba(28,25,23,.2); content: ""; transform: translateY(-50%); }
+    .names-slots-row::before { left: 8px; }
+    .names-slots-row::after { right: 8px; }
+    .names-slots-row-content { display: flex; width: calc(100% - 48px); height: 58px; min-width: 0; align-items: center; justify-content: center; border: 1px solid rgba(120,113,108,.38); border-radius: 5px; background: #fff; color: #111; padding: 0 18px; box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 1px 2px rgba(28,25,23,.1); }
     .names-slots-row-name { min-width: 0; overflow-wrap: anywhere; }
+    .names-slots-student-name { font-family: "Board Marker", sans-serif; font-weight: 400; }
     .names-slots-row.is-removable { cursor: pointer; }
     .names-slots-row.is-removable:hover .names-slots-row-name, .names-slots-row.is-removable:focus-visible .names-slots-row-name { text-decoration: line-through; text-decoration-thickness: 2px; }
     .names-slots-row:disabled { cursor: default; }
-    .names-slots-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.4; text-align: center; }
+    .names-slots-empty-row { --cassette-case-colour: #e7e5e4; }
+    .names-slots-empty-row .names-slots-row-name { font-family: "Board Marker", sans-serif; font-weight: 400; }
+    .names-slots-empty-prompt { font-size: .78em; font-weight: 500; }
     .names-saved-list { display: flex; max-height: 300px; flex-direction: column; gap: 8px; overflow-y: auto; padding: 8px; }
     .names-saved-row { display: flex; min-width: 0; align-items: stretch; gap: 6px; }
     .names-saved-card { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #e7e5e4; border-radius: 12px; background: white; padding: 9px 10px; color: #111; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,.03); transition: transform .08s ease, filter .08s ease, box-shadow .12s ease, background-color .12s ease; }
@@ -93,10 +128,11 @@
     .names-toolbar-save-glyph { filter: invert(1); }
     .names-toolbar-clear { border-color: #d6d3d1 !important; background: #fff !important; color: #000 !important; }
     .names-toolbar-clear:disabled, .names-toolbar-save:disabled { cursor: not-allowed; opacity: .42; transform: none; filter: none; box-shadow: none; }
-     .names-toolbar-save, .names-toolbar-clear { width: 92px; }
+    .names-toolbar-save { width: 92px; }
+    .names-toolbar-clear { width: 112px; }
     .names-saved-actions { position: absolute; z-index: 5; right: 0; bottom: 0; display: flex; align-items: center; gap: 8px; }
     .names-saved-actions button { box-sizing: border-box; height: 44px !important; min-height: 44px !important; }
-    .names-saved-actions .hub-menu-panel { top: auto; bottom: 100%; margin-top: 0; margin-bottom: .5rem; }
+    .names-saved-actions .hub-menu-panel { top: auto; bottom: 100%; width: 300px; max-width: 300px; margin-top: 0; margin-bottom: .5rem; }
     .names-fullscreen-action { position: absolute; z-index: 5; bottom: 0; left: 0; }
     .names-fullscreen-action { opacity: 1; transition: opacity .35s ease; }
     .names-fullscreen-action.is-hidden { pointer-events: none; opacity: 0; }
@@ -135,16 +171,21 @@
     .names-dialog-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 18px; }
     .names-winner { margin: 18px 0 0; color: #111; font-size: 2.4rem; font-weight: 900; letter-spacing: -.035em; line-height: 1.08; }
     .names-winner span { display: block; transform-origin: center; animation: namesWinnerPulse .9s ease-in-out infinite; }
-    .names-winner-panel { position: absolute; z-index: 6; top: 50%; left: 50%; width: min(420px, calc(100% - 40px)); transform: translate(-50%, -50%); border: 1px solid #e7e5e4; border-radius: 18px; background: white; padding: 18px; box-shadow: var(--names-shared-shadow); text-align: center; }
+    .names-winner-panel { position: absolute; z-index: 6; top: 50%; left: 50%; box-sizing: border-box; width: 420px; max-width: calc(100% - 40px); transform: translate(-50%, -50%); border: 1px solid #e7e5e4; border-radius: 18px; background: white; padding: 18px; box-shadow: var(--names-shared-shadow); text-align: center; }
     .names-winner-panel .names-winner { margin-top: 0; }
     .names-winner-panel .names-dialog-actions { flex-direction: row; flex-wrap: nowrap; margin-top: 16px; }
     .names-winner-panel .names-dialog-actions button { width: auto; flex: 1; }
     .names-winner-panel:not(.names-wheel-confirm-panel) .names-winner { transform: translateY(22px); }
     .names-winner-panel:not(.names-wheel-confirm-panel) .names-dialog-actions { margin-top: 66px; }
+    .names-winner-colour-card { transform-origin: center; animation: namesWinnerCardPop .48s cubic-bezier(.18,.88,.32,1.18) both; border-color: #111; background: var(--winner-card-colour); }
+    .names-winner-colour-card .names-winner { color: var(--winner-text-colour); }
+    .names-winner-colour-card.is-dark .names-primary-button { border-color: #fff; background: #fff; color: #111; }
+    .names-winner-colour-card.is-dark .names-secondary-button { border-color: #fff; background: transparent; color: #fff; }
     .names-wheel-confirm-panel h2 { margin: 0; color: #111; font-size: 1.2rem; font-weight: 900; line-height: 1.2; }
     .names-wheel-confirm-panel .names-dialog-actions { flex-direction: row; }
     .names-wheel-confirm-panel .names-dialog-actions button { width: auto; flex: 1; }
-    .names-wheel-popover { max-height: calc(100% - 40px); overflow-y: auto; }
+    .names-wheel-stage > .names-wheel-popover { inset: 0; display: flex; width: auto !important; max-width: none !important; align-items: center; justify-content: center; transform: none; border: 0; background: transparent; padding: 20px; box-shadow: none; }
+    .names-wheel-popover-card { box-sizing: border-box; width: 420px; max-width: 100%; max-height: calc(100% - 40px); overflow-y: auto; border: 1px solid #e7e5e4; border-radius: 18px; background: #fff; padding: 18px; box-shadow: var(--names-shared-shadow); }
     .names-wheel-popover h2 { margin: 0; padding: 0 32px; color: #111; font-size: 1.2rem; font-weight: 900; line-height: 1.2; text-align: center; }
     .names-wheel-popover-body { margin-top: 12px; text-align: left; }
     .names-wheel-popover-body > p { margin: 0; color: #57534e; font-size: 14px; line-height: 1.45; text-align: center; }
@@ -157,10 +198,12 @@
     .names-class-line-numbers { pointer-events: none; position: absolute; z-index: 1; top: 1px; bottom: 1px; left: 1px; box-sizing: border-box; width: 40px; overflow: hidden; border-radius: 11px 0 0 11px; padding: 11px 0 11px 14px; color: #a8a29e; font-size: 14px; line-height: 1.45; text-align: left; }
     .names-class-line-number { display: block; height: 1.45em; }
     .names-wheel-stage.has-wheel-overlay .names-wheel, .names-wheel-stage.has-wheel-overlay .names-slots-window, .names-wheel-stage.has-wheel-overlay .names-wheel-pointer, .names-wheel-stage.has-wheel-overlay .names-spin-button { opacity: .24; }
+    .names-wheel-stage.has-wheel-overlay .names-vinyl-tonearm { opacity: 1; }
     .names-wheel-stage.has-wheel-overlay .names-spin-button { box-shadow: none; }
     .names-confetti { pointer-events: none; position: fixed; inset: 0; z-index: 1400; overflow: hidden; }
     .names-confetti span { position: absolute; top: -18px; width: 9px; height: 16px; border-radius: 3px; animation: namesConfettiFall 1.8s cubic-bezier(.15,.65,.4,1) forwards; }
     @keyframes namesWelcomeSpin { 0% { transform: rotate(0); } 12% { transform: rotate(360deg); } 100% { transform: rotate(360deg); } }
+    @keyframes namesWinnerCardPop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.08); } 72% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
     @keyframes namesWinnerPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14); } }
     @keyframes namesDuplicateShake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
     @keyframes namesConfettiFall { 0% { opacity: 1; transform: translate3d(0,-5vh,0) rotate(0); } 100% { opacity: 0; transform: translate3d(var(--drift),105vh,0) rotate(680deg); } }
@@ -172,7 +215,7 @@
     .names-main:fullscreen .names-wheel-stage.is-wheel .names-wheel-wrap { transform: translateX(60px); }
     .names-main:fullscreen .names-wheel-stage.is-wheel .names-winner-panel { left: calc(50% + 60px); }
     .names-main:fullscreen .names-fullscreen-action { bottom: 24px; left: 24px; }
-    @media (prefers-reduced-motion: reduce) { .names-confetti { display: none; } .names-wheel-rotor { transition-duration: .01ms !important; } .names-wheel-empty { animation: none !important; } .names-duplicate-message { animation: none !important; } .names-winner span { animation: none !important; } .names-fullscreen-action { transition: none !important; } }
+    @media (prefers-reduced-motion: reduce) { .names-confetti { display: none; } .names-wheel-rotor { transition-duration: .01ms !important; } .names-wheel-empty { animation: none !important; } .names-duplicate-message { animation: none !important; } .names-winner-colour-card, .names-winner span { animation: none !important; } .names-fullscreen-action { transition: none !important; } }
   </style>
   <script src="analytics-config.js"></script>
   <script src="analytics.js" defer></script>
@@ -184,9 +227,25 @@
 const { useEffect, useMemo, useRef, useState } = React;
 const CORE = window.NAME_RANDOMISER_CORE;
 const STORAGE_KEY = "mlh-name-randomiser-v1";
-const MIN_SPIN_DURATION = 6000;
+const TONEARM_EDITOR_STORAGE_KEY = "mlh-name-randomiser-tonearm-calibration";
+const TONEARM_EDITOR_ENABLED = new URLSearchParams(window.location.search).get("tonearm-editor") === "1";
+const DEFAULT_TONEARM_CALIBRATION = {
+  resting: { x: 66, y: -103, rotation: 32, scale: 1 },
+  playing: { x: 66, y: -103, rotation: 18, scale: 1 }
+};
+const DEFAULT_CASSETTE_SPIN_DURATION_MS = 6000;
+const VINYL_NEEDLE_LEAD_MS = 450;
+const VINYL_FULL_SPEED_AT_MS = 2000;
+const VINYL_ANIMATION_DURATION_MS = 12000;
+const VINYL_AUDIO_DURATION_MS = 11000;
+const VINYL_AUDIO_SLOWDOWN_AT_MS = 5000;
+const VINYL_AUDIO_RATE_STEP_MS = 50;
+const VINYL_AUDIO_RATE_STEP = .02;
+const VINYL_MOMENTUM_POWER = 1;
+const VINYL_ROTATIONS_PER_SPIN = 12;
+const VINYL_STYLUS_ANGLE = 180;
 const FULLSCREEN_CONTROL_TIMEOUT = 3000;
-const ASSET = { appIcon: "names-icon.svg", wheel: "wheel2.svg", slots: "slots.svg", customise: "customise.svg", classIcon: "class.svg", list: "list.svg", save: "save.svg", edit: "rename.svg", bin: "bin.svg", fullscreen: "full screen.svg", audio: "audio-svgrepo-com.svg?v=20260722-smaller15", tick: "tick.svg", spin: "spin.mp3" };
+const ASSET = { appIcon: "names-icon.svg", wheel: "vinyl.svg", slots: "cassette.svg", customise: "customise.svg", classIcon: "class.svg", list: "list.svg", save: "save.svg", edit: "rename.svg", bin: "bin.svg", fullscreen: "full screen.svg", audio: "audio-svgrepo-com.svg?v=20260722-smaller15", tick: "tick.svg", drop: "drop.mp3", vinylSpin: "vinyl.mp3", cassetteSpin: "spin.mp3" };
 
 function uid(prefix) {
   if (window.crypto?.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
@@ -196,6 +255,28 @@ function uid(prefix) {
 function readPersistence() {
   try { return CORE.cleanPersistence(JSON.parse(window.localStorage.getItem(STORAGE_KEY))); }
   catch { return CORE.emptyPersistence(); }
+}
+
+function cleanTonearmCalibration(value) {
+  const cleanPosition = (position, fallback) => ({
+    x: Number.isFinite(Number(position?.x)) ? Number(position.x) : fallback.x,
+    y: Number.isFinite(Number(position?.y)) ? Number(position.y) : fallback.y,
+    rotation: Number.isFinite(Number(position?.rotation)) ? Number(position.rotation) : fallback.rotation,
+    scale: Number.isFinite(Number(position?.scale)) ? Math.max(.4, Math.min(2, Number(position.scale))) : fallback.scale
+  });
+  return {
+    resting: cleanPosition(value?.resting, DEFAULT_TONEARM_CALIBRATION.resting),
+    playing: cleanPosition(value?.playing, DEFAULT_TONEARM_CALIBRATION.playing)
+  };
+}
+
+function readTonearmCalibration() {
+  try { return cleanTonearmCalibration(JSON.parse(window.localStorage.getItem(TONEARM_EDITOR_STORAGE_KEY))); }
+  catch { return cleanTonearmCalibration(DEFAULT_TONEARM_CALIBRATION); }
+}
+
+function tonearmExportCode(calibration) {
+  return `const NAME_RANDOMISER_TONEARM = ${JSON.stringify(cleanTonearmCalibration(calibration), null, 2)};`;
 }
 
 function polarPoint(cx, cy, radius, degrees) {
@@ -226,7 +307,20 @@ function wrapName(name, maxChars) {
 }
 
 function segmentTextColour(fill) {
-  return fill === "#111111" ? "#fff" : "#111";
+  return fill === "#111111" || fill === "#44403c" ? "#fff" : "#111";
+}
+
+function winnerLightAccentColour(fill) {
+  return {
+    "#ffffff": "#ffffff", "#fafaf9": "#fafaf9",
+    "#111111": "#ffffff", "#44403c": "#ffffff",
+    "#fee2e2": "#fee2e2", "#fca5a5": "#fee2e2",
+    "#ffedd5": "#ffedd5", "#fdba74": "#ffedd5",
+    "#fef9c3": "#fef9c3", "#fde047": "#fef9c3",
+    "#dcfce7": "#dcfce7", "#86efac": "#dcfce7",
+    "#dbeafe": "#dbeafe", "#93c5fd": "#dbeafe",
+    "#ede9fe": "#ede9fe", "#c4b5fd": "#ede9fe"
+  }[fill] || "#ffffff";
 }
 
 function spinArrowOutline(selectedColour, spinColour) {
@@ -238,8 +332,13 @@ function randomiserFontSize(count) {
   return Math.max(7, Math.min(28, 34 - count * 1.05));
 }
 
-function Wheel({ segments, rotation, spinning, locked, durationMs, selectedColour, onRemove, onSpin, spinDisabled }) {
+function randomiserMethodLabel(method) {
+  return method === "Rows" ? "Cassette" : "Vinyl";
+}
+
+function Wheel({ segments, rotation, spinning, needleEngaged, locked, selectedColour, onRemove, onSpin, spinDisabled, tonearmEditor, tonearmCalibration, tonearmPreview, onTonearmChange }) {
   const [armedRemoveId, setArmedRemoveId] = useState(null);
+  const tonearmDragRef = useRef(null);
   const count = segments.length;
   const slice = count ? 360 / count : 360;
   const sliceRadians = slice * Math.PI / 180;
@@ -250,11 +349,38 @@ function Wheel({ segments, rotation, spinning, locked, durationMs, selectedColou
   const colourPalette = CORE.segmentColourPalette(selectedColour);
   const spinColour = CORE.spinControlColour(selectedColour);
   const spinButtonColour = spinColour;
-  const arrowOutline = spinArrowOutline(selectedColour, spinColour);
+  const activeTonearm = tonearmCalibration?.[tonearmPreview] || DEFAULT_TONEARM_CALIBRATION.resting;
+  const tonearmStyle = tonearmEditor ? {
+    top: 0,
+    left: 0,
+    transform: `translate(${activeTonearm.x}px, ${activeTonearm.y}px) rotate(${activeTonearm.rotation}deg) scale(${activeTonearm.scale})`
+  } : undefined;
+  const beginTonearmDrag = (event) => {
+    if (!tonearmEditor) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    tonearmDragRef.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, x: activeTonearm.x, y: activeTonearm.y };
+  };
+  const moveTonearm = (event) => {
+    const drag = tonearmDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    onTonearmChange?.({ ...activeTonearm, x: Math.round(drag.x + event.clientX - drag.clientX), y: Math.round(drag.y + event.clientY - drag.clientY) });
+  };
+  const endTonearmDrag = (event) => {
+    if (tonearmDragRef.current?.pointerId === event.pointerId) tonearmDragRef.current = null;
+  };
   return <div className="names-wheel-wrap">
-    <svg className="names-wheel" viewBox="0 0 600 600" role="img" aria-label={count ? `Wheel containing ${count} segments` : "Empty name wheel"}>
-      <circle cx="300" cy="300" r="260" fill="#fff" stroke="#111" strokeWidth="1.25" />
-      <g className="names-wheel-rotor" style={{ transform: `rotate(${rotation}deg)`, transition: spinning ? `transform ${durationMs}ms cubic-bezier(.08,.68,.12,1)` : "none" }}>
+    <svg className="names-wheel" viewBox="0 0 600 600" role="img" aria-label={count ? `Vinyl containing ${count} names` : "Empty Vinyl"}>
+      <defs>
+        <mask id="names-vinyl-record-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="600" height="600">
+          <rect width="600" height="600" fill="#fff" />
+          <circle cx="300" cy="300" r="6" fill="#000" />
+        </mask>
+      </defs>
+      <g mask="url(#names-vinyl-record-cutout)">
+        <circle cx="300" cy="300" r="260" fill={count ? "#fff" : "#111"} stroke="#111" strokeWidth=".6" />
+        {count === 0 && <circle aria-hidden="true" cx="300" cy="300" r="256" fill="none" stroke="#3f3f46" strokeWidth="1.5" />}
+        <g className="names-wheel-rotor" style={{ transform: `rotate(${rotation}deg)` }}>
         {segments.map((segment, index) => {
           const start = index * slice;
           const end = start + slice;
@@ -280,7 +406,7 @@ function Wheel({ segments, rotation, spinning, locked, durationMs, selectedColou
           return <g key={segment.id} className={`names-wheel-segment ${segment.preview ? "is-preview" : ""} ${removable ? "is-removable" : ""} ${armedRemoveId === segment.id ? "is-remove-armed" : ""}`} role={!segment.preview ? "button" : undefined} tabIndex={removable ? 0 : -1} aria-label={!segment.preview ? `Remove ${segment.names[0]}` : undefined} aria-disabled={!segment.preview && !removable ? "true" : undefined} onPointerUp={requestRemove} onClick={(event) => { if (event.detail === 0) requestRemove(event); }} onKeyDown={(event) => { if (removable && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); event.stopPropagation(); onRemove(segment.id); } }}>
             {count === 1
               ? <circle cx="300" cy="300" r="259" fill={segmentFill} />
-              : <path d={wedgePath(start, end)} fill={segmentFill} stroke="#111" strokeWidth={count > 35 ? .75 : 1.25} />}
+              : <path d={wedgePath(start, end)} fill={segmentFill} />}
             <g transform={`rotate(${middle} 300 300)`}>
               <text className="names-segment-label" x={textX} y="300" transform={`rotate(180 ${textX} 300)`} fill={textColour} fontSize={fontSize} fontWeight="800" textAnchor="middle" dominantBaseline="middle">
                 {textLines.map((line, lineIndex) => <tspan key={`${line}-${lineIndex}`} x={textX} dy={lineIndex === 0 ? firstDy : lineHeight}>{line}</tspan>)}
@@ -288,18 +414,111 @@ function Wheel({ segments, rotation, spinning, locked, durationMs, selectedColou
             </g>
           </g>;
         })}
-        {count > 0 && <g aria-hidden="true">
-          <circle cx="300" cy="300" r="36" fill="#fff" stroke="#111" strokeWidth="1.25" />
-          <text className="names-wheel-centre-glyph" x="300" y="300" fill="#111" textAnchor="middle" dominantBaseline="central" transform="translate(0 7)">{"\uE050"}</text>
-        </g>}
+        {count > 1 && segments.map((segment, index) => {
+          const dividerStart = polarPoint(300, 300, 61, index * slice);
+          const dividerEnd = polarPoint(300, 300, 235, index * slice);
+          return <line key={`divider-${segment.id}`} aria-hidden="true" x1={dividerStart.x} y1={dividerStart.y} x2={dividerEnd.x} y2={dividerEnd.y} stroke="#111" strokeWidth=".6" />;
+        })}
+        {count > 0 && <circle aria-hidden="true" cx="300" cy="300" r="259.4" fill="none" stroke="#111" strokeWidth=".6" />}
+        {count > 0 && <circle aria-hidden="true" cx="300" cy="300" r="256" fill="none" stroke="#111" strokeWidth=".5" opacity=".32" />}
+          {count > 0 && <g aria-hidden="true">
+            <circle cx="300" cy="300" r="36" fill="#fff" stroke="#111" strokeWidth=".6" />
+            <text className="names-wheel-centre-glyph" x="300" y="300" fill="#111" textAnchor="middle" dominantBaseline="central" transform="translate(0 7)">{"\uE050"}</text>
+          </g>}
+        </g>
+        <g className={`names-vinyl-grooves ${count > 0 ? "is-populated" : ""}`} aria-hidden="true">
+          <g>
+            <path d="M405.6 101.3 A225 225 0 0 1 511.4 223" />
+            <path d="M401 110.2 A215 215 0 0 1 502 226.5" />
+            <path d="M396.2 119 A205 205 0 0 1 492.6 229.9" />
+            <path d="M391.5 127.8 A195 195 0 0 1 483.2 233.3" />
+          </g>
+          <g transform="rotate(180 300 300)">
+            <path d="M405.6 101.3 A225 225 0 0 1 511.4 223" />
+            <path d="M401 110.2 A215 215 0 0 1 502 226.5" />
+            <path d="M396.2 119 A205 205 0 0 1 492.6 229.9" />
+            <path d="M391.5 127.8 A195 195 0 0 1 483.2 233.3" />
+          </g>
+        </g>
       </g>
+      {count > 0 && <circle className="names-vinyl-spindle" cx="300" cy="300" r="6" />}
     </svg>
-    {count === 0 && <div className="names-wheel-empty"><span className="names-empty-title">Welcome!</span><span className="names-empty-description">Add a name to get started.</span></div>}
+    {count === 0 && <div className={`names-wheel-empty ${spinning ? "is-spinning" : ""}`} style={spinning ? { transform: `rotate(${rotation}deg)` } : undefined}>
+      <svg className="names-vinyl-sticker" viewBox="0 0 168 168" role="img" aria-label="Welcome. Add a name to get started">
+        <defs>
+          <path id="names-vinyl-title-curve" d="M 24 78 A 61 61 0 0 1 144 78" />
+          <path id="names-vinyl-description-curve" d="M 27 108 A 62 62 0 0 0 141 108" />
+          <mask id="names-vinyl-sticker-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="168" height="168">
+            <rect width="168" height="168" fill="#fff" />
+            <circle cx="84" cy="84" r="7" fill="#000" />
+          </mask>
+        </defs>
+        <g mask="url(#names-vinyl-sticker-cutout)">
+          <circle cx="84" cy="84" r="83" fill="#f5f5f4" stroke="#111" strokeWidth="1.5" />
+          <circle cx="84" cy="84" r="78" fill="none" stroke="#fff" strokeWidth="2" opacity=".5" />
+          <text className="names-vinyl-label-title"><textPath href="#names-vinyl-title-curve" startOffset="50%" textAnchor="middle">Welcome</textPath></text>
+          <text className="names-vinyl-label-description"><textPath href="#names-vinyl-description-curve" startOffset="50%" textAnchor="middle">Add a name to get started</textPath></text>
+          <text className="names-wheel-centre-glyph" x="84" y="84" fill="#111" textAnchor="middle" dominantBaseline="central" transform="translate(0 7)">{"\uE050"}</text>
+        </g>
+        <circle className="names-vinyl-spindle" cx="84" cy="84" r="7" />
+      </svg>
+    </div>}
     <div className="names-wheel-pointer-group">
       <button type="button" className="names-primary-button names-spin-button" style={{ backgroundColor: spinButtonColour, borderColor: "#111", color: segmentTextColour(spinButtonColour), fontSize: `${baseFontSize}px`, fontWeight: 800 }} disabled={spinDisabled} onClick={onSpin}>Spin</button>
-      <svg className="names-wheel-pointer" viewBox="0 0 68 58" aria-hidden="true"><path d="M5 13 L5 45 Q5 57 15.94 52.06 L56.06 33.94 Q67 29 56.06 24.06 L15.94 5.94 Q5 1 5 13 Z" fill={spinColour} stroke={arrowOutline} strokeWidth={arrowOutline === "none" ? 0 : 1} /></svg>
+      <svg className={`names-vinyl-tonearm ${needleEngaged ? "is-playing" : ""} ${tonearmEditor ? "is-editing" : ""}`} style={tonearmStyle} viewBox="0 0 80 260" aria-hidden="true" onPointerDown={beginTonearmDrag} onPointerMove={moveTonearm} onPointerUp={endTonearmDrag} onPointerCancel={endTonearmDrag}>
+        <circle cx="12" cy="35" r="16" fill="#111" stroke="#57534e" strokeWidth="2" />
+        <circle cx="12" cy="35" r="9.5" fill="#d6d3d1" stroke="#f5f5f4" strokeWidth="1.5" />
+        <g transform="rotate(-14 12 35)">
+          <rect x="4" y="1" width="16" height="28" rx="4" fill="#78716c" />
+          <rect x="4" y="7" width="16" height="7" fill="#111" />
+          <rect x="4" y="14" width="16" height="6" fill="#d6d3d1" />
+        </g>
+        <rect x="8" y="25" width="9" height="21" rx="4.5" fill="#fff" transform="rotate(43 12 35)" />
+        <path d="M12 51 V178 Q12 199 27 210 L49 226" fill="none" stroke="#57534e" strokeWidth="11" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 51 V178 Q12 199 27 210 L49 226" fill="none" stroke="#a8a29e" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+        <g transform="rotate(36 51 227)">
+          <rect x="44" y="219" width="27" height="16" rx="3" fill="#44403c" stroke="#111" strokeWidth="1.5" />
+          <path d="M71 227 H77" stroke="#111" strokeWidth="3" strokeLinecap="round" />
+        </g>
+      </svg>
     </div>
   </div>;
+}
+
+function TonearmEditor({ calibration, preview, setPreview, updateActive, save, reset, copyCode, exportCode }) {
+  const active = calibration[preview];
+  const setNumber = (key, value) => {
+    const number = Number(value);
+    if (Number.isFinite(number)) updateActive({ ...active, [key]: number });
+  };
+  return <aside className="names-tonearm-editor" aria-label="Tonearm calibration editor">
+    <h2>Tonearm Editor</h2>
+    <p className="names-tonearm-editor-note">Drag the arm directly, then adjust its size and angle. Resting and Playing are saved separately.</p>
+    <div className="names-tonearm-editor-tabs">
+      <button type="button" aria-pressed={preview === "resting"} onClick={() => setPreview("resting")}>Resting</button>
+      <button type="button" aria-pressed={preview === "playing"} onClick={() => setPreview("playing")}>Playing</button>
+    </div>
+    <div className="names-tonearm-editor-grid">
+      <label className="names-tonearm-editor-field">Horizontal
+        <input type="number" value={active.x} step="1" onChange={(event) => setNumber("x", event.target.value)} />
+      </label>
+      <label className="names-tonearm-editor-field">Vertical
+        <input type="number" value={active.y} step="1" onChange={(event) => setNumber("y", event.target.value)} />
+      </label>
+      <label className="names-tonearm-editor-field names-tonearm-editor-slider">Rotation: {active.rotation}°
+        <input type="range" min="-180" max="180" step="1" value={active.rotation} onChange={(event) => setNumber("rotation", event.target.value)} />
+      </label>
+      <label className="names-tonearm-editor-field names-tonearm-editor-slider">Size: {Math.round(active.scale * 100)}%
+        <input type="range" min=".4" max="2" step=".01" value={active.scale} onChange={(event) => setNumber("scale", event.target.value)} />
+      </label>
+    </div>
+    <textarea className="names-tonearm-editor-code" readOnly value={exportCode} aria-label="Exported tonearm code" />
+    <div className="names-tonearm-editor-actions">
+      <button type="button" className="names-secondary-button" onClick={reset}>Reset</button>
+      <button type="button" className="names-secondary-button" onClick={save}>Save Position</button>
+      <button type="button" className="names-primary-button is-wide" onClick={copyCode}>Copy Export Code</button>
+    </div>
+  </aside>;
 }
 
 function SlotMachine({ segments, position, locked, selectedColour, onRemove, onSpin, spinDisabled }) {
@@ -316,9 +535,14 @@ function SlotMachine({ segments, position, locked, selectedColour, onRemove, onS
     const segmentIndex = ((base + offset) % count + count) % count;
     return { offset, segmentIndex, segment: segments[segmentIndex] };
   }) : [];
+  const emptyRows = !count ? Array.from({ length: 7 }, (_, rowIndex) => {
+    const offset = rowIndex - 3;
+    const sequenceIndex = ((base + offset) % 2 + 2) % 2;
+    return { offset, label: sequenceIndex === 0 ? "Welcome" : "Add a name to begin" };
+  }) : [];
 
   return <div className="names-slots-wrap">
-    <div className="names-slots-window" role="group" aria-label={count ? `Rows containing ${count} names` : "Empty Rows"}>
+    <div className="names-slots-window" role="group" aria-label={count ? `Cassette containing ${count} names` : "Empty Cassette"}>
       <span className="names-slots-corner-clef is-top-left" aria-hidden="true">{"\uE050"}</span>
       <span className="names-slots-corner-clef is-top-right" aria-hidden="true">{"\uE050"}</span>
       <span className="names-slots-corner-clef is-bottom-left" aria-hidden="true">{"\uE050"}</span>
@@ -329,9 +553,13 @@ function SlotMachine({ segments, position, locked, selectedColour, onRemove, onS
         const scale = Math.max(.76, 1 - distance * .11);
         const removable = !segment.preview && !locked;
         const rowColour = colourPalette[segmentIndex % colourPalette.length];
-        return <button key={`${offset}-${segment.id}`} type="button" className={`names-slots-row ${removable ? "is-removable" : ""}`} style={{ top: `calc(50% + ${(offset - fraction) * 92}px)`, backgroundColor: rowColour, color: segmentTextColour(rowColour), fontSize: `${fontSize}px`, opacity: Math.max(.5, 1 - distance * .16), transform: `translateY(-50%) scale(${scale})`, zIndex: distance < .55 ? 2 : 1 }} disabled={!removable} aria-label={!segment.preview ? `Remove ${segment.names.join(" and ")}` : "Name preview"} onClick={() => removable && onRemove(segment.id)}><span className="names-slots-row-content"><span className="names-slots-row-name">{segment.names.map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}</span></span></button>;
+        return <button key={`${offset}-${segment.id}`} type="button" className={`names-slots-row ${removable ? "is-removable" : ""}`} style={{ top: `calc(50% + ${(offset - fraction) * 92}px)`, "--cassette-case-colour": rowColour, fontSize: `${fontSize}px`, opacity: Math.max(.5, 1 - distance * .16), transform: `translateY(-50%) scale(${scale})`, zIndex: distance < .55 ? 2 : 1 }} disabled={!removable} aria-label={!segment.preview ? `Remove ${segment.names.join(" and ")}` : "Name preview"} onClick={() => removable && onRemove(segment.id)}><span className="names-slots-row-content"><span className="names-slots-row-name names-slots-student-name">{segment.names.map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}</span></span></button>;
       })}
-      {!count && <div className="names-slots-empty"><span className="names-empty-title">Welcome!</span><span className="names-empty-description">Add a name to get started.</span></div>}
+      {emptyRows.map(({ offset, label }) => {
+        const distance = Math.abs(offset - fraction);
+        const prompt = label === "Add a name to begin";
+        return <div key={`${base}-${offset}`} className="names-slots-row names-slots-empty-row" style={{ top: `calc(50% + ${(offset - fraction) * 92}px)`, fontSize: `${Math.max(17, 36 - distance * 7)}px`, opacity: Math.max(.5, 1 - distance * .16), transform: `translateY(-50%) scale(${Math.max(.76, 1 - distance * .11)})`, zIndex: distance < .55 ? 2 : 1 }}><span className="names-slots-row-content"><span className={`names-slots-row-name ${prompt ? "names-slots-empty-prompt" : ""}`}>{label}</span></span></div>;
+      })}
     </div>
     <div className="names-wheel-pointer-group">
       <button type="button" className="names-primary-button names-spin-button" style={{ backgroundColor: spinButtonColour, borderColor: "#111", color: segmentTextColour(spinButtonColour), fontSize: `${spinFontSize}px`, fontWeight: 800 }} disabled={spinDisabled} onClick={onSpin}>Spin</button>
@@ -355,10 +583,12 @@ function WheelPopover({ title, children, actions, onClose, labelledBy = "names-w
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("keydown", onKeyDown); previous?.focus?.(); };
   }, [title]);
-  return <aside ref={popoverRef} className="names-winner-panel names-wheel-confirm-panel names-wheel-popover" role="dialog" aria-modal="true" aria-labelledby={labelledBy} data-menu-panel="true">
+  return <aside ref={popoverRef} className="names-winner-panel names-wheel-confirm-panel names-wheel-popover" role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
+    <div className="names-wheel-popover-card">
       <h2 id={labelledBy}>{title}</h2>
       <div className="names-wheel-popover-body">{children}</div>
       {actions && <div className="names-dialog-actions">{actions}</div>}
+    </div>
   </aside>;
 }
 
@@ -403,6 +633,7 @@ function SavedLists({ lists, activeSavedId, loadList, editList, deleteList, disa
 
 function App() {
   const initial = useMemo(readPersistence, []);
+  const initialTonearmCalibration = useMemo(readTonearmCalibration, []);
   const [segments, setSegments] = useState(initial.currentSegments);
   const [savedLists, setSavedLists] = useState(initial.savedLists);
   const [activeSavedId, setActiveSavedId] = useState(initial.activeSavedId);
@@ -416,7 +647,7 @@ function App() {
   const [rotation, setRotation] = useState(0);
   const [slotPosition, setSlotPosition] = useState(0);
   const [spinning, setSpinning] = useState(false);
-  const [spinDuration, setSpinDuration] = useState(MIN_SPIN_DURATION);
+  const [spinDuration, setSpinDuration] = useState(DEFAULT_CASSETTE_SPIN_DURATION_MS);
   const [winner, setWinner] = useState(null);
   const [pendingRemoval, setPendingRemoval] = useState(null);
   const [confettiKey, setConfettiKey] = useState(0);
@@ -425,12 +656,21 @@ function App() {
   const [duplicateErrorKey, setDuplicateErrorKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenControlVisible, setFullscreenControlVisible] = useState(true);
+  const [tonearmCalibration, setTonearmCalibration] = useState(initialTonearmCalibration);
+  const [tonearmPreview, setTonearmPreview] = useState("resting");
   const mainRef = useRef(null);
   const customiseRef = useRef(null);
   const methodRef = useRef(null);
   const savedListsRef = useRef(null);
+  const dropAudioRef = useRef(null);
+  const vinylAudioRef = useRef(null);
   const spinAudioRef = useRef(null);
+  const spinStartTimerRef = useRef(null);
+  const vinylStopTimerRef = useRef(null);
+  const vinylRateStartTimerRef = useRef(null);
+  const vinylRateIntervalRef = useRef(null);
   const spinTimerRef = useRef(null);
+  const vinylFrameRef = useRef(null);
   const slotFrameRef = useRef(null);
   const fullscreenFadeTimerRef = useRef(null);
   const winnerPanelRef = useRef(null);
@@ -443,7 +683,7 @@ function App() {
     catch {}
   }, [segments, savedLists, activeSavedId, draftName, soundEffects, segmentColour, randomiserMethod]);
 
-  useEffect(() => () => { window.clearTimeout(spinTimerRef.current); window.cancelAnimationFrame(slotFrameRef.current); }, []);
+  useEffect(() => () => { window.clearTimeout(spinStartTimerRef.current); window.clearTimeout(vinylStopTimerRef.current); window.clearTimeout(vinylRateStartTimerRef.current); window.clearInterval(vinylRateIntervalRef.current); window.clearTimeout(spinTimerRef.current); vinylAudioRef.current?.pause(); window.cancelAnimationFrame(vinylFrameRef.current); window.cancelAnimationFrame(slotFrameRef.current); }, []);
 
   useEffect(() => {
     const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === mainRef.current);
@@ -490,7 +730,7 @@ function App() {
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (spinning || winner || pendingRemoval || dialog || reducedMotion) return undefined;
     const idleTimer = window.setInterval(() => {
-      if (randomiserMethod === "Rows" && segments.length) setSlotPosition((current) => current + .004);
+      if (randomiserMethod === "Rows") setSlotPosition((current) => current + .004);
       else if (randomiserMethod === "Wheel") setRotation((current) => current + .3);
     }, 50);
     return () => window.clearInterval(idleTimer);
@@ -501,11 +741,37 @@ function App() {
     const startedAt = performance.now();
     const step = (now) => {
       const progress = Math.min(1, (now - startedAt) / duration);
-      const eased = 1 - Math.pow(1 - progress, 4);
+      const eased = 1 - Math.pow(1 - progress, 3);
       setSlotPosition(start + (target - start) * eased);
       if (progress < 1) slotFrameRef.current = window.requestAnimationFrame(step);
     };
     slotFrameRef.current = window.requestAnimationFrame(step);
+  }
+
+  function animateVinyl(start, target, accelerationDuration, slowdownDuration) {
+    window.cancelAnimationFrame(vinylFrameRef.current);
+    const startedAt = performance.now();
+    const duration = accelerationDuration + slowdownDuration;
+    const accelerationDistance = accelerationDuration / 2;
+    const slowdownDistance = slowdownDuration / (VINYL_MOMENTUM_POWER + 1);
+    const totalDistance = accelerationDistance + slowdownDistance;
+    const step = (now) => {
+      const elapsed = Math.min(duration, now - startedAt);
+      let distance;
+      if (elapsed <= accelerationDuration) {
+        distance = (elapsed * elapsed) / (2 * accelerationDuration);
+      } else {
+        const slowingElapsed = elapsed - accelerationDuration;
+        const slowingProgress = Math.min(1, slowingElapsed / slowdownDuration);
+        distance = accelerationDistance + slowdownDistance
+          * (1 - Math.pow(1 - slowingProgress, VINYL_MOMENTUM_POWER + 1));
+      }
+      const progress = distance / totalDistance;
+      setRotation(start + (target - start) * Math.min(1, progress));
+      if (elapsed < duration) vinylFrameRef.current = window.requestAnimationFrame(step);
+      else setRotation(target);
+    };
+    vinylFrameRef.current = window.requestAnimationFrame(step);
   }
 
   function addName() {
@@ -570,7 +836,7 @@ function App() {
       return;
     }
     const nextSegments = clean ? [...segments, { id: uid("segment"), names: [clean] }] : segments;
-    if (nextSegments.length < 2) return;
+    const emptySpin = nextSegments.length === 0;
     if (clean) {
       setSegments(nextSegments);
       setDraftName("");
@@ -578,40 +844,93 @@ function App() {
     }
     setWinner(null);
     setDialog(null);
-    const chosenIndex = CORE.chooseIndex(nextSegments.length);
-    const slice = 360 / nextSegments.length;
+    const chosenIndex = emptySpin ? -1 : CORE.chooseIndex(nextSegments.length);
+    const winnerPalette = CORE.segmentColourPalette(segmentColour);
+    const winnerColour = emptySpin ? null : winnerPalette[chosenIndex % winnerPalette.length];
+    const slice = emptySpin ? 360 : 360 / nextSegments.length;
     const landingFraction = .04 + Math.random() * .92;
-    const target = 180 - (chosenIndex * slice + slice * landingFraction);
-    const audio = spinAudioRef.current;
-    let duration = spinDuration;
-    if (audio && Number.isFinite(audio.duration) && audio.duration > .5) duration = Math.max(MIN_SPIN_DURATION, Math.round(audio.duration * 1000));
+    const target = emptySpin ? 0 : VINYL_STYLUS_ANGLE - (chosenIndex * slice + slice * landingFraction);
+    const isVinyl = randomiserMethod === "Wheel";
+    const audio = isVinyl ? vinylAudioRef.current : spinAudioRef.current;
+    let duration = isVinyl ? VINYL_ANIMATION_DURATION_MS - VINYL_NEEDLE_LEAD_MS : spinDuration;
+    if (!isVinyl && audio && Number.isFinite(audio.duration) && audio.duration > .5) duration = Math.round(audio.duration * 1000);
     setSpinDuration(duration);
     setSpinning(true);
     setStatus("Spinning…");
-    if (randomiserMethod === "Rows") {
-      const firstWholePosition = Math.ceil(slotPosition);
-      const slotDelta = ((chosenIndex - firstWholePosition) % nextSegments.length + nextSegments.length) % nextSegments.length;
-      animateSlots(slotPosition, firstWholePosition + nextSegments.length * 6 + slotDelta, duration);
-    } else {
-      setRotation((current) => {
-        const currentMod = ((current % 360) + 360) % 360;
-        const targetMod = ((target % 360) + 360) % 360;
-        const delta = ((targetMod - currentMod) + 360) % 360;
-        return current + 5 * 360 + delta;
-      });
+    const needleLead = isVinyl ? VINYL_NEEDLE_LEAD_MS : 0;
+    if (soundEffects && isVinyl) {
+      const dropAudio = dropAudioRef.current;
+      if (dropAudio) { dropAudio.currentTime = 0; dropAudio.play().catch(() => {}); }
+      if (audio) {
+        window.clearTimeout(vinylRateStartTimerRef.current);
+        window.clearInterval(vinylRateIntervalRef.current);
+        audio.currentTime = 0;
+        audio.playbackRate = 1;
+        audio.preservesPitch = false;
+        audio.play().catch(() => {});
+        vinylRateStartTimerRef.current = window.setTimeout(() => {
+          let rateStep = 0;
+          vinylRateIntervalRef.current = window.setInterval(() => {
+            rateStep += 1;
+            audio.playbackRate = Math.max(.01, 1 - rateStep * VINYL_AUDIO_RATE_STEP);
+            if (rateStep >= 50) window.clearInterval(vinylRateIntervalRef.current);
+          }, VINYL_AUDIO_RATE_STEP_MS);
+        }, VINYL_AUDIO_SLOWDOWN_AT_MS);
+        window.clearTimeout(vinylStopTimerRef.current);
+        vinylStopTimerRef.current = window.setTimeout(() => {
+          window.clearTimeout(vinylRateStartTimerRef.current);
+          window.clearInterval(vinylRateIntervalRef.current);
+          audio.pause();
+          audio.currentTime = 0;
+          audio.playbackRate = 1;
+        }, VINYL_AUDIO_DURATION_MS);
+      }
     }
-    if (soundEffects && audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+    const beginSpinMotion = () => {
+      if (randomiserMethod === "Rows") {
+        if (emptySpin) animateSlots(slotPosition, slotPosition + 42, duration);
+        else {
+          const firstWholePosition = Math.ceil(slotPosition);
+          const slotDelta = ((chosenIndex - firstWholePosition) % nextSegments.length + nextSegments.length) % nextSegments.length;
+          animateSlots(slotPosition, firstWholePosition + nextSegments.length * 24 + slotDelta, duration);
+        }
+      } else {
+        let finalRotation = rotation + VINYL_ROTATIONS_PER_SPIN * 360;
+        if (!emptySpin) {
+          const currentMod = ((rotation % 360) + 360) % 360;
+          const targetMod = ((target % 360) + 360) % 360;
+          const delta = ((targetMod - currentMod) + 360) % 360;
+          finalRotation += delta;
+        }
+        animateVinyl(
+          rotation,
+          finalRotation,
+          VINYL_FULL_SPEED_AT_MS - needleLead,
+          VINYL_ANIMATION_DURATION_MS - VINYL_FULL_SPEED_AT_MS
+        );
+      }
+      if (soundEffects && audio && !isVinyl) { audio.currentTime = 0; audio.play().catch(() => {}); }
+    };
+    window.clearTimeout(spinStartTimerRef.current);
+    if (needleLead) spinStartTimerRef.current = window.setTimeout(beginSpinMotion, needleLead);
+    else beginSpinMotion();
     window.clearTimeout(spinTimerRef.current);
     spinTimerRef.current = window.setTimeout(() => {
+      window.cancelAnimationFrame(vinylFrameRef.current);
       window.cancelAnimationFrame(slotFrameRef.current);
+      if (emptySpin) {
+        setSpinning(false);
+        setStatus("Ready to spin.");
+        return;
+      }
       if (randomiserMethod === "Rows") setSlotPosition(nextSegments.length * 2 + chosenIndex);
       setSpinning(false);
       const selected = nextSegments[chosenIndex];
-      setWinner(selected);
+      setWinner({ ...selected, colour: winnerColour });
       setConfettiKey((key) => key + 1);
       setStatus(`Selected: ${selected.names.join(" and ")}`);
       if (soundEffects) window.MLH.playFeedbackSound?.(true, true, "bronze");
-    }, duration + 40);
+    }, needleLead + duration + 40);
   }
 
   function removeSelectedName() {
@@ -666,11 +985,51 @@ function App() {
     setStatus(`${title} updated.`);
   }
 
+  function updateActiveTonearm(position) {
+    setTonearmCalibration((current) => ({ ...current, [tonearmPreview]: cleanTonearmCalibration({ ...current, [tonearmPreview]: position })[tonearmPreview] }));
+  }
+
+  function saveTonearmCalibration() {
+    try {
+      window.localStorage.setItem(TONEARM_EDITOR_STORAGE_KEY, JSON.stringify(cleanTonearmCalibration(tonearmCalibration)));
+      setStatus("Tonearm position saved.");
+    } catch {
+      setStatus("The tonearm position could not be saved.");
+    }
+  }
+
+  function resetTonearmCalibration() {
+    const defaults = cleanTonearmCalibration(DEFAULT_TONEARM_CALIBRATION);
+    setTonearmCalibration(defaults);
+    try { window.localStorage.removeItem(TONEARM_EDITOR_STORAGE_KEY); } catch {}
+    setStatus("Tonearm position reset.");
+  }
+
+  async function copyTonearmCode() {
+    const code = tonearmExportCode(tonearmCalibration);
+    try {
+      await navigator.clipboard.writeText(code);
+      setStatus("Tonearm export code copied.");
+      return;
+    } catch {}
+    const field = document.createElement("textarea");
+    field.value = code;
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.appendChild(field);
+    field.select();
+    const copied = document.execCommand("copy");
+    field.remove();
+    setStatus(copied ? "Tonearm export code copied." : "Select and copy the export code manually.");
+  }
+
   const cleanDraftName = CORE.cleanName(draftName);
   const previewName = CORE.hasName(segments, cleanDraftName) ? "" : cleanDraftName;
   const displayedSegments = previewName ? [...segments, { id: "draft-preview", names: [previewName], preview: true }] : segments;
+  const displayedRandomiserMethod = TONEARM_EDITOR_ENABLED ? "Wheel" : randomiserMethod;
+  const exportedTonearmCode = tonearmExportCode(tonearmCalibration);
   const wheelOverlayOpen = Boolean(winner || pendingRemoval || dialog);
-  const wheelLocked = spinning || wheelOverlayOpen;
+  const wheelLocked = spinning || wheelOverlayOpen || TONEARM_EDITOR_ENABLED;
 
   return <div className={`${window.MLH.shell.pageShellClass} names-page`}>
     <window.MLH.AppHeader icon={ASSET.appIcon} title="Name Randomiser" subtitle="Randomly select students to perform, participate in activities or answer questions." profileUsesSharedSettings={false} profileShowLabel={false} />
@@ -680,10 +1039,6 @@ function App() {
           <div className="hub-menu-anchor relative" ref={customiseRef}>
             <window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" aria-hidden="true" className="h-[26px] w-[26px]" />} onClick={() => { if (wheelLocked) return; setMethodOpen(false); setSavedListsOpen(false); setCustomiseOpen((open) => !open); }} dataMenuTrigger={true} />
             {customiseOpen && <window.MLH.MenuPanel title="Customise" position="left-0" variant="customise" dataMenuPanel={true}>
-              <div className="names-customise-section">
-                <window.MLH.MenuSubheading>Options</window.MLH.MenuSubheading>
-                <button type="button" className="names-primary-button names-customise-action" onClick={() => { setCustomiseOpen(false); setDialog({ type: "add-class", value: "", error: "" }); }}><img src={ASSET.classIcon} alt="" aria-hidden="true" className="names-customise-action-icon" /><span>Add Class</span></button>
-              </div>
               <div className="names-customise-section">
                 <window.MLH.MenuSubheading>Audio</window.MLH.MenuSubheading>
                 <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Sound Effects" checked={soundEffects} onChange={() => setSoundEffects((enabled) => !enabled)} />
@@ -699,15 +1054,15 @@ function App() {
             </window.MLH.MenuPanel>}
           </div>
           <div className="hub-menu-anchor names-method-anchor relative" ref={methodRef}>
-            <button type="button" className={`${window.MLH.ToolbarButtonClass} names-method-button`} data-menu-trigger="true" disabled={wheelLocked} aria-expanded={methodOpen} onClick={() => { setCustomiseOpen(false); setSavedListsOpen(false); setMethodOpen((open) => !open); }}><img src={randomiserMethod === "Wheel" ? ASSET.wheel : ASSET.slots} alt="" aria-hidden="true" className="names-method-button-glyph" /><span>{randomiserMethod}</span></button>
+            <button type="button" className={`${window.MLH.ToolbarButtonClass} names-method-button`} data-menu-trigger="true" disabled={wheelLocked} aria-expanded={methodOpen} onClick={() => { setCustomiseOpen(false); setSavedListsOpen(false); setMethodOpen((open) => !open); }}><img src={displayedRandomiserMethod === "Wheel" ? ASSET.wheel : ASSET.slots} alt="" aria-hidden="true" className="names-method-button-glyph" /><span>{randomiserMethodLabel(displayedRandomiserMethod)}</span></button>
             {methodOpen && <window.MLH.MenuPanel title="Randomiser" position="left-0" dataMenuPanel={true}>
               <div className="names-method-options">
                 {CORE.RANDOMISER_METHODS.map((method) => {
                   const active = randomiserMethod === method;
-                  return <button key={method} type="button" className="names-method-option" aria-pressed={active} onClick={() => { setRandomiserMethod(method); setMethodOpen(false); setStatus(`${method} randomiser selected.`); }}>
+                  return <button key={method} type="button" className="names-method-option" aria-pressed={active} onClick={() => { setRandomiserMethod(method); setMethodOpen(false); setStatus(`${randomiserMethodLabel(method)} randomiser selected.`); }}>
                     <span className="names-method-option-inner">
                       <span className="names-method-badge" aria-hidden="true"><img src={method === "Wheel" ? ASSET.wheel : ASSET.slots} alt="" className="names-method-glyph" /></span>
-                      <span className="names-method-label">{method}</span>
+                      <span className="names-method-label">{randomiserMethodLabel(method)}</span>
                       {active && <img src={ASSET.tick} alt="" aria-hidden="true" className="names-method-tick" />}
                     </span>
                   </button>;
@@ -716,14 +1071,15 @@ function App() {
             </window.MLH.MenuPanel>}
           </div>
         </div>} feedback={<NameComposer draftName={draftName} setDraftName={setDraftName} addName={addName} duplicateErrorKey={duplicateErrorKey} clearDuplicateError={() => setDuplicateErrorKey(0)} disabled={wheelLocked} />} right={<div className="flex items-center gap-2">
-          <button type="button" className={`${window.MLH.ToolbarButtonClass} names-toolbar-clear sm:min-w-[92px]`} disabled={wheelLocked || !segments.length} onClick={() => setDialog({ type: "clear" })}>Clear</button>
+          <button type="button" className={`${window.MLH.ToolbarButtonClass} names-toolbar-clear sm:min-w-[112px]`} disabled={wheelLocked || !segments.length} onClick={() => setDialog({ type: "clear" })}>Clear Names</button>
         </div>} />
 
         <div className="names-layout">
-          <section className={`names-wheel-stage ${randomiserMethod === "Rows" ? "is-rows" : "is-wheel"} ${wheelOverlayOpen ? "has-wheel-overlay" : ""}`} aria-label={`${randomiserMethod} name randomiser`}>
-            {randomiserMethod === "Wheel"
-              ? <Wheel segments={displayedSegments} rotation={rotation} spinning={spinning} locked={wheelLocked} durationMs={spinDuration} selectedColour={segmentColour} onRemove={removeSegment} onSpin={performSpin} spinDisabled={wheelLocked || displayedSegments.length < 2 || Boolean(cleanDraftName && !previewName)} />
-              : <SlotMachine segments={displayedSegments} position={slotPosition} locked={wheelLocked} selectedColour={segmentColour} onRemove={removeSegment} onSpin={performSpin} spinDisabled={wheelLocked || displayedSegments.length < 2 || Boolean(cleanDraftName && !previewName)} />}
+          <section className={`names-wheel-stage ${displayedRandomiserMethod === "Rows" ? "is-rows" : "is-wheel"} ${wheelOverlayOpen ? "has-wheel-overlay" : ""}`} aria-label={`${randomiserMethodLabel(displayedRandomiserMethod)} name randomiser`}>
+            {displayedRandomiserMethod === "Wheel"
+              ? <Wheel segments={displayedSegments} rotation={rotation} spinning={spinning} needleEngaged={TONEARM_EDITOR_ENABLED ? tonearmPreview === "playing" : spinning || Boolean(winner)} locked={wheelLocked} selectedColour={segmentColour} onRemove={removeSegment} onSpin={performSpin} spinDisabled={wheelLocked || Boolean(cleanDraftName && !previewName)} tonearmEditor={TONEARM_EDITOR_ENABLED} tonearmCalibration={tonearmCalibration} tonearmPreview={tonearmPreview} onTonearmChange={updateActiveTonearm} />
+              : <SlotMachine segments={displayedSegments} position={slotPosition} locked={wheelLocked} selectedColour={segmentColour} onRemove={removeSegment} onSpin={performSpin} spinDisabled={wheelLocked || Boolean(cleanDraftName && !previewName)} />}
+            {TONEARM_EDITOR_ENABLED && <TonearmEditor calibration={tonearmCalibration} preview={tonearmPreview} setPreview={setTonearmPreview} updateActive={updateActiveTonearm} save={saveTonearmCalibration} reset={resetTonearmCalibration} copyCode={copyTonearmCode} exportCode={exportedTonearmCode} />}
             <div className={`names-fullscreen-action ${isFullscreen && !fullscreenControlVisible ? "is-hidden" : ""}`}>
               <button type="button" className={`${window.MLH.ToolbarButtonClass} names-toolbar-clear gap-2`} aria-label={isFullscreen ? "Exit full screen" : "Enter full screen"} onFocus={() => setFullscreenControlVisible(true)} onClick={toggleFullscreen}><img src={ASSET.fullscreen} alt="" aria-hidden="true" className="names-fullscreen-glyph" /><span>{isFullscreen ? "Exit Full Screen" : "Full Screen"}</span></button>
             </div>
@@ -731,6 +1087,7 @@ function App() {
               <div className="hub-menu-anchor relative" ref={savedListsRef}>
                 <button type="button" className={`${window.MLH.ToolbarButtonClass} gap-2 sm:min-w-[112px]`} data-menu-trigger="true" disabled={wheelLocked} aria-haspopup="menu" aria-expanded={savedListsOpen} onClick={() => { setCustomiseOpen(false); setMethodOpen(false); setSavedListsOpen((open) => !open); }}><img src={ASSET.list} alt="" aria-hidden="true" className="names-toolbar-list-glyph" /><span>Saved Classes</span></button>
                 {savedListsOpen && <window.MLH.MenuPanel title="Saved Classes" position="right-0" dataMenuPanel={true}>
+                  <button type="button" className="names-primary-button names-customise-action" onClick={() => { setSavedListsOpen(false); setDialog({ type: "add-class", value: "", error: "" }); }}><img src={ASSET.classIcon} alt="" aria-hidden="true" className="names-customise-action-icon" /><span>Add Class</span></button>
                   <SavedLists lists={savedLists} activeSavedId={activeSavedId} loadList={(list) => { setSavedListsOpen(false); loadList(list); }} editList={(list) => { setSavedListsOpen(false); setDialog({ type: "edit", list, listTitle: list.title, value: list.segments.flatMap((segment) => segment.names).join("\n"), error: "" }); }} deleteList={(list) => { setSavedListsOpen(false); setDialog({ type: "delete", list }); }} disabled={wheelLocked} />
                 </window.MLH.MenuPanel>}
               </div>
@@ -743,13 +1100,13 @@ function App() {
             {dialog?.type === "save" && <WheelPopover title="Save Class" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" disabled={!CORE.cleanName(dialog.value)} onClick={confirmSave}>Save</button></>}><p>Save the names currently in the randomiser to a class set you can use.</p><input className="names-field mt-4" autoFocus value={dialog.value} placeholder="For example, S2 Music" aria-label="Saved list name" onChange={(event) => setDialog((current) => ({ ...current, value: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") confirmSave(); }} /></WheelPopover>}
             {dialog?.type === "edit" && <WheelPopover title="Edit Class" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" disabled={!CORE.cleanName(dialog.listTitle) || !CORE.uniqueNewNames(dialog.value, []).length} onClick={confirmEditList}>Save</button></>}><p>Edit the class name and students below, with one student on each line.</p><label htmlFor="names-edit-class-name" className="names-edit-field-label">Class Name</label><input id="names-edit-class-name" className="names-field" autoFocus value={dialog.listTitle} placeholder="Class name" onChange={(event) => setDialog((current) => ({ ...current, listTitle: event.target.value, error: "" }))} /><NumberedClassTextarea id="names-edit-class-students" rows={20} value={dialog.value} onChange={(event) => setDialog((current) => ({ ...current, value: event.target.value, error: "" }))} />{dialog.error && <p className="names-duplicate-message !relative !top-auto mt-2" role="alert">{dialog.error}</p>}</WheelPopover>}
             {dialog?.type === "load" && <WheelPopover title="Load List" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" onClick={dialog.confirm}>Load</button></>}><p>Loading <strong>{dialog.list.title}</strong> will replace the current wheel.</p></WheelPopover>}
-            {dialog?.type === "clear" && <WheelPopover title="Are you sure?" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" onClick={() => { setSegments([]); setActiveSavedId(null); setDraftName(""); setDuplicateErrorKey(0); setDialog(null); setStatus("Wheel cleared."); }}>Clear</button></>}><p>This will remove every name from the current wheel. Saved lists will not be affected.</p></WheelPopover>}
+            {dialog?.type === "clear" && <WheelPopover title="Are you sure?" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" onClick={() => { setSegments([]); setActiveSavedId(null); setDraftName(""); setDuplicateErrorKey(0); setDialog(null); setStatus("Wheel cleared."); }}>Clear</button></>}><p>This will remove every name currently added.</p></WheelPopover>}
             {dialog?.type === "delete" && <WheelPopover title="Are you sure?" onClose={() => setDialog(null)} actions={<><button type="button" className="names-secondary-button" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="names-primary-button" onClick={() => { setSavedLists((current) => current.filter((list) => list.id !== dialog.list.id)); if (activeSavedId === dialog.list.id) setActiveSavedId(null); setDialog(null); setStatus(`${dialog.list.title} deleted.`); }}>Delete</button></>}><p>Delete <strong>{dialog.list.title}</strong>? This cannot be undone.</p></WheelPopover>}
-            {winner && <aside ref={winnerPanelRef} className="names-winner-panel" role="dialog" aria-label="Selected name">
+            {winner && <aside ref={winnerPanelRef} className={`names-winner-panel names-winner-colour-card ${winner.colour === "#111111" ? "is-dark" : ""}`} style={{ "--winner-card-colour": winner.colour, "--winner-text-colour": segmentTextColour(winner.colour) }} role="dialog" aria-label="Selected name">
               <div className="names-winner">{winner.names.map((name, index) => <span key={`${name}-${index}`}>{name}</span>)}</div>
               <div className="names-dialog-actions">
                 <button type="button" className="names-primary-button" onClick={removeSelectedName}>Remove Name</button>
-                <button type="button" className="names-secondary-button" onClick={() => setWinner(null)}>Continue</button>
+                <button type="button" className="names-secondary-button" style={{ backgroundColor: segmentColour === CORE.MULTI_SEGMENT_COLOUR ? "#ffffff" : winnerLightAccentColour(winner.colour), borderColor: segmentColour === CORE.MULTI_SEGMENT_COLOUR ? "#ffffff" : winnerLightAccentColour(winner.colour), color: "#111" }} onClick={() => setWinner(null)}>Continue</button>
               </div>
             </aside>}
             {pendingRemoval && <aside ref={removalPanelRef} className="names-winner-panel names-wheel-confirm-panel" role="dialog" aria-labelledby="names-remove-title">
@@ -766,7 +1123,9 @@ function App() {
       </main>
     </div>
 
-    <audio ref={spinAudioRef} src={ASSET.spin} preload="auto" onLoadedMetadata={(event) => { if (event.currentTarget.duration > .5) setSpinDuration(Math.max(MIN_SPIN_DURATION, Math.round(event.currentTarget.duration * 1000))); }} />
+    <audio ref={dropAudioRef} src={ASSET.drop} preload="auto" />
+    <audio ref={vinylAudioRef} src={ASSET.vinylSpin} preload="auto" />
+    <audio ref={spinAudioRef} src={ASSET.cassetteSpin} preload="auto" onLoadedMetadata={(event) => { if (event.currentTarget.duration > .5) setSpinDuration(Math.round(event.currentTarget.duration * 1000)); }} />
   </div>;
 }
 

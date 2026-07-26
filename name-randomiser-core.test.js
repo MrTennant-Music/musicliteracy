@@ -57,8 +57,8 @@ assert.equal(core.SEGMENT_COLOURS.some((colour) => colour.label === "Orange"), f
 assert.deepEqual(core.segmentColourPalette(core.MULTI_SEGMENT_COLOUR), ["#fee2e2", "#ffedd5", "#fef9c3", "#dcfce7", "#dbeafe", "#ede9fe"], "Multi should cycle through the approved fixed pastel palette");
 assert.equal(core.spinControlColour("#ffffff"), "#111111", "White should retain black Spin controls");
 assert.equal(core.spinControlColour("#111111"), "#111111", "Black should retain black Spin controls");
-assert.equal(core.spinControlColour("#fee2e2"), "#fca5a5", "Pastel colours should use their stronger companion for Spin controls");
-assert.equal(core.spinControlColour(core.MULTI_SEGMENT_COLOUR), "#ffffff", "Multi should use a white arrow while its Spin button remains black");
+assert.equal(core.spinControlColour("#fee2e2"), "#111111", "Pastel colours should use black Spin controls");
+assert.equal(core.spinControlColour(core.MULTI_SEGMENT_COLOUR), "#111111", "Multi should use black Spin controls");
 assert.equal(core.cleanSegmentColour("#ffedd5"), core.MULTI_SEGMENT_COLOUR, "The former standalone Orange preference should migrate to Multi");
 assert.equal(core.cleanSegmentColour("#f5f5f4"), "#ffffff", "The former light-grey default should migrate to White");
 assert.equal(core.cleanPersistence({ segmentColour: "#111111" }).segmentColour, "#111111", "The black wheel colour should be restored");
