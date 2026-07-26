@@ -40,7 +40,7 @@ includes("{ beat: 3, beats: 2, rhythm: \"minim\" }", "AH chord slots in 5/4 must
 includes("barlineQuestionPromptText(barlineTargets[0], question.bars.length)", "AH barline prompts must retain two-digit bar numbers");
 includes("question.transpositionTarget?.type === \"meaning\" ? 0 : 95", "A written transposition stave must add 95 pixels below its system");
 includes("const scaleDegreeBoxHeight = MARKING_BOX_HEIGHT + 10;", "Scale-degree boxes must extend 10 pixels farther downward");
-includes("reserveExtraSpacingAfterSystem(ahChordSystemIndex, 300);", "Chord and bass-line boxes must push line 4 down by 300 pixels");
+includes("reserveExtraSpacingAfterSystem(ahChordSystemIndex, 300 + worksheetAhChordGapExtension + worksheetAhChordFollowingStaveOffset);", "Chord and bass-line boxes must include the worksheet spacing adjustments when pushing line 4 down");
 includes("sharedBoxY - 10", "Total-value boxes must extend 10 pixels upward from the top");
 includes("const lineStart = start + 39;", "8va and 8vb dashed lines must be shortened 35 pixels from the left");
 includes("const ENHARMONIC_KEY_SOURCE_OPTIONS = {", "Enharmonic questions must use key-specific boxed source spellings");

@@ -16,11 +16,14 @@ concept. Hard slots begin blank so a teacher can write each one manually. The
 concept shown as the slot title is the topic being assessed; it does not have
 to be the final answer to a teacher-written Hard question.
 
-Only complete slots are copied into the five qualification-level JSON banks
-and `millionaire-music-concept-bank.js`. These are the canonical, auditable
-playable records: they retain the concept, fact, sense, reviewed hint and Music
-Literacy link metadata. An incomplete slot remains safely available in the
-editor but cannot appear in a game.
+A slot becomes playable when it has a question, four answers and a selected
+correct answer. Playable slots are copied into the five qualification-level
+JSON banks and `millionaire-music-concept-bank.js`. The editor labels a
+playable question `needs details` until its supporting description (for Easy
+questions), punctuation, hint and explanation are also complete. This allows a
+teacher-written question to be used while clearly showing what can still be
+improved. A slot without the minimum playable fields remains inactive and
+cannot appear in a game.
 
 The five files in `scripts/music-concepts/strong-hints/` contain one manually
 reviewed, answer-specific Hint lifeline clue for every generated concept or
@@ -54,9 +57,11 @@ before reporting success. If validation fails, the editor restores the previous
 working bank automatically.
 
 `Clear Question` empties the editable fields but does not delete the permanent
-slot. Nothing changes until `Save Question` is pressed. A cleared or partly
-completed slot is saved as incomplete and excluded from Millionaire; completing
-all required fields and saving it adds it back to the playable pool.
+slot. Nothing changes until `Save Question` is pressed. A cleared slot, or one
+without a question, four answers and a selected correct answer, is inactive and
+excluded from Millionaire. Once those minimum fields are saved, it enters the
+playable pool; the editor separately shows whether the supporting details are
+complete.
 
 Description-question feedback is filled automatically from the displayed
 description. Whenever a multiple-choice answer set contains a musical style,

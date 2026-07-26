@@ -362,29 +362,7 @@ function noteMeta(index) {
   };
 }
 
-function makeMelodyNote(index, { id, barIndex, noteIndex, rhythm: rhythmId, beat, chord }) {
-  const meta = noteMeta(index);
-  return {
-    id,
-    barIndex,
-    noteIndex,
-    rhythm: rhythmId,
-    beat,
-    chord,
-    index: meta.index,
-    name: meta.name,
-    letter: meta.letter,
-    step: meta.step,
-  };
-}
 
-function setMelodyNotePitch(note, index) {
-  const meta = noteMeta(index);
-  note.index = meta.index;
-  note.name = meta.name;
-  note.letter = meta.letter;
-  note.step = meta.step;
-}
 
 function weighted(items) {
   const total = items.reduce((sum, item) => sum + item.weight, 0);
@@ -409,9 +387,6 @@ function strongBeat(startBeat, ts) {
   return startBeat === 0 || (ts.id === "4/4" && startBeat === 2);
 }
 
-function canPassing(pattern, i) {
-  return pattern[i] === "quaver" && pattern[i - 1] === "quaver";
-}
 
 function patternBeats(pattern) {
   return pattern.reduce((sum, rhythmId) => sum + rhythm(rhythmId).beats, 0);
@@ -428,44 +403,6 @@ function choosePattern(ts, barIndex) {
   return r(validPatternsFor(ts));
 }
 
-function chooseNoteIndex({ previousIndex, previousMove, chordLetters, isStrong, allowPassing, forceStepwise, barIndex, noteIndex, noteCount }) {
-  if (barIndex === 0 && noteIndex === 0) return r([noteIndexFromLetter("C", 0), noteIndexFromLetter("C", 7)]);
-  if (barIndex === 7 && noteIndex === noteCount - 1) return r([noteIndexFromLetter("C", 0), noteIndexFromLetter("C", 7)]);
-
-  const contour = barIndex < 3 ? 1 : barIndex > 3 ? -1 : 0;
-  const finalPhrase = barIndex >= 6;
-  const candidates = [];
-
-  NOTES.forEach((note, index) => {
-    const letter = note.name[0];
-    const isChordTone = chordLetters.includes(letter);
-    if (!isChordTone && !allowPassing) return;
-
-    const distance = index - previousIndex;
-    const abs = Math.abs(distance);
-    if (abs > MAX_MELODIC_LEAP_STEPS) return;
-    if (forceStepwise && abs !== 1) return;
-
-    let weight = 1;
-    weight *= isStrong ? (isChordTone ? 10 : 0) : (isChordTone ? 4 : 2.5);
-    if (abs === 0) weight *= 2.1;
-    if (abs === 1) weight *= 5.5;
-    if (abs === 2) weight *= 3.1;
-    if (abs === 3) weight *= 1.1;
-    if (abs >= 4) weight *= 0.15;
-    if (previousMove >= 3 && distance < 0 && abs <= 2) weight *= 4;
-    if (previousMove <= -3 && distance > 0 && abs <= 2) weight *= 4;
-    if (Math.abs(previousMove) >= 3 && Math.sign(distance) === Math.sign(previousMove)) weight *= 0.2;
-    if (contour > 0 && distance > 0) weight *= 1.7;
-    if (contour < 0 && distance < 0) weight *= 1.7;
-    if (finalPhrase && ["G", "D", "B", "C", "E"].includes(letter)) weight *= 1.6;
-    if (barIndex === 7 && ["C", "E", "G"].includes(letter)) weight *= 3;
-    if (index < 1 || index > NOTES.length - 2) weight *= 0.35;
-    candidates.push({ value: index, weight });
-  });
-
-  return weighted(candidates.length ? candidates : [{ value: previousIndex, weight: 1 }]);
-}
 
 function melodyNotes(bars) {
   return bars.flatMap(bar => bar.notes || []);
@@ -516,22 +453,6 @@ function leapsRecoverByStep(notes) {
   return true;
 }
 
-function melodyPassesQualityRules(bars) {
-  const notes = melodyNotes(bars);
-  if (notes.length < 2) return false;
-  const intervals = notes.slice(1).map((note, index) => Math.abs(note.step - notes[index].step));
-  const range = Math.max(...notes.map(note => note.step)) - Math.min(...notes.map(note => note.step));
-  if (notes[0].letter !== "C") return false;
-  if (notes.at(-1).letter !== "C") return false;
-  if (range > MAX_MELODIC_RANGE_STEPS) return false;
-  if (Math.max(...intervals) > MAX_MELODIC_LEAP_STEPS) return false;
-  if (hasAwkwardBarlineLeap(bars)) return false;
-  if (!hasBalancedContour(notes)) return false;
-  if (!leapsRecoverByStep(notes)) return false;
-  if (longestRepeatedPitchRun(notes) > MAX_REPEATED_PITCH_RUN) return false;
-  if (new Set(notes.map(note => note.step)).size < 3) return false;
-  return true;
-}
 
 function chordFitScore(bar, chord) {
   const chordLetters = CHORDS[chord] || CHORDS.C;
@@ -548,19 +469,6 @@ function allowedChordsForBar(barIndex) {
   return ["C", "F", "G", "Am", "Dm"];
 }
 
-function fitChordsToMelody(bars) {
-  return bars.map(bar => {
-    const allowed = allowedChordsForBar(bar.barIndex);
-    const best = allowed.reduce((bestChord, chord) => (
-      chordFitScore(bar, chord) > chordFitScore(bar, bestChord) ? chord : bestChord
-    ), allowed[0]);
-    return {
-      ...bar,
-      chord: best,
-      notes: bar.notes.map(note => ({ ...note, chord: best })),
-    };
-  });
-}
 
 function makeChordProgression(key) {
   const options = ["IV", "V", "VI"];

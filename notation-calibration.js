@@ -3269,21 +3269,24 @@ document.getElementById("resetButton").addEventListener("click", () => {
 document.getElementById("exportButton").addEventListener("click", async () => {
   const button = document.getElementById("exportButton");
   updateExportText();
+  let copied = false;
   try {
+    if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
     await navigator.clipboard.writeText(exportText.value);
+    copied = true;
   } catch (error) {
     exportText.classList.remove("export-storage");
+    exportText.focus();
     exportText.select();
-    document.execCommand("copy");
-    exportText.classList.add("export-storage");
   }
-  button.classList.add("copied");
-  copyConfirmation.textContent = "Configuration copied";
+  button.classList.toggle("copied", copied);
+  copyConfirmation.textContent = copied ? "Configuration copied" : "Press ⌘C or Ctrl+C to copy";
   copyConfirmation.classList.add("visible");
   window.setTimeout(() => {
     button.classList.remove("copied");
     copyConfirmation.classList.remove("visible");
-  }, 1600);
+    if (!copied) exportText.classList.add("export-storage");
+  }, copied ? 1600 : 3000);
 });
 
 fillGeneratedSymbolChecks();

@@ -441,10 +441,6 @@
         ?? FULL_ACCOMPANIMENT_PATTERN_LIBRARY.block_chords.variants.simple_4;
     }
 
-    function accompanimentPatternLabel(styleId) {
-      return FULL_ACCOMPANIMENT_PATTERN_LIBRARY[styleId]?.name
-        ?? styleId.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-    }
 
     function adaptPatternToMeter(stylePattern, meterInfo) {
       if (!stylePattern?.variants) return null;
@@ -4520,56 +4516,6 @@
       return bars.map((bar) => bar.notes.map((note) => `${note.rest ? "R" : note.step}:${note.rhythm}:${note.tieToNext ? "tie" : ""}`).join(",")).join("|");
     }
 
-    function makeIdentifyMelodyQuestion(level = "AH") {
-      const useShortExtract = Math.random() < 0.28;
-      const base = makeCompletionQuestion(level, 0, useShortExtract);
-      const clef = Math.random() < 0.28 ? "bass" : "treble";
-      const sourceBars = useShortExtract ? base.bars.slice(0, 2) : base.bars;
-      const correctBars = cloneBarsForOption(sourceBars, "correct");
-      if (Math.random() < 0.28) addTieToAhBars(correctBars, base.key, base.timeSignature);
-      if (clef === "bass") {
-        correctBars.forEach((bar) => {
-          bar.notes = bar.notes.map((note) => {
-            if (note.rest) return note;
-            const lower = NOTE_POOL[clamp(noteBaseIndex(note) - 7, 0, NOTE_POOL.length - 1)];
-            return { ...note, ...lower, writtenAccidental: melodicAccidentalForLetter(base.key, lower.letter) };
-          });
-        });
-      }
-      fitBarsToClefRange(correctBars, clef, base.key);
-      const options = [{ id: "correct", bars: correctBars, correct: true }];
-      const seen = new Set([barsSignature(correctBars)]);
-
-      let attempts = 0;
-      while (options.length < 3 && attempts < 40) {
-        attempts += 1;
-        const variantBars = makeMelodyVariantBars(correctBars, base.key, `variant-${options.length}-${attempts}`);
-        fitBarsToClefRange(variantBars, clef, base.key);
-        const signature = barsSignature(variantBars);
-        if (seen.has(signature)) continue;
-        seen.add(signature);
-        options.push({ id: `variant-${options.length}`, bars: variantBars, correct: false });
-      }
-
-      while (options.length < 3) {
-        const fallbackBars = makeMelodyVariantBars(correctBars, base.key, `fallback-${options.length}`);
-        options.push({ id: `variant-${options.length}`, bars: fallbackBars, correct: false });
-      }
-
-      balanceRestOptions(options, base.key);
-      const shuffledOptions = avoidCorrectOptionFirst(shuffleItems(options));
-      return {
-        ...base,
-        questionType: "identifyMelody",
-        clef,
-        targetBar: null,
-        bars: correctBars,
-        options: shuffledOptions,
-        selectedOptionIndex: null,
-        answerIndex: shuffledOptions.findIndex((option) => option.correct),
-        prompt: "Listen to the music and select the melody that matches what you hear.",
-      };
-    }
 
     function cleanAnswer(value) {
       return String(value ?? "")
@@ -4645,12 +4591,6 @@
         .slice(0, 3);
     }
 
-    function advancedHigherInversionLabel(inversion) {
-      if (inversion === 0) return "Root";
-      if (inversion === 1) return "1st";
-      if (inversion === 2) return "2nd";
-      return "";
-    }
 
 function advancedHigherGuideInversionLabel(inversion) {
     if (inversion === 0) return "Root";
@@ -4659,11 +4599,6 @@ function advancedHigherGuideInversionLabel(inversion) {
     return "";
 }
 
-    function advancedHigherRomanWithInversionLabel(symbol, inversion) {
-      if (inversion === 1) return `${symbol}b`;
-      if (inversion === 2) return `${symbol}c`;
-      return symbol;
-    }
 
 function advancedHigherInversionAnswerLabel(inversion) {
     if (inversion === 0) return "Root";
@@ -4906,23 +4841,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
       setSoundingNoteToScaleDegree(question, barIndex, degree, { ...options, target: "last" })
     );
 
-    function setFirstSoundingNoteAboveSpelledTone(question, barIndex, [letter, octave, accidental = 0]) {
-      const bar = question.bars?.[barIndex];
-      if (!bar) return false;
-      const noteIndex = bar.notes.findIndex((note) => !note.rest);
-      if (noteIndex < 0) return false;
-      const targetMidi = noteBaseForLetterOctave(letter, octave).midi + accidental + 1;
-      const candidate = NOTE_POOL
-        .filter((note) => note.midi === targetMidi)
-        .sort((first, second) => Math.abs(noteBaseIndex(bar.notes[noteIndex]) - noteBaseIndex(first)) - Math.abs(noteBaseIndex(bar.notes[noteIndex]) - noteBaseIndex(second)))[0];
-      if (!candidate) return false;
-      bar.notes[noteIndex] = {
-        ...bar.notes[noteIndex],
-        ...candidate,
-        writtenAccidental: melodicAccidentalForLetter(question.key, candidate.letter),
-      };
-      return true;
-    }
 
     function applyAdvancedHigherChordTypeContext(question, barIndex, chordType, spelling) {
       if (chordType.id === "add6") {
@@ -9683,38 +9601,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
         }));
       }
 
-      function articulationTargetFromPointer(event, bar, positions, top) {
-        const pointer = pointerToSvg(event);
-        let closest = null;
-        let closestDistance = Infinity;
-        positions.forEach((x, noteIndex) => {
-          const note = bar.notes[noteIndex];
-          if (!note || note.rest) return;
-          const noteY = yForStep(displayStep(note, question.clef), top);
-          const distance = Math.hypot(pointer.x - x, pointer.y - noteY);
-          if (distance < closestDistance && distance < 36) {
-            closestDistance = distance;
-            closest = { barIndex: bar.barIndex, noteIndex };
-          }
-        });
-        return closest;
-      }
 
-      function placeArticulation(target) {
-        const part = activeArticulationPart();
-        if (!part || feedback || !target) return;
-        const current = placementValue(part, { selectedMarkingId: null, placements: [] });
-        if (!current.selectedMarkingId) return;
-        const existing = current.placements ?? [];
-        const targetKey = articulationPlacementKey(target);
-        const placements = existing.some((placement) => articulationPlacementKey(placement) === targetKey)
-          ? existing.filter((placement) => articulationPlacementKey(placement) !== targetKey)
-          : [...existing, { ...target, markingId: current.selectedMarkingId }];
-        setPracticeAnswers((answers) => ({
-          ...answers,
-          [part.id]: { ...current, placements },
-        }));
-      }
 
       function tripletTargetFromPointer(event, bar, positions, top) {
         const part = activeTripletPart();
@@ -12553,13 +12440,6 @@ function advancedHigherInversionAnswerLabel(inversion) {
       );
     }
 
-    function MenuAudioQuestionGlyph() {
-      return (
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center">
-          <AudioQuestionGlyph />
-        </span>
-      );
-    }
 
     function CustomiseMenu({ activeLevel, limitPlays, setLimitPlays, timerEnabled, setTimerEnabled, followPlayback, setFollowPlayback, enabledQuestionTypes, onToggleQuestionType }) {
       const visibleQuestionTypes = [...practiceQuestionTypesForLevel(activeLevel)].sort((first, second) => first.label.localeCompare(second.label));

@@ -306,6 +306,11 @@ const AH_CHORD_TYPES = [
   { id:"aug", label:"Augmented triad", intervals:[0,4,8], aliases:["augmentedtriad","augmented","aug"] },
 ];
 const DEFAULT_AH_CUSTOMISE = { identifyChords:true, insertPosition:true, createBassLine:true };
+const DEFAULT_N5_CUSTOMISE = { chordProgression:true, identifyChord:true };
+const N5_CUSTOMISE_ROWS = [
+  { id:"chordProgression", label:"Chord Progression", glyph:"V-I" },
+  { id:"identifyChord", label:"Identify Chord", glyph:"I" },
+];
 const AH_CUSTOMISE_ROWS = [
   { id:"identifyChords", label:"Identify Chords", glyph:"°7" },
   { id:"insertPosition", label:"Insert Chord and Position", glyph:"Ic" },
@@ -313,6 +318,9 @@ const AH_CUSTOMISE_ROWS = [
 ];
 function ahCustomiseMatchesLevel(settings=DEFAULT_AH_CUSTOMISE){
   return AH_CUSTOMISE_ROWS.every(row=>Boolean(settings[row.id])===Boolean(DEFAULT_AH_CUSTOMISE[row.id]));
+}
+function n5CustomiseMatchesLevel(settings=DEFAULT_N5_CUSTOMISE){
+  return N5_CUSTOMISE_ROWS.every(row=>Boolean(settings[row.id])===Boolean(DEFAULT_N5_CUSTOMISE[row.id]));
 }
 const AH_CHORD_SPELLINGS = [
   { root:"C", type:"dom7", tones:[["C",4,0],["E",4,0],["G",4,0],["B",4,-1]] },
@@ -433,11 +441,6 @@ function inversionLabel(inversion){
   if(inversion===1) return "1st inv.";
   if(inversion===2) return "2nd inv.";
   return "";
-}
-function romanInversionLabel(symbol,inversion){
-  if(inversion===1) return `${symbol}b`;
-  if(inversion===2) return `${symbol}c`;
-  return symbol;
 }
 function accidentalForInterval(rootTone,targetLetter,intervalSemitones){
   const [rootLetter, rootAccidental=0] = rootTone;
@@ -795,8 +798,13 @@ function makeAHAudioChordQuestion(){
     targetBars:[],
   };
 }
-function makeQuestion(level="N5", ahCustomise=DEFAULT_AH_CUSTOMISE){
-  if(level==="N5") return Math.random()<.5?makeN5Question():makeN5ChordSequenceQuestion();
+function makeQuestion(level="N5", ahCustomise=DEFAULT_AH_CUSTOMISE, n5Customise=DEFAULT_N5_CUSTOMISE){
+  if(level==="N5"){
+    const pool=[];
+    if(n5Customise.chordProgression) pool.push(makeN5ChordSequenceQuestion);
+    if(n5Customise.identifyChord) pool.push(makeN5Question);
+    return r(pool.length?pool:[makeN5ChordSequenceQuestion,makeN5Question])();
+  }
   if(level==="AH"){
     const hasAudio=Boolean(ahCustomise.identifyChords);
     const hasInsert=ahCustomise.insertPosition;
@@ -1551,13 +1559,21 @@ function TempoDropdownRow({tempo,setTempo,stopAudio}){
 function AHMenuGlyph({children,yOffset=5}){
   return <span className="music-symbol inline-flex h-[22px] min-w-[22px] items-center justify-center text-[18px] font-semibold leading-none text-black" style={{transform:`translateY(${yOffset}px)`}}>{children}</span>;
 }
-function MenuRows({level,tempo,setTempo,metronomeOn,setMetronomeOn,highlightPlayback,setHighlightPlayback,showNoteNames,setShowNoteNames,showScaleDegrees,setShowScaleDegrees,ahCustomise,setAhCustomise,stopAudio,onCustomiseChange}){
+function MenuRows({level,tempo,setTempo,metronomeOn,setMetronomeOn,highlightPlayback,setHighlightPlayback,showNoteNames,setShowNoteNames,showScaleDegrees,setShowScaleDegrees,n5Customise,setN5Customise,ahCustomise,setAhCustomise,stopAudio,onN5CustomiseChange,onAHCustomiseChange}){
+  const toggleN5Option=id=>{
+    setN5Customise(current=>{
+      const next={...current,[id]:!current[id]};
+      if(!next.chordProgression&&!next.identifyChord) return current;
+      onN5CustomiseChange?.(next);
+      return next;
+    });
+  };
   const toggleAHOption=id=>{
     setAhCustomise(current=>{
       const next={...current,[id]:!current[id]};
       const hasAnyQuestion=next.identifyChords || next.insertPosition || next.createBassLine;
       if(!hasAnyQuestion) return current;
-      onCustomiseChange?.(next);
+      onAHCustomiseChange?.(next);
       return next;
     });
   };
@@ -1580,6 +1596,14 @@ function MenuRows({level,tempo,setTempo,metronomeOn,setMetronomeOn,highlightPlay
         onChange={()=>setHighlightPlayback(v=>!v)}
       />
     </>}
+    {level==="N5"&&<window.MLH.MenuSubheading>Question Types</window.MLH.MenuSubheading>}
+    {level==="N5"&&N5_CUSTOMISE_ROWS.map(row=><window.MLH.MenuToggleRow
+      key={row.id}
+      glyph={<span className="min-w-[34px] text-center text-xs font-black">{row.glyph}</span>}
+      label={row.label}
+      checked={Boolean(n5Customise[row.id])}
+      onChange={()=>toggleN5Option(row.id)}
+    />)}
     <window.MLH.MenuSubheading>Help</window.MLH.MenuSubheading>
     <window.MLH.MenuToggleRow
       glyph={<span className="inline-flex h-[22px] min-w-[28px] items-center justify-center text-[12px] font-black leading-none text-black">ABC</span>}
@@ -1618,8 +1642,9 @@ function App(){
   const [metronomeOn,setMetronomeOn]=useState(false);
   const [showNoteNames,setShowNoteNames]=useState(false);
   const [showScaleDegrees,setShowScaleDegrees]=useState(false);
+  const [n5Customise,setN5Customise]=useState(DEFAULT_N5_CUSTOMISE);
   const [ahCustomise,setAhCustomise]=useState(DEFAULT_AH_CUSTOMISE);
-  const [question,setQuestion]=useState(()=>makeQuestion(initialLevel,DEFAULT_AH_CUSTOMISE));
+  const [question,setQuestion]=useState(()=>makeQuestion(initialLevel,DEFAULT_AH_CUSTOMISE,DEFAULT_N5_CUSTOMISE));
   const [questionVisible,setQuestionVisible]=useState(true);
   const [answers,setAnswers]=useState({});
   const [promptMessage,setPromptMessage]=useState("");
@@ -1645,7 +1670,9 @@ function App(){
   );
   useEffect(()=>()=>{ clearFeedbackTimers(); stopAudio(); },[]);
   const acc=attempted===0?0:Math.round(correct/attempted*100);
-  const medalEligible=activeLevel!=="AH" || ahCustomiseMatchesLevel(ahCustomise);
+  const medalEligible=activeLevel==="N5"
+    ? n5CustomiseMatchesLevel(n5Customise)
+    : activeLevel!=="AH" || ahCustomiseMatchesLevel(ahCustomise);
   const displayedLevel=medalEligible ? activeLevel : "Custom";
   const displayedLevelLabel=medalEligible ? LEVELS[activeLevel].label : "Custom";
   const selectedTempo=TEMPOS.find(t=>t.id===tempo)||TEMPOS[1];
@@ -1674,7 +1701,11 @@ function App(){
   function clearQuestionTimer(){ if(questionTimerRef.current){ clearTimeout(questionTimerRef.current); questionTimerRef.current=null; } }
   function clearFeedbackTimers(){ feedbackTimersRef.current.forEach(t=>clearTimeout(t)); feedbackTimersRef.current=[]; clearQuestionTimer(); }
   function resetTask(q){ clearFeedbackTimers(); stopAudio(); setQuestion(q); setAnswers({}); setPromptMessage(""); setFeedback(null); setFeedbackFading(false); }
-  function newQuestion(level=activeLevel, nextAHCustomise=ahCustomise){ clearQuestionTimer(); setQuestionVisible(false); questionTimerRef.current=setTimeout(()=>{ questionTimerRef.current=null; resetTask(makeQuestion(level,nextAHCustomise)); setQuestionVisible(true); },260); }
+  function newQuestion(level=activeLevel, nextAHCustomise=ahCustomise, nextN5Customise=n5Customise){ clearQuestionTimer(); setQuestionVisible(false); questionTimerRef.current=setTimeout(()=>{ questionTimerRef.current=null; resetTask(makeQuestion(level,nextAHCustomise,nextN5Customise)); setQuestionVisible(true); },260); }
+  function handleN5CustomiseChange(nextN5Customise){
+    window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
+    if(activeLevel==="N5") newQuestion("N5",ahCustomise,nextN5Customise);
+  }
   function handleAHCustomiseChange(nextAHCustomise){
     window.MLH.resetLevelSessionProgress?.({ setCorrect, setAttempted, setStreak, setBest });
     if(activeLevel==="AH") newQuestion("AH",nextAHCustomise);
@@ -1952,7 +1983,7 @@ function App(){
   }
 
   return <div className={SHELL.pageShellClass || "overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12"}>
-    <window.MLH.AppHeader icon={ASSET.appIcon} title="Chords" subtitle="Identify, create and apply chords in music." worksheetConfig={activeLevel==="N5"||(activeLevel==="AH"&&(ahCustomise.insertPosition||ahCustomise.createBassLine)) ? () => ({ version: 1, activityId: "chords", sourceUrl: window.location.href, settings: { level: activeLevel, ahCustomise } }) : null}>
+    <window.MLH.AppHeader icon={ASSET.appIcon} title="Chords" subtitle="Identify, create and apply chords in music." worksheetConfig={activeLevel==="N5"||(activeLevel==="AH"&&(ahCustomise.insertPosition||ahCustomise.createBassLine)) ? () => ({ version: 1, activityId: "chords", sourceUrl: window.location.href, settings: { level: activeLevel, n5Customise, ahCustomise } }) : null}>
       <window.MLH.ScoreStreakPanel
         assets={ASSET}
         correct={correct}
@@ -1992,7 +2023,7 @@ function App(){
               dataMenuTrigger={true}
             />
             {customiseOpen&&<window.MLH.MenuPanel title="Customise" position="chords-customise-panel -left-[66px] sm:left-0" variant="customise" dataMenuPanel={true}>
-              <MenuRows level={activeLevel} tempo={tempo} setTempo={setTempo} metronomeOn={metronomeOn} setMetronomeOn={setMetronomeOn} highlightPlayback={highlightPlayback} setHighlightPlayback={setHighlightPlayback} showNoteNames={showNoteNames} setShowNoteNames={setShowNoteNames} showScaleDegrees={showScaleDegrees} setShowScaleDegrees={setShowScaleDegrees} ahCustomise={ahCustomise} setAhCustomise={setAhCustomise} stopAudio={stopAudio} onCustomiseChange={handleAHCustomiseChange}/>
+              <MenuRows level={activeLevel} tempo={tempo} setTempo={setTempo} metronomeOn={metronomeOn} setMetronomeOn={setMetronomeOn} highlightPlayback={highlightPlayback} setHighlightPlayback={setHighlightPlayback} showNoteNames={showNoteNames} setShowNoteNames={setShowNoteNames} showScaleDegrees={showScaleDegrees} setShowScaleDegrees={setShowScaleDegrees} n5Customise={n5Customise} setN5Customise={setN5Customise} ahCustomise={ahCustomise} setAhCustomise={setAhCustomise} stopAudio={stopAudio} onN5CustomiseChange={handleN5CustomiseChange} onAHCustomiseChange={handleAHCustomiseChange}/>
             </window.MLH.MenuPanel>}
           </div>
         </div>

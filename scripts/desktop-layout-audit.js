@@ -3,7 +3,7 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const SOURCE_EXTENSIONS = new Set([".html", ".css", ".js", ".jsx", ".ts", ".tsx"]);
-const IGNORED_DIRECTORIES = new Set([".git", "node_modules", "vendor"]);
+const IGNORED_DIRECTORIES = new Set([".git", "dist", "node_modules", "vendor"]);
 const LEGACY_DESKTOP_VARIANT_LIMITS = {
   "accidentals.html": 13,
   "articulation.html": 33,
@@ -86,7 +86,7 @@ for (const file of htmlFiles) {
 
 for (const file of productionFiles) {
   const name = relative(file);
-  if (name === "desktop-layout.js" || name === "scripts/desktop-layout-audit.js") continue;
+  if (name === "desktop-layout.js" || name === "scripts/desktop-layout-audit.js" || name === "tailwind.config.js") continue;
   const text = fs.readFileSync(file, "utf8");
   const isResponsiveHomepage = name === "index.html";
   if (!isResponsiveHomepage && /@media[^{]*(?:min-width|max-width)/i.test(text)) {

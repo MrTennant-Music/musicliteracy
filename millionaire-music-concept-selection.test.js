@@ -61,7 +61,7 @@ function legacyBank() {
     syntheticQuestion({ id: `legacy-${difficulty}-${index + 1}`, difficulty })));
 }
 
-test("the default Hard Music Concept pools contain faithful temporary clones of Medium questions", () => {
+test("the default Hard Music Concept pools use authored questions where available and faithful temporary Medium clones elsewhere", () => {
   const expectedConceptCounts = { N3: 68, N4: 75, N5: 70, H: 48, AH: 39 };
   for (const [level, expectedCount] of Object.entries(expectedConceptCounts)) {
     const mediumQuestions = BANK.pools[level].medium.concepts;
@@ -70,10 +70,14 @@ test("the default Hard Music Concept pools contain faithful temporary clones of 
     assert.equal(mediumQuestions.length, expectedCount);
     assert.equal(hardQuestions.length, expectedCount);
     for (const fallback of hardQuestions) {
-      assert.equal(fallback.temporaryMediumFallback, true);
       assert.equal(fallback.difficulty, "hard");
       assert.equal(fallback.difficultyMin, 11);
       assert.equal(fallback.difficultyMax, 15);
+      if (!fallback.temporaryMediumFallback) {
+        assert.equal(fallback.answerMode, "custom");
+        assert.equal(fallback.questionType, "teacher_authored");
+        continue;
+      }
       const source = mediumById.get(fallback.id.replace(/-hard-fallback$/, ""));
       assert.ok(source, `${fallback.id} should have a Medium source in the same level.`);
       assert.equal(source.conceptId, fallback.conceptId);

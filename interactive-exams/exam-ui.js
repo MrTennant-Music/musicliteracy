@@ -1519,5 +1519,7 @@
   }
 
   root.ExamUI = { initialise };
-  document.addEventListener("DOMContentLoaded", initialise);
+  document.addEventListener("DOMContentLoaded", () => {
+    Promise.resolve(root.InteractiveExamPaperReady).then(initialise, initialise);
+  });
 })(window);

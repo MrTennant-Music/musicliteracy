@@ -14,6 +14,7 @@ const marking = require("../exam-marking.js");
 global.ExamMarking = marking;
 const paper = require("../papers/national5-2014.js");
 const paperRegistry = require("../paper-registry.js");
+const paperRegistrySource = fs.readFileSync(require.resolve("../paper-registry.js"), "utf8");
 const { ExamEngine, createAttempt, validateAttempt } = require("../exam-engine.js");
 const examHtml = fs.readFileSync(require.resolve("../exam.html"), "utf8");
 const examUiSource = fs.readFileSync(require.resolve("../exam-ui.js"), "utf8");
@@ -34,6 +35,9 @@ assert.match(examUiSource, /while \(sourceY < canvas\.height\)/, "Long feedback 
 assert.match(examHtml, /vendor\/html2canvas-1\.4\.1\.min\.js/, "Feedback PDF generation should use the local html2canvas copy.");
 assert.match(examHtml, /vendor\/jspdf-2\.5\.2\.umd\.min\.js/, "Feedback PDF generation should use the local jsPDF copy.");
 assert.equal(paperRegistry["national5-2014"].dataFile.startsWith("papers/national5-2014.js"), true, "The reusable registry should load the 2014 paper without a paper-specific script in exam.html.");
+assert.doesNotMatch(paperRegistrySource, /document\.write/, "Paper data should load without the outdated document.write API.");
+assert.match(paperRegistrySource, /InteractiveExamPaperReady[\s\S]*document\.createElement\("script"\)/, "Paper loading should expose a readiness promise for the exam interface.");
+assert.match(examUiSource, /Promise\.resolve\(root\.InteractiveExamPaperReady\)\.then\(initialise, initialise\)/, "The exam interface should wait for the selected paper data before starting.");
 assert.match(examAudioSource, /audio\.addEventListener\("error",/, "Audio loading failures should be reported instead of silently stalling Exam Mode.");
 assert.match(examAudioSource, /async retry\(\)/, "The Exam Mode audio failure prompt should be able to retry playback from a pupil gesture.");
 assert.doesNotMatch(examAudioSource, /audio\.play\(\)\.then\(\(\) => onClipStart/, "Autoplay should not fire the first clip-start callback a second time.");

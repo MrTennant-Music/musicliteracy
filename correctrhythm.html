@@ -1814,17 +1814,6 @@ function NotesGroup({ notes, positions, systemTop, timeSignature, colour = "curr
   );
 }
 
-function TimeSignatureAt({ timeSignature, x, systemTop }) {
-  const signatureInfo = TIME_SIGNATURE_SYMBOLS[timeSignature.id] || TIME_SIGNATURE_SYMBOLS["4/4"];
-  const top = signatureInfo.top.map((symbolKey) => symbolForKey(symbolKey)).join("") || timeSignature.top;
-  const bottom = signatureInfo.bottom.map((symbolKey) => symbolForKey(symbolKey)).join("") || timeSignature.bottom;
-  return (
-    <g>
-      <text className="music-symbol" x={x} y={systemTop + 15} fill="currentColor" fontSize="34" textAnchor="middle">{top}</text>
-      <text className="music-symbol" x={x} y={systemTop + 39} fill="currentColor" fontSize="34" textAnchor="middle">{bottom}</text>
-    </g>
-  );
-}
 
 function PercussionTimeSignatureAt({ timeSignature, x, y }) {
   const signatureInfo = TIME_SIGNATURE_SYMBOLS[timeSignature.id] || TIME_SIGNATURE_SYMBOLS["4/4"];
@@ -2087,7 +2076,6 @@ function ToolGlyph({ id, className }) {
     </svg>
   );
 }
-function RhythmSymbol({ rhythmId }) { const note = { id: rhythmId, rhythm: rhythmId, displayRhythm: rhythmId, letter: "A", octave: 4, step: 3, midi: 69, writtenAccidental: null }; return <svg viewBox="0 0 90 70" className="h-[56px] w-[74px] overflow-visible"><Note note={note} x={50} systemTop={19} colour="currentColor" /></svg>; }
 
 
 function streakMedal(streak) { if (streak >= 10) return { emoji: "💎", bg: "bg-cyan-400/25", text: "text-cyan-500", sound: "platinum" }; if (streak >= 6) return { emoji: "🥇", bg: "bg-yellow-400/25", text: "text-yellow-500", sound: "gold" }; if (streak >= 4) return { emoji: "🥈", bg: "bg-slate-300/30", text: "text-slate-500", sound: "silver" }; if (streak >= 2) return { emoji: "🥉", bg: "bg-amber-700/20", text: "text-amber-700", sound: "bronze" }; return null; }
@@ -2113,140 +2101,8 @@ function defaultQuestionTypesForLevel(level) {
   const required = LEVEL_REQUIRED_OPTIONS[level] ?? LEVEL_REQUIRED_OPTIONS.N5;
   return [...required.questionTypes];
 }
-function StatCard({ label, value, footer, progress = null, medal = null, variant = "default", confettiKey = 0 }) {
-  const safeProgress = progress == null ? null : clamp(progress, 0, 100);
-  const fillHeight = safeProgress == null || safeProgress <= 0 ? 0 : safeProgress;
-  const fillColour = safeProgress == null ? "transparent" : safeProgress < 50 ? "rgba(220, 38, 38, 0.38)" : safeProgress < 70 ? "rgba(255, 120, 0, 0.42)" : "rgba(22, 163, 74, 0.38)";
-  const isStreak = variant === "streak";
-  return <div className={isStreak ? "relative overflow-visible bg-transparent p-3" : `relative overflow-hidden rounded-xl border border-stone-200 p-3 shadow-sm ${medal ? medal.bg : "bg-stone-50"}`}>{isStreak && confettiKey > 0 && <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">{Array.from({ length: 18 }).map((_, index) => <span key={index} className="absolute block h-1.5 w-1 rounded-sm" style={{ left: `${8 + ((index * 19) % 84)}%`, top: "-8px", backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5], animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`, animationDelay: `${(index % 6) * 0.035}s` }} />)}</div>}{safeProgress !== null && <div className="absolute bottom-0 left-0 right-0 transition-all duration-700" style={{ height: `${fillHeight}%`, background: fillColour }} />}<div className="relative z-10 text-center"><div className="text-xs uppercase tracking-wide text-stone-500">{label}</div><div className={`text-xl font-semibold leading-tight ${isStreak && medal ? medal.text : ""}`}>{value}</div>{footer && <div className="mt-1 text-[13px] leading-none text-stone-500">{footer}</div>}</div>{isStreak && <div className="pointer-events-none absolute -right-[12px] top-[12px] z-[999] select-none text-3xl leading-none" style={medal?.emoji ? { animation: "medalShine 1.4s ease-in-out infinite" } : { opacity: 0.16, filter: "grayscale(1) brightness(0.7)" }}>{medal?.emoji ?? "🥉"}</div>}</div>;
-}
 
-function CorrectRhythmScorePanel({ correct, attempted, accuracy, streak, bestStreak, resetScore, confettiKey, medalEligible }) {
-  const [popover, setPopover] = useState(null);
-  const [autoPopoverKey, setAutoPopoverKey] = useState(0);
-  const ref = useRef(null);
-  window.MLH.useClickAway(ref, () => setPopover(null));
-
-  const scoreFill = clamp(accuracy || 0, 0, 100);
-  const scoreColour = scoreFill < 50 ? "rgba(220,38,38,.38)" : scoreFill < 70 ? "rgba(255,120,0,.42)" : "rgba(22,163,74,.38)";
-  const thresholds = [
-    { label: "Bronze", value: 2, icon: ASSET.bronze, className: "text-amber-700", active: streak >= 2 && streak < 4 },
-    { label: "Silver", value: 4, icon: ASSET.silver, className: "text-slate-500", active: streak >= 4 && streak < 6 },
-    { label: "Gold", value: 6, icon: ASSET.gold, className: "text-yellow-500", active: streak >= 6 && streak < 10 },
-    { label: "Diamond", value: 10, icon: ASSET.diamond, className: "text-cyan-500", active: streak >= 10 },
-  ];
-  const activeThreshold = medalEligible ? thresholds.find((item) => item.active) : null;
-  useEffect(() => {
-    if (!medalEligible || confettiKey <= 0) return;
-    setAutoPopoverKey(confettiKey);
-    const timer = setTimeout(() => setAutoPopoverKey(0), 2000);
-    return () => clearTimeout(timer);
-  }, [confettiKey, medalEligible]);
-  const autoMedalPopover = medalEligible && autoPopoverKey > 0;
-  const medalStyle = !medalEligible
-    ? { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-    : streak >= 10
-    ? { backgroundColor: "rgba(34, 211, 238, .25)", color: "#06b6d4" }
-    : streak >= 6
-      ? { backgroundColor: "rgba(250, 204, 21, .25)", color: "#eab308" }
-      : streak >= 4
-        ? { backgroundColor: "rgba(203, 213, 225, .3)", color: "#64748b" }
-        : streak >= 2
-          ? { backgroundColor: "rgba(180, 83, 9, .2)", color: "#b45309" }
-          : { backgroundColor: "#fafaf9", color: "#000000" };
-  const tile = window.MLH.shell.scoreTileClass;
-  const active = window.MLH.shell.scoreTileActiveClass;
-
-  return (
-    <div ref={ref} className="grid w-full grid-cols-2 gap-2 md:w-auto md:grid-cols-[112px_98px] lg:grid-cols-[124px_108px]">
-      <section
-        role="button"
-        tabIndex="0"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => setPopover((value) => value === "score" ? null : "score")}
-        className={`${tile} ${popover === "score" ? active : ""}`}
-      >
-        <div className="absolute inset-0 overflow-hidden rounded-xl">
-          <div className="absolute bottom-0 -left-[2px] right-0 rounded-b-xl transition-all duration-700" style={{ height: `${scoreFill}%`, background: scoreColour }} />
-        </div>
-        <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
-          <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Score</div>
-          <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight text-black sm:text-[22px]">{correct}/{attempted}</div>
-          <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Accuracy: {accuracy}%</div>
-        </div>
-        {popover === "score" && (
-          <button
-            type="button"
-            onClick={(event) => { event.stopPropagation(); resetScore(); setPopover(null); }}
-            className="fixed-popover-button score-reset-button absolute left-1/2 top-full z-[120] mt-2 flex min-w-[112px] w-full -translate-x-1/2 items-center justify-center rounded-xl border border-[#dc2626] bg-[#dc2626] px-3 py-2 text-sm font-semibold text-white shadow-[0_14px_34px_rgba(0,0,0,0.28)] sm:w-auto"
-            style={{ animation: "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
-          >
-            Reset
-          </button>
-        )}
-      </section>
-      <section
-        role="button"
-        tabIndex="0"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => setPopover((value) => value === "streak" ? null : "streak")}
-        className={`${tile} overflow-visible ${popover === "streak" ? active : ""}`}
-        style={{ backgroundColor: medalStyle.backgroundColor }}
-      >
-        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl">
-          <div className="absolute inset-0 rounded-xl transition-colors duration-700" style={{ backgroundColor: medalStyle.backgroundColor }} />
-        </div>
-        {medalEligible && confettiKey > 0 && (
-          <div key={confettiKey} className="pointer-events-none absolute inset-0 z-20 overflow-visible">
-            {Array.from({ length: 18 }).map((_, index) => (
-              <span
-                key={index}
-                className="absolute block h-1.5 w-1 rounded-sm"
-                style={{
-                  left: `${8 + ((index * 19) % 84)}%`,
-                  top: "-8px",
-                  backgroundColor: ["#facc15", "#38bdf8", "#fb7185", "#4ade80", "#a78bfa"][index % 5],
-                  animation: `confettiDrop ${0.85 + (index % 5) * 0.12}s ease-out forwards`,
-                  animationDelay: `${(index % 6) * 0.035}s`,
-                }}
-              />
-            ))}
-          </div>
-        )}
-        <div className="relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center">
-          <div className="text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]">Streak</div>
-          <div className="mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px]" style={{ color: medalStyle.color }}>{streak}</div>
-          <div className="mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]">Highest: {bestStreak}</div>
-        </div>
-        {(popover === "streak" || autoMedalPopover) && (
-          <div
-            className="fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]"
-            style={{ animation: autoMedalPopover ? "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1), medalPopupOut .24s ease-in 1.76s forwards" : "medalPopupIn .28s cubic-bezier(.22,1.25,.32,1)" }}
-          >
-            <div className="flex items-end justify-center gap-3">
-              {thresholds.map((item) => (
-                <div key={item.value} className={`flex flex-col items-center justify-end ${activeThreshold?.label === item.label ? "medal-threshold-active" : ""}`}>
-                  <img src={item.icon} alt="" aria-hidden="true" className={`h-[22.8px] w-[22.8px] object-contain ${medalEligible ? "" : "grayscale opacity-35"}`} />
-                  <span className={`mt-1 text-[11px] font-semibold leading-none ${medalEligible ? item.className : "text-stone-400"}`}>{item.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
 function Feedback({ feedback, fading }) { return <window.MLH.FeedbackBadge feedback={feedback} fading={fading} animationPrefix="note" />; }
-function TapIcon() { return <svg width="22" height="22" viewBox="0 0 32 32" fill="none" aria-hidden="true" className="shrink-0 translate-x-[6px]"><path d="M16 15.5v-8.2a1.7 1.7 0 0 1 3.4 0v8.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><path d="M19.4 15.5v-3.2a1.55 1.55 0 0 1 3.1 0v5.4c0 4.2-2.7 7.3-6.9 7.3h-1.1c-2.1 0-3.2-.9-4.4-2.5l-2.5-3.4a1.55 1.55 0 0 1 2.4-1.95l1.8 1.85V15.5a1.7 1.7 0 0 1 3.4 0v2.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="17.7" cy="8" r="4.9" stroke="currentColor" strokeWidth="1.6" opacity="0.45" /></svg>; }
-function MenuIcon({ type }) { const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "currentColor", className: "h-[22.5px] w-[22.5px] shrink-0 text-stone-700", "aria-hidden": "true" }; if (type === "difficulty") return <svg {...common}><path d="M4 18h16v2H4v-2Z" /><path d="M5 14h3v3H5v-3Z" /><path d="M10.5 10h3v7h-3v-7Z" /><path d="M16 5h3v12h-3V5Z" /></svg>; if (type === "tempo") return <span className="flex h-[22.5px] w-[22.5px] shrink-0 items-center justify-center text-base leading-none text-stone-700">♫</span>; if (type === "metronome") return <svg {...common}><path d="M8.5 3.5h7L20 20.5H4L8.5 3.5Z" /><path d="M12.7 5.8 16 15.2l-1.7.6-3.3-9.4 1.7-.6Z" fill="white" opacity=".9" /><circle cx="12" cy="16.4" r="1.25" fill="white" opacity=".9" /></svg>; if (type === "follow") return <svg {...common}><path d="M12 5.2c5.2 0 8.7 5.05 9.55 6.48a.63.63 0 0 1 0 .64C20.7 13.75 17.2 18.8 12 18.8S3.3 13.75 2.45 12.32a.63.63 0 0 1 0-.64C3.3 10.25 6.8 5.2 12 5.2Z" /><circle cx="12" cy="12" r="3.15" fill="white" opacity=".95" /><circle cx="12" cy="12" r="1.55" /></svg>; return null; }
-function AppIcon() {
-  return (
-    <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
-      <img src="https://mrtennant-music.github.io/musicliteracy/correct-the-rhythm-icon.svg" alt="" aria-hidden="true" className="block h-full w-full object-contain" />
-    </div>
-  );
-}
 
 function ToolButton({ tool, selectedToolId, feedback, question, onSelect }) {
   const state = toolFeedbackState(question, tool.id, feedback);
@@ -2440,7 +2296,6 @@ function App() {
   }, [medalEligible]);
 
   function injectStyles() { if (document.getElementById("correct-rhythm-golden-style")) return; const style = document.createElement("style"); style.id = "correct-rhythm-golden-style"; style.innerHTML = `button { -webkit-tap-highlight-color: transparent; user-select: none; transition: transform .08s ease, filter .08s ease, background-color .12s ease, box-shadow .12s ease; } button:active { transform: scale(.96); filter: brightness(.92); } .chords-customise-panel{z-index:900;max-height:calc(100dvh - 170px);overflow-y:auto} @media (hover:hover) and (pointer:fine) { .hover-bg-stone-100:hover { background-color: rgb(245 245 244); } .hover-bg-stone-800:hover { background-color: rgb(41 37 36); } .hover-bg-green-700:hover { background-color: rgb(21 128 61); } } @keyframes medalShine { 0%,100% { transform: scale(1) rotate(-4deg); filter: drop-shadow(0 0 0 rgba(250,204,21,0)); } 50% { transform: scale(1.16) rotate(4deg); filter: drop-shadow(0 0 10px rgba(250,204,21,.9)); } } @keyframes confettiDrop { 0% { transform: translateY(-12px) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 100% { transform: translateY(72px) rotate(260deg); opacity: 0; } } @keyframes incorrectDropShake { 0% { transform: translateY(-28px); opacity: 0; } 55% { transform: translateY(0); opacity: 1; } 68% { transform: translateX(-5px); } 78% { transform: translateX(5px); } 88% { transform: translateX(-3px); } 100% { transform: translateX(0); opacity: 1; } } @keyframes correctFade { 0% { transform: translateY(-18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }`; document.head.appendChild(style); }
-  function formatPlaybackTime(seconds) { const safe = Math.max(0, Math.floor(seconds || 0)); return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`; }
   function stopAudioPlayback() { if (audioStopTimerRef.current) window.clearTimeout(audioStopTimerRef.current); if (playbackFrameRef.current) window.cancelAnimationFrame(playbackFrameRef.current); highlightTimersRef.current.forEach((timer) => window.clearTimeout(timer)); highlightTimersRef.current = []; if (audioContextRef.current) { try { if (audioContextRef.current.state !== "closed") audioContextRef.current.close(); } catch {} } audioContextRef.current = null; setIsAudioPlaying(false); setActivePlaybackNoteId(null); setPlaybackElapsed(0); setPlaybackTotal(0); }
   function clearFeedbackTimers() { if (timerRef.current) { window.clearTimeout(timerRef.current); timerRef.current = null; } if (feedbackFadeTimerRef.current) { window.clearTimeout(feedbackFadeTimerRef.current); feedbackFadeTimerRef.current = null; } }
   function newQuestion(nextTypes = enabledQuestionTypes, nextSyncopation = syncopationOn, nextLevel = activeLevel) { clearFeedbackTimers(); stopAudioPlayback(); setQuestionVisible(false); window.setTimeout(() => { setQuestion(makeQuestion({ enabledQuestionTypes: nextTypes, syncopationOn: nextSyncopation, level: nextLevel })); setSelectedToolId(null); setHoverTarget(null); setFeedback(null); setFeedbackFading(false); setPrompt(""); setQuestionVisible(true); }, 300); }

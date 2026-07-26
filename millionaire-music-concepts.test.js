@@ -47,14 +47,16 @@ test("the five canonical banks contain only concepts and answer options from the
   for (const { code, label } of LEVELS) {
     const questions = CANONICAL_BANKS[code].questions;
     const permittedConceptIds = new Set(KNOWLEDGE_BANK.concepts.filter((concept) => concept.level === label).map((concept) => concept.concept_id));
-    assert.equal(questions.length, permittedConceptIds.size * 2, `${label} should contain one ready Easy and Medium question per concept.`);
+    const hardQuestions = questions.filter((question) => question.difficulty === "Hard");
+    assert.equal(questions.length, permittedConceptIds.size * 2 + hardQuestions.length, `${label} should contain one ready Easy and Medium question per concept, plus any teacher-authored Hard questions.`);
     assert.ok(questions.every((question) => question.level === label), `${label} must not contain questions tagged for another level.`);
     assert.ok(questions.every((question) => permittedConceptIds.has(question.conceptId)), `${label} must not assess a concept from another level.`);
-    assert.ok(questions.every((question) => ["Easy", "Medium"].includes(question.difficulty)), `${label} should exclude blank Hard slots from its playable bank.`);
+    assert.ok(questions.every((question) => ["Easy", "Medium", "Hard"].includes(question.difficulty)), `${label} should exclude incomplete slots from its playable bank.`);
     permittedConceptIds.forEach((conceptId) => {
       const conceptQuestions = questions.filter((question) => question.conceptId === conceptId);
-      assert.equal(conceptQuestions.length, 2, `${conceptId} should have exactly two ready questions.`);
-      assert.deepEqual(new Set(conceptQuestions.map((question) => question.difficulty)), new Set(["Easy", "Medium"]));
+      assert.equal(conceptQuestions.filter((question) => question.difficulty === "Easy").length, 1, `${conceptId} should have one Easy question.`);
+      assert.equal(conceptQuestions.filter((question) => question.difficulty === "Medium").length, 1, `${conceptId} should have one Medium question.`);
+      assert.ok(conceptQuestions.filter((question) => question.difficulty === "Hard").length <= 1, `${conceptId} should have no more than one teacher-authored Hard question.`);
     });
     assert.ok(questions.every((question) => !/\bpupil\b/i.test(question.question)), `${label} questions should use direct wording rather than third-person pupil framing.`);
     assert.ok(questions.every((question) => question.question.length <= 200), `${label} questions must fit the Millionaire question panel.`);
@@ -64,7 +66,7 @@ test("the five canonical banks contain only concepts and answer options from the
     assert.ok(questions.every((question) => !AVOIDABLE_FORMAL_WORDING.test(question.question)
       && !AVOIDABLE_FORMAL_WORDING.test(question.hint)), `${label} question wording and hints should avoid the reviewed formal wording.`);
     assert.ok(questions.every((question) => !/^A second useful clue is:/i.test(question.hint)), `${label} hints should present the clue directly.`);
-    assert.ok(questions.filter((question) => question.difficulty === "Easy").every((question) => question.answers.every((answer) =>
+    assert.ok(questions.filter((question) => question.difficulty === "Easy" && question.answerMode === "concept").every((question) => question.answers.every((answer) =>
       conceptNamesByLevel[code].has(normalise(answer.text))
       || REVIEWED_ANSWER_EXCEPTIONS.get(question.id)?.has(normalise(answer.text)))), `${label} distractors must come from the same course level unless explicitly reviewed.`);
     assert.equal(new Set(questions.map((question) => question.id)).size, questions.length, `${label} question IDs must be unique.`);
@@ -103,16 +105,17 @@ test("description questions reuse their description as feedback", () => {
   });
 });
 
-test("the Millionaire adapter preserves 600 ready questions and adds 300 temporary Hard clones", () => {
+test("the Millionaire adapter preserves every ready question and fills the remaining Hard stages with temporary clones", () => {
   const runtimeConcepts = BANK.filter((question) => question.category === "concepts");
   const canonicalIds = new Set(LEVELS.flatMap(({ code }) => CANONICAL_BANKS[code].questions.map((question) => question.id)));
   const directQuestions = runtimeConcepts.filter((question) => !question.temporaryMediumFallback);
   const temporaryHardQuestions = runtimeConcepts.filter((question) => question.temporaryMediumFallback);
   const directById = new Map(directQuestions.map((question) => [question.id, question]));
-  assert.equal(canonicalIds.size, 600);
-  assert.equal(directQuestions.length, 600);
+  const authoredHardCount = directQuestions.filter((question) => question.difficulty === "hard").length;
+  assert.equal(directQuestions.length, canonicalIds.size);
   assert.deepEqual(new Set(directQuestions.map((question) => question.id)), canonicalIds);
-  assert.equal(temporaryHardQuestions.length, 300);
+  assert.equal(temporaryHardQuestions.length, 300 - authoredHardCount);
+  assert.equal(runtimeConcepts.filter((question) => question.difficulty === "hard").length, 300);
   for (const fallback of temporaryHardQuestions) {
     assert.equal(fallback.difficulty, "hard");
     assert.equal(fallback.difficultyMin, 11);
@@ -134,27 +137,40 @@ test("Easy descriptions and Medium NOT-a-feature prompts use their intended game
   const runtimeConcepts = BANK.filter((question) => question.category === "concepts");
   const easyQuestions = runtimeConcepts.filter((question) => question.difficulty === "easy");
   const mediumQuestions = runtimeConcepts.filter((question) => question.difficulty === "medium");
-  const hardFallbacks = runtimeConcepts.filter((question) => question.difficulty === "hard");
+  const hardQuestions = runtimeConcepts.filter((question) => question.difficulty === "hard");
+  const hardFallbacks = hardQuestions.filter((question) => question.temporaryMediumFallback && question.answerMode === "not_feature");
+  const authoredHardQuestions = hardQuestions.filter((question) => !question.temporaryMediumFallback);
+  const customHardFallbacks = hardQuestions.filter((question) => question.temporaryMediumFallback && question.answerMode === "custom");
+  const standardEasyQuestions = easyQuestions.filter((question) => question.answerMode === "concept");
+  const customEasyQuestions = easyQuestions.filter((question) => question.answerMode === "custom");
+  const standardMediumQuestions = mediumQuestions.filter((question) => question.answerMode === "not_feature");
+  const customMediumQuestions = mediumQuestions.filter((question) => question.answerMode === "custom");
   assert.equal(easyQuestions.length, 300);
   assert.equal(mediumQuestions.length, 300);
-  assert.equal(hardFallbacks.length, 300);
-  for (const question of easyQuestions) {
+  assert.equal(hardQuestions.length, 300);
+  for (const question of standardEasyQuestions) {
     assert.equal(question.answerMode, "concept");
     assert.equal(question.prompt, "What concept is described?");
     assert.ok(question.conceptDescription?.trim(), `${question.id} should provide its concept description separately.`);
     assert.ok(question.question.startsWith(question.conceptDescription), `${question.id} should retain its full reviewed question for records and review.`);
     assert.notEqual(question.conceptDescription, question.question);
   }
-  for (const question of [...mediumQuestions, ...hardFallbacks]) {
+  for (const question of [...standardMediumQuestions, ...hardFallbacks]) {
     assert.equal(question.questionType, "feature_exclusion");
     assert.equal(question.answerMode, "not_feature");
     assert.equal(question.conceptDescription, null);
     assert.equal(question.prompt, question.question);
     assert.equal(question.prompt, `Which is NOT a feature of ${question.concept}?`);
   }
-  const directQuestions = [...easyQuestions, ...mediumQuestions];
+  for (const question of [...customEasyQuestions, ...customMediumQuestions, ...authoredHardQuestions, ...customHardFallbacks]) {
+    assert.equal(question.answerMode, "custom");
+    assert.equal(question.questionType, "teacher_authored");
+    assert.ok(question.prompt?.trim());
+    assert.equal(question.answers.length, 4);
+  }
+  const directQuestions = runtimeConcepts.filter((question) => !question.temporaryMediumFallback);
   const displayedKeys = directQuestions.map((question) => [question.level, normalise(question.conceptDescription), normalise(question.prompt)].join("|"));
-  assert.equal(new Set(displayedKeys).size, displayedKeys.length, "The 600 authored questions should have unique displays.");
+  assert.equal(new Set(displayedKeys).size, displayedKeys.length, "Authored questions should have unique displays.");
   hardFallbacks.forEach((fallback) => {
     const sourceId = fallback.id.replace(/-hard-fallback$/, "");
     const source = mediumQuestions.find((question) => question.id === sourceId);
@@ -177,7 +193,8 @@ test("Music Concept games use temporary Medium clones at Hard stages without rep
         ...Array(5).fill("hard"),
       ]);
       assert.ok(game.slice(0, 10).every((question) => !question.temporaryMediumFallback));
-      assert.ok(game.slice(10).every((question) => question.temporaryMediumFallback === true));
+      assert.ok(game.slice(10).every((question) => question.temporaryMediumFallback === true
+        || (question.difficulty === "hard" && question.answerMode === "custom")));
       assert.ok(game.every((question) => question.level === code && question.category === "concepts"));
     }
   }
@@ -198,7 +215,9 @@ test("mixed Music Literacy and Music Concept games stay balanced without repeati
       game.forEach((question, index) => {
         assert.equal(question.level, code);
         assert.equal(question.difficulty, CORE.difficultyForStage(index + 1));
-        if (index >= 10 && question.category === "concepts") assert.equal(question.temporaryMediumFallback, true);
+        if (index >= 10 && question.category === "concepts") {
+          assert.ok(question.temporaryMediumFallback === true || question.answerMode === "custom");
+        }
         else assert.ok(!question.temporaryMediumFallback);
         if (index >= 2) {
           assert.ok(!(game[index - 2].category === question.category && game[index - 1].category === question.category), `${code} should never ask three questions of the same type in a row.`);
@@ -302,8 +321,7 @@ test("questions for concepts with multiple meanings carry a valid, explicit sens
 test("every Medium question has three true target features and one correct false feature", () => {
   const conceptsById = new Map(KNOWLEDGE_BANK.concepts.map((concept) => [concept.concept_id, concept]));
   const mediumQuestions = LEVELS.flatMap(({ code }) => CANONICAL_BANKS[code].questions
-    .filter((question) => question.difficulty === "Medium"));
-  assert.equal(mediumQuestions.length, 300);
+    .filter((question) => question.difficulty === "Medium" && question.answerMode === "not_feature"));
   for (const question of mediumQuestions) {
     assert.equal(question.questionType, "feature_exclusion");
     assert.equal(question.answerMode, "not_feature");
@@ -331,9 +349,9 @@ test("the UI loads the concept bank before the combined bank and keeps non-audio
   const combinedIndex = html.indexOf("millionaire-question-bank.js");
   assert.ok(generatedIndex >= 0 && combinedIndex > generatedIndex, "The generated concept bank must load before the combined question bank.");
   assert.match(script, /id: "concepts", categories: \["concepts"\], label: "Music Concepts"/);
-  assert.match(script, /audioQuestions:\s*true/);
-  assert.match(script, /settings\.audioQuestions && categories\.includes\("concepts"\) && categoryAvailableAtLevel\(settings\.level, "listening"\)/);
-  assert.match(script, /label="Audio Questions"[\s\S]*?disabled=\{!settings\.questionTypes\.includes\("concepts"\) \|\| !categoryAvailableAtLevel\(settings\.level, "listening"\)\}/);
+  assert.match(script, /audioQuestions:\s*false/);
+  assert.match(script, /const selectedQuestionCategories = \(\) => \["literacy"\];/);
+  assert.doesNotMatch(script, /label="Audio Questions"/);
   assert.ok(!BANK.some((question) => question.category === "concepts" && (question.audioSrc || question.audio)), "Current Music Concept questions must remain text-only.");
   assert.ok(script.includes('className="millionaire-concept-description"') && script.includes("question.prompt || question.question"), "The description and short question should render in separate containers.");
   assert.match(css, /\.millionaire-question-media\.has-concept-description \{[^}]*align-items: center;[^}]*padding-bottom: 0;/s, "The concept description should be vertically centred above the question.");
@@ -374,10 +392,10 @@ test("the local Question Editor manages 900 permanent concept and difficulty slo
   assert.match(editorScript, /question\.conceptId !== elements\.concept\.value/);
   assert.match(editorScript, /elements\.clear\.addEventListener\("click"/);
   assert.match(editorScript, /Nothing will change in Millionaire until you save/);
-  assert.match(editorScript, /question\?\.status === "ready" \? "ready" : "blank"/);
+  assert.match(editorScript, /question\?\.completionState === "complete" \? "complete" : question\?\.completionState === "needs-details" \? "needs details" : "inactive"/);
   assert.match(editorScript, /• Edited/);
   assert.doesNotMatch(editorScript, /fetch\("\/api\/question\/delete"/);
-  assert.match(gameScript, /href="http:\/\/127\.0\.0\.1:4178\/"[^>]*>[^<]*<span[^>]*>Question Editor<\/span>/);
+  assert.match(gameScript, /setScreen\("creator"\)/, "Millionaire should include its current in-app question creator.");
   assert.equal(overrides.schemaVersion, "1.0");
   assert.ok(overrides.questions && !Array.isArray(overrides.questions));
 
@@ -402,25 +420,31 @@ test("the local Question Editor manages 900 permanent concept and difficulty slo
   });
   const readySlots = editorSlots.slots.filter((slot) => slot.status === "ready");
   const draftSlots = editorSlots.slots.filter((slot) => slot.status === "draft");
-  assert.equal(readySlots.length, 600);
-  assert.equal(draftSlots.length, 300);
+  const canonicalReadyCount = LEVELS.reduce((total, { code }) => total + CANONICAL_BANKS[code].questions.length, 0);
+  assert.equal(readySlots.length, canonicalReadyCount);
+  assert.equal(draftSlots.length, 900 - canonicalReadyCount);
   assert.ok(editorSlots.slots.filter((slot) => slot.difficulty === "Easy" || slot.difficulty === "Medium")
     .every((slot) => slot.status === "ready"));
   const hardSlots = editorSlots.slots.filter((slot) => slot.difficulty === "Hard");
-  assert.ok(hardSlots.every((slot) => slot.status === "draft"
-    && slot.prompt === ""
+  assert.ok(hardSlots.filter((slot) => slot.status === "draft").every((slot) =>
+    slot.prompt === ""
     && slot.answers.length === 4
     && slot.answers.every((answer) => answer === "")
     && slot.correctAnswer === -1
     && slot.hint === ""
-    && slot.explanation === ""), "Every default Hard slot should remain a blank teacher-authored placeholder.");
+    && slot.explanation === ""), "Every unfinished Hard slot should remain a blank teacher-authored placeholder.");
+  assert.ok(hardSlots.filter((slot) => slot.status === "ready").every((slot) =>
+    slot.prompt
+    && slot.answers.length === 4
+    && slot.answers.every(Boolean)
+    && slot.correctAnswer >= 0), "Every ready Hard slot should contain a playable teacher-authored question.");
   const runtimeIds = new Set(BANK.filter((question) => question.category === "concepts").map((question) => question.id));
   editorSlots.slots.forEach((slot) => {
     assert.equal(runtimeIds.has(slot.id), slot.status === "ready", `${slot.id} readiness should match its inclusion in Millionaire.`);
   });
 });
 
-test("the Question Editor saves complete questions and keeps cleared or partial slots out of the game", () => {
+test("the Question Editor saves playable questions and reports whether optional supporting details are complete", () => {
   const { normaliseQuestionOverride, validateRestrictedAnswers } = require("./scripts/music-concepts/question-editor-server.js");
   const blank = normaliseQuestionOverride({
     id: "MCQ-H-MC0218-F01-H-001",
@@ -439,15 +463,23 @@ test("the Question Editor saves complete questions and keeps cleared or partial 
   assert.equal(partial.status, "draft");
   assert.equal(partial.cleared, false);
 
-  const complete = normaliseQuestionOverride({
+  const playable = normaliseQuestionOverride({
     ...blank,
     prompt: "Which section belongs to the Mass?",
     answers: ["Gloria", "Aria", "Episode", "Ritornello"],
     correctAnswer: 0,
+  }, { difficulty: "Hard" });
+  assert.equal(playable.status, "ready");
+  assert.equal(playable.completionState, "needs-details");
+  assert.equal(playable.cleared, false);
+
+  const complete = normaliseQuestionOverride({
+    ...playable,
     hint: "Glory begins this Latin movement.",
     explanation: "Gloria is one of the fixed sections of the Mass.",
   }, { difficulty: "Hard" });
   assert.equal(complete.status, "ready");
+  assert.equal(complete.completionState, "complete");
   assert.equal(complete.cleared, false);
   assert.throws(() => normaliseQuestionOverride({ ...complete, difficulty: "Medium" }, { difficulty: "Hard" }), /difficulty is fixed/);
 
@@ -463,14 +495,13 @@ test("the Question Editor saves complete questions and keeps cleared or partial 
   };
   const savedMedium = normaliseQuestionOverride(mediumQuestion, { difficulty: "Medium", concept: "Mass" });
   assert.equal(savedMedium.status, "ready");
-  assert.throws(() => normaliseQuestionOverride({
+  const customMedium = normaliseQuestionOverride({
     ...mediumQuestion,
     conceptDescription: "A vocal setting of parts of the liturgy.",
-  }, { difficulty: "Medium", concept: "Mass" }), /upper description box blank/);
-  assert.throws(() => normaliseQuestionOverride({
-    ...mediumQuestion,
     prompt: "Which statement does not match Mass?",
-  }, { difficulty: "Medium", concept: "Mass" }), /Medium questions must use/);
+  }, { difficulty: "Medium", concept: "Mass" });
+  assert.equal(customMedium.status, "ready");
+  assert.equal(customMedium.completionState, "complete");
 
   assert.doesNotThrow(() => validateRestrictedAnswers({ level: "National 3", conceptId: "MC-0001" }, {
     answers: ["Blues", "Jazz", "Pop", "Rock"], correctAnswer: 0,

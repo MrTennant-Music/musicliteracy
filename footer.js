@@ -76,23 +76,19 @@ document.body.insertAdjacentHTML("beforeend", `
     <h2>About</h2>
 
     <p>
-      The Music Literacy Hub is a collection of interactive tools designed to develop and reinforce music literacy skills from <strong>National 3</strong> to <strong>Advanced Higher</strong>. Built around <strong>Qualifications Scotland</strong> music literacy concepts, it supports classroom learning, revision and independent study.
+      The Music Literacy Hub is a collection of interactive tools designed to develop and reinforce music literacy skills from <strong>National 3</strong> to <strong>Advanced Higher</strong> in a more visual, interactive and accessible way.
     </p>
 
     <p>
-      The hub includes interactive listening and aural training activities, uses the same desktop layout on every device, and organises concepts by level and topic to support clear progression.
+      The Hub includes interactive listening and aural training activities and is designed to work best with desktop and tablet devices.
     </p>
 
     <p>
-      It was created to make music theory more visual, interactive and accessible.
+      Built around <strong>Qualifications Scotland</strong> music literacy concepts, it supports classroom learning, revision and independent study. It organises concepts by level and topic to support clear progression.
     </p>
 
     <p>
       The Music Literacy Hub uses anonymous Google Analytics to help understand how the website is used. This includes information such as the pages and resources visited, the curriculum levels accessed and general website usage.
-    </p>
-
-    <p>
-      This website was built using Codex.
     </p>
   </div>
 </div>

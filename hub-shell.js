@@ -1,10 +1,24 @@
 (function () {
   const MLH = window.MLH || {};
+  function decodeBase64Url(value) {
+    const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const bytes = Uint8Array.from(window.atob(padded), character => character.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }
+
+  function encodeBase64Url(value) {
+    const bytes = new TextEncoder().encode(value);
+    let binary = "";
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
   function decodeSharedSettings() {
     const encoded = new URLSearchParams(window.location.search).get("settings");
     if (!encoded) return { toggles: {}, fields: {}, buttons: {} };
     try {
-      const json = decodeURIComponent(escape(window.atob(encoded.replace(/-/g, "+").replace(/_/g, "/"))));
+      const json = decodeBase64Url(encoded);
       const parsed = JSON.parse(json);
       return {
         toggles: parsed?.version === 1 && parsed.toggles && typeof parsed.toggles === "object" ? parsed.toggles : {},
@@ -47,7 +61,7 @@
     },
     encoded() {
       const json = JSON.stringify({ version: 1, toggles: sharedSettings.toggles, fields: sharedSettings.fields, buttons: sharedSettings.buttons });
-      return window.btoa(unescape(encodeURIComponent(json))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+      return encodeBase64Url(json);
     },
   };
 

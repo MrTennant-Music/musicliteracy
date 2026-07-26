@@ -21,11 +21,21 @@
   };
 
   root.InteractiveExamPaperRegistry = papers;
+  root.InteractiveExamPaperReady = Promise.resolve(null);
 
   if (typeof document !== "undefined") {
     const requestedId = new URLSearchParams(root.location.search).get("paper") || "national5-2014";
     const entry = papers[requestedId];
-    if (entry) document.write(`<script src="${entry.dataFile}"><\/script>`);
+    if (entry) {
+      root.InteractiveExamPaperReady = new Promise(resolve => {
+        const script = document.createElement("script");
+        script.src = entry.dataFile;
+        script.async = false;
+        script.addEventListener("load", () => resolve(root.InteractiveExamPapers?.[requestedId] || null), { once: true });
+        script.addEventListener("error", () => resolve(null), { once: true });
+        document.head.appendChild(script);
+      });
+    }
   }
 
   if (typeof module !== "undefined" && module.exports) module.exports = papers;

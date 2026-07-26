@@ -46,7 +46,8 @@ assert.match(chordsSource, /activeLevel==="N5"\|\|\(activeLevel==="AH"&&\(ahCust
 assert.match(chordsSource, /function ahSymbolOrChordLabel/, "The Chords activity must share a Roman-numeral-or-chord label formatter");
 assert.match(chordsSource, /ahSymbolOrChordLabel\(question\.key,item\.symbol,item\.chord\)/, "The Chords activity tables must always show both accepted chord labels");
 assert.match(chordsSource, /inversionLabel\(item\.inversion\)\|\|"Root"/, "The Chords activity bass table bottom row must use consistent position names");
-assert.match(chordsSource, /if\(level==="N5"\) return Math\.random\(\)<\.5\?makeN5Question\(\):makeN5ChordSequenceQuestion\(\)/, "National 5 should split outlined-chord and chord-sequence questions equally");
+assert.match(chordsSource, /if\(n5Customise\.chordProgression\) pool\.push\(makeN5ChordSequenceQuestion\)/, "National 5 should include chord-progression questions when that type is enabled");
+assert.match(chordsSource, /if\(n5Customise\.identifyChord\) pool\.push\(makeN5Question\)/, "National 5 should include identify-chord questions when that type is enabled");
 assert.match(chordsSource, /KEYS\.filter\(item=>\["C","F","G"\]\.includes\(item\.id\)\)/, "National 5 chord sequences should use only C, F and G major");
 assert.match(chordsSource, /const N5_SEQUENCE_CHORD_SYMBOLS = \["I", "IV", "V", "VI"\]/, "National 5 chord sequences should use only chords I, IV, V and VI");
 assert.match(chordsSource, /const N5_SEQUENCE_ACCOMPANIMENT_STYLES = \[\s*"block_chords", "waltz", "romantic_octaves", "pop_ballad", "pop_power_piano", "stride_piano",\s*\]/, "National 5 chord-sequence accompaniment choices should all contain full or block chords");
