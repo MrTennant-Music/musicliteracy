@@ -61,8 +61,8 @@
         const panelWidth = panelRef.current?.offsetWidth || 360;
         const gap = 8;
         const edge = 16;
-        const rawLeft = window.innerWidth < 640 ? rect.left - 66 : rect.left;
-        const left = Math.max(edge, Math.min(rawLeft, window.innerWidth - panelWidth - edge));
+        const rawLeft = rect.left;
+        const left = Math.max(edge, Math.min(rawLeft, 1280 - panelWidth - edge));
         const top = Math.max(edge, rect.bottom + gap);
         setFloatingStyle({ left: `${left}px`, top: `${top}px`, maxHeight: `calc(100dvh - ${top + edge}px)` });
       }

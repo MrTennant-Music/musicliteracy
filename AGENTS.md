@@ -1,5 +1,29 @@
 # The Music Literacy Hub project instructions
 
+## Permanent desktop-only layout policy
+
+The Music Literacy Hub uses a fixed 1280px desktop layout on every device for
+all pages except `index.html`. The homepage is the sole responsive,
+mobile-friendly exception. The fixed policy applies to every existing and
+future activity, Digital Past Paper and internal project tool.
+
+1. Every HTML page except `index.html` must use
+   `<meta name="viewport" content="width=1280, initial-scale=1.0" />`.
+2. Every HTML page except `index.html` must load `desktop-layout.css` and
+   `desktop-layout.js`. Tailwind pages must load `desktop-layout.js`
+   immediately after Tailwind.
+3. Never add viewport-width media queries, responsive utility variants,
+   mobile/tablet layouts, viewport-width sizing or JavaScript layout switches.
+4. Keep desktop navigation, sidebars, headers, footers, cards, tables, forms,
+   notation, controls, spacing and typography unchanged on smaller devices.
+5. Do not scale or compress the interface to fit. Allow normal horizontal and
+   vertical scrolling.
+6. Input-specific touch support is allowed only when it does not change layout.
+7. Run `pnpm test:desktop-layout` whenever a page or shared layout file changes.
+8. `index.html` must keep its device-width viewport and established responsive
+   header, cards, filters, footer and modals. Never extend this exception to
+   another page.
+
 ## Interactive exam notation questions
 
 When creating or changing a notation-based question in Interactive Exam Papers:

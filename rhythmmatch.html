@@ -2,17 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=1280, initial-scale=1.0" />
+  <link rel="stylesheet" href="./desktop-layout.css?v=3" />
   <title>Rhythm Identification</title>
   <link rel="icon" type="image/svg+xml" href="https://mrtennant-music.github.io/musicliteracy/rhythm-groups-icon.svg" />
   <link rel="apple-touch-icon" href="https://mrtennant-music.github.io/musicliteracy/rhythm-groups-icon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./desktop-layout.js?v=1"></script>
   <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./bravura-symbols.js?v=20260629"></script>
   <script src="./shared-notation-config.js?v=20260629"></script>
-  <script src="./hub-mobile.js?v=20260629"></script>
+  <script src="./hub-input.js?v=20260629"></script>
   <script src="./hub-audio.js?v=20260712-metronome-samples"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
@@ -31,6 +33,8 @@
       text-rendering: geometricPrecision;
     }
   </style>
+  <script src="analytics-config.js"></script>
+  <script src="analytics.js" defer></script>
 </head>
 <body>
   <div id="root"></div>
@@ -580,7 +584,7 @@ function GlyphToggleButton({ label, active, disabled = false, onClick, glyph, sh
 function MenuRows({ enabledRhythms, enabledCardTypes, activeLevel, onToggleRhythm, onToggleCardType }) {
   const visibleRhythms = menuRhythmsForLevel(activeLevel, enabledRhythms);
   return (
-    <div style={{ width: "min(360px, calc(100vw - 4.5rem))" }}>
+    <div style={{ width: "360px" }}>
       <window.MLH.MenuSubheading>Card Options</window.MLH.MenuSubheading>
       <div className="grid grid-cols-2 gap-2">
         {CARD_TYPE_OPTIONS.map((option) => {
@@ -646,24 +650,7 @@ function useGlobalStyles() {
       @keyframes medalShine { 0%, 100% { transform: translateY(3px) scale(1) rotate(-4deg); } 50% { transform: translateY(3px) scale(1.16) rotate(4deg); filter: drop-shadow(0 0 10px rgba(250,204,21,.9)); } }
       @keyframes swapPop { 0% { transform: scale(.96); } 55% { transform: scale(1.06); } 100% { transform: scale(1); } }
       @keyframes groupComplete { 0% { transform: scale(.985); filter: brightness(1); } 50% { transform: scale(1.025); filter: brightness(1.08); } 100% { transform: scale(1); filter: brightness(1); } }
-      @media (max-width: 767px) {
-        .card-option-toggle {
-          padding-left: 14px !important;
-        }
-        .card-option-toggle > span:first-child {
-          display: none;
-        }
-        .card-option-toggle > span:nth-child(2) {
-          margin-left: 0;
-          transform: none !important;
-          text-align: left;
-        }
-        .rhythm-board-scroll.is-mobile-group-page { overflow-x: visible; }
-        .rhythm-board-grid.is-mobile-group-page {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          min-width: 0;
-        }
-      }
+
     `;
     document.head.appendChild(style);
   }, []);
@@ -675,28 +662,9 @@ function playGroupCompleteSound() {
   playFeedbackSound(true);
 }
 
-function isPhoneView() {
-  return window.matchMedia?.("(max-width: 767px)")?.matches;
-}
-
-function usePhoneView() {
-  const [phoneView, setPhoneView] = useState(() => isPhoneView());
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia?.("(max-width: 767px)");
-    if (!mediaQuery) return undefined;
-    const updatePhoneView = () => setPhoneView(mediaQuery.matches);
-    updatePhoneView();
-    mediaQuery.addEventListener?.("change", updatePhoneView);
-    return () => mediaQuery.removeEventListener?.("change", updatePhoneView);
-  }, []);
-
-  return phoneView;
-}
-
 function RhythmGroupsLandscapeApp() {
   useGlobalStyles();
-  const phoneView = usePhoneView();
+  const phoneView = false;
 
   const requestedLevel = new URLSearchParams(window.location.search).get("level");
   const initialLevel = LEVELS[requestedLevel] ? requestedLevel : "N3";
@@ -895,31 +863,7 @@ function RhythmGroupsLandscapeApp() {
     });
   }
 
-  function selectSlotOnPhone(event, slotKey, cardId) {
-    if (!cardId || !canMoveSlot(slotKey)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    navigator.vibrate?.(8);
-    if (!selectedSlotKey) {
-      setSelectedSlotKey(slotKey);
-      return;
-    }
-    if (selectedSlotKey === slotKey) {
-      setSelectedSlotKey(null);
-      return;
-    }
-    if (!canMoveSlot(selectedSlotKey)) {
-      setSelectedSlotKey(slotKey);
-      return;
-    }
-    swapSlots(selectedSlotKey, slotKey);
-  }
-
   function startPointerDrag(event, slotKey, cardId) {
-    if (isPhoneView()) {
-      selectSlotOnPhone(event, slotKey, cardId);
-      return;
-    }
     if (!cardId || !canMoveSlot(slotKey)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -931,7 +875,6 @@ function RhythmGroupsLandscapeApp() {
   }
 
   function movePointerDrag(event) {
-    if (isPhoneView()) return;
     if (!dragStateRef.current) return;
     const nextDragState = { ...dragStateRef.current, x: event.clientX, y: event.clientY };
     dragStateRef.current = nextDragState;
@@ -942,7 +885,6 @@ function RhythmGroupsLandscapeApp() {
   }
 
   function endPointerDrag(event) {
-    if (isPhoneView()) return;
     const currentDrag = dragStateRef.current;
     if (!currentDrag) return;
     const targetElement = document.elementFromPoint(event.clientX, event.clientY);

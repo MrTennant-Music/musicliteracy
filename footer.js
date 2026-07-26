@@ -80,11 +80,15 @@ document.body.insertAdjacentHTML("beforeend", `
     </p>
 
     <p>
-      The hub includes interactive listening and aural training activities, is fully compatible with desktop, tablet and mobile devices, and organises concepts by level and topic to support clear progression.
+      The hub includes interactive listening and aural training activities, uses the same desktop layout on every device, and organises concepts by level and topic to support clear progression.
     </p>
 
     <p>
       It was created to make music theory more visual, interactive and accessible.
+    </p>
+
+    <p>
+      The Music Literacy Hub uses anonymous Google Analytics to help understand how the website is used. This includes information such as the pages and resources visited, the curriculum levels accessed and general website usage.
     </p>
 
     <p>
@@ -109,15 +113,7 @@ footerStyle.textContent = `
     transform: translateX(-7px);
   }
 
-  @media (max-width: 980px) {
-    .footer .footer-grid {
-      grid-template-columns: 1fr !important;
-    }
 
-    .footer .footer-wordmark {
-      transform: translateX(11px);
-    }
-  }
 
   .footer .text-link:hover,
   .footer .text-link:focus-visible {

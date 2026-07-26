@@ -85,15 +85,15 @@
     scoreTileClass: "relative h-[58px] rounded-xl border border-stone-200 bg-stone-50 shadow-sm outline-none transition active:scale-[0.98] sm:h-[64px]",
     scoreTileActiveClass: "-translate-y-0.5 scale-[1.01] brightness-105 shadow-lg",
     toolbarButtonClass: "flex h-10 w-[58px] items-center justify-center rounded-xl border border-stone-300 bg-white text-sm font-semibold text-stone-800 sm:h-11 sm:w-auto sm:px-2.5",
-    menuPanelClass: "absolute top-full z-[120] mt-2 inline-block w-[calc(100vw-48px)] max-w-[360px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit sm:max-w-none",
+    menuPanelClass: "absolute top-full z-[120] mt-2 inline-block w-[360px] max-w-[360px] rounded-2xl border border-stone-200 bg-white p-3 shadow-lg sm:w-fit sm:max-w-none",
     menuTitleClass: "relative -top-[4px] mb-1.5 flex h-[28px] items-center justify-center whitespace-nowrap px-8",
     pageShellClass: "overflow-x-hidden bg-stone-50 pb-10 text-black md:pb-12",
     pageContentClass: "mx-auto max-w-6xl px-3 pt-[154px] sm:px-4 sm:pt-[154px] md:px-8 md:pt-[104px]",
     mainShellClass: "relative z-0 min-h-[520px] overflow-visible rounded-2xl border border-stone-200 bg-white px-3 pb-0 pt-[10px] shadow-sm sm:min-h-[390px] sm:px-4 md:h-auto md:min-h-0 md:overflow-visible md:px-6 md:pb-6 md:pt-[14px]",
     footerShellClass: "bg-stone-50",
-    questionCardMobileClass: "hub-mobile-question-card",
+    questionCardMobileClass: "",
     confirmButtonClass: "hub-confirm-button rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60",
-    mobileConfirmButtonClass: "hub-confirm-button hub-mobile-confirm-full rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60",
+    mobileConfirmButtonClass: "hub-confirm-button rounded-xl border border-black bg-black px-[22px] py-[10px] text-sm font-bold text-white disabled:opacity-60",
   };
 
   function useClickAway(ref, handler) {
@@ -286,12 +286,12 @@
                 React.createElement("img", { src: displayedIcon, alt: "", "aria-hidden": "true", className: "block h-full w-full object-contain" })
               ),
               React.createElement("div", { className: "flex h-14 flex-col justify-center" },
-                React.createElement("h1", { className: "relative top-[1px] inline-flex items-center gap-2 text-[clamp(1.55rem,6vw,2.2rem)] font-semibold leading-none tracking-tight md:text-3xl" },
+                React.createElement("h1", { className: "relative top-[1px] inline-flex items-center gap-2 text-[2.2rem] font-semibold leading-none tracking-tight md:text-3xl" },
                   displayedTitle,
                   React.createElement(ProfileQrButton, { disabled: activeWorksheetMode || profileShareDisabled, onClick: () => setQrOpen(true) }),
                   React.createElement(WorksheetButton, { enabled: worksheetEnabled && !worksheetOpening, selected: activeWorksheetMode, returnLabel: typeof displayedTitle === "string" ? displayedTitle : "activity", onClick: activeWorksheetMode ? worksheetHeader?.onExit : createWorksheet })
                 ),
-                React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[clamp(0.7rem,2.7vw,1rem)] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[clamp(0.72rem,1.2vw,1rem)] xl:whitespace-nowrap" }, displayedSubtitle)
+                React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[1rem] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[15.36px] xl:whitespace-nowrap" }, displayedSubtitle)
               )
             ),
             React.createElement("div", { className: "relative z-50 flex flex-wrap items-center gap-2 overflow-visible md:ml-auto md:justify-end" }, displayedChildren)
@@ -312,7 +312,7 @@
     return (
       React.createElement("div", { className: "relative flex w-full items-center justify-center text-center" },
         React.createElement("div", {
-          className: `flex h-10 min-w-[58px] max-w-[calc(100vw-96px)] items-center justify-center rounded-xl border px-3 text-[18px] font-black text-white translate-y-[60px] sm:translate-y-0 ${feedback.correct ? "border-[#16a34a] bg-[#16a34a]" : "border-[#dc2626] bg-[#dc2626]"}`,
+          className: `flex h-10 min-w-[58px] max-w-[1184px] items-center justify-center rounded-xl border px-3 text-[18px] font-black text-white translate-y-[60px] sm:translate-y-0 ${feedback.correct ? "border-[#16a34a] bg-[#16a34a]" : "border-[#dc2626] bg-[#dc2626]"}`,
           style: { animation: fading ? fadeOut : fadeIn },
         }, feedback.correct ? "Correct" : "Incorrect")
       )

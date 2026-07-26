@@ -11,7 +11,7 @@ const index = fs.readFileSync("index.html", "utf8");
   'reading-score-scroll', 'prefers-reduced-motion', 'reading-rhythms-core.js',
   'tap.svg', 'spacebar.svg', 'mouse.svg', 'pulsesPerBar * 2', 'SHARED_NOTATION_CONFIG',
   'quarterNoteStemUp', 'augmentationDot', 'secondaryBeamSegments', 'glyph("tie"',
-  'hub-mobile.js', 'hub-audio.js', 'hub-shell.js', 'hub-menu.js', 'footer.js',
+  'hub-input.js', 'hub-audio.js', 'hub-shell.js', 'hub-menu.js', 'footer.js',
   'Compound time • Rests • Triplets', '5/4 • Ties • Syncopation',
   'CustomiseMenu', 'toggleRhythm', 'canGenerateWithEnabled', 'BeatBoxGroup', '{countInCue}', '["Ready", "Set", "Go!"]',
   'text-left text-xs font-black uppercase leading-none',
