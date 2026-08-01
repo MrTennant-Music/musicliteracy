@@ -98,7 +98,7 @@
       },
       {
         id: "q3", number: "3", marks: 6, topic: "Music notation", audio: { clips: [audio(4, [
-          { label: "Preview", time: 13.94 }, { label: "1st", time: 66.7 }, { label: "2nd", time: 130.66 }, { label: "3rd", time: 194.48 },
+          { label: "Guide", time: 13.94 }, { label: "1st", time: 66.7 }, { label: "2nd", time: 130.66 }, { label: "3rd", time: 194.48 },
         ])] },
         intro: [
           "You now have to answer questions relating to the guide score printed below.",
@@ -109,11 +109,11 @@
         score: { key: "F major", bars: 8, sharedNotation: "n5-2015-q3" },
         subquestions: [
           { id: "q3a", label: "(a)", marks: 1, type: "notation-choice", sharedScore: true, notationTool: "time-signature", prompt: "Insert the time signature in the correct place.", scoreHint: "Select a button to apply it to the score.", options: [option("2/4"), option("3/4"), option("4/4")], answer: "4/4", acceptedAnswers: ["4/4", "C", "common time"], answerDisplay: "4/4 or common time (C)" },
-          { id: "q3b", label: "(b)", marks: 1, type: "notation-choice", sharedScore: true, notationTool: "tempo", prompt: "Write an Italian term at the correct place to indicate the tempo.", scoreHint: "Select a button to apply it to the score.", options: [option("Andante"), option("Moderato"), option("Adagio")], answer: "Andante", acceptedAnswers: ["Andante", "Moderato", "Adagio"], answerDisplay: "Andante, Moderato or Adagio" },
+          { id: "q3b", label: "(b)", marks: 1, type: "notation-choice", sharedScore: true, notationTool: "tempo", prompt: "Write an Italian term at the correct place to indicate the tempo.", scoreHint: "Select a button to apply it to the score.", options: [option("Adagio"), option("Andante"), option("Moderato"), option("Allegro")], answer: "Andante", acceptedAnswers: ["Andante", "Moderato", "Adagio"], answerDisplay: "Andante, Moderato or Adagio" },
           { id: "q3c", label: "(c)", marks: 1, type: "short-text", capitaliseAnswer: true, prompt: "Name the key of this excerpt.", inlineAnswer: { before: "Name the key of this excerpt.", after: "" }, acceptedAnswers: ["f", "f major", "f maj", "f majer", "f majour"], answerDisplay: "F major" },
           { id: "q3d", label: "(d)", marks: 1, type: "short-text", capitaliseAnswer: true, prompt: "Name the cadence at bar 4.", inlineAnswer: { before: "Name the cadence at bar 4.", after: "" }, acceptedAnswers: ["imperfect", "imperfect cadence", "i v", "i to v", "1 5", "1 to 5", "imperfct", "imperfect cadance"], answerDisplay: "Imperfect (I–V)" },
           { id: "q3e", label: "(e)", marks: 1, type: "short-text", capitaliseAnswer: true, prompt: "Name the note marked X in bar 5.", inlineAnswer: { before: "Name the note marked X in bar 5.", after: "" }, acceptedAnswers: ["b flat", "bb", "b♭", "bflat"], answerDisplay: "B flat" },
-          { id: "q3f", label: "(f)", marks: 1, type: "notation-choice", sharedScore: true, notationTool: "note-entry", prompt: "Complete bar 7 by inserting the missing notes. The rhythm is given above the bar.", scoreHint: "Use the score above to enter your answer.", options: [], noteSlots: 4, answer: "A4,G4,A4,Bb4", answerDisplay: "A dotted quaver, G semiquaver, A quaver and B flat quaver" },
+          { id: "q3f", label: "(f)", marks: 1, type: "notation-choice", sharedScore: true, notationTool: "note-entry", prompt: "Complete bar 7 by inserting the missing notes. The rhythm is given above the bar.", scoreHint: "Use the score above to enter your answer.", options: [], noteSlots: 4, answer: "A4,A4,B4,C5", answerDisplay: "A dotted quaver, A semiquaver, B quaver and C quaver" },
         ],
       },
       {

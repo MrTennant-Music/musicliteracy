@@ -4,6 +4,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const SOURCE_EXTENSIONS = new Set([".html", ".css", ".js", ".jsx", ".ts", ".tsx"]);
 const IGNORED_DIRECTORIES = new Set([".git", "dist", "node_modules", "vendor"]);
+const INTERACTIVE_EXAM_CANVAS_FIT = "interactive-exams/exam-canvas-fit.js";
 const LEGACY_DESKTOP_VARIANT_LIMITS = {
   "accidentals.html": 13,
   "articulation.html": 33,
@@ -89,13 +90,14 @@ for (const file of productionFiles) {
   if (name === "desktop-layout.js" || name === "scripts/desktop-layout-audit.js" || name === "tailwind.config.js") continue;
   const text = fs.readFileSync(file, "utf8");
   const isResponsiveHomepage = name === "index.html";
+  const isInteractiveExamCanvasFit = name === INTERACTIVE_EXAM_CANVAS_FIT;
   if (!isResponsiveHomepage && /@media[^{]*(?:min-width|max-width)/i.test(text)) {
     failures.push(`${name}: viewport-width media query found`);
   }
   if (!isResponsiveHomepage && /(?:\d|\))\s*(?:vw|dvw|vmin|vmax)\b/i.test(text)) {
     failures.push(`${name}: viewport-width sizing found`);
   }
-  if (/matchMedia[^\n]*(?:min-width|max-width)|\b(?:innerWidth|outerWidth|visualViewport)\b|screen\.width/i.test(text)) {
+  if (!isInteractiveExamCanvasFit && /matchMedia[^\n]*(?:min-width|max-width)|\b(?:innerWidth|outerWidth|visualViewport)\b|screen\.width/i.test(text)) {
     failures.push(`${name}: JavaScript viewport layout switch found`);
   }
   if (/hub-mobile\.js/.test(text)) {

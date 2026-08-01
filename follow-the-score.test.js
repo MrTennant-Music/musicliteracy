@@ -47,5 +47,5 @@ test("Follow the Score keeps the requested level, repeat and answer rules", () =
 test("the Hub lists Follow the Score with the requested icon", () => {
   assert.match(homepage, /href: "wheredidthemusicstop\.html"[\s\S]*?disabled: \[\]/);
   assert.match(homepage, /"Follow the Score": "stopmusic-icon\.svg"/);
-  assert.match(homepage, /app\.comingSoon \|\| app\.title === "Digital Past Papers" \|\| app\.title === "Follow the Score"/);
+  assert.match(homepage, /app\.comingSoon \|\| app\.title === "Digital Question Papers" \|\| app\.title === "Follow the Score"/);
 });

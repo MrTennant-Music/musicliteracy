@@ -63,10 +63,11 @@
   function paperTextMarkup(text, boldPhrases = []) {
     const source = String(text ?? "");
     const phrases = [...new Set(boldPhrases.filter(Boolean))].sort((a, b) => b.length - a.length);
-    if (!phrases.length) return escapeHtml(source);
+    const escapedPaperText = value => escapeHtml(value).replace(/\n/g, "<br />");
+    if (!phrases.length) return escapedPaperText(source);
     const phraseSet = new Set(phrases);
     const pattern = new RegExp(`(${phrases.map(escapeRegExp).join("|")})`, "g");
-    return source.split(pattern).map(part => phraseSet.has(part) ? `<strong class="paper-emphasis">${escapeHtml(part)}</strong>` : escapeHtml(part)).join("");
+    return source.split(pattern).map(part => phraseSet.has(part) ? `<strong class="paper-emphasis">${escapedPaperText(part)}</strong>` : escapedPaperText(part)).join("");
   }
   let engine;
   let paper;
@@ -104,7 +105,7 @@
         + (active ? '<img class="exam-menu-tick" src="../tick.svg" alt="" aria-hidden="true" />' : "")
         + '</button>';
     }).join("");
-    const years = entries.filter(entry => entry.levelCode === paper.levelCode).sort((left, right) => Number(right.year) - Number(left.year));
+    const years = entries.filter(entry => entry.levelCode === paper.levelCode).sort((left, right) => Number(left.year) - Number(right.year));
     $("[data-paper-year-options]").innerHTML = years.map(entry => '<button class="exam-menu-option ' + (entry.id === paper.id ? "is-active" : "") + '" type="button" data-paper-id="' + escapeHtml(entry.id) + '" data-selection-label="' + escapeHtml(entry.year) + '">'
       + '<span class="exam-menu-glyph">' + escapeHtml(entry.levelCode) + '</span>'
       + '<span class="exam-menu-copy"><strong>' + escapeHtml(entry.year) + '</strong><span>' + escapeHtml(entry.level) + ' Music</span></span>'
@@ -237,16 +238,17 @@
     bottomNext.disabled = nextDisabled;
     submits.forEach(submit => { submit.disabled = false; });
     checkAnswers.hidden = engine.attempt.mode !== "practice" || checked;
-    checkAnswers.disabled = !complete;
+    checkAnswers.disabled = false;
     checkAnswers.setAttribute("aria-disabled", String(checkAnswers.disabled));
-    checkAnswers.title = complete ? "Mark and lock this question" : "Complete every part of this question first";
+    checkAnswers.title = "Mark and lock this question";
   }
 
   function optionMarkup(subquestion, value, checkbox = false) {
     const selected = checkbox ? (Array.isArray(value) ? value : []) : value;
     const limitId = `${subquestion.id}-selection-limit`;
     const removalId = `${subquestion.id}-removal-help`;
-    const options = `<div class="answer-options ${checkbox ? "answer-options-checkbox" : ""}">${subquestion.options.map(item => {
+    const hasChordOptions = subquestion.options.some(item => item.secondaryLabel);
+    const options = `<div class="answer-options ${checkbox ? "answer-options-checkbox" : ""} ${hasChordOptions ? "chord-answer-options" : ""}">${subquestion.options.map(item => {
       const checked = checkbox ? selected.includes(item.value) : selected === item.value;
       const optionText = item.stackedFraction
         ? `<span class="answer-option-copy answer-option-fraction"><span>${escapeHtml(item.stackedFraction[0])}</span><span>${escapeHtml(item.stackedFraction[1])}</span></span>`
@@ -254,25 +256,50 @@
         ? `<span class="answer-option-copy chord-option-copy">${String(item.label).split(/\s+/).map(cell => `<span>${escapeHtml(cell)}</span>`).join("")}${String(item.secondaryLabel).split(/\s+/).map(cell => `<span>${escapeHtml(cell)}</span>`).join("")}</span>`
         : `<span class="answer-option-copy">${escapeHtml(item.label)}</span>`;
       const accessibleOptionLabel = item.secondaryLabel ? `${item.label}, ${item.secondaryLabel}` : item.label;
-      return `<label class="answer-option ${checked ? "is-selected" : ""}"><input type="${checkbox ? "checkbox" : "radio"}" name="${subquestion.id}" value="${escapeHtml(item.value)}" aria-label="${escapeHtml(accessibleOptionLabel)}" aria-keyshortcuts="Shift+Delete" ${checked ? "checked" : ""} />${optionText}</label>`;
+      return `<label class="answer-option ${item.secondaryLabel ? "chord-answer-option" : ""} ${checked ? "is-selected" : ""}"><input type="${checkbox ? "checkbox" : "radio"}" name="${subquestion.id}" value="${escapeHtml(item.value)}" aria-label="${escapeHtml(accessibleOptionLabel)}" aria-keyshortcuts="Shift+Delete" ${checked ? "checked" : ""} />${optionText}</label>`;
     }).join("")}</div>`;
     const describedBy = checkbox ? `${limitId} ${removalId}` : removalId;
     return `<fieldset class="answer-fieldset" aria-describedby="${describedBy}"><legend class="visually-hidden">${escapeHtml(subquestion.prompt)}</legend>${options}</fieldset><span class="visually-hidden" id="${removalId}">Double-click, double-tap or right-click a selected answer to remove it. Keyboard users can press Shift and Delete.</span>${checkbox ? `<span class="visually-hidden" id="${limitId}">Tick ${subquestion.maxSelections} boxes.</span><p class="answer-error" data-selection-error role="status" hidden>You can tick no more than ${subquestion.maxSelections} boxes.</p>` : ""}`;
   }
 
-  function inputMarkup(subquestion, value) {
+  function inputMarkup(subquestion, value, question) {
     const displayedValue = subquestion.capitaliseAnswer ? capitaliseInitialText(value) : value;
     if (subquestion.type === "radio") return optionMarkup(subquestion, value, false);
     if (subquestion.type === "checkbox") return optionMarkup(subquestion, value, true);
-    if (subquestion.type === "short-text" && subquestion.inlineAnswer) return `<div class="sentence-answer"><span>${paperTextMarkup(subquestion.inlineAnswer.before, subquestion.boldPhrases)}</span><label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(displayedValue || "")}" autocomplete="off" autocapitalize="${subquestion.capitaliseAnswer ? "sentences" : "none"}" /><span>${paperTextMarkup(subquestion.inlineAnswer.after, subquestion.boldPhrases)}</span></div>`;
+    if (subquestion.type === "short-text" && subquestion.inlineAnswer) {
+      const periodOnly = String(subquestion.inlineAnswer.after || "").trim() === ".";
+      return `<div class="sentence-answer${periodOnly ? " sentence-answer-period" : ""}"><span>${paperTextMarkup(subquestion.inlineAnswer.before, subquestion.boldPhrases)}</span><label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(displayedValue || "")}" autocomplete="off" autocapitalize="${subquestion.capitaliseAnswer ? "sentences" : "none"}" /><span>${paperTextMarkup(subquestion.inlineAnswer.after, subquestion.boldPhrases)}</span></div>`;
+    }
     if (subquestion.type === "short-text" && subquestion.answerStyle === "reason") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><textarea id="${subquestion.id}" class="text-answer extended-answer-box" rows="4" autocapitalize="sentences">${escapeHtml(value || "")}</textarea>`;
     if (subquestion.type === "short-text") return `<label class="visually-hidden" for="${subquestion.id}">${escapeHtml(subquestion.prompt)}</label><input id="${subquestion.id}" class="text-answer short-answer-line" type="text" value="${escapeHtml(value || "")}" autocomplete="off" autocapitalize="sentences" />`;
+    if (subquestion.type === "concept-lines") {
+      const bank = `<div class="higher-concept-bank">${(subquestion.conceptBank || []).map(item => `<span>${escapeHtml(item.label)}</span>`).join("")}</div>`;
+      const prompt = `<div class="higher-concept-answer-prompt"><span>${paperTextMarkup(subquestion.prompt, subquestion.boldPhrases)}</span><strong class="subquestion-heading-marks" data-question-total-mark="${escapeHtml(question?.id || "")}" aria-label="${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}">${subquestion.marks}</strong></div>`;
+      const lineCount = Number(subquestion.lines || subquestion.marks);
+      const existingLines = Array.isArray(value) ? value : String(value || "").split("\n");
+      const lines = Array.from({ length: lineCount }, (_, index) => `<label class="higher-concept-line"><span class="visually-hidden">Answer line ${index + 1}</span><input id="${subquestion.id}-line-${index + 1}" class="text-answer" type="text" data-concept-line value="${escapeHtml(existingLines[index] || "")}" autocomplete="off" autocapitalize="sentences" /></label>`).join("");
+      return `${bank}${prompt}<div class="higher-concept-lines" role="group" aria-label="${escapeHtml(subquestion.prompt)}">${lines}</div>`;
+    }
+    if (subquestion.type === "comparison-grid") {
+      const selected = value || {};
+      const columns = ["a", "b", "c"];
+      const sourceCategories = subquestion.categories || (subquestion.groups || []).map(group => ({ label: group.label, rows: group.concepts.map(concept => concept.label) }));
+      const categories = sourceCategories.map(category => category.rows.map((row, rowIndex) => `<tr>${rowIndex === 0 ? `<th scope="rowgroup" rowspan="${category.rows.length}">${escapeHtml(category.label)}</th>` : ""}<th scope="row">${escapeHtml(row)}</th>${columns.map(column => `<td class="comparison-column-${column}"><label><span class="visually-hidden">${escapeHtml(row)}, Column ${column.toUpperCase()}</span><input type="checkbox" data-comparison-column="${column}" value="${escapeHtml(row)}" ${(selected[column] || []).includes(row) ? "checked" : ""} /></label></td>`).join("")}</tr>`).join("")).join("");
+      return `<div class="higher-comparison-wrap"><table class="higher-comparison-grid"><thead><tr><th aria-hidden="true"></th><th>Concepts</th><th>Column A<br /><span>Excerpt 1</span></th><th>Column B<br /><span>Excerpt 2</span></th><th>Column C<br /><strong>5 features common to both</strong></th></tr></thead><tbody>${categories}</tbody><tfoot><tr><td class="comparison-footer-spacer" colspan="4" aria-hidden="true"></td><td class="comparison-marks-footer">5 marks</td></tr></tfoot></table></div>`;
+    }
+    if (subquestion.type === "lyric-placement") {
+      const features = `<ul class="higher-lyric-features">${(subquestion.features || []).map(feature => `<li>${escapeHtml(feature.before || "")}<u><strong>${escapeHtml(feature.word)}</strong></u>${escapeHtml(feature.after || "")}</li>`).join("")}</ul>`;
+      const playback = Array.isArray(subquestion.playbackLines) ? `<div class="higher-lyric-playback">${subquestion.playbackLines.map(line => `<p>${paperTextMarkup(line, ["three times"])}</p>`).join("")}</div>` : "";
+      const rows = (subquestion.lyrics || subquestion.lyricLines || []).map((lyric, index) => { const line = String(index + 1); return `<tr><th scope="row">${escapeHtml(lyric)}</th><td><div class="higher-lyrics-answer-cell"><span>${line}</span><label class="visually-hidden" for="${subquestion.id}-line-${line}">Feature at lyric line ${line}</label><input id="${subquestion.id}-line-${line}" class="text-answer" type="text" data-lyric-line="${line}" value="${escapeHtml(value?.[line] || "")}" autocomplete="off" autocapitalize="sentences" /></div></td></tr>`; }).join("");
+      return `${features}${playback}<div class="higher-lyric-instruction-row"><p class="higher-lyric-instruction">Insert the <strong>five</strong> underlined words at the point where they occur.<br />Insert each word <strong>once</strong> only.</p><strong class="higher-lyric-marks" data-question-total-mark="${escapeHtml(question?.id || "")}" aria-label="${subquestion.marks} marks">${subquestion.marks}</strong></div><div class="higher-lyrics-wrap"><table class="higher-lyrics-table"><tbody>${rows}</tbody></table></div><p class="q8-end-paper">[END OF QUESTION PAPER]</p>`;
+    }
     if (subquestion.type === "structured-review") {
       if (subquestion.roughWork && subquestion.finalAnswerField) {
-        const finalAnswerMark = subquestion.finalAnswerMarks
-          ? `<span class="q8-final-answer-marks" data-question-total-mark="${escapeHtml(subquestion.finalAnswerQuestionId || "")}" aria-label="${subquestion.finalAnswerMarks} marks">${subquestion.finalAnswerMarks}</span>`
-          : "";
-        return `<div class="q8-answer-workspace"><section class="q8-rough-work" aria-labelledby="q8-rough-work-heading"><h3 id="q8-rough-work-heading">Rough work</h3><div class="q8-rough-work-table">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" aria-label="Rough work: ${escapeHtml(heading.label)}" autocapitalize="sentences">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div></section><section class="q8-final-answer" aria-labelledby="q8-final-answer-heading"><div class="q8-final-answer-heading-row"><h3 id="q8-final-answer-heading">Final answer</h3></div><div class="q8-final-answer-lines"><label class="visually-hidden" for="${subquestion.id}-final">Final answer</label><textarea id="${subquestion.id}-final" data-heading="final" aria-label="Final answer" autocapitalize="sentences">${escapeHtml(value?.final || "")}</textarea>${finalAnswerMark}</div><p class="q8-end-paper">[END OF QUESTION PAPER]</p></section></div>`;
+        const endOfPaper = subquestion.endOfPaper === false ? "" : `<p class="q8-end-paper">[END OF QUESTION PAPER]</p>`;
+        const finalLines = Array.isArray(value?.final) ? value.final : String(value?.final || "").split("\n");
+        const lineCount = Math.max(7, Number(subquestion.finalAnswerLines || 0));
+        const answerLines = Array.from({ length: lineCount }, (_, index) => `<label class="q8-final-answer-line"><span class="visually-hidden">Final answer line ${index + 1}</span><input id="${subquestion.id}-final-${index + 1}" class="text-answer" type="text" data-final-answer-line value="${escapeHtml(finalLines[index] || "")}" autocomplete="off" autocapitalize="sentences" /></label>`).join("");
+        return `<div class="q8-answer-workspace"><section class="q8-rough-work" aria-labelledby="q8-rough-work-heading"><h3 id="q8-rough-work-heading">Rough work</h3><div class="q8-rough-work-table">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" aria-label="Rough work: ${escapeHtml(heading.label)}" autocapitalize="sentences">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div></section><section class="q8-final-answer" aria-labelledby="q8-final-answer-heading"><div class="q8-final-answer-heading-row"><h3 id="q8-final-answer-heading">Final answer</h3></div><div class="q8-final-answer-lines" role="group" aria-label="Final answer lines">${answerLines}</div>${endOfPaper}</section></div>`;
       }
       return `<div class="structured-answer">${subquestion.headings.map(heading => `<label><span>${escapeHtml(heading.label)}</span><textarea data-heading="${heading.id}" rows="4" autocapitalize="sentences">${escapeHtml(value?.[heading.id] || "")}</textarea></label>`).join("")}</div>`;
     }
@@ -289,8 +316,22 @@
       const isTotalMarksRow = question.introTotalMarks && index === totalMarksIndex;
       if (!isTotalMarksRow) return `<p>${paperTextMarkup(text, question.introBoldPhrases)}</p>`;
       const marks = Number(question.introTotalMarks);
-      return `<p class="question-intro-mark-row"><span>${paperTextMarkup(text, question.introBoldPhrases)}</span><span class="question-intro-marks" ${question.id ? `data-question-total-mark="${escapeHtml(question.id)}"` : ""} aria-label="${marks} ${marks === 1 ? "mark" : "marks"}">${marks}</span></p>`;
+      return `<p class="question-intro-mark-row"><span>${paperTextMarkup(text, question.introBoldPhrases)}</span><strong class="question-intro-marks" ${question.id ? `data-question-total-mark="${escapeHtml(question.id)}"` : ""} aria-label="${marks} ${marks === 1 ? "mark" : "marks"}">${marks}</strong></p>`;
     };
+    if (Array.isArray(question.introHeadingRowRange) || Array.isArray(question.introCompactRange) || Array.isArray(question.introCompactRanges)) {
+      const headingRange = question.introHeadingRowRange || [];
+      const compactRanges = Array.isArray(question.introCompactRanges)
+        ? question.introCompactRanges
+        : (Array.isArray(question.introCompactRange) ? [question.introCompactRange] : []);
+      return paragraphs.map((text, index) => {
+        if (index === headingRange[0]) return `<div class="question-intro-heading-row">${paragraphs.slice(headingRange[0], headingRange[1] + 1).map(item => `<span>${paperTextMarkup(item, question.introBoldPhrases)}</span>`).join("")}</div>`;
+        if (index > headingRange[0] && index <= headingRange[1]) return "";
+        const compactRange = compactRanges.find(range => index >= range[0] && index <= range[1]);
+        if (compactRange && index === compactRange[0]) return `<div class="question-intro-compact-lines">${paragraphs.slice(compactRange[0], compactRange[1] + 1).map((item, itemIndex) => paragraphMarkup(item, compactRange[0] + itemIndex)).join("")}</div>`;
+        if (compactRange) return "";
+        return paragraphMarkup(text, index);
+      }).join("");
+    }
     if (!Array.isArray(question.introBulletRange)) return paragraphs.map(paragraphMarkup).join("");
     const [bulletStart, bulletEnd] = question.introBulletRange;
     return paragraphs.map((text, index) => {
@@ -305,13 +346,15 @@
     return `<div class="paper-opening-instructions">${paper.openingInstructions.map(line => `<p>${escapeHtml(line)}</p>`).join("")}</div>`;
   }
 
-  function questionOutroMarkup(question) {
+  function questionOutroMarkup(question, includeMovedOutro = false) {
     if (!question.outro) return "";
+    if (question.outroPosition === "before-score" && !includeMovedOutro) return "";
     return questionIntroMarkup({
       id: question.id,
       intro: question.outro,
       introBoldPhrases: question.outroBoldPhrases,
       introTotalMarks: question.outroTotalMarks,
+      introCompactRange: question.outroCompactRange,
     });
   }
 
@@ -338,30 +381,47 @@
     if (question.layout === "style-reason-groups") return styleReasonGroupsMarkup(question);
     return question.subquestions.map((subquestion, subquestionIndex) => {
       const groupStart = subquestion.groupStart ? `<div class="subquestion-group-heading"><strong>${escapeHtml(subquestion.groupStart.label)}</strong><span>${escapeHtml(subquestion.groupStart.prompt)}</span></div>` : "";
-      const showMarks = question.showPartMarks !== false;
-      const showQuestionTotal = !showMarks && question.totalMarksOnLastPart && subquestionIndex === question.subquestions.length - 1;
+      const conceptPromptEmbedded = subquestion.type === "concept-lines";
+      const showMarks = question.showPartMarks !== false && !conceptPromptEmbedded;
+      const showQuestionTotal = !conceptPromptEmbedded && !showMarks && question.totalMarksOnLastPart && subquestionIndex === question.subquestions.length - 1;
       const showHeading = Boolean(subquestion.label) && subquestion.type !== "structured-review";
       const promptMatchesLabel = subquestion.prompt === subquestion.label;
       const value = engine.attempt.answers[subquestion.id];
       const inlineAnswer = Boolean(subquestion.inlineAnswer);
+      const inlineNotationControls = subquestion.type === "notation-choice" && Boolean(subquestion.inlineNotationControls);
+      const scoreClearButton = paper.levelCode === "H" && subquestion.answerInScore
+        ? `<button class="notation-clear-button score-answer-clear-button" type="button" data-clear-score-answer="${escapeHtml(subquestion.id)}">Clear</button>`
+        : "";
       const promptMarkup = Array.isArray(subquestion.promptLines)
         ? `<div class="subquestion-prompt-lines">${subquestion.promptLines.map(line => line ? `<span>${paperTextMarkup(line, subquestion.boldPhrases)}</span>` : `<span class="subquestion-prompt-spacer" aria-hidden="true"></span>`).join("")}</div>`
         : `<span>${paperTextMarkup(subquestion.prompt, subquestion.boldPhrases)}</span>`;
-      const headingQuestion = subquestion.type === "structured-review"
+      const headingQuestion = subquestion.hidePrompt
+        ? ""
+        : subquestion.type === "structured-review"
         ? subquestion.roughWork ? "" : `<h3 class="final-answer-heading">${escapeHtml(subquestion.prompt)}</h3>`
+        : conceptPromptEmbedded
+          ? ""
         : inlineAnswer
           ? inputMarkup(subquestion, value)
           : promptMatchesLabel
             ? ""
-            : `${promptMarkup}${subquestion.scoreHint && subquestion.scoreHintPlacement === "prompt" ? `<span class="score-apply-hint score-apply-hint-inline">${escapeHtml(subquestion.scoreHint)}</span>` : ""}`;
+            : `${promptMarkup}${subquestion.scoreHint && subquestion.scoreHintPlacement === "prompt" ? `<span class="score-apply-hint score-apply-hint-inline">${escapeHtml(subquestion.scoreHint)}</span>` : ""}${inlineNotationControls ? `<div class="inline-notation-controls" data-notation-container></div>` : ""}`;
       const instruction = subquestion.instruction ? `<p class="subquestion-instruction">${escapeHtml(subquestion.instruction)}</p>` : "";
+      const answerReference = subquestion.answerReference
+        ? `<div class="answer-reference"><p>${paperTextMarkup(subquestion.answerReference.heading)}</p><div class="answer-reference-grid">${subquestion.answerReference.rows.map(row => `<span>${escapeHtml(row[0])}</span><span>${escapeHtml(row[1])}</span>`).join("")}</div><div class="answer-reference-footer"><p>${paperTextMarkup(subquestion.answerReference.footer)}</p>${scoreClearButton}</div></div>`
+        : "";
+      const afterAnswerLines = Array.isArray(subquestion.afterAnswerLines)
+        ? `<div class="subquestion-after-answer-lines">${subquestion.afterAnswerLines.map(line => `<span>${paperTextMarkup(line, subquestion.boldPhrases)}</span>`).join("")}</div>`
+        : "";
       const guideArrow = ["music-guide", "music-guide-vertical"].includes(question.layout) && subquestionIndex < question.subquestions.length - 1
         ? `<svg class="music-guide-arrow ${question.layout === "music-guide-vertical" ? "is-vertical" : ""}" viewBox="0 0 52 28" aria-hidden="true" focusable="false"><path d="M0 8 H35 V1 L51 14 L35 27 V20 H0 Z" /></svg>`
         : "";
-      return `${groupStart}<section class="subquestion subquestion-${subquestion.type} ${showHeading ? "has-part-label" : ""} ${subquestion.answerStyle ? `answer-style-${subquestion.answerStyle}` : ""}" data-subquestion="${subquestion.id}">
-        ${showHeading || headingQuestion || showMarks || showQuestionTotal ? `<div class="subquestion-heading"><span class="subquestion-heading-label">${showHeading ? escapeHtml(subquestion.label) : ""}</span><div class="subquestion-heading-question">${headingQuestion}</div>${showMarks ? `<span class="subquestion-heading-marks ${subquestion.markAlign === "prompt-end" ? "is-prompt-end" : ""}" data-subquestion-mark="${subquestion.id}" aria-label="${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}">${subquestion.marks}</span>` : showQuestionTotal ? `<span class="subquestion-heading-marks" data-question-total-mark="${escapeHtml(question.id)}" aria-label="${question.marks} marks">${question.marks}</span>` : ""}</div>` : ""}
+      return `${groupStart}<section class="subquestion subquestion-${subquestion.type} ${showHeading ? "has-part-label" : ""} ${scoreClearButton ? "has-score-answer-clear" : ""} ${subquestion.answerStyle ? `answer-style-${subquestion.answerStyle}` : ""}" data-subquestion="${subquestion.id}">
+        ${showHeading || headingQuestion || showMarks || showQuestionTotal ? `<div class="subquestion-heading"><span class="subquestion-heading-label">${showHeading ? escapeHtml(subquestion.label) : ""}</span><div class="subquestion-heading-question">${headingQuestion}${scoreClearButton && !subquestion.answerReference ? scoreClearButton : ""}</div>${showMarks ? `<strong class="subquestion-heading-marks ${subquestion.markAlign === "prompt-end" ? "is-prompt-end" : ""}" data-subquestion-mark="${subquestion.id}" aria-label="${subquestion.marks} ${subquestion.marks === 1 ? "mark" : "marks"}">${subquestion.marks}</strong>` : showQuestionTotal ? `<strong class="subquestion-heading-marks" data-question-total-mark="${escapeHtml(question.id)}" aria-label="${question.marks} marks">${question.marks}</strong>` : ""}</div>` : ""}
         ${instruction}
-        ${inlineAnswer ? "" : inputMarkup(subquestion, value)}
+        ${answerReference}
+        ${inlineAnswer || inlineNotationControls || subquestion.answerInScore ? "" : inputMarkup(subquestion, value, question)}
+        ${afterAnswerLines}
         ${guideArrow}
       </section>`;
     }).join("");
@@ -369,6 +429,18 @@
 
   function sharedNotationMarkup(question) {
     return question.score?.sharedNotation ? `<div class="shared-notation-panel" data-shared-notation="${escapeHtml(question.score.sharedNotation)}"></div>` : "";
+  }
+
+  function questionPartsMarkup(question) {
+    const score = sharedNotationMarkup(question);
+    const parts = subquestionsMarkup(question);
+    const beforeScoreOutro = question.outroPosition === "before-score"
+      ? `<div class="question-outro question-outro-before-score">${questionOutroMarkup(question, true)}</div>`
+      : "";
+    const beforeScore = question.scorePosition === "after"
+      ? `${parts}${beforeScoreOutro}${score}`
+      : `${score}${beforeScoreOutro}${parts}`;
+    return `${contentHeadingMarkup(question)}${beforeScore}`;
   }
 
   function contentHeadingMarkup(question) {
@@ -379,9 +451,9 @@
   function renderSharedNotation(card, question) {
     const container = card.querySelector("[data-shared-notation]");
     if (!container || !root.ExamNotation?.renderSharedScore) return;
-    root.ExamNotation.renderSharedScore(container, question, engine.attempt.answers, (subquestionId, value) => {
+    root.ExamNotation.renderSharedScore(container, question, engine.attempt.answers, (subquestionId, value, options = {}) => {
       engine.setAnswer(subquestionId, value);
-      renderSharedNotation(card, question);
+      if (options.rerender !== false) renderSharedNotation(card, question);
     });
   }
 
@@ -438,37 +510,76 @@
       });
     } else if (subquestion.type === "short-text") {
       const input = card.querySelector("input, textarea");
-      input.setAttribute("aria-keyshortcuts", "Shift+Delete");
-      syncTypedAnswerStyle(input);
-      input.addEventListener("input", () => {
-        if (!subquestion.inlineAnswer || subquestion.capitaliseAnswer) capitaliseInitialAnswer(input);
+      if (input) {
+        input.setAttribute("aria-keyshortcuts", "Shift+Delete");
         syncTypedAnswerStyle(input);
-        engine.setAnswer(subquestion.id, input.value);
+        input.addEventListener("input", () => {
+          if (!subquestion.inlineAnswer || subquestion.capitaliseAnswer) capitaliseInitialAnswer(input);
+          syncTypedAnswerStyle(input);
+          engine.setAnswer(subquestion.id, input.value);
+        });
+        bindRemovalGesture(input, () => {
+          if (!input.value) return;
+          input.value = "";
+          syncTypedAnswerStyle(input);
+          engine.setAnswer(subquestion.id, "");
+        });
+      }
+    } else if (subquestion.type === "concept-lines") {
+      const inputs = [...card.querySelectorAll("[data-concept-line]")];
+      const updateConceptLines = () => engine.setAnswer(subquestion.id, inputs.map(input => input.value).join("\n"));
+      inputs.forEach(input => {
+        input.setAttribute("aria-keyshortcuts", "Shift+Delete");
+        syncTypedAnswerStyle(input);
+        input.addEventListener("input", () => {
+          capitaliseInitialAnswer(input);
+          syncTypedAnswerStyle(input);
+          updateConceptLines();
+        });
+        bindRemovalGesture(input, () => {
+          if (!input.value) return;
+          input.value = "";
+          syncTypedAnswerStyle(input);
+          updateConceptLines();
+        });
       });
-      bindRemovalGesture(input, () => {
-        if (!input.value) return;
-        input.value = "";
+    } else if (subquestion.type === "comparison-grid") {
+      const updateComparison = () => {
+        const next = { a: [], b: [], c: [] };
+        card.querySelectorAll("[data-comparison-column]:checked").forEach(input => next[input.dataset.comparisonColumn].push(input.value));
+        engine.setAnswer(subquestion.id, next);
+      };
+      card.querySelectorAll("[data-comparison-column]").forEach(input => input.addEventListener("change", updateComparison));
+    } else if (subquestion.type === "lyric-placement") {
+      const updateLyrics = () => {
+        const next = {};
+        card.querySelectorAll("[data-lyric-line]").forEach(input => { if (input.value.trim()) next[input.dataset.lyricLine] = input.value; });
+        engine.setAnswer(subquestion.id, next);
+      };
+      card.querySelectorAll("[data-lyric-line]").forEach(input => {
         syncTypedAnswerStyle(input);
-        engine.setAnswer(subquestion.id, "");
+        input.addEventListener("input", () => { syncTypedAnswerStyle(input); updateLyrics(); });
       });
     } else if (subquestion.type === "structured-review") {
       const updateStructuredAnswer = () => {
         const value = {};
         card.querySelectorAll("textarea").forEach(field => { value[field.dataset.heading] = field.value; });
+        const finalLines = [...card.querySelectorAll("[data-final-answer-line]")].map(field => field.value);
+        if (finalLines.length) value.final = finalLines.join("\n");
         engine.setAnswer(subquestion.id, value);
       };
-      card.querySelectorAll("textarea").forEach(textarea => {
-        textarea.setAttribute("aria-keyshortcuts", "Shift+Delete");
-        syncTypedAnswerStyle(textarea);
-        textarea.addEventListener("input", () => {
-          capitaliseInitialAnswer(textarea);
-          syncTypedAnswerStyle(textarea);
+      card.querySelectorAll("textarea, [data-final-answer-line]").forEach(field => {
+        field.setAttribute("aria-keyshortcuts", "Shift+Delete");
+        syncTypedAnswerStyle(field);
+        field.addEventListener("input", () => {
+          capitaliseInitialAnswer(field);
+          syncTypedAnswerStyle(field);
           updateStructuredAnswer();
         });
-        bindRemovalGesture(textarea, () => {
-          if (!textarea.value) return;
-          textarea.value = "";
-          syncTypedAnswerStyle(textarea);
+        bindRemovalGesture(field, () => {
+          if (!field.value) return;
+          field.value = "";
+          syncTypedAnswerStyle(field);
           updateStructuredAnswer();
         });
       });
@@ -482,6 +593,13 @@
       });
       renderNotationControl(engine.attempt.answers[subquestion.id]);
     }
+    const scoreClearButton = card.querySelector("[data-clear-score-answer]");
+    if (scoreClearButton) scoreClearButton.addEventListener("click", () => {
+      engine.setAnswer(subquestion.id, "");
+      const questionCard = card.closest(".question-card");
+      const question = paper.questions.find(item => item.subquestions.some(part => part.id === subquestion.id));
+      if (questionCard && question) renderSharedNotation(questionCard, question);
+    });
   }
 
   function renderQuestion() {
@@ -511,16 +629,16 @@
     if (paperActions.parentElement !== questionCard) questionCard.append(paperActions);
     const checked = engine.isQuestionChecked(question.id);
     const questionResult = checked ? root.ExamMarking.markPaper(paper, engine.attempt.answers).questionBreakdown.find(item => item.id === question.id) : null;
-    questionCard.className = `question-card question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""} ${checked ? "marked-question-card is-practice-checked" : ""}`;
+    questionCard.className = `question-card question-${question.id} paper-level-${String(paper.levelCode || "").toLocaleLowerCase("en-GB")} ${question.layout ? `question-layout-${question.layout}` : ""} ${question.score?.sharedNotation === "n5-2024-q3" ? "n5-2024-q3-layout" : ""} ${question.score?.sharedNotation === "n5-2023-q3" ? "n5-2023-q3-layout" : ""} ${question.score?.sharedNotation === "n5-2022-q3" ? "n5-2022-q3-layout" : ""} ${question.score?.sharedNotation === "n5-2019-q3" ? "n5-2019-q3-layout" : ""} ${checked ? "marked-question-card is-practice-checked" : ""}`;
     $("[data-question-heading]").textContent = `Question ${question.number}`;
     $("[data-paper-opening]").innerHTML = paperOpeningMarkup(question);
     $("[data-question-intro]").innerHTML = questionIntroMarkup(question);
     const parts = $("[data-subquestions]");
-    parts.innerHTML = `${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}`;
+    parts.innerHTML = questionPartsMarkup(question);
     $("[data-question-outro]").innerHTML = questionOutroMarkup(question);
     const sharedNotation = parts.closest(".question-card").querySelector("[data-shared-notation]");
     if (checked && sharedNotation && root.ExamNotation?.renderSharedScore) {
-      const notationReview = Object.fromEntries(question.subquestions.filter(subquestion => subquestion.type === "notation-choice").map(subquestion => [subquestion.id, questionResult.parts.find(part => part.id === subquestion.id)?.status]));
+      const notationReview = Object.fromEntries(question.subquestions.filter(subquestion => subquestion.type === "notation-choice" || subquestion.answerInScore).map(subquestion => [subquestion.id, questionResult.parts.find(part => part.id === subquestion.id)?.status]));
       root.ExamNotation.renderSharedScore(sharedNotation, question, engine.attempt.answers, null, notationReview);
     } else {
       renderSharedNotation(parts.closest(".question-card"), question);
@@ -571,13 +689,13 @@
     };
     singleArea.hidden = true;
     allArea.hidden = false;
-    allArea.innerHTML = engine.visibleQuestions().map(question => `<article class="question-card all-question-card question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}" data-all-question="${question.id}">
+    allArea.innerHTML = engine.visibleQuestions().map(question => `<article class="question-card all-question-card question-${question.id} paper-level-${String(paper.levelCode || "").toLocaleLowerCase("en-GB")} ${question.layout ? `question-layout-${question.layout}` : ""}" data-all-question="${question.id}">
       <div data-all-question-audio></div>
       <div class="paper-marks-heading">MARKS</div>
       ${paperOpeningMarkup(question)}
       <header class="question-header"><h2>Question ${question.number}</h2></header>
       <div class="question-intro">${questionIntroMarkup(question)}</div>
-      <div class="subquestions">${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}</div>
+      <div class="subquestions">${questionPartsMarkup(question)}</div>
       <div class="question-outro">${questionOutroMarkup(question)}</div>
     </article>`).join("") + `<div class="question-actions all-question-actions"><span></span><button class="button button-dark" type="button" data-all-submit-paper>Submit</button></div>`;
     const firstPaper = allArea.querySelector(".all-question-card");
@@ -636,7 +754,7 @@
       <div class="paper-marks-heading">MARKS</div>
       <header class="question-header"><h2>Question ${question.number}</h2></header>
       <div class="question-intro">${questionIntroMarkup(question)}</div>
-      <div class="subquestions">${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}</div>
+      <div class="subquestions">${questionPartsMarkup(question)}</div>
       <div class="question-outro">${questionOutroMarkup(question)}</div>
     </article>`).join("")}`;
     paper.questions.forEach(question => {
@@ -871,6 +989,14 @@
     return String(answer).replace(/^(\s*)([a-z])/, (_, spacing, letter) => `${spacing}${letter.toUpperCase()}`);
   }
 
+  function correctAnswerLabel(subquestion) {
+    const answer = acceptedAnswerDisplay(subquestion);
+    const hasMultipleAnswers = Number(subquestion.requiredResponses || 0) > 1
+      || Array.isArray(subquestion.answers) && subquestion.answers.length > 1
+      || /[,;]|\bor\b|\band\b/i.test(answer);
+    return hasMultipleAnswers ? "Correct answers:" : "Correct answer:";
+  }
+
   function partResult(id) {
     return engine.attempt.result.questionBreakdown.flatMap(question => question.parts).find(part => part.id === id);
   }
@@ -910,10 +1036,14 @@
     const capExplanation = part.marks < part.maxMarks && cappedHeadings.length
       ? `<p class="q8-heading-cap-explanation">${cappedHeadings.map(([heading, count]) => `You identified ${count} valid concepts under <b>${escapeHtml(headingLabels[heading] || heading)}</b>, but only ${headingCap} marks can be awarded from one heading.`).join(" ")} To achieve full marks, include valid concepts from at least 3 headings.</p>`
       : "";
+    const additionalAnswerExplanation = part.additionalAnswers
+      ? `<p class="q8-heading-cap-explanation">${part.additionalAnswers} ${part.additionalAnswers === 1 ? "mark was" : "marks were"} deducted for additional ${part.additionalAnswers === 1 ? "answer" : "answers"} beyond the number requested.</p>`
+      : "";
     return `<aside class="inline-answer-feedback is-${state}" aria-label="Feedback for ${escapeHtml(subquestion.label || subquestion.prompt)}">
       <div class="inline-feedback-heading"><strong>${title}</strong></div>
       ${capExplanation}
-      ${part.status !== "correct" && !subquestion.finalAnswerField ? `<p class="inline-correct-answer"><b>Correct answer:</b> ${escapeHtml(acceptedAnswerDisplay(subquestion))}</p>` : ""}
+      ${additionalAnswerExplanation}
+      ${part.status !== "correct" && !subquestion.finalAnswerField ? `<p class="inline-correct-answer"><b>${correctAnswerLabel(subquestion)}</b> ${escapeHtml(acceptedAnswerDisplay(subquestion))}</p>` : ""}
       ${subquestion.definition ? `<p class="inline-answer-definition">${escapeHtml(subquestion.definition)}</p>` : ""}
       ${structuredAnswerGuidanceMarkup(subquestion, part)}
     </aside>`;
@@ -929,6 +1059,55 @@
     if (!fullMarks) {
       markElement.innerHTML = `<span class="unachieved-maximum-mark" aria-hidden="true">${availableMarks}</span>${availableMarks > 1 && awardedMarks > 0 ? `<span class="subquestion-earned-marks" aria-hidden="true">${awardedMarks}</span>` : ""}`;
     }
+  }
+
+  function uncreditedConceptMarkup(value) {
+    return String(value || "").split(/(\s*(?:[,;•]|\band\b)\s*)/gi).map(part => {
+      if (!part || /^\s*$/.test(part) || /^\s*(?:[,;•]|and)\s*$/i.test(part)) return escapeHtml(part);
+      return `<span class="higher-concept-answer-incorrect">${escapeHtml(part)}</span>`;
+    }).join("");
+  }
+
+  function conceptLineFeedbackMarkup(value, correctRanges) {
+    const source = String(value || "");
+    const ranges = [...correctRanges].sort((left, right) => left.start - right.start || left.end - right.end);
+    let cursor = 0;
+    let markup = "";
+    ranges.forEach(range => {
+      const start = Math.max(cursor, Number(range.start || 0));
+      const end = Math.min(source.length, Number(range.end || 0));
+      if (end <= start) return;
+      markup += uncreditedConceptMarkup(source.slice(cursor, start));
+      markup += `<span class="higher-concept-answer-correct">${escapeHtml(source.slice(start, end))}</span>`;
+      cursor = end;
+    });
+    return markup + uncreditedConceptMarkup(source.slice(cursor));
+  }
+
+  function applyConceptLineMarking(section, part) {
+    const fields = [...section.querySelectorAll("[data-concept-line]")];
+    const correctEvidence = part.correctEvidence || part.matchedEvidence || [];
+    let offset = 0;
+    fields.forEach(field => {
+      const value = String(field.value || "");
+      const fieldStart = offset;
+      const fieldEnd = fieldStart + value.length;
+      const hasAnswer = Boolean(value.trim());
+      const localCorrectRanges = correctEvidence.filter(evidence => evidence.start >= fieldStart && evidence.end <= fieldEnd)
+        .map(evidence => ({ start: evidence.start - fieldStart, end: evidence.end - fieldStart }));
+      const line = field.closest(".higher-concept-line");
+      line?.querySelector(".higher-concept-line-marked-answer")?.remove();
+      field.classList.remove("is-user-correct", "is-user-incorrect");
+      field.classList.toggle("has-marked-concept-answer", hasAnswer);
+      if (hasAnswer && line) {
+        const markedAnswer = document.createElement("span");
+        markedAnswer.className = "higher-concept-line-marked-answer";
+        markedAnswer.setAttribute("aria-hidden", "true");
+        markedAnswer.innerHTML = conceptLineFeedbackMarkup(value, localCorrectRanges);
+        field.after(markedAnswer);
+      }
+      offset = fieldEnd + 1;
+    });
   }
 
   function applyInlineMarking(card, subquestion, part) {
@@ -948,24 +1127,42 @@
         option.classList.toggle("is-user-correct", isChosen && isExpected);
         option.classList.toggle("is-user-incorrect", isChosen && !isExpected);
       });
+    } else if (subquestion.type === "concept-lines") {
+      applyConceptLineMarking(section, part);
     } else if (subquestion.type === "short-text") {
-      const field = section.querySelector("input, textarea");
-      if (field) field.classList.add(part.status === "correct" ? "is-user-correct" : part.status === "unanswered" ? "is-unanswered" : "is-user-incorrect");
+      const fields = section.querySelectorAll("input, textarea");
+      fields.forEach(field => {
+        field.classList.add(part.status === "correct" ? "is-user-correct" : part.status === "unanswered" ? "is-unanswered" : "is-user-incorrect");
+      });
+    } else if (subquestion.type === "comparison-grid") {
+      const correct = new Set(part.selectedCorrect || []);
+      section.querySelectorAll('[data-comparison-column="c"]').forEach(input => {
+        const cell = input.closest("td");
+        if (!input.checked) return;
+        cell.classList.add(correct.has(root.ExamMarking.normalise(input.value)) ? "is-user-correct" : "is-user-incorrect");
+      });
+      section.querySelectorAll('[data-comparison-column="a"], [data-comparison-column="b"]').forEach(input => input.closest("td")?.classList.add("is-unmarked-rough-work"));
+    } else if (subquestion.type === "lyric-placement") {
+      const correctLines = new Set(Object.values(part.matchedLines || {}).flat().map(String));
+      section.querySelectorAll("[data-lyric-line]").forEach(input => {
+        if (!input.value.trim()) return;
+        input.classList.add(correctLines.has(input.dataset.lyricLine) ? "is-user-correct" : "is-user-incorrect");
+      });
     } else if (subquestion.type === "notation-choice") {
       section.querySelectorAll(".notation-tool-button").forEach(button => {
         const expectedValues = subquestion.acceptedAnswers || [subquestion.answer];
         const isExpected = expectedValues.map(String).includes(button.dataset.value);
         const hasAnswer = Boolean(String(part.value || "").replace(/_/g, "").replace(/,/g, ""));
-        const representsPlacementTool = ["note-entry", "repeat-sign"].includes(subquestion.notationTool);
+        const representsPlacementTool = ["note-entry", "repeat-sign", "barline-entry"].includes(subquestion.notationTool);
         button.classList.toggle("is-review-correct", isExpected || representsPlacementTool && part.status === "unanswered");
         button.classList.toggle("is-user-correct", part.status === "correct" && (isExpected || representsPlacementTool));
         button.classList.toggle("is-user-incorrect", hasAnswer && part.status !== "correct" && (button.classList.contains("is-selected") || representsPlacementTool));
       });
     } else if (subquestion.type === "structured-review") {
-      const finalAnswer = section.querySelector('[data-heading="final"]');
+      const finalAnswer = section.querySelector(".q8-final-answer-lines") || section.querySelector('[data-heading="final"]');
       if (finalAnswer) {
         const markedAnswer = document.createElement("div");
-        markedAnswer.id = finalAnswer.id;
+        markedAnswer.id = `${subquestion.id}-final`;
         markedAnswer.className = "q8-marked-final-answer";
         markedAnswer.setAttribute("role", "textbox");
         markedAnswer.setAttribute("aria-readonly", "true");
@@ -1016,12 +1213,12 @@
     $(".exam-header-audio").hidden = showingAllQuestions;
     const questions = showingAllQuestions ? paper.questions : [currentQuestion()];
     resultsPaper.innerHTML = questions.map(question => {
-      return `<article class="question-card all-question-card marked-question-card ${showingAllQuestions ? "" : "has-paper-actions"} question-${question.id} ${question.layout ? `question-layout-${question.layout}` : ""}" data-result-question="${question.id}">
+      return `<article class="question-card all-question-card marked-question-card ${showingAllQuestions ? "" : "has-paper-actions"} question-${question.id} paper-level-${String(paper.levelCode || "").toLocaleLowerCase("en-GB")} ${question.layout ? `question-layout-${question.layout}` : ""}" data-result-question="${question.id}">
         ${showingAllQuestions ? "<div data-result-question-audio></div>" : ""}
         <div class="paper-marks-heading">MARKS</div>
         <header class="question-header"><h2>Question ${question.number}</h2></header>
         <div class="question-intro">${questionIntroMarkup(question)}</div>
-        <div class="subquestions">${contentHeadingMarkup(question)}${sharedNotationMarkup(question)}${subquestionsMarkup(question)}</div>
+        <div class="subquestions">${questionPartsMarkup(question)}</div>
         <div class="question-outro">${questionOutroMarkup(question)}</div>
         ${showingAllQuestions ? "" : `<div class="question-review-footer">
           <button class="button button-primary question-navigation-button" type="button" data-result-bottom-previous aria-label="Previous question" title="Previous"><img class="question-nav-arrow is-previous" src="../next.svg" alt="" aria-hidden="true" /></button>
@@ -1035,7 +1232,7 @@
       const questionResult = engine.attempt.result.questionBreakdown.find(item => item.id === question.id);
       applyReviewMark(card.querySelector(`[data-question-total-mark="${question.id}"]`), questionResult.marks, questionResult.maxMarks);
       const sharedNotation = card.querySelector("[data-shared-notation]");
-      const notationReview = Object.fromEntries(question.subquestions.filter(subquestion => subquestion.type === "notation-choice").map(subquestion => [subquestion.id, partResult(subquestion.id)?.status]));
+      const notationReview = Object.fromEntries(question.subquestions.filter(subquestion => subquestion.type === "notation-choice" || subquestion.answerInScore).map(subquestion => [subquestion.id, partResult(subquestion.id)?.status]));
       if (sharedNotation && root.ExamNotation?.renderSharedScore) root.ExamNotation.renderSharedScore(sharedNotation, question, engine.attempt.answers, null, notationReview);
       const feedbackAudio = card.querySelector("[data-result-question-audio]");
       if (feedbackAudio) allQuestionAudioPlayers.push(createRecoverableAudioPlayer(feedbackAudio, { clips: question.audio.clips }));
@@ -1219,7 +1416,7 @@
   function closeSubmitModal() { $("[data-submit-overlay]").classList.remove("is-open"); }
   function openQuestionCheckModal() {
     const question = currentQuestion();
-    if (!question || engine.attempt.mode !== "practice" || engine.isQuestionChecked(question.id) || !questionIsComplete(question)) return;
+    if (!question || engine.attempt.mode !== "practice" || engine.isQuestionChecked(question.id)) return;
     pendingQuestionCheck = question.id;
     $("[data-check-question-overlay]").classList.add("is-open");
   }
@@ -1486,7 +1683,7 @@
       $("main").innerHTML = '<section class="empty-state"><h1>Paper unavailable</h1><p>This paper is not currently available.</p><a class="button" href="index.html">Choose another paper</a></section>';
       return;
     }
-    document.title = paper.title + " · Digital Past Papers";
+    document.title = paper.title + " · Digital Question Papers";
     engine = new root.ExamEngineCore.ExamEngine(paper, onEngineChange);
     renderPaperSelectors();
     renderToolbarStats();

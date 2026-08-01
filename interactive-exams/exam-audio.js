@@ -36,6 +36,14 @@
     let consumed = Boolean(limitPlayback && playConsumed);
     let stalledTimer = null;
     let playbackErrorReported = false;
+    let seekableObjectUrl = null;
+    let seekableAudioPromise = null;
+
+    function releaseSeekableAudio() {
+      if (seekableObjectUrl) root.URL?.revokeObjectURL?.(seekableObjectUrl);
+      seekableObjectUrl = null;
+      seekableAudioPromise = null;
+    }
 
     function clearStalledTimer() {
       if (stalledTimer) root.clearTimeout(stalledTimer);
@@ -62,7 +70,48 @@
       }
     }
 
+    async function loadSeekableAudioCopy() {
+      if (seekableObjectUrl) return true;
+      if (seekableAudioPromise) return seekableAudioPromise;
+      const targetAudio = audio;
+      const source = targetAudio?.currentSrc || targetAudio?.src;
+      seekableAudioPromise = root.fetch(source)
+        .then(response => {
+          if (!response.ok) throw new Error("The audio could not be loaded for seeking.");
+          return response.blob();
+        })
+        .then(blob => {
+          if (destroyed || audio !== targetAudio) return false;
+          seekableObjectUrl = root.URL.createObjectURL(blob);
+          return new Promise((resolve, reject) => {
+            targetAudio.addEventListener("loadedmetadata", () => resolve(true), { once: true });
+            targetAudio.addEventListener("error", () => reject(targetAudio.error || new Error("The audio could not be loaded for seeking.")), { once: true });
+            targetAudio.src = seekableObjectUrl;
+            targetAudio.load();
+          });
+        })
+        .finally(() => { seekableAudioPromise = null; });
+      return seekableAudioPromise;
+    }
+
+    async function seekTo(seconds) {
+      if (!audio?.duration) return;
+      const target = Math.min(Math.max(0, Number(seconds)), audio.duration);
+      const wasPlaying = !audio.paused;
+      audio.currentTime = target;
+      await new Promise(resolve => root.setTimeout(resolve, 150));
+      if (Math.abs(audio.currentTime - target) > 1 && await loadSeekableAudioCopy()) {
+        audio.currentTime = target;
+        if (wasPlaying) await playCurrent();
+      }
+      const progress = container.querySelector("[data-progress]");
+      const elapsed = container.querySelector("[data-elapsed]");
+      if (progress) progress.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
+      if (elapsed) elapsed.textContent = formatTime(audio.currentTime);
+    }
+
     function render() {
+      releaseSeekableAudio();
       const clip = clips[clipIndex];
       container.innerHTML = `
         <div class="exam-audio-player" data-audio-player>
@@ -156,11 +205,11 @@
         audio.currentTime = (Number(progress.value) / 1000) * audio.duration;
         elapsed.textContent = formatTime(audio.currentTime);
       });
-      container.querySelectorAll("[data-marker-time]").forEach(marker => marker.addEventListener("click", () => {
+      container.querySelectorAll("[data-marker-time]").forEach(marker => marker.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
         if (locked || limitPlayback || !audio.duration) return;
-        audio.currentTime = Math.min(Number(marker.dataset.markerTime), audio.duration);
-        progress.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
-        elapsed.textContent = formatTime(audio.currentTime);
+        void seekTo(marker.dataset.markerTime).catch(reportPlaybackError);
       }));
       container.querySelectorAll("[data-clip]").forEach(button => button.addEventListener("click", () => {
         audio.pause();
@@ -176,6 +225,7 @@
         if (destroyed) return;
         destroyed = true;
         clearStalledTimer();
+        releaseSeekableAudio();
         audio?.pause();
         players.delete(audio);
         if (activeAudio === audio) activeAudio = null;

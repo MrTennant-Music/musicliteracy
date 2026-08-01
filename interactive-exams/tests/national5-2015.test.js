@@ -76,7 +76,7 @@ assert.match(notationSource, /N5_2015_Q3_SYSTEM_SPACING = Q3_SYSTEM_SPACING \+ 2
 assert.match(notationSource, /systemIndex >= 3 \? 30 : 0/, "Question 3 should add a further thirty pixels between systems 3 and 4.");
 assert.match(notationSource, /q3ScoreSvg2015[\s\S]*?viewBox: "0 0 920 630"/, "The taller 2015 guide score should retain all four spaced notation systems.");
 assert.match(notationSource, /N5_2015_Q3_BAR_5_NOTES[\s\S]*?note\("A4", "semiquaver"\)[\s\S]*?note\("A4", "dottedQuaver"\)[\s\S]*?note\("A4", "semiquaver"\)[\s\S]*?note\("A4", "dottedQuaver"\)[\s\S]*?note\("G4", "semiquaver"\)[\s\S]*?note\("A4", "semiquaver"\)[\s\S]*?note\("Bb4", "dottedQuaver"\)/, "Bar 5 should retain the corrected A, A, A, A, G, A, B flat pitch inventory.");
-assert.match(notationSource, /N5_2015_Q3_BAR_7_NOTES = N5_2015_Q3_BAR_5_NOTES\.map\(\(item, index\) => index >= 6 \? \{ \.\.\.item, rhythm: "quaver" \} : item\)/, "Bar 7 should retain Bar 5's pitches while changing its final two notes to quavers.");
+assert.match(notationSource, /N5_2015_Q3_BAR_7_ANSWER_PITCHES = \[null, null, null, null, "A4", "A4", "B4", "C5"\]/, "Bar 7 should retain the official A, A, B, C missing-note answer.");
 assert.match(notationSource, /bar\(\[note\("C5", "semibreve"\)\]\)/, "Bar 6 should contain a C semibreve.");
 assert.match(notationSource, /const guideTop = top - 59/, "Bar 7's rhythm guide should sit thirty pixels lower.");
 assert.match(notationSource, /note\("A4", "dottedQuaver"\), note\("A4", "semiquaver"\), note\("A4", "quaver"\), note\("A4", "quaver"\)/, "Bar 7's guide rhythm pairs should share the same vertical note level.");
@@ -87,12 +87,13 @@ assert.match(notationSource, /\["li-", "ving\.", null\][\s\S]*?\["giv-", "ing\."
 assert.match(notationSource, /x: positions\[noteIndex\]/, "Question 3 should position each lyric syllable beneath its corresponding note.");
 assert.deepEqual(questionThree.subquestions.map(part => part.marks), [1, 1, 1, 1, 1, 1]);
 assert.equal(marking.markSubquestion(parts.get("q3a"), "common time").marks, 1, "Question 3(a) should accept common time.");
+assert.deepEqual(parts.get("q3b").options.map(option => option.label), ["Adagio", "Andante", "Moderato", "Allegro"], "Question 3(b) should show the shared four tempo options.");
 assert.equal(marking.markSubquestion(parts.get("q3b"), "Moderato").marks, 1, "Question 3(b) should accept Moderato.");
 assert.equal(marking.markSubquestion(parts.get("q3b"), "Adagio").marks, 1, "Question 3(b) should accept Adagio.");
 assert.equal(marking.markSubquestion(parts.get("q3e"), "B flat").marks, 1, "Question 3(e) should accept B flat.");
 assert.equal(marking.markSubquestion(parts.get("q3e"), "B").marks, 0, "Question 3(e) should reject B natural.");
-assert.equal(marking.markSubquestion(parts.get("q3f"), "A4,G4,A4,Bb4").marks, 1, "Question 3(f) should mark the complete missing-note answer.");
-assert.equal(marking.markSubquestion(parts.get("q3f"), "A4,A4,Bb4,C5").marks, 0, "Question 3(f) should reject the superseded missing-note answer.");
+assert.equal(marking.markSubquestion(parts.get("q3f"), "A4,A4,B4,C5").marks, 1, "Question 3(f) should mark the official A, A, B, C missing-note answer.");
+assert.equal(marking.markSubquestion(parts.get("q3f"), "A4,G4,A4,Bb4").marks, 0, "Question 3(f) should reject the superseded missing-note answer.");
 
 const questionFive = paper.questions.find(question => question.id === "q5");
 const questionSix = paper.questions.find(question => question.id === "q6");

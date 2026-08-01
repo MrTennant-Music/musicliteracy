@@ -106,7 +106,7 @@
       },
       {
         id: "q3", number: "3", marks: 6, topic: "Music notation", audio: { clips: [timedAudio(4, [
-          { label: "Preview", time: 14.6 },
+          { label: "Guide", time: 14.6 },
           { label: "1st", time: 105.6 },
           { label: "2nd", time: 205.06 },
           { label: "3rd", time: 304.86 },

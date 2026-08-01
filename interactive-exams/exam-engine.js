@@ -77,8 +77,18 @@
   function answerComplete(subquestion, value) {
     if (!root.ExamMarking.isAnswered(subquestion, value)) return false;
     if (subquestion.type === "checkbox") return value.length === subquestion.maxSelections;
+    if (subquestion.type === "concept-lines") {
+      const result = root.ExamMarking.markSubquestion(subquestion, value);
+      return root.ExamMarking.responseCount(value, result.recognisedConcepts?.length || 0) >= Number(subquestion.requiredResponses || subquestion.marks);
+    }
+    if (subquestion.type === "comparison-grid") return (value?.c || []).length >= Number(subquestion.requiredResponses || subquestion.marks);
+    if (subquestion.type === "lyric-placement") return Object.values(value || {}).filter(entry => String(entry || "").trim()).length >= Number(subquestion.requiredResponses || subquestion.marks);
     if (subquestion.type === "structured-review") {
-      if (subquestion.finalAnswerField) return Boolean(String(value?.final || "").trim());
+      if (subquestion.finalAnswerField) {
+        const result = root.ExamMarking.markSubquestion(subquestion, value);
+        const recognisedConceptCount = Object.values(result.validConceptCounts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
+        return root.ExamMarking.responseCount(value?.final, recognisedConceptCount) >= Number(subquestion.requiredResponses || subquestion.marks);
+      }
       return Object.values(value).filter(entry => String(entry || "").trim()).length >= 3;
     }
     return true;
@@ -229,8 +239,9 @@
 
     questionState(question) {
       const completed = question.subquestions.filter(subquestion => answerComplete(subquestion, this.attempt?.answers[subquestion.id])).length;
-      if (completed === 0) return "unanswered";
-      return completed === question.subquestions.length ? "answered" : "partial";
+      if (completed === question.subquestions.length) return "answered";
+      const attempted = question.subquestions.some(subquestion => root.ExamMarking.isAnswered(subquestion, this.attempt?.answers[subquestion.id]));
+      return attempted ? "partial" : "unanswered";
     }
 
     isQuestionChecked(id) {
@@ -240,7 +251,7 @@
     checkQuestion(id) {
       if (!this.attempt || this.attempt.status !== "active" || this.attempt.mode !== "practice" || this.isQuestionChecked(id)) return false;
       const question = this.paper.questions.find(item => item.id === id);
-      if (!question || question.subquestions.some(subquestion => !answerComplete(subquestion, this.attempt.answers[subquestion.id]))) return false;
+      if (!question) return false;
       this.attempt.checkedQuestionIds ||= [];
       this.attempt.checkedQuestionIds.push(id);
       this.persist();

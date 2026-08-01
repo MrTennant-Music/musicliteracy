@@ -23,6 +23,13 @@ future activity, Digital Past Paper and internal project tool.
 8. `index.html` must keep its device-width viewport and established responsive
    header, cards, filters, footer and modals. Never extend this exception to
    another page.
+9. Exception overriding points 3 and 5 only for `interactive-exams/exam.html`:
+   keep the complete 1280px desktop arrangement, but proportionally scale the
+   entire page as one canvas when the visible browser width is below 1280px.
+   Do not reflow, stack, rearrange or independently resize any paper content.
+   The full header, toolbar, paper, notation and controls must remain visible
+   without horizontal scrolling or clipping. Use 100% scale at 1280px and
+   above, and keep PDF and print output unscaled.
 
 ## Interactive exam notation questions
 
@@ -37,6 +44,23 @@ When creating or changing a notation-based question in Interactive Exam Papers:
 7. Check Bravura glyphs, staff and system spacing, note sizes, alignment, beaming, stems, barlines, editable-area boxes, hover previews, dragging, clear controls and desktop/mobile presentation.
 8. Do not guess when the source paper is visually or musically ambiguous. Ask one precise musical question and wait for confirmation before encoding the uncertain detail.
 9. Make the smallest maintainable change and preserve existing Practice Questions and shared notation behaviour.
+
+### Mandatory notation transcription workflow
+
+Complete these steps in order for every new or corrected literacy question that contains printed notation. Do not begin drawing the interactive score until the transcription audit is complete.
+
+1. Render the official question-paper page at high resolution, using at least 300 dpi, and create a close crop of the notation. Do not transcribe notes from a whole-page preview, a low-resolution screenshot or the apparent shape of the melody.
+2. Separate the score into individual staff systems. Calibrate the vertical centre of all five staff lines independently for each system, because scanning, scaling and page skew can make one system differ slightly from another.
+3. Establish the pitch map from the printed clef and key signature before reading any notes. For treble clef, explicitly confirm the line and space references, including any ledger lines, rather than estimating their positions.
+4. Read the centre of each notehead. Do not use the stem, beam, flag, augmentation dot, lyric position or nearby marking box to judge pitch.
+5. Create a complete bar-by-bar inventory containing every pitch, rhythm, rest, dot, tie, beam group, accidental, barline and deliberately missing or editable item. Record interface boxes by the complete bar or bars they refer to, not merely by the nearest visible notes.
+6. Check the rhythmic total of every bar against the printed time signature. Treat an anacrusis, tied duration or deliberately incorrect rhythm as an explicit exception and document it.
+7. Use the official marking instructions to confirm deliberately missing notes and accepted answers. Do not use them as a substitute for reading the pitches that are visibly printed in the question paper.
+8. Perform a second, independent note-by-note comparison between the high-resolution source and the completed inventory. Do not infer transposition, repetition or melodic continuation from musical expectation; verify every note individually.
+9. If any notehead centre, ledger line, accidental, rhythm or box boundary remains ambiguous, stop and ask the user one precise musical question. Do not encode a best guess.
+10. Only after the audit passes, encode the inventory as structured data separate from the renderer. Add a regression test that protects the exact pitch-and-rhythm inventory for every bar, the editable-note indices and the final barline type.
+11. Render the finished score and compare it with the source at the same useful scale. Check pitch height, rhythm, stems, beams, dots, ties, system spacing, bar numbers, box boundaries and final barlines before declaring the question complete.
+12. Record any user-confirmed corrections in that paper's import notes and update its regression inventory immediately, so the correction becomes part of the process for all later papers.
 
 ## Reusable Digital Past Paper notation decisions
 
@@ -86,6 +110,24 @@ Use the completed National 5 Music 2014 paper in `interactive-exams/` as the ref
 ### Audio marker calibration
 
 Before importing National 5 Music 2016, read `interactive-exams/papers/national5-2015-review-notes.md` and apply its complete import checklist.
+
+Before importing National 5 Music 2017 or any later paper, also read `interactive-exams/papers/national5-2016-import-notes.md` and apply its source, audio, notation and marking checklist.
+
+Before importing National 5 Music 2018 or any later paper, also read `interactive-exams/papers/national5-2017-import-notes.md`. It records the 2017 Whisper marker workflow, the rhythm-correction and missing-note notation interactions, shared Question 8 concept de-duplication and the official-answer edge cases that must remain regression-tested.
+
+Before importing Higher Music 2016 or any later Higher paper, read `interactive-exams/papers/higher-2015-import-notes.md`. It records the Higher concept-line, comparison-grid and lyric-placement interactions, the six-mark analysis rules, the score-after-questions literacy layout, the across-the-board additional-answer rule and the local Whisper calibration workflow.
+
+Before importing National 5 Music 2019 or any later paper, also read `interactive-exams/papers/national5-2018-import-notes.md`. It records the 2018 source inventory, Whisper marker calibration, 16-bar Question 3 interaction model, official marking alternatives and Question 8 concept rules that must remain regression-tested.
+
+Before importing National 5 Music 2020 or any later paper, also read `interactive-exams/papers/national5-2019-import-notes.md`. It records the 2019 source inventory, 30 calibrated Whisper markers, eight-bar Question 3 transcription and correction model, the two-concept Bothy ballad reason rule and the official Question 8 acceptance and rejection cases that must remain regression-tested.
+
+Before importing National 5 Music 2023 or any later paper, also read `interactive-exams/papers/national5-2022-import-notes.md`. It records the 2022 source inventory, Whisper marker workflow, sixteen-bar C-major Question 3 transcription with direct bar-13 note entry, official marking alternatives and Question 8 acceptance and exclusion rules.
+
+Before importing National 5 Music 2024 or any later paper, also read `interactive-exams/papers/national5-2023-import-notes.md`. It records the 2023 source inventory, Whisper marker workflow, ten-bar F-major Question 3 transcription with anacrusis, endings, direct bar-2 note entry and physical repeat-sign placement, plus the official Question 7 and Question 8 marking edge cases.
+
+Before importing National 5 Music 2025 or any later paper, also read `interactive-exams/papers/national5-2024-import-notes.md`. It records the 2024 source inventory, Whisper marker workflow, eight-bar A-minor Question 3 transcription with direct bar-3 note entry and quiet-dynamic placement, the Question 7 evidence rules, and the Question 8 concept-overlap safeguards.
+
+Before importing National 5 Music 2026 or any later paper, also read `interactive-exams/papers/national5-2025-import-notes.md`. It records the 2025 source inventory, Whisper marker workflow, ten-bar F-major Question 3 transcription with first/second endings, direct bar-3 note entry and physical end-repeat placement, the Question 7 evidence rules, and the Question 8 mezzo-forte overlap safeguard.
 
 1. When implementing a new Digital Past Paper, transcribe every official question audio track with a local Whisper speech-to-text model before setting section markers. Use the transcription to locate each spoken question, part and replay cue; do not estimate markers from track duration or visual waveform alone.
 2. Refine every transcribed cue against the waveform boundary and compare its optical and playback behaviour with the completed National 5 Music 2014 paper. Markers should land at the start of the relevant spoken cue, using the same small lead-in convention as the 2014 reference.
