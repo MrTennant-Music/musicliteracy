@@ -541,7 +541,7 @@ a { color: inherit; }
   pointer-events: none;
 }
 .card.year-open .year-picker {
-  max-height: 64px;
+  max-height: 118px;
   opacity: 1;
   margin-top: 10px;
   padding-top: 10px;
@@ -870,6 +870,15 @@ const levels = [
   ["H", "Higher"],
   ["AH", "Advanced Higher"]
 ];
+const digitalPaperYears = {
+  N5: [2014, 2015, 2016, 2017, 2018, 2019, 2022, 2023, 2024, 2025],
+  H: [2015, 2016, 2017, 2018, 2019, 2022, 2023, 2024, 2025]
+};
+function setDigitalPaperYearLevel(card, level) {
+  card.querySelectorAll(".year-choice").forEach(button => {
+    button.hidden = button.dataset.level !== level;
+  });
+}
 const appIcons = {
   "Digital Question Papers": "exam-icon.svg",
   "Practice Questions": "practice-app-icon.svg",
@@ -940,7 +949,7 @@ const appData = [
     { href: "repeatsigns.html", title: "Repeat Signs", desc: "Identify repeat signs and navigation marks.", keywords: "music symbols repeat signs first second time bars endings dc ds coda audio listening", audio: true, disabled: ["N3"] }
   ]},
   { category: "Practice", apps: [
-    { href: "interactive-exams/exam.html?paper=national5-2014", title: "Digital Question Papers", desc: "Complete interactive past papers with audio and feedback.", keywords: "interactive exam papers past paper national 5 assessment audio feedback", audio: true, disabled: ["N3", "N4", "H", "AH"] },
+    { href: "interactive-exams/exam.html", title: "Digital Question Papers", desc: "Complete interactive past papers with audio and feedback.", keywords: "interactive exam papers past paper national 5 higher assessment audio feedback", audio: true, disabled: ["N3", "N4", "AH"] },
     { href: "practicequestions.html", title: "Practice Questions", desc: "Complete exam-style questions combining multiple music literacy concepts.", keywords: "practice exam questions mixed concepts melody rhythm harmony dynamics symbols", audio: true, disabled: [] }
   ]},
   { category: "Other", apps: [
@@ -989,7 +998,7 @@ function renderApps() {
             ${app.comingSoon || app.direct === true ? "" : `<div class="level-picker" aria-label="Choose level">
               ${levels.map(([key, label]) => `<button class="level-choice ${app.disabled.includes(key) ? "disabled" : ""}" type="button" data-level="${key}" ${app.disabled.includes(key) ? "disabled aria-disabled=\"true\"" : ""} ${app.title === "Digital Question Papers" && key === "N5" ? "aria-expanded=\"false\" aria-controls=\"interactive-exam-years\"" : ""}>${label}</button>`).join("")}
             </div>`}
-            ${app.title === "Digital Question Papers" ? `<div class="year-picker" id="interactive-exam-years" aria-label="Choose year"><button class="year-choice" type="button" data-href="interactive-exams/exam.html?paper=national5-2014">2014</button></div>` : ""}
+            ${app.title === "Digital Question Papers" ? `<div class="year-picker" id="interactive-exam-years" aria-label="Choose year">${Object.entries(digitalPaperYears).map(([level, years]) => years.map(year => `<button class="year-choice" type="button" data-level="${level}" hidden data-href="interactive-exams/exam.html?paper=${level === "N5" ? "national5" : "higher"}-${year}">${year}</button>`).join("")).join("")}</div>` : ""}
           </div>`).join("")}
       </div>
     </section>`).join("");
@@ -1103,7 +1112,8 @@ document.addEventListener("click", event => {const filterChoice = event.target.c
   if (levelChoice && !levelChoice.disabled) {
     event.preventDefault();
     const card = levelChoice.closest(".card");
-    if (card.dataset.title === "Digital Question Papers" && levelChoice.dataset.level === "N5") {
+    if (card.dataset.title === "Digital Question Papers" && digitalPaperYears[levelChoice.dataset.level]) {
+      setDigitalPaperYearLevel(card, levelChoice.dataset.level);
       const open = !card.classList.contains("year-open");
       card.classList.toggle("year-open", open);
       levelChoice.classList.toggle("is-selected", open);
@@ -1125,17 +1135,18 @@ document.addEventListener("click", event => {const filterChoice = event.target.c
       return;
     }
 
-    if (activeLevelFilter !== "all" && !(card.dataset.title === "Digital Question Papers" && activeLevelFilter === "N5")) {
+    if (activeLevelFilter !== "all" && !(card.dataset.title === "Digital Question Papers" && digitalPaperYears[activeLevelFilter])) {
       window.location.href = `${card.dataset.href}?level=${encodeURIComponent(activeLevelFilter)}`;
       return;
     }
 
-    if (card.dataset.title === "Digital Question Papers" && activeLevelFilter === "N5") {
+    if (card.dataset.title === "Digital Question Papers" && digitalPaperYears[activeLevelFilter]) {
+      setDigitalPaperYearLevel(card, activeLevelFilter);
       card.classList.add("open", "year-open");
       cardMain.setAttribute("aria-expanded", "true");
-      const national5Button = card.querySelector('[data-level="N5"]');
-      national5Button?.classList.add("is-selected");
-      national5Button?.setAttribute("aria-expanded", "true");
+      const filteredLevelButton = card.querySelector(`[data-level="${activeLevelFilter}"]`);
+      filteredLevelButton?.classList.add("is-selected");
+      filteredLevelButton?.setAttribute("aria-expanded", "true");
       return;
     }
 
