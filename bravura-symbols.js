@@ -49,6 +49,9 @@ const BRAVURA_SYMBOLS = {
   augmentationDot: "\uE1E7",
   tie: "\uE1FD",
 
+  // Grace notes and ornaments
+  slashedGraceNoteStemUp: "\uE560",
+
   // Accidentals
   flat: "\uE260",
   natural: "\uE261",
@@ -57,6 +60,7 @@ const BRAVURA_SYMBOLS = {
   // Articulations
   accentAbove: "\uE4A0",
   accentBelow: "\uE4A1",
+  fermataAbove: "\uE4C0",
   staccatoAbove: "\uE4A2",
   staccatoBelow: "\uE4A3",
 

@@ -75,7 +75,7 @@ Every complete numbered bar totals four crotchet beats. Before changing any note
 
 - Question 1(c) requires the full term `mezzo soprano`; `mezzo` alone is not accepted.
 - Question 2 accepts French horn or horns, arco, trill, and perfect cadence or the equivalent V–I / 5–1 description.
-- Question 3 accepts Andante or Moderato, numeric and written forms of one and a half beats, and semitone/2/any second for the interval.
+- Question 3 accepts Andante or Moderato, numeric and written forms of one and a half beats, and semitone/2/any second for the interval. Feedback displays the decimal duration `1.5` first; fraction and written forms remain accepted.
 - Question 6(c) accepts strophic, verse and chorus, or ABAB.
 - Question 7(a)(ii) requires evidence of more than one vocalist, such as choir, singers or vocalists.
 - Question 7(b)(ii) must link a Celtic/traditional feature or instrument with a rock feature or instrument. Either half by itself earns no mark.

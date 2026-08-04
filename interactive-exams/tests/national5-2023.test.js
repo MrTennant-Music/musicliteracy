@@ -77,6 +77,8 @@ assert.deepEqual(parts.get("q3b").options.map(option => option.label), ["Adagio"
 assert.equal(marking.markSubquestion(parts.get("q3b"), "Moderato").marks, 1, "Question 3(b) should accept Moderato under the additional guidance.");
 assert.equal(marking.markSubquestion(parts.get("q3c"), "A4,Bb4").marks, 1, "Question 3(c) should require A followed by B flat.");
 assert.equal(marking.markSubquestion(parts.get("q3c"), "Bb4,A4").marks, 0, "Question 3(c) should reject the notes in the wrong order.");
+assert.equal(parts.get("q3d").answerDisplay, "1.5 or 1½", "National 5 2023 should show the decimal duration first in feedback.");
+assert.equal(marking.markSubquestion(parts.get("q3d"), "1.5").marks, 1, "Question 3(d) should accept the decimal duration.");
 assert.equal(marking.markSubquestion(parts.get("q3d"), "one and a half").marks, 1, "Question 3(d) should accept the duration in words.");
 assert.equal(marking.markSubquestion(parts.get("q3e"), "minor 2nd").marks, 1, "Question 3(e) should accept any official second/semitone description.");
 assert.equal(marking.markSubquestion(parts.get("q3f"), "end-bar-8").marks, 1, "Question 3(f) should require the repeat sign at bar 8.");

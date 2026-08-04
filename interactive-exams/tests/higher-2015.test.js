@@ -136,7 +136,7 @@ assert.match(notationSource, /const finalTieBarlineX = \(finalPositions\[9\] \+ 
 assert.match(notationSource, /notation-accidental-option-glyph/, "Higher Question 4 accidental controls should use Bravura glyphs.");
 assert.match(notationSource, /isHigherQuestionFour \? controlsOnly : tools/, "Higher Question 4 Clear controls should be separate from the answer-button row.");
 assert.match(notationSource, /isSequenceEntry \|\| isRhythmPlacement \|\| isAccidentalPlacement/, "Higher score accidentals should receive the same shared Clear control as notes, rhythms and bar lines.");
-assert.match(uiSource, /paper\.levelCode === "H" && subquestion\.answerInScore[\s\S]*data-clear-score-answer/, "Higher answers typed directly in score boxes should receive a Clear control by default.");
+assert.match(uiSource, /paper\.levelCode === "H" && needsScoreClearButton[\s\S]*data-clear-score-answer/, "Higher answers typed directly in score boxes and Higher literacy parts without a built-in notation Clear control should receive a Clear control by default.");
 assert.match(uiSource, /scoreClearButton\.addEventListener\("click"[\s\S]*engine\.setAnswer\(subquestion\.id, ""\)[\s\S]*renderSharedNotation/, "A Higher score-box Clear control should remove only its own answer and refresh the score.");
 assert.equal((uiSource.match(/subquestion\.type === "notation-choice" \|\| subquestion\.answerInScore/g) || []).length, 2, "Both checked-question and final-paper feedback should send score-box answer results to the Higher notation renderer.");
 assert.match(notationSource, /higher-2015-barline-preview/, "Higher Question 4 should preview bar lines directly inside the line 5 score box.");

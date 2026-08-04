@@ -82,7 +82,10 @@
       return root.ExamMarking.responseCount(value, result.recognisedConcepts?.length || 0) >= Number(subquestion.requiredResponses || subquestion.marks);
     }
     if (subquestion.type === "comparison-grid") return (value?.c || []).length >= Number(subquestion.requiredResponses || subquestion.marks);
-    if (subquestion.type === "lyric-placement") return Object.values(value || {}).filter(entry => String(entry || "").trim()).length >= Number(subquestion.requiredResponses || subquestion.marks);
+    if (subquestion.type === "lyric-placement") {
+      const responseTotal = Object.values(value || {}).reduce((sum, entry) => sum + root.ExamMarking.responseCount(entry), 0);
+      return responseTotal >= Number(subquestion.requiredResponses || subquestion.marks);
+    }
     if (subquestion.type === "structured-review") {
       if (subquestion.finalAnswerField) {
         const result = root.ExamMarking.markSubquestion(subquestion, value);

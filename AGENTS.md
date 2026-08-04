@@ -117,6 +117,8 @@ Before importing National 5 Music 2018 or any later paper, also read `interactiv
 
 Before importing Higher Music 2016 or any later Higher paper, read `interactive-exams/papers/higher-2015-import-notes.md`. It records the Higher concept-line, comparison-grid and lyric-placement interactions, the six-mark analysis rules, the score-after-questions literacy layout, the across-the-board additional-answer rule and the local Whisper calibration workflow.
 
+Before importing Higher Music 2017 or any later Higher paper, also read `interactive-exams/papers/higher-2016-import-notes.md`. It records the 2016 source inventory, 32 calibrated Whisper markers, sixteen-bar F-major Question 4 transcription and interactions, official marking alternatives.
+
 Before importing National 5 Music 2019 or any later paper, also read `interactive-exams/papers/national5-2018-import-notes.md`. It records the 2018 source inventory, Whisper marker calibration, 16-bar Question 3 interaction model, official marking alternatives and Question 8 concept rules that must remain regression-tested.
 
 Before importing National 5 Music 2020 or any later paper, also read `interactive-exams/papers/national5-2019-import-notes.md`. It records the 2019 source inventory, 30 calibrated Whisper markers, eight-bar Question 3 transcription and correction model, the two-concept Bothy ballad reason rule and the official Question 8 acceptance and rejection cases that must remain regression-tested.
