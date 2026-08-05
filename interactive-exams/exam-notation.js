@@ -4953,24 +4953,43 @@
     });
   }
 
+  function higher2024RhythmAnswerParts(value) {
+    const [rhythmValue = "", metadata = ""] = String(value || "").split("|", 2);
+    const overrides = metadata.split(",").reduce((result, entry) => {
+      const [noteIndex, rhythm] = entry.split(":");
+      if (/^\d+$/.test(noteIndex) && rhythm) result[noteIndex] = rhythm;
+      return result;
+    }, {});
+    return { rhythms: rhythmValue, overrides };
+  }
+
+  function higher2024RhythmMetadata(value) {
+    return higher2024RhythmAnswerParts(`|${String(value || "")}`).overrides;
+  }
+
+  function higher2024RhythmAnswerValue(rhythms, overrides = {}) {
+    const metadata = Object.entries(overrides).map(([noteIndex, rhythm]) => `${noteIndex}:${rhythm}`).join(",");
+    return metadata ? `${rhythms.join(",")}|${metadata}` : rhythms.join(",");
+  }
+
   function q3AddHigher2024RhythmTargets(svg, answers, onAnswerChange, positions, top, questionCard = null) {
     if (!onAnswerChange) return;
     const bar = HIGHER_2024_Q4_BARS[5];
     const indexes = bar.rhythmCorrectionIndices;
     const editableIndexes = bar.notes.map((item, noteIndex) => item.rhythm === "crotchet" ? noteIndex : null).filter(noteIndex => noteIndex !== null);
     questionCard = questionCard || svg.closest(".question-card");
-    const overrides = () => String(questionCard?.dataset.q3Higher2024RhythmOverrides || "").split(",").reduce((result, entry) => {
-      const [noteIndex, rhythm] = entry.split(":");
-      if (/^\d+$/.test(noteIndex) && rhythm) result[noteIndex] = rhythm;
-      return result;
-    }, {});
+    const answerParts = higher2024RhythmAnswerParts(answers.q4b);
+    const overrides = () => ({
+      ...answerParts.overrides,
+      ...higher2024RhythmMetadata(questionCard?.dataset.q3Higher2024RhythmOverrides),
+    });
     const saveOverrides = next => {
       if (!questionCard) return;
       questionCard.dataset.q3Higher2024RhythmOverrides = Object.entries(next).map(([noteIndex, rhythm]) => `${noteIndex}:${rhythm}`).join(",");
     };
     const currentRhythms = () => {
       const value = questionCard?.dataset.q3CurrentRhythmValue ?? String(answers.q4b || "");
-      const current = value.split(",").slice(0, indexes.length);
+      const current = higher2024RhythmAnswerParts(value).rhythms.split(",").slice(0, indexes.length);
       while (current.length < indexes.length) current.push("_");
       return current;
     };
@@ -4981,7 +5000,7 @@
       });
       const value = hasEditableRhythm ? current.join(",") : "";
       if (questionCard) questionCard.dataset.q3CurrentRhythmValue = value;
-      onAnswerChange("q4b", value);
+      onAnswerChange("q4b", higher2024RhythmAnswerValue(current, overrides()));
     };
     editableIndexes.forEach(noteIndex => {
       const order = indexes.indexOf(noteIndex);
@@ -5021,7 +5040,7 @@
           const next = overrides();
           next[noteIndex] = q3RhythmToolArmed;
           saveOverrides(next);
-          onAnswerChange("q4b", questionCard?.dataset.q3CurrentRhythmValue || String(answers.q4b || ""));
+          onAnswerChange("q4b", higher2024RhythmAnswerValue(currentRhythms(), next));
         }
       };
       target.addEventListener("pointerenter", showPreview);
@@ -5043,7 +5062,7 @@
           if (!next[noteIndex]) return;
           delete next[noteIndex];
           saveOverrides(next);
-          onAnswerChange("q4b", questionCard?.dataset.q3CurrentRhythmValue || String(answers.q4b || ""));
+          onAnswerChange("q4b", higher2024RhythmAnswerValue(currentRhythms(), next));
         }
       });
       svg.append(target);
@@ -6138,11 +6157,11 @@
     const { systems, groups, staffLeft, musicStart, firstBarLeftShift, barEnds: systemBarEnds } = layout;
     const barPositions = [], barStarts = [], barEnds = [], barPoints = [], barTops = [];
     const questionCard = context || svg.closest(".question-card");
-    const rhythmOverrides = String(questionCard?.dataset.q3Higher2024RhythmOverrides || "").split(",").reduce((result, entry) => {
-      const [noteIndex, rhythm] = entry.split(":");
-      if (/^\d+$/.test(noteIndex) && rhythm) result[noteIndex] = rhythm;
-      return result;
-    }, {});
+    const answerRhythmParts = higher2024RhythmAnswerParts(answers.q4b);
+    const rhythmOverrides = {
+      ...answerRhythmParts.overrides,
+      ...higher2024RhythmMetadata(questionCard?.dataset.q3Higher2024RhythmOverrides),
+    };
     const rhythmOverrideIndices = Object.keys(rhythmOverrides).map(Number);
 
     Object.values(layout.boxes).forEach(box => {
@@ -6172,7 +6191,7 @@
         const positions = higher2015Positions(item.notes, start, end, { firstInSystem: local === 0 });
         barPositions[barIndex] = positions; barStarts[barIndex] = start; barEnds[barIndex] = end; barTops[barIndex] = top;
         if (barIndex !== 0) q3Text(svg, String(barIndex + 1), { x: local === 0 ? staffLeft + 6 : start + 3, y: top - 17 - (barIndex >= 22 ? 15 : 0), "text-anchor": "middle" }, "q3-bar-number");
-        const enteredRhythmValue = barIndex === 5 ? String(answers.q4b || "").split(",")[0] : "";
+        const enteredRhythmValue = barIndex === 5 ? answerRhythmParts.rhythms.split(",")[0] : "";
         barPoints[barIndex] = higher2015DrawNotes(svg, item.notes, positions, top, {
           hiddenIndices: barIndex === 5 ? [...new Set([...(enteredRhythmValue && enteredRhythmValue !== "_" ? [item.rhythmCorrectionIndices[0]] : []), ...rhythmOverrideIndices])] : [],
           beamGroups: item.beamGroups,
@@ -6201,19 +6220,34 @@
     const rhythmSourceIndex = rhythmIndexes[0];
     const rhythmX = barPositions[5][rhythmSourceIndex];
     const rhythmSourceNote = HIGHER_2024_Q4_BARS[5].notes[rhythmSourceIndex];
-    const enteredRhythms = String(answers.q4b || "").split(",");
+    const enteredRhythms = answerRhythmParts.rhythms.split(",");
     const enteredRhythm = enteredRhythms[0];
+    const rhythmRedrawPoints = {};
     if (enteredRhythm && enteredRhythm !== "_") {
-      higher2015DrawNotes(svg, [{ ...rhythmSourceNote, rhythm: enteredRhythm }], [rhythmX], systems[1], {
+      const redrawn = higher2015DrawNotes(svg, [{ ...rhythmSourceNote, rhythm: enteredRhythm }], [rhythmX], systems[1], {
         beamGroups: [],
         classNames: [answerClass("q4b")],
       });
+      rhythmRedrawPoints[rhythmSourceIndex] = redrawn[0];
     }
     Object.entries(rhythmOverrides).forEach(([noteIndexValue, rhythm]) => {
       const noteIndex = Number(noteIndexValue);
       const sourceNote = HIGHER_2024_Q4_BARS[5].notes[noteIndex];
       if (!sourceNote || sourceNote.rest) return;
-      q3DrawNote(svg, { ...sourceNote, rhythm }, barPositions[5][noteIndex], systems[1], { className: answerClass("q4b") });
+      rhythmRedrawPoints[noteIndex] = q3DrawNote(svg, { ...sourceNote, rhythm }, barPositions[5][noteIndex], systems[1], { className: answerClass("q4b") });
+    });
+    const rhythmHiddenIndexes = new Set([
+      ...(enteredRhythm && enteredRhythm !== "_" ? [rhythmSourceIndex] : []),
+      ...Object.keys(rhythmOverrides).map(Number),
+    ]);
+    HIGHER_2024_Q4_BARS[5].notes.forEach((item, noteIndex) => {
+      if (!item.tieToNext || (!rhythmHiddenIndexes.has(noteIndex) && !rhythmHiddenIndexes.has(noteIndex + 1))) return;
+      const point = index => rhythmRedrawPoints[index] || barPoints[5]?.[index] || {
+        x: barPositions[5][index],
+        y: q3YForStep(HIGHER_2024_Q4_BARS[5].notes[index].step, systems[1]),
+        down: HIGHER_2024_Q4_BARS[5].notes[index].stemDown ?? q3StemDown(HIGHER_2024_Q4_BARS[5].notes[index].step),
+      };
+      q3DrawTie(svg, point(noteIndex), point(noteIndex + 1));
     });
     if (needsCorrection("q4b")) higher2015DrawNotes(svg, [{ ...rhythmSourceNote, rhythm: "quaver" }], [rhythmX + (enteredRhythm && enteredRhythm !== "_" ? 7 : 0)], systems[1], {
       beamGroups: [],

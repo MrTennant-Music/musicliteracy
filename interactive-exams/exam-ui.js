@@ -60,6 +60,14 @@
     return Boolean(String(value ?? "").trim());
   }
 
+  function clearTransientNotationState() {
+    document.querySelectorAll(".question-card").forEach(card => {
+      Object.keys(card.dataset).forEach(key => {
+        if (key.startsWith("q3Current") || key === "q3Higher2024RhythmOverrides") delete card.dataset[key];
+      });
+    });
+  }
+
   function paperTextMarkup(text, boldPhrases = []) {
     const source = String(text ?? "");
     const phrases = [...new Set(boldPhrases.filter(Boolean))].sort((a, b) => b.length - a.length);
@@ -1430,6 +1438,7 @@
   }
 
   function startAttempt(mode) {
+    clearTransientNotationState();
     root.ExamStorage.deleteDraft(paper.id);
     root.ExamStorage.deleteSubmitted(paper.id);
     feedbackPrintState = null;
@@ -1646,6 +1655,7 @@
     $("[data-cancel-reset]").addEventListener("click", closeResetModal);
     $("[data-confirm-reset]").addEventListener("click", () => {
       closeResetModal();
+      clearTransientNotationState();
       root.ExamStorage.deleteDraft(paper.id);
       root.ExamStorage.deleteSubmitted(paper.id);
       root.ExamAudio.pauseAll();

@@ -290,7 +290,8 @@
     }
     const expected = subquestion.acceptedAnswers || [subquestion.answer];
     const rawResponse = normalise(value);
-    const response = subquestion.allowMusicSuffix ? rawResponse.replace(/\s+music$/, "").trim() : rawResponse;
+    const notationResponse = subquestion.notationTool === "rhythm-entry" ? rawResponse.split("|", 1)[0].trim() : rawResponse;
+    const response = subquestion.allowMusicSuffix ? notationResponse.replace(/\s+music$/, "").trim() : notationResponse;
     const comparableResponse = subquestion.notationTool === "accidental" ? response.replace(/@\d+$/, "") : response;
     const exactMatch = expected.map(normalise).includes(comparableResponse);
     const spellingMatch = expected.some(answer => answerSpellingMatches(comparableResponse, answer, subquestion.allowFuzzy !== false, subquestion.allowCommonSpellings !== false));

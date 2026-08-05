@@ -47,6 +47,7 @@ assert.equal(marking.markSubquestion(parts.get("q3b"), "Impressionism").marks, 1
 assert.equal(marking.markSubquestion(parts.get("q3c"), "Soul").marks, 1);
 assert.equal(marking.markSubquestion(parts.get("q4a"), "Perfect 5th").marks, 1);
 assert.equal(marking.markSubquestion(parts.get("q4b"), "quaver,quaver").marks, 1);
+assert.equal(marking.markSubquestion(parts.get("q4b"), "quaver,quaver|0:dottedCrotchet").marks, 1);
 assert.equal(marking.markSubquestion(parts.get("q4c"), "bar-10-c").marks, 1);
 assert.equal(marking.markSubquestion(parts.get("q4c"), "bar-10-c-second").marks, 1);
 assert.equal(marking.markSubquestion(parts.get("q4c"), "bar-10-c-both").marks, 1);

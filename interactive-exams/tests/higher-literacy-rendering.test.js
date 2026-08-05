@@ -6,6 +6,7 @@ const notation = require("../exam-notation.js");
 const papers = [2015, 2017, 2018, 2019, 2022, 2023, 2024, 2025]
   .map(year => require(`../papers/higher-${year}.js`));
 const notationSource = fs.readFileSync(path.resolve(__dirname, "..", "exam-notation.js"), "utf8");
+const uiSource = fs.readFileSync(path.resolve(__dirname, "..", "exam-ui.js"), "utf8");
 
 class FakeSvgNode {
   constructor(name = "node") { this.name = name; this.attributes = {}; this.children = []; this.style = {}; this.dataset = {}; this.textContent = ""; }
@@ -156,10 +157,19 @@ assert.match(notationSource, /const HIGHER_2023_Q4_REST_X_OFFSET = -25;[\s\S]*co
 assert.match(notationSource, /bar\(\[note\("C5", "crotchet"\), note\("C5", "quaver"\), note\("Bb4", "quaver"\), note\("Bb4", "quaver"\), note\("Bb4", "crotchet"\), note\("A4", "quaver", \{ tiedFromPreviousBar: true \}\)\], \{ beamGroups: \[\{ start: 1, end: 2 \}\] \}\),/, "Higher 2023 bar 13 should beam the quaver pair without a slur.");
 assert.match(notationSource, /\[\[6, 7\], \[8, 9\], \[10, 11\], \[12, 13\], \[13, 14\], \[14, 15\]\]/, "Higher 2023 should render the cross-bar ties through bars 12 to 16.");
 assert.match(notationSource, /const editableIndexes = bar\.notes\.map\(\(item, noteIndex\) => item\.rhythm === "crotchet" \? noteIndex : null\)/, "Higher 2024 should make every crotchet in bar 6 editable.");
-assert.match(notationSource, /const enteredRhythmValue = barIndex === 5 \? String\(answers\.q4b \|\| ""\)\.split\(","\)\[0\]/, "Higher 2024 should track only the selected bar-6 crotchet rhythm.");
+assert.match(notationSource, /const enteredRhythmValue = barIndex === 5 \? answerRhythmParts\.rhythms\.split\(","\)\[0\]/, "Higher 2024 should track only the selected bar-6 crotchet rhythm.");
 assert.match(notationSource, /const rhythmSourceIndex = rhythmIndexes\[0\];[\s\S]*higher2015DrawNotes\(svg, \[\{ \.\.\.rhythmSourceNote, rhythm: enteredRhythm \}\]/, "Higher 2024 should redraw only the selected crotchet and leave the quavers untouched.");
+assert.match(notationSource, /function higher2024RhythmAnswerValue\(rhythms, overrides = \{\}\)[\s\S]*metadata \?/, "Higher 2024 should retain extra crotchet rhythm changes when the marked score is redrawn.");
+assert.match(notationSource, /if \(!item\.tieToNext \|\| \(!rhythmHiddenIndexes\.has\(noteIndex\)/, "Higher 2024 should redraw a printed tie when a rhythm change hides one of its noteheads.");
+const rhythmFeedbackWithDot2024 = descendants(render(higher2024, { q4b: "quaver,quaver|0:dottedCrotchet" }, { q4b: "correct" }));
+assert.ok(rhythmFeedbackWithDot2024.some(node => node.textContent === "augmentationDot" && hasClass(node, "q3-answer-correct")), "Higher 2024 correct rhythm feedback should retain an entered dotted crotchet.");
+const restoredTie2024 = rhythmFeedbackWithDot2024.find(node => node.textContent === "tie");
+assert.ok(restoredTie2024 && !hasClass(restoredTie2024, "q3-answer-correct") && !hasClass(restoredTie2024, "q3-answer-incorrect"), "Higher 2024 correct rhythm feedback should retain the printed tie without colouring it as a pupil answer.");
 assert.match(notationSource, /missingXs,systems\[4\]-67/, "Higher 2025 should position the bar-17 guide quavers 67 pixels above the answer stave.");
 assert.match(notationSource, /id:"q4d",xs:missingXs,top:systems\[4\],pitchMap:Object\.fromEntries\(\["C4","D4","E4","F4","G4","A4","B4","C5","D5","E5","F5","G5","A5"\]/, "Higher 2025 bar-17 note entry should allow pitches through A5.");
+assert.match(uiSource, /function clearTransientNotationState\(\)[\s\S]*key\.startsWith\("q3Current"\)[\s\S]*q3Higher2024RhythmOverrides/, "Reset should clear temporary notation state stored on the paper card.");
+assert.match(uiSource, /function startAttempt\(mode\) \{\s*clearTransientNotationState\(\);/, "Starting a new attempt should clear temporary notation state before rendering the paper.");
+assert.match(uiSource, /\$\("\[data-confirm-reset\]"\)\.addEventListener\("click", \(\) => \{\s*closeResetModal\(\);\s*clearTransientNotationState\(\);/, "Confirming a paper reset should clear temporary notation state immediately.");
 
 global.document = previousDocument;
 global.BRAVURA_SYMBOLS = previousSymbols;
