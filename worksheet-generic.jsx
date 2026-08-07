@@ -1201,7 +1201,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
         {paper.parts.map((part,partIndex) => <div key={part.id} className="grid grid-cols-[22px_28px_1fr_auto] items-baseline gap-x-1 px-1 py-1 text-xs leading-tight">
           <strong>{data.paperCount>1&&partIndex===0?`${paperIndex+1}.`:""}</strong>
           <strong>{data.numbers ? `(${part.label})` : ""}</strong>
-          <div><EmphasisedPrompt>{part.prompt}</EmphasisedPrompt>{!directScoreTypes.has(part.type)?<div className="relative mt-1 min-h-4">{answers?<div className="absolute inset-x-0 bottom-1 font-semibold text-stone-700">{part.answer}</div>:null}<div className="practice-paper-answer-line h-3 w-full"/></div>:null}</div>
+          <div><EmphasisedPrompt>{part.prompt}</EmphasisedPrompt>{!directScoreTypes.has(part.type)?<div className={`practice-paper-answer-area relative mt-1 min-h-4 ${level==="AH"?"practice-paper-answer-area-ah":""}`}>{answers?<div className="absolute inset-x-0 bottom-1 font-semibold text-stone-700">{part.answer}</div>:null}<div className="practice-paper-answer-line h-3 w-full"/></div>:null}</div>
           {data.marks?<strong className="self-baseline pl-2">1</strong>:null}
         </div>)}
       </div>:null}

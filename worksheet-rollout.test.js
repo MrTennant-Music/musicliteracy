@@ -26,7 +26,7 @@ assert.match(timeSignaturesActivity, /const \{ useEffect, useMemo, useRef, useSt
 const outlineContext = { window: {} };
 vm.runInNewContext(fs.readFileSync("bravura-worksheet-outlines.js", "utf8"), outlineContext);
 const worksheetOutlines = outlineContext.window.BRAVURA_WORKSHEET_OUTLINES?.symbols || {};
-for (const symbol of ["brace", "gClef", "fClef", "noteheadBlack", "augmentationDot", "accentAbove", "accentBelow", "staccatoAbove", "staccatoBelow", "piano", "forte", "pianissimo", "mezzoPiano", "mezzoForte", "fortissimo", "sforzato", "wholeNote", "halfNoteStemUp", "halfNoteStemDown", "quarterNoteStemUp", "quarterNoteStemDown", "eighthNoteStemUp", "eighthNoteStemDown", "sharp", "flat", "natural", "timeSig2", "timeSig3", "timeSig4", "barlineFinal", "repeatLeft", "repeatRight"]) {
+for (const symbol of ["brace", "gClef", "fClef", "noteheadBlack", "noteheadHalf", "ottavaBassa", "augmentationDot", "accentAbove", "accentBelow", "staccatoAbove", "staccatoBelow", "piano", "forte", "pianissimo", "mezzoPiano", "mezzoForte", "fortissimo", "sforzato", "wholeNote", "halfNoteStemUp", "halfNoteStemDown", "quarterNoteStemUp", "quarterNoteStemDown", "eighthNoteStemUp", "eighthNoteStemDown", "sharp", "flat", "natural", "timeSig2", "timeSig3", "timeSig4", "barlineFinal", "repeatLeft", "repeatRight"]) {
   assert.ok(worksheetOutlines[symbol]?.path, `Worksheet PDFs need a vector outline for ${symbol}`);
 }
 for (const { file } of eligible.filter(({ file }) => file !== "intervals.html")) {
@@ -113,7 +113,7 @@ const practiceSource = fs.readFileSync("practicequestions.html", "utf8");
 const hubShellSource = fs.readFileSync("hub-shell.js", "utf8");
 assert.doesNotMatch(hubShellSource, /worksheetControlsMode|mlh-worksheet-controls-height|mlh-worksheet-source-config/, "Activities should not expose embedded Level or Customise controls in worksheet mode");
 assert.doesNotMatch(fs.readFileSync("worksheet-generator.html", "utf8"), /WorksheetSourceControls|worksheet-source-controls/, "The worksheet generator should use its original layout without embedded activity controls");
-assert.match(fs.readFileSync("worksheet-generator.html", "utf8"), /worksheet-generic\.jsx\?v=20260717-worksheet-header-cards/, "Browsers must fetch the worksheet renderer version that includes activity-matched worksheet header cards");
+assert.match(fs.readFileSync("worksheet-generator.html", "utf8"), /worksheet-generic\.jsx\?v=20260805-ah-answer-area/, "Browsers must fetch the worksheet renderer version that includes the Advanced Higher answer area");
 assert.match(hubShellSource, /worksheetHeaderChildren[\s\S]*worksheetHeader\?\.children[\s\S]*displayedChildren/, "Worksheet mode should allow activities to provide matching inactive header cards");
 assert.match(practiceSource, /PRACTICE_WORKSHEET_PAPER_COUNT = 20/, "Mixed Practice Questions should prepare twenty complete paper choices");
 assert.match(practiceSource, /new Set\(\["missing", "rhythmicDictation", "tempoQuestion", "cadence", "repeatSigns", "chord", "accidentals"\]\)/, "Mixed Practice Questions should exclude listening-dependent cadence, repeat-sign, chord and accidental questions");
@@ -139,12 +139,17 @@ assert.match(hubShellSource, /window\.alert\("The worksheet could not be prepare
 assert.match(practiceSource, /function practiceWorksheetPrompt[\s\S]*Write the correct articulation marking over the notes in the bar\./, "Practice worksheets should use written instructions instead of asking pupils to select articulation answers");
 assert.match(practiceSource, /prompt: practiceWorksheetPrompt\(part\)/, "Practice worksheet questions should use their written-paper wording");
 assert.match(practiceSource, /worksheetSystemGapReduction=\{question\.bars\.length > 8 \? 30 : 0\}/, "Sixteen-bar worksheet scores should request thirty pixels less space between stave systems");
-assert.match(practiceSource, /worksheetSystemGapIncrease=\{question\.level === "AH" \? 10 : 0\}/, "Advanced Higher worksheet scores should add ten pixels between stave systems");
+assert.match(practiceSource, /renderPracticeWorksheetScore\(question, \{ worksheetLevel = question\.level,/, "Practice worksheet score rendering should receive the selected worksheet level");
+assert.match(practiceSource, /worksheetSystemGapIncrease=\{worksheetLevel === "AH" \? 25 : 0\}/, "Advanced Higher worksheet scores should add twenty-five pixels between stave systems");
+assert.match(practiceSource, /renderPracticeWorksheetScore\(question, \{ worksheetLevel: level \}\)/, "Question-sheet scores should pass the selected worksheet level to the renderer");
+assert.match(practiceSource, /renderPracticeWorksheetScore\(completed\.question, \{ \.\.\.completed, worksheetLevel: level \}\)/, "Answer-sheet scores should pass the selected worksheet level to the renderer");
 assert.match(practiceSource, /worksheetTranspositionGapReduction=\{10\}/, "Practice worksheets should reduce the extra space below a transposition stave by ten pixels");
 assert.match(practiceSource, /95 - worksheetTranspositionGapReduction/, "Transposition spacing should apply the worksheet-only reduction without changing the activity layout");
 assert.match(practiceSource, /worksheetAhChordGapExtension=\{40\}/, "Advanced Higher worksheet chord tasks should request enough room beneath their enlarged answer boxes");
 assert.match(practiceSource, /worksheetAhChordBoxHeightReduction=\{question\.level === "AH" \? 15 : 0\}/, "Advanced Higher worksheet surrounding chord boxes should be fifteen pixels shorter");
-assert.match(practiceSource, /worksheetAhChordFollowingStaveOffset=\{question\.level === "AH" \? 10 : 0\}/, "The stave following Advanced Higher chord boxes should move down ten pixels");
+assert.match(practiceSource, /const ADVANCED_HIGHER_CHORD_IDENTIFY_BAR = 8;/, "Advanced Higher chord identification should remain fixed at printed bar 9");
+assert.match(practiceSource, /const ADVANCED_HIGHER_CHORD_BASS_BAR = 9;/, "Advanced Higher bass-note entry should remain fixed at printed bar 10");
+assert.match(practiceSource, /worksheetAhChordFollowingStaveOffset=\{worksheetLevel === "AH" \? 50 : 0\}/, "The fourth stave should move down fifty pixels when an Advanced Higher chord task is present");
 assert.match(practiceSource, /worksheetAhChordGuideRowHeight=\{question\.level === "AH" \? 45 : 60\}/, "Advanced Higher user answer rows should be fifteen pixels shorter");
 assert.match(practiceSource, /300 \+ worksheetAhChordGapExtension \+ worksheetAhChordFollowingStaveOffset/, "The stave following an Advanced Higher chord task should move independently from its shorter boxes");
 assert.match(practiceSource, /STAFF\.gap \* 16 \+ worksheetAhChordGapExtension - worksheetAhChordBoxHeightReduction - ahChordBoxY/, "The Advanced Higher surrounding chord boxes should apply their independent height reduction");
@@ -203,6 +208,7 @@ assert.match(worksheetGeneratorSource, /\.practice-paper-score-sixteen \{ transf
 assert.match(worksheetGeneratorSource, /\.practice-paper-page-sixteen \.practice-paper-questions \{[^}]*flex: 1 1 auto;[^}]*justify-content: space-between;[^}]*gap: 3px;/, "Sixteen-bar practice questions should distribute all available space without moving their starting position");
 assert.match(worksheetGeneratorSource, /\.practice-paper-questions-only-page \.practice-paper-questions \{[^}]*justify-content: flex-start;[^}]*gap: 16px;/, "Advanced Higher questions-only pages should use moderately spaced fixed question rows");
 assert.match(worksheetGeneratorSource, /\.practice-paper-score-only-page \.practice-paper-score \{ top: 10px; \}/, "Advanced Higher score-only pages should move their music down ten pixels");
+assert.match(worksheetGeneratorSource, /\.practice-paper-page > footer \{ position: relative; z-index: 3; background: #fff; \}/, "Practice paper footers should remain in front of overflowing sheet music in previews and PDFs");
 assert.match(worksheetGeneratorSource, /\.practice-paper-questions-only-page \.practice-paper-questions \{ position: relative; top: 10px; \}/, "Advanced Higher questions-only pages should move their questions down ten pixels");
 assert.match(generic, /practice-paper-total-marks mt-1 flex shrink-0 justify-end/, "Practice-paper totals should expose a dedicated row for page-specific positioning");
 assert.match(worksheetGeneratorSource, /\.practice-paper-questions-only-page \.practice-paper-total-marks \{ position: relative; top: 25px; \}/, "Advanced Higher total marks labels, boxes and values should move down together by twenty-five pixels");
@@ -212,7 +218,8 @@ assert.match(practiceSource, /answerMarkup: answerScore\.markup/, "Practice answ
 assert.match(practiceSource, /answerScoreVersion: 1/, "Practice papers should identify that they contain completed score answers");
 assert.doesNotMatch(fs.readFileSync("worksheet-generic.jsx", "utf8"), /paper\.answerMarkup\|\|paper\.markup/, "Practice answer sheets must never substitute an unanswered score");
 assert.match(fs.readFileSync("worksheet-generic.jsx", "utf8"), /created before completed score answers were available/, "Older stored papers should clearly ask to be recreated");
-assert.match(fs.readFileSync("worksheet-generic.jsx", "utf8"), /!directScoreTypes\.has\(part\.type\)\?<div className="relative mt-1 min-h-4">[\s\S]*practice-paper-answer-line/, "Practice papers should only render answer lines for written responses");
+assert.match(fs.readFileSync("worksheet-generic.jsx", "utf8"), /!directScoreTypes\.has\(part\.type\)\?<div className=\{`practice-paper-answer-area relative mt-1 min-h-4 \$\{level==="AH"\?"practice-paper-answer-area-ah":""\}`\}>[\s\S]*practice-paper-answer-line h-3 w-full/, "Practice papers should render answer lines only for written responses and identify Advanced Higher answer areas explicitly");
+assert.match(worksheetGeneratorSource, /\.practice-paper-answer-area-ah,[\s\S]*\.pdf-capture \.practice-paper-answer-area-ah \{ padding-top: 15px !important; \}/, "Advanced Higher HTML and PDF captures should both keep fifteen pixels above written-answer lines");
 assert.match(generic, /practice-paper-total-marks-label h-6 leading-6[\s\S]*total-marks-box practice-paper-total-marks-box relative h-6 min-w-16[\s\S]*total-marks-value practice-paper-total-marks-value absolute left-2 right-2 text-right leading-none/, "Practice paper totals should use the PDF-safe vertically centred marks box");
 assert.match(worksheetGeneratorSource, /\.practice-paper-total-marks-label,[\s\S]*\.practice-paper-total-marks-box \{ transform: translateY\(4px\); \}/, "Practice-paper total labels and boxes should move down together by four pixels");
 assert.match(worksheetGeneratorSource, /\.practice-paper-total-marks-value \{ transform: translateY\(-4px\); \}/, "Practice-paper total values should remain at their previous vertical position");
