@@ -5445,9 +5445,7 @@
       higher2015Staff(svg, top, { left: staffLeft, right: musicEnd, sharpKeySignature: true });
       group.forEach((barIndex, local) => {
         const item = HIGHER_2017_Q4_BARS[barIndex];
-        const start = local === 0
-          ? musicStart + (systemIndex === 0 ? 0 : HIGHER_2025_Q4_SCORE_LAYOUT.firstBarStartOffset)
-          : systemBarEnds[systemIndex][local - 1];
+        const start = local === 0 ? musicStart : systemBarEnds[systemIndex][local - 1];
         const end = systemBarEnds[systemIndex][local];
         const positions = higher2015Positions(item.notes, start, end, { firstInSystem: local === 0 });
         barPositions[barIndex] = positions;

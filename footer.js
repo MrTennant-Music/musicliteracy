@@ -87,9 +87,6 @@ document.body.insertAdjacentHTML("beforeend", `
       Built around <strong>Qualifications Scotland</strong> music literacy concepts, it supports classroom learning, revision and independent study. It organises concepts by level and topic to support clear progression.
     </p>
 
-    <p>
-      The Music Literacy Hub uses anonymous Google Analytics to help understand how the website is used. This includes information such as the pages and resources visited, the curriculum levels accessed and general website usage.
-    </p>
   </div>
 </div>
 `);
