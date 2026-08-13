@@ -1,5 +1,6 @@
 (function () {
   const MLH = window.MLH || {};
+  const protectedTouchDragSurfaces = new WeakSet();
 
   MLH.isTouchDevice = function isTouchDevice() {
     return window.matchMedia("(hover: none) and (pointer: coarse)").matches ||
@@ -46,6 +47,20 @@
       sourceX: point.clientX,
       sourceY: point.clientY,
     };
+  };
+
+  MLH.preventTouchScrollWhileDragging = function preventTouchScrollWhileDragging(element) {
+    if (!element || protectedTouchDragSurfaces.has(element)) return;
+
+    const blockScroll = function blockScroll(event) {
+      if (event.cancelable) event.preventDefault();
+    };
+
+    element.style.touchAction = "none";
+    element.style.overscrollBehavior = "contain";
+    element.addEventListener("touchstart", blockScroll, { passive: false });
+    element.addEventListener("touchmove", blockScroll, { passive: false });
+    protectedTouchDragSurfaces.add(element);
   };
 
   window.MLH = MLH;

@@ -6,6 +6,9 @@
   function svgElement(name, attributes = {}) {
     const node = document.createElementNS(SVG_NS, name);
     Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+    if (String(attributes.class || "").split(/\s+/).includes("q3-note-hit-area")) {
+      root.MLH?.preventTouchScrollWhileDragging?.(node);
+    }
     return node;
   }
 
