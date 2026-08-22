@@ -184,7 +184,7 @@
 
   function defaultProfileShareUrl() {
     const fileName = window.location.pathname.split("/").filter(Boolean).pop() || "index.html";
-    return `https://mrtennant-music.github.io/musicliteracy/${fileName}${window.location.search}`;
+    return `https://themusicliteracyhub.netlify.app/${fileName}${window.location.search}`;
   }
 
   function defaultProfileLabel() {

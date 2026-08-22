@@ -995,7 +995,7 @@
   }
 
   function paperShareUrl() {
-    return `https://mrtennant-music.github.io/musicliteracy/interactive-exams/exam.html?paper=${encodeURIComponent(paper.id)}`;
+    return `https://themusicliteracyhub.netlify.app/interactive-exams/exam.html?paper=${encodeURIComponent(paper.id)}`;
   }
 
   function openQrOverlay() {
