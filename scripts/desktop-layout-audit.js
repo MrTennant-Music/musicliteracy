@@ -56,6 +56,21 @@ const failures = [];
 const sourceFiles = collectFiles(ROOT);
 const productionFiles = sourceFiles.filter((file) => !file.endsWith(".test.js"));
 const htmlFiles = productionFiles.filter((file) => file.endsWith(".html"));
+const desktopLayoutCss = fs.readFileSync(path.join(ROOT, "desktop-layout.css"), "utf8");
+const desktopLayoutJs = fs.readFileSync(path.join(ROOT, "desktop-layout.js"), "utf8");
+
+if (!/html\s*\{[^}]*overflow-x:\s*hidden/i.test(desktopLayoutCss)) {
+  failures.push("desktop-layout.css: fitted canvas must prevent horizontal page scrolling");
+}
+if (!/body\s*\{[^}]*overflow-x:\s*hidden\s*!important/i.test(desktopLayoutCss)) {
+  failures.push("desktop-layout.css: page body must prevent horizontal drift");
+}
+if (!/viewport\.setAttribute\("content", `width=\$\{DESKTOP_WIDTH\}`\)/.test(desktopLayoutJs)) {
+  failures.push("desktop-layout.js: viewport must request the fixed canvas width only");
+}
+if (/viewport\.setAttribute\([^\n]*initial-scale/.test(desktopLayoutJs)) {
+  failures.push("desktop-layout.js: forced initial scale prevents fitted mobile rendering");
+}
 
 for (const file of htmlFiles) {
   const name = relative(file);
@@ -65,12 +80,12 @@ for (const file of htmlFiles) {
       failures.push(`${name}: responsive homepage viewport is missing`);
     }
     if (text.includes("desktop-layout.css") || text.includes("desktop-layout.js")) {
-      failures.push(`${name}: homepage must not load the desktop-only layout policy`);
+      failures.push(`${name}: homepage must not load the fitted fixed-canvas policy`);
     }
     continue;
   }
-  if (!/<meta name="viewport" content="width=1280, initial-scale=1\.0" \/>/.test(text)) {
-    failures.push(`${name}: viewport must be fixed at 1280px`);
+  if (!/<meta name="viewport" content="width=1280" \/>/.test(text)) {
+    failures.push(`${name}: viewport must fit the fixed 1280px canvas without forcing 100% zoom`);
   }
   if (!text.includes("desktop-layout.css")) {
     failures.push(`${name}: desktop-layout.css is missing`);
@@ -115,9 +130,9 @@ const mobileCssFiles = productionFiles.filter((file) => /mobile/i.test(path.base
 for (const file of mobileCssFiles) failures.push(`${relative(file)}: mobile-specific CSS file found`);
 
 if (failures.length) {
-  console.error("Desktop-only layout audit failed:\n");
+  console.error("Fixed-canvas layout audit failed:\n");
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
 
-console.log(`Layout audit passed: responsive homepage plus ${htmlFiles.length - 1} desktop-only pages.`);
+console.log(`Layout audit passed: responsive homepage plus ${htmlFiles.length - 1} fitted fixed-canvas pages.`);

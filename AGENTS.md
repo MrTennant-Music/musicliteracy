@@ -1,35 +1,39 @@
 # The Music Literacy Hub project instructions
 
-## Permanent desktop-only layout policy
+## Permanent fitted desktop-canvas layout policy
 
 The Music Literacy Hub uses a fixed 1280px desktop layout on every device for
 all pages except `index.html`. The homepage is the sole responsive,
-mobile-friendly exception. The fixed policy applies to every existing and
-future activity, Digital Past Paper and internal project tool.
+mobile-friendly exception. On screens narrower than 1280px, the complete
+desktop layout is proportionally fitted to the visible width as one canvas so
+that pupils cannot accidentally move the page sideways. The fixed policy
+applies to every existing and future activity, Digital Past Paper and internal
+project tool.
 
 1. Every HTML page except `index.html` must use
-   `<meta name="viewport" content="width=1280, initial-scale=1.0" />`.
+   `<meta name="viewport" content="width=1280" />`. Do not force
+   `initial-scale=1.0`; mobile browsers must infer the scale that fits the
+   complete 1280px canvas into the visible width.
 2. Every HTML page except `index.html` must load `desktop-layout.css` and
    `desktop-layout.js`. Tailwind pages must load `desktop-layout.js`
    immediately after Tailwind.
 3. Never add viewport-width media queries, responsive utility variants,
-   mobile/tablet layouts, viewport-width sizing or JavaScript layout switches.
+   mobile/tablet layouts, viewport-width sizing or page-specific JavaScript
+   layout switches.
 4. Keep desktop navigation, sidebars, headers, footers, cards, tables, forms,
    notation, controls, spacing and typography unchanged on smaller devices.
-5. Do not scale or compress the interface to fit. Allow normal horizontal and
-   vertical scrolling.
+5. Scale the complete interface proportionally as one canvas when the visible
+   width is below 1280px. Do not reflow, stack, rearrange or independently
+   resize any content. Prevent horizontal page scrolling and retain normal
+   vertical scrolling. Use 100% scale at 1280px and above.
 6. Input-specific touch support is allowed only when it does not change layout.
 7. Run `pnpm test:desktop-layout` whenever a page or shared layout file changes.
 8. `index.html` must keep its device-width viewport and established responsive
    header, cards, filters, footer and modals. Never extend this exception to
    another page.
-9. Exception overriding points 3 and 5 only for `interactive-exams/exam.html`:
-   keep the complete 1280px desktop arrangement, but proportionally scale the
-   entire page as one canvas when the visible browser width is below 1280px.
-   Do not reflow, stack, rearrange or independently resize any paper content.
-   The full header, toolbar, paper, notation and controls must remain visible
-   without horizontal scrolling or clipping. Use 100% scale at 1280px and
-   above, and keep PDF and print output unscaled.
+9. `interactive-exams/exam.html` may retain its existing canvas-fit fallback
+   for narrow desktop browser windows. Avoid double scaling on mobile devices,
+   and keep PDF and print output unscaled.
 
 ## Interactive exam notation questions
 
