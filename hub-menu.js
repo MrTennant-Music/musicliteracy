@@ -336,7 +336,7 @@
               e("div", { className: "pb-[1px] text-[13px] font-black leading-[1.2] sm:whitespace-normal" }, level.label),
               level.description ? e("div", { className: "mt-[2px] pb-[2px] text-[11px] leading-[1.25] text-stone-600 sm:whitespace-normal" }, level.description) : null,
             ),
-            active ? e("img", { src: "https://mrtennant-music.github.io/musicliteracy/tick.svg", alt: "", "aria-hidden": "true", className: "h-[22px] w-[22px] shrink-0 self-center object-contain" }) : null,
+            active ? e("img", { src: "https://themusicliteracyhub.netlify.app/tick.svg", alt: "", "aria-hidden": "true", className: "h-[22px] w-[22px] shrink-0 self-center object-contain" }) : null,
           ),
         );
       }),

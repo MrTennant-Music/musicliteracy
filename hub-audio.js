@@ -202,7 +202,7 @@
       platinum: {
         tier: "diamond",
         emoji: "💎",
-        icon: "https://mrtennant-music.github.io/musicliteracy/diamond.svg",
+        icon: "https://themusicliteracyhub.netlify.app/diamond.svg",
         bg: "bg-cyan-400/25",
         text: "text-cyan-500",
         sound: "platinum",
@@ -210,7 +210,7 @@
       gold: {
         tier: "gold",
         emoji: "🥇",
-        icon: "https://mrtennant-music.github.io/musicliteracy/gold.svg",
+        icon: "https://themusicliteracyhub.netlify.app/gold.svg",
         bg: "bg-yellow-400/25",
         text: "text-yellow-500",
         sound: "gold",
@@ -218,7 +218,7 @@
       silver: {
         tier: "silver",
         emoji: "🥈",
-        icon: "https://mrtennant-music.github.io/musicliteracy/silver.svg",
+        icon: "https://themusicliteracyhub.netlify.app/silver.svg",
         bg: "bg-slate-300/30",
         text: "text-slate-500",
         sound: "silver",
@@ -226,7 +226,7 @@
       bronze: {
         tier: "bronze",
         emoji: "🥉",
-        icon: "https://mrtennant-music.github.io/musicliteracy/bronze.svg",
+        icon: "https://themusicliteracyhub.netlify.app/bronze.svg",
         bg: "bg-amber-700/20",
         text: "text-amber-700",
         sound: "bronze",

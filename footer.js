@@ -10,7 +10,7 @@ const hasHubUiStylesheet = Array.from(document.querySelectorAll('link[rel="style
 if (!hasHubUiStylesheet) {
   const hubStyle = document.createElement("link");
   hubStyle.rel = "stylesheet";
-  hubStyle.href = "https://mrtennant-music.github.io/musicliteracy/hub-ui.css?v=1.4";
+  hubStyle.href = "https://themusicliteracyhub.netlify.app/hub-ui.css?v=1.4";
   document.head.appendChild(hubStyle);
 }
 
@@ -21,9 +21,9 @@ document.body.insertAdjacentHTML("beforeend", `
   <div class="footer-grid">
 
     <div class="footer-brand">
-      <a href="https://mrtennant-music.github.io/musicliteracy/" aria-label="Return to Music Literacy Hub home page">
+      <a href="https://themusicliteracyhub.netlify.app/" aria-label="Return to Music Literacy Hub home page">
         <img
-          src="https://mrtennant-music.github.io/musicliteracy/the-music-literacy-hub-logo.svg"
+          src="https://themusicliteracyhub.netlify.app/the-music-literacy-hub-logo.svg"
           alt="The Music Literacy Hub"
           class="brand-wordmark footer-wordmark"
         />
