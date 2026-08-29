@@ -41,6 +41,7 @@ assert.match(examStyles, /question-q4 \[data-subquestion="q4f"\] \.answer-refere
 assert.match(examStyles, /\.exam-year-menu\s*\{[^}]*max-height:\s*430px;[^}]*overflow:\s*hidden;/, "The Year menu should use a shorter fixed container.");
 assert.match(examStyles, /\.exam-year-menu \.exam-selection-menu-list\s*\{[^}]*max-height:\s*350px;[^}]*overflow-x:\s*hidden;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/, "The Year menu should scroll vertically without horizontal overflow or passing overscroll to the paper.");
 assert.match(examStyles, /\.exam-year-menu\s*\{[^}]*width:\s*360px;[^}]*max-width:\s*360px;/, "The Year menu should use the narrower menu width.");
+assert.match(examStyles, /\.exam-mode-card\s*\{[^}]*color:\s*var\(--ink\);/, "Mode-card headings should explicitly remain black instead of using iPad Safari's blue button colour.");
 assert.match(examStyles, /\.question-header\s*\{[^}]*min-width:\s*0;/, "Question headers inside the paper should not inherit the page-wide 1280px minimum width.");
 assert.match(examHtml, /exam-canvas-fit\.js/, "Interactive papers should load their desktop-canvas fitting helper.");
 assert.match(examCanvasFitSource, /Math\.min\(1, visibleWidth \/ DESKTOP_WIDTH\)/, "Interactive papers should scale down only when the visible browser width is below 1280px.");

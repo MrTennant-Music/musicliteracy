@@ -23,3 +23,11 @@ test("the Aural Recognition ear icon uses the shared app-icon frame", () => {
   assert.match(icon, /stroke="#e5e7eb"/);
   assert.match(icon, /stroke="#020617"/);
 });
+
+test("Digital Question Papers opens an Advanced Higher Coming soon row", () => {
+  assert.match(source, /const digitalPaperYears = \{[\s\S]*?AH: \[\][\s\S]*?\};/);
+  assert.match(source, /title: "Digital Question Papers"[\s\S]*?disabled: \["N3", "N4"\]/);
+  assert.match(source, /class="year-coming-soon" data-level="\$\{level\}" hidden>Coming soon<\/p>/);
+  assert.match(source, /\.year-coming-soon\s*\{[\s\S]*?grid-column: 1 \/ -1;[\s\S]*?justify-content: center;/);
+  assert.match(source, /app\.title === "Digital Question Papers" && digitalPaperYears\[key\]/);
+});
