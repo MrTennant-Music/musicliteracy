@@ -72,6 +72,21 @@ test("Transposing Whole Bar mode commits iPad drops from synchronous release sta
   assert.doesNotMatch(releaseHandler, /releasePointerCapture/);
 });
 
+test("Transposing Whole Bar mode prompts for a rhythm only after an invalid placement attempt", () => {
+  const source = read("transposing.html");
+  const pressHandler = source.slice(
+    source.indexOf("function handlePointerDown"),
+    source.indexOf("function handlePointerUp"),
+  );
+
+  assert.doesNotMatch(source, /Press and hold to drag note into place\./);
+  assert.match(source, /const \[rhythmWarningVisible, setRhythmWarningVisible\] = useState\(false\)/);
+  assert.match(pressHandler, /if \(wholeBarMode && !selectedRhythmTool && !selectedRhythms\[targetSlot\]\)/);
+  assert.match(pressHandler, /setRhythmWarningVisible\(true\);[\s\S]*?return;/);
+  assert.match(source, /rhythmWarningVisible[\s\S]*?text-red-700[\s\S]*?Select a rhythm first\./);
+  assert.match(source, /function selectRhythm\(tool\) \{[\s\S]*?setRhythmWarningVisible\(false\)/);
+});
+
 test("Practice Questions and Follow the Score protect every note-placement variant", () => {
   ["practicequestions.html", "wheredidthemusicstop.html"].forEach((file) => {
     const source = read(file);
