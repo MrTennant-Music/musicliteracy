@@ -57,6 +57,21 @@ test("standalone stave-placement activities use the shared safeguard", () => {
   });
 });
 
+test("Transposing Whole Bar mode commits iPad drops from synchronous release state", () => {
+  const source = read("transposing.html");
+  const releaseHandler = source.slice(
+    source.indexOf("function handlePointerUp"),
+    source.indexOf("function handlePointerCancel"),
+  );
+
+  assert.match(source, /const touchPreviewRef = useRef\(null\)/);
+  assert.match(source, /function updateTouchPreview\(nextPreview\) \{[\s\S]*?touchPreviewRef\.current = nextPreview;[\s\S]*?setTouchPreview\(nextPreview\)/);
+  assert.match(source, /onPointerUp=\{\(event\) => onPointerUp\(event, index\)\}/);
+  assert.match(releaseHandler, /const preview = touchPreviewRef\.current/);
+  assert.match(releaseHandler, /const \{ step \} = getPointerStep\(event\);[\s\S]*?placeStep\(step, preview\.targetSlot \?\? targetSlot\)/);
+  assert.doesNotMatch(releaseHandler, /releasePointerCapture/);
+});
+
 test("Practice Questions and Follow the Score protect every note-placement variant", () => {
   ["practicequestions.html", "wheredidthemusicstop.html"].forEach((file) => {
     const source = read(file);

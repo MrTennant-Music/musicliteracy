@@ -1007,7 +1007,7 @@ function ScoreArea({
             style={{ touchAction: "none" }}
             onPointerDown={(event) => onPointerDown(event, index)}
             onPointerMove={(event) => onPointerMove(event, index)}
-            onPointerUp={onPointerUp}
+            onPointerUp={(event) => onPointerUp(event, index)}
             onPointerCancel={onPointerCancel}
           />
         ))}
@@ -1197,6 +1197,7 @@ function App() {
   const [userTies, setUserTies] = useState([]);
   const [activeSlot, setActiveSlot] = useState(0);
   const [touchPreview, setTouchPreview] = useState(null);
+  const touchPreviewRef = useRef(null);
   const [feedback, setFeedback] = useState(null);
   const [feedbackFading, setFeedbackFading] = useState(false);
   const [feedbackDetails, setFeedbackDetails] = useState(null);
@@ -1241,6 +1242,11 @@ function App() {
         : question.instruction?.[mode]
       : question.instruction?.[mode] ?? <>Rewrite the note as it would sound.</>;
 
+  function updateTouchPreview(nextPreview) {
+    touchPreviewRef.current = nextPreview;
+    setTouchPreview(nextPreview);
+  }
+
   function resetTask(nextQuestion = question) {
     if (feedbackTimerRef.current) {
       window.clearTimeout(feedbackTimerRef.current);
@@ -1258,7 +1264,7 @@ function App() {
     setSelectedRhythmTool(null);
     setUserTies([]);
     setActiveSlot(0);
-    setTouchPreview(null);
+    updateTouchPreview(null);
     setFeedback(null);
     setFeedbackFading(false);
     setFeedbackDetails(null);
@@ -1312,14 +1318,14 @@ function App() {
       setUserTies([]);
       setActiveSlot(0);
       setHoverStep(null);
-      setTouchPreview(null);
+      updateTouchPreview(null);
       setPrompt("");
       return;
     }
 
     setLockedStep(null);
     setHoverStep(null);
-    setTouchPreview(null);
+    updateTouchPreview(null);
     setPrompt("");
   }
 
@@ -1377,7 +1383,7 @@ function App() {
         setUserTies(Array(question.passage.length).fill(false));
         setActiveSlot(existingTieSlot);
         setHoverStep(null);
-        setTouchPreview(null);
+        updateTouchPreview(null);
         setPrompt("");
         return;
       }
@@ -1396,7 +1402,7 @@ function App() {
 
       setActiveSlot(targetSlot);
       setHoverStep(null);
-      setTouchPreview(null);
+      updateTouchPreview(null);
       setPrompt("");
       return;
     }
@@ -1407,7 +1413,7 @@ function App() {
       return;
     }
 
-    const shouldRemoveExisting = !touchPreview?.dragged && selectedRhythms[targetSlot] === rhythmToPlace && examSteps[targetSlot] != null;
+    const shouldRemoveExisting = !touchPreviewRef.current?.dragged && selectedRhythms[targetSlot] === rhythmToPlace && examSteps[targetSlot] != null;
 
     setExamSteps((current) => {
       const next = [...current];
@@ -1437,10 +1443,10 @@ function App() {
 
   function handlePointerMove(event, targetSlot = activeSlot) {
     if (feedback) return;
-    if (!wholeBarMode && lockedStep != null && !touchPreview?.active) return;
+    if (!wholeBarMode && lockedStep != null && !touchPreviewRef.current?.active) return;
     if (wholeBarMode && selectedRhythmTool === "tie" && examSteps[targetSlot] == null) {
       setHoverStep(null);
-      setTouchPreview(null);
+      updateTouchPreview(null);
       return;
     }
     if (wholeBarMode && !selectedRhythmTool && !selectedRhythms[targetSlot]) return;
@@ -1450,20 +1456,20 @@ function App() {
     setHoverStep(selectedRhythmTool === "tie" ? examSteps[targetSlot] : step);
 
     if (selectedRhythmTool === "tie") {
-      setTouchPreview({ active: true, type: "tie", targetSlot, x: pointer.x, y: pointer.y, dragged: false });
+      updateTouchPreview({ active: true, type: "tie", targetSlot, x: pointer.x, y: pointer.y, dragged: false });
       return;
     }
 
-    if (touchPreview?.active) {
-      setTouchPreview((current) => ({
-        ...(current ?? {}),
+    if (touchPreviewRef.current?.active) {
+      updateTouchPreview({
+        ...touchPreviewRef.current,
         active: true,
         x: pointer.x,
         y: pointer.y,
         step,
         targetSlot,
         dragged: true,
-      }));
+      });
     }
   }
 
@@ -1480,41 +1486,44 @@ function App() {
     }
 
     event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {}
 
     const { pointer, step } = getPointerStep(event);
     setActiveSlot(targetSlot);
     setHoverStep(selectedRhythmTool === "tie" ? examSteps[targetSlot] : step);
-    setTouchPreview(
+    updateTouchPreview(
       selectedRhythmTool === "tie"
         ? { active: true, type: "tie", targetSlot, x: pointer.x, y: pointer.y, dragged: false }
         : { active: true, x: pointer.x, y: pointer.y, step, targetSlot, dragged: false },
     );
   }
 
-  function handlePointerUp(event) {
+  function handlePointerUp(event, targetSlot = activeSlot) {
     if (feedback) return;
     event.preventDefault();
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    const preview = touchPreviewRef.current;
 
-    if (touchPreview?.type === "tie") {
-      placeStep(null, touchPreview.targetSlot ?? activeSlot);
-    } else if (touchPreview?.step != null) {
-      placeStep(touchPreview.step, touchPreview.targetSlot ?? activeSlot);
+    if (preview?.type === "tie") {
+      placeStep(null, preview.targetSlot ?? targetSlot);
+    } else if (preview) {
+      const { step } = getPointerStep(event);
+      placeStep(step, preview.targetSlot ?? targetSlot);
     }
 
-    setTouchPreview(null);
+    updateTouchPreview(null);
   }
 
   function handlePointerCancel() {
-    setTouchPreview(null);
+    updateTouchPreview(null);
   }
 
   function selectRhythm(tool) {
     if (feedback || !wholeBarMode) return;
     setSelectedRhythmTool(tool);
     setHoverStep(null);
-    setTouchPreview(null);
+    updateTouchPreview(null);
     setPrompt("");
   }
 
