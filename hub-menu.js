@@ -247,26 +247,28 @@
     };
   }
 
-  function MenuToggleRow({ glyph, label, checked, disabled = false, onChange, labelWidthClass = "min-w-[145px]" }) {
+  function MenuToggleRow({ glyph, label, checked, disabled = false, onChange, labelWidthClass = "min-w-[145px]", profileKey = null }) {
+    const toggleKey = profileKey ?? (typeof label === "string" ? label : null);
     useEffect(() => {
-      const restored = MLH.profileSettings?.getToggle(label);
+      if (!toggleKey) return undefined;
+      const restored = MLH.profileSettings?.getToggle(toggleKey);
       if (typeof restored !== "boolean" || restored === checked) return;
       // Enable extra choices before disabling defaults so minimum-choice rules
       // cannot block restoration of a valid shared profile.
       const timer = window.setTimeout(() => onChange?.(), restored ? 0 : 70);
       return () => window.clearTimeout(timer);
-    }, [label, checked, onChange]);
+    }, [toggleKey, checked, onChange]);
     return e(
       "button",
       {
         type: "button",
         disabled,
         onClick: () => {
-          MLH.profileSettings?.setToggle(label, !checked);
+          if (toggleKey) MLH.profileSettings?.setToggle(toggleKey, !checked);
           onChange?.();
         },
         "aria-pressed": checked,
-        "data-profile-toggle": label,
+        ...(toggleKey ? { "data-profile-toggle": toggleKey } : {}),
         className: "hub-toggle-row",
       },
       e(
