@@ -211,6 +211,7 @@ assert.match(worksheetGeneratorSource, /\.practice-paper-score-only-page \.pract
 assert.match(worksheetGeneratorSource, /\.practice-paper-page > footer \{ position: relative; z-index: 3; background: #fff; \}/, "Practice paper footers should remain in front of overflowing sheet music in previews and PDFs");
 assert.match(worksheetGeneratorSource, /\.practice-paper-questions-only-page \.practice-paper-questions \{ position: relative; top: 10px; \}/, "Advanced Higher questions-only pages should move their questions down ten pixels");
 assert.match(generic, /practice-paper-total-marks mt-1 flex shrink-0 justify-end/, "Practice-paper totals should expose a dedicated row for page-specific positioning");
+assert.match(worksheetGeneratorSource, /\.practice-paper-total-marks \{ position: relative; z-index: 4; \}/, "Practice-paper total marks boxes should render above the footer so their bottom outlines are not clipped");
 assert.match(worksheetGeneratorSource, /\.practice-paper-questions-only-page \.practice-paper-total-marks \{ position: relative; top: 25px; \}/, "Advanced Higher total marks labels, boxes and values should move down together by twenty-five pixels");
 assert.match(worksheetGeneratorSource, /\.practice-paper-questions \{[^}]*z-index: 2;[^}]*background: #fff;/, "Practice questions should remain visible above any overlapping score notation");
 assert.match(practiceSource, /function practiceWorksheetCompletedState/, "Practice worksheets should build completed score state for answer sheets");
