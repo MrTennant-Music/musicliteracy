@@ -13,7 +13,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=1.4"></script>
-  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
   <script src="./hub-shell.js?v=20260714-controls-removed"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -1850,15 +1850,46 @@ function App(){
     oscillator.start(start); oscillator.stop(start+duration+.1);
   }
   function playDrumHit(ctx,start,accented=false,destination=ctx.destination){ window.MLH?.playMetronomeClick?.(ctx,destination,start,accented); }
-  function playQuestionAudio(startOffsetSeconds=0, forcePlay=false){
+  async function playQuestionAudio(startOffsetSeconds=0, forcePlay=false){
     if(question.type==="ahInversionBar") return;
-    if(playing && !forcePlay){ stopAudio(); return; }
+    if((playing || audioRef.current) && !forcePlay){ stopAudio(); return; }
     const AC=window.AudioContext||window.webkitAudioContext; if(!AC){setPromptMessage("Audio playback is not supported in this browser.");return;}
     stopAudio(); const ctx=new AC(); audioRef.current=ctx; setPlaying(true); setPromptMessage("");
     const selectedTempo=TEMPOS.find(t=>t.id===tempo)||TEMPOS[1], beatSeconds=60/selectedTempo.bpm, beatsPerBar=question.timeSignature.beats, barSeconds=beatSeconds*beatsPerBar;
     const playbackLoops=question.type==="n5ChordSequence"?2:1;
     const activeDuration=question.bars.length*barSeconds*playbackLoops;
     const startOffset=clamp(startOffsetSeconds||0,0,Math.max(0,activeDuration-0.05));
+    const frequencies = question.type === "ahAudioChord"
+      ? question.audioBars.flatMap(bar => [
+          ...bar.notes.flatMap((note, index) => {
+            const pitches = note.stack?.length ? note.stack.map(tone => tone.midi) : [effectivePitchForMelodyNote(question, question.bars[bar.barIndex], index)];
+            return pitches.flatMap(pitch => [pitch, pitch + 12]);
+          }),
+          ...bar.intervals.map(interval => bar.rootMidi + interval),
+        ]).map(midiToFrequency)
+      : question.bars.flatMap(bar => {
+          const chord = bar.chord;
+          const melody = bar.notes.flatMap((note, index) => {
+            const pitch = effectivePitchForMelodyNote(question, bar, index);
+            return question.type === "n5ChordSequence" ? [pitch + 12] : activeLevel === "H" ? [] : [pitch + 12, pitch + 24];
+          });
+          if (question.type === "n5ChordSequence") {
+            const root = pitchForChordLetter(question.key, chord, chord.notes[0], 3);
+            const third = pitchForChordLetter(question.key, chord, chord.notes[1], 4);
+            const fifth = pitchForChordLetter(question.key, chord, chord.notes[2], 5);
+            return [...melody, root - 12, third - 12, fifth - 12, root, third, fifth, root + 12].map(midiToFrequency);
+          }
+          return [
+            ...melody,
+            ...chord.notes.flatMap((letter, index) => {
+              const midi = pitchForChordLetter(question.key, chord, letter, 3 + index);
+              return [midi, midi - 12];
+            }),
+          ].map(midiToFrequency);
+        });
+    const ready = await window.MLH.prepareAudioPlayback(ctx, { piano: frequencies, metronome: metronomeOn });
+    if (audioRef.current !== ctx) return;
+    if (!ready) { stopAudio(); return; }
     const audioStartTime=ctx.currentTime+.08;
     if(question.type==="n5ChordSequence"){
       Array.from({length:playbackLoops},(_,loopIndex)=>loopIndex).forEach(loopIndex=>{

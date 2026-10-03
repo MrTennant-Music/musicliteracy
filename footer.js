@@ -42,7 +42,7 @@ document.body.insertAdjacentHTML("beforeend", `
     <div>
       <h4>Feedback</h4>
       <p>
-        If you have any suggestions on how to improve the hub,
+        If you have any suggestions on how to improve the Hub,
         please click
         <a
           class="text-link"

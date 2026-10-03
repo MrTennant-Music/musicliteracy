@@ -13,7 +13,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -289,7 +289,49 @@ function App(){
       chordLetters.forEach((letter, index) => oscillator(ctx, gainNode, midiToFrequency(pitchForChordLetter(question, bar, letter, 4 + index)), startTime + pulseStart, pulseDuration, 0.018, "triangle", 0.05));
     });
   }
-  function play(){ if(playing){ stopAudio(); return; } const AC=window.AudioContext||window.webkitAudioContext; if(!AC){setPrompt("Audio playback is not supported in this browser.");return;} stopAudio(); const ctx=new AC(); audioRef.current=ctx; const master=ctx.createGain(); master.gain.setValueAtTime(1.25, ctx.currentTime); master.connect(ctx.destination); const beat=60/tempo.bpm; const start=ctx.currentTime+0.12; setPlaying(true); setPrompt(""); question.bars.forEach(bar=>{ const barStart=bar.barIndex*4*beat; if(metronome){ for(let b=0;b<4;b++) playClick(ctx, master, start+barStart+b*beat, b===0); } playAccompaniment(ctx, master, bar, barStart, beat, start); bar.notes.forEach(note=>{ const noteStart=barStart+note.beat*beat; const duration=note.beats*beat*0.96; playMelodyNote(ctx, master, midiToFrequency(effectiveMidiForNote(question, bar, note)), start+noteStart, duration); timers.current.push(setTimeout(()=>{ if(follow) setActiveNoteId(note.id); }, Math.max(0,(start+noteStart-ctx.currentTime)*1000))); timers.current.push(setTimeout(()=>setActiveNoteId(null), Math.max(0,(start+noteStart-ctx.currentTime+duration)*1000))); }); }); timers.current.push(setTimeout(stopAudio, BAR_COUNT*4*beat*1000+350)); }
+  async function play() {
+    if (playing || audioRef.current) { stopAudio(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { setPrompt("Audio playback is not supported in this browser."); return; }
+    stopAudio();
+    const ctx = new AC();
+    audioRef.current = ctx;
+    setPlaying(true);
+    setPrompt("");
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(1.25, ctx.currentTime);
+    master.connect(ctx.destination);
+    const frequencies = question.bars.flatMap(bar => {
+      const letters = question.key.chords[bar.chordSymbol] || [];
+      const chord = letters.map((letter, index) => pitchForChordLetter(question, bar, letter, 4 + index));
+      const bass = letters.length ? [
+        chord[0] - 12,
+        pitchForChordLetter(question, bar, letters[0], 3) - 12,
+        pitchForChordLetter(question, bar, letters[1] || letters[0], 3) - 12,
+      ] : [];
+      return [...bar.notes.map(note => effectiveMidiForNote(question, bar, note)), ...chord, ...bass].map(midiToFrequency);
+    });
+    const ready = await window.MLH.prepareAudioPlayback(ctx, { piano: frequencies, metronome });
+    if (audioRef.current !== ctx) return;
+    if (!ready) { stopAudio(); return; }
+    const beat = 60 / tempo.bpm;
+    const start = ctx.currentTime + 0.12;
+    question.bars.forEach(bar => {
+      const barStart = bar.barIndex * 4 * beat;
+      if (metronome) {
+        for (let b = 0; b < 4; b++) playClick(ctx, master, start + barStart + b * beat, b === 0);
+      }
+      playAccompaniment(ctx, master, bar, barStart, beat, start);
+      bar.notes.forEach(note => {
+        const noteStart = barStart + note.beat * beat;
+        const duration = note.beats * beat * 0.96;
+        playMelodyNote(ctx, master, midiToFrequency(effectiveMidiForNote(question, bar, note)), start + noteStart, duration);
+        timers.current.push(setTimeout(() => { if (follow) setActiveNoteId(note.id); }, Math.max(0, (start + noteStart - ctx.currentTime) * 1000)));
+        timers.current.push(setTimeout(() => setActiveNoteId(null), Math.max(0, (start + noteStart - ctx.currentTime + duration) * 1000)));
+      });
+    });
+    timers.current.push(setTimeout(stopAudio, BAR_COUNT * 4 * beat * 1000 + 350));
+  }
   function answerButtonClass(id){ const base="min-h-12 rounded-xl border px-3 py-2 text-sm font-bold"; if(!feedback) return `${base} border-stone-300 bg-white text-black`; if(id===question.answerId) return `${base} border-green-600 bg-green-600 text-white`; if(id===selected) return `${base} border-red-600 bg-red-600 text-white`; return `${base} border-stone-300 bg-white text-stone-500 opacity-70`; }
   const acc=attempted?Math.round(correct/attempted*100):0;
   const disabledConfirm=feedback || (question.mode==="choice" ? !selected : !typed.trim());

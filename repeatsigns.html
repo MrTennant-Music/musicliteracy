@@ -13,7 +13,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -1392,9 +1392,11 @@ function App() {
   }
 
   function handleLockPlacement(event) {
-    if (!selectedSymbolId || feedback || !hoverPlacement) return;
+    if (!selectedSymbolId || feedback) return;
+    const placement = snap(pointerToSvg(event), selectedSymbolId);
+    if (!placement) return;
     event.preventDefault();
-    const newPlacement = { ...hoverPlacement, localId: Math.random().toString(36).slice(2) };
+    const newPlacement = { ...placement, localId: Math.random().toString(36).slice(2) };
     setPlacements(current => {
       const isTimeBar = newPlacement.symbolId === "first-time" || newPlacement.symbolId === "second-time";
       const isNavigation = ["dc", "ds", "fine", "segno"].includes(newPlacement.symbolId);
@@ -1440,8 +1442,8 @@ function App() {
     score(placementsMatch(question, placements) && wrongs.length === 0 && miss.length === 0);
   }
 
-  function playExcerpt() {
-    if (playing) return;
+  async function playExcerpt() {
+    if (playing || audioRef.current) return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { setPromptMessage("Audio playback is not supported in this browser."); return; }
     stopAudio();
@@ -1454,6 +1456,18 @@ function App() {
     master.gain.value = 1;
     master.connect(ctx.destination);
     masterRef.current = master;
+
+    const frequencies = question.bars.flatMap(bar => {
+      const letters = bar.chord?.notes || CHORDS.C;
+      return [
+        ...bar.notes.map(note => note.freq || freqForStep(note.step)),
+        midiToFrequency(pitchForLetter(question.key, bar.chord, letters[0], 2)),
+        ...letters.map((letter, index) => midiToFrequency(accompanimentChordMidi(question.key, bar.chord, letter, 3 + index))),
+      ];
+    });
+    const ready = await window.MLH.prepareAudioPlayback(ctx, { piano: frequencies, metronome: metronomeEnabled });
+    if (audioRef.current !== ctx) return;
+    if (!ready) { stopAudio(); return; }
 
     const tempoBpm = tempo === "adagio" ? 58 : tempo === "allegro" ? 96 : 76;
     const beatSeconds = 60 / tempoBpm;

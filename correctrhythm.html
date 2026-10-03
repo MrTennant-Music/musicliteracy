@@ -15,7 +15,7 @@
   <script src="./bravura-symbols.js?v=20260629"></script>
   <script src="./shared-notation-config.js?v=20260629"></script>
   <script src="./hub-input.js?v=20260629"></script>
-  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
@@ -2462,8 +2462,8 @@ function confirmAnswer() {
     body.start(start);
     body.stop(start + hitDuration + 0.02);
   }
-  function playQuestionAudio() {
-    if (isAudioPlaying) {
+  async function playQuestionAudio() {
+    if (isAudioPlaying || audioContextRef.current) {
       stopAudioPlayback();
       return;
     }
@@ -2485,6 +2485,25 @@ function confirmAnswer() {
     const isPercussionQuestion = isIdentifyQuestion || question.questionType === "longInsert";
     const playbackBars = isIdentifyQuestion ? question.options[question.answerIndex].bars : question.bars;
     const chords = isIdentifyQuestion ? (IDENTIFY_CHORDS[question.key.id] ?? IDENTIFY_CHORDS.C) : (CHORDS[question.key.id] ?? CHORDS.C);
+    const frequencies = question.performedOrder.flatMap(barIndex => {
+      const bar = playbackBars[barIndex];
+      const chord = chords[barIndex % chords.length];
+      const melody = isPercussionQuestion ? [] : bar.notes.flatMap((note, index) => {
+        if (note.silentAudio || rhythmInfo(getAudioRhythm(note)).rest) return [];
+        const pitch = pitchForNote(question, barIndex, index);
+        return [pitch + 12, pitch + 24];
+      });
+      return [
+        ...melody,
+        ...chord.flatMap((tone, index) => {
+          const midi = chordToneMidi(tone, question.key, 3 + index);
+          return isPercussionQuestion ? [midi] : [midi, midi - 12];
+        }),
+      ].map(midiToFrequency);
+    });
+    const ready = await window.MLH.prepareAudioPlayback(audioContext, { piano: frequencies, metronome: metronomeOn });
+    if (audioContextRef.current !== audioContext) return;
+    if (!ready) { stopAudioPlayback(); return; }
     const audioStartTime = audioContext.currentTime + 0.08;
     let relativeCursor = 0;
 

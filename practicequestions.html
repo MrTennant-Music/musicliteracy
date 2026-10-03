@@ -11,7 +11,7 @@
   <script src="./desktop-layout.js?v=2"></script>
   <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
   <script src="./hub-input.js?v=1.4"></script>
-  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
   <script src="./piano%20audio/salamander-browser-map.js"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -14616,8 +14616,8 @@ function advancedHigherInversionAnswerLabel(inversion) {
         const uniqueSamples = [...new Set(layers.map((layer) => layer?.sample).filter(Boolean))];
         if (!uniqueSamples.length) return false;
         try {
-          await Promise.all(uniqueSamples.map((sample) => loadPianoSample(ctx, sample)));
-          return true;
+          const results = await Promise.allSettled(uniqueSamples.map((sample) => loadPianoSample(ctx, sample)));
+          return results.every(result => result.status === "fulfilled");
         } catch {
           return false;
         }
@@ -15022,7 +15022,7 @@ function advancedHigherInversionAnswerLabel(inversion) {
       }
 
       async function playQuestionAudio(startAt = 0, restart = false) {
-        if (isPlaying && !restart) {
+        if ((isPlaying || audioRef.current) && !restart) {
           stopAudio();
           return;
         }
@@ -15043,8 +15043,12 @@ function advancedHigherInversionAnswerLabel(inversion) {
         audioRef.current = ctx;
         setIsPlaying(true);
         setPrompt("");
-        await preloadPianoSamples(ctx, pianoLayersForPlayback(question, playbackBars));
+        const [ready] = await Promise.all([
+          window.MLH.prepareAudioPlayback(ctx, { metronome: metronomeOn }),
+          preloadPianoSamples(ctx, pianoLayersForPlayback(question, playbackBars)),
+        ]);
         if (audioRef.current !== ctx) return;
+        if (!ready) { stopAudio(); return; }
         const startTime = ctx.currentTime + 0.12 - offset;
 
         playbackBars.forEach((bar, playbackIndex) => {

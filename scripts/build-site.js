@@ -12,6 +12,7 @@ const MAX_PUBLISHED_BYTES = 1_000_000_000;
 const PUBLIC_ROOT_DIRECTORIES = new Set([
   "board-marker",
   "copperplate-gothic-std",
+  "familyfortunes-audio",
   "interactive-exams",
   "millionaire-starter",
   "piano audio",

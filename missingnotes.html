@@ -11,7 +11,7 @@
   <script src="./desktop-layout.js?v=2"></script>
   <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
   <script src="./hub-input.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-shell.js?v=20260714-controls-removed"></script>
@@ -2118,8 +2118,8 @@
         oscillator(ctx, gainNode, frequency, start, duration, 0.078);
       }
 
-      function playQuestionAudio(startAt = 0, restart = false) {
-        if (isPlaying && !restart) {
+      async function playQuestionAudio(startAt = 0, restart = false) {
+        if ((isPlaying || audioRef.current) && !restart) {
           stopAudio();
           return;
         }
@@ -2139,10 +2139,26 @@
         master.gain.setValueAtTime(1.25, ctx.currentTime);
         master.connect(ctx.destination);
         audioRef.current = ctx;
-        const startTime = ctx.currentTime + 0.12 - offset;
         setIsPlaying(true);
         setPrompt("");
         setPlaybackElapsed(offset);
+        const frequencies = question.bars.flatMap(bar => {
+          const letters = question.key.chords[bar.chordSymbol] ?? [];
+          const chord = letters.map((letter, index) => pitchForChordLetter(question, bar, letter, 3 + index));
+          const bass = letters.length ? [
+            chord[0] - 12,
+            pitchForChordLetter(question, bar, letters[0], 2) - 12,
+            pitchForChordLetter(question, bar, letters[1] ?? letters[0], 2) - 12,
+          ] : [];
+          return [
+            ...bar.notes.filter(note => !note.rest).map(note => effectiveMidiForNote(question, bar, note)),
+            ...chord, ...bass,
+          ].map(midiToFrequency);
+        });
+        const ready = await window.MLH.prepareAudioPlayback(ctx, { piano: frequencies, metronome: metronomeOn });
+        if (audioRef.current !== ctx) return;
+        if (!ready) { stopAudio(); return; }
+        const startTime = ctx.currentTime + 0.12 - offset;
 
         question.bars.forEach((bar) => {
           const barStart = bar.barIndex * barSeconds;

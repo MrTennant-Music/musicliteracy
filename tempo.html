@@ -13,7 +13,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -353,7 +353,46 @@ function App(){
         [1, 2, 3].forEach(offset => playChord(offset));
     }
   }
-  function play(){ if(playing){stopAudio();return;} const AC=window.AudioContext||window.webkitAudioContext; if(!AC){setPrompt("Audio playback is not supported in this browser.");return;} stopAudio(); const ctx=new AC(); audioRef.current=ctx; const master=ctx.createGain(); master.gain.value=0.86; master.connect(ctx.destination); const beat=60/(question.bpm || question.answer.bpm); const start=ctx.currentTime+0.08; setPlaying(true); question.bars.forEach(bar=>playAccompaniment(ctx,master,bar,bar.barIndex*4,beat,start)); question.notes.forEach(note=>{ const bar=question.bars[note.barIndex]; const t=start+(note.barIndex*4+note.beat)*beat; const dur=Math.max(0.12,note.beats*beat*0.96); timers.current.push(setTimeout(()=>setActiveNoteId(note.id),Math.max(0,(t-ctx.currentTime)*1000))); timers.current.push(setTimeout(()=>setActiveNoteId(null),Math.max(0,(t-ctx.currentTime+dur)*1000))); playMelodyNote(ctx,master,midiToFrequency(effectiveMidiForNote(question,bar,note)),t,dur); }); if(metronome){ for(let b=0;b<BAR_COUNT*4;b++) playClick(ctx,master,start+b*beat,b%4===0); } timers.current.push(setTimeout(stopAudio,BAR_COUNT*4*beat*1000+300)); }
+  async function play() {
+    if (playing || audioRef.current) { stopAudio(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { setPrompt("Audio playback is not supported in this browser."); return; }
+    stopAudio();
+    const ctx = new AC();
+    audioRef.current = ctx;
+    setPlaying(true);
+    const master = ctx.createGain();
+    master.gain.value = 0.86;
+    master.connect(ctx.destination);
+    const frequencies = [
+      ...question.notes.map(note => effectiveMidiForNote(question, question.bars[note.barIndex], note)),
+      ...question.bars.flatMap(bar => {
+        const letters = question.key.chords[bar.chordSymbol] || [];
+        return letters.length ? [
+          pitchForChordLetter(question, bar, letters[0], 3) - 12,
+          ...letters.map(letter => pitchForChordLetter(question, bar, letter, 4)).filter(midi => midi <= 67),
+        ] : [];
+      }),
+    ].map(midiToFrequency);
+    const ready = await window.MLH.prepareAudioPlayback(ctx, { piano: frequencies, metronome });
+    if (audioRef.current !== ctx) return;
+    if (!ready) { stopAudio(); return; }
+    const beat = 60 / (question.bpm || question.answer.bpm);
+    const start = ctx.currentTime + 0.08;
+    question.bars.forEach(bar => playAccompaniment(ctx, master, bar, bar.barIndex * 4, beat, start));
+    question.notes.forEach(note => {
+      const bar = question.bars[note.barIndex];
+      const t = start + (note.barIndex * 4 + note.beat) * beat;
+      const dur = Math.max(0.12, note.beats * beat * 0.96);
+      timers.current.push(setTimeout(() => setActiveNoteId(note.id), Math.max(0, (t - ctx.currentTime) * 1000)));
+      timers.current.push(setTimeout(() => setActiveNoteId(null), Math.max(0, (t - ctx.currentTime + dur) * 1000)));
+      playMelodyNote(ctx, master, midiToFrequency(effectiveMidiForNote(question, bar, note)), t, dur);
+    });
+    if (metronome) {
+      for (let b = 0; b < BAR_COUNT * 4; b++) playClick(ctx, master, start + b * beat, b % 4 === 0);
+    }
+    timers.current.push(setTimeout(stopAudio, BAR_COUNT * 4 * beat * 1000 + 300));
+  }
   function answerButtonClass(id){
     const base="min-h-12 rounded-xl border px-3 py-2 text-sm font-bold transition";
     if(!feedback) return `${base} ${selected===id?"border-black bg-black text-white":"border-stone-300 bg-white text-black hover:border-black"}`;

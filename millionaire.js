@@ -150,13 +150,13 @@ class AudioDirector {
     this.effectsEnabled = true;
     this.stage = 1;
     this.excerptPlaying = false;
+    this.excerptSequence = 0;
   }
 
   ensureContext() {
     const Context = window.AudioContext || window.webkitAudioContext;
     if (!Context) return null;
     if (!this.context || this.context.state === "closed") this.context = new Context();
-    this.context.resume?.().catch(() => {});
     return this.context;
   }
 
@@ -563,6 +563,7 @@ class AudioDirector {
   }
 
   stopExcerpt(resume = true) {
+    this.excerptSequence += 1;
     window.clearTimeout(this.excerptTimer);
     this.clearExcerptFade();
     this.excerptNodes.forEach((node) => { try { node.stop(); } catch {} });
@@ -596,6 +597,8 @@ class AudioDirector {
     const context = this.ensureContext();
     if (!context || !generator) return null;
     this.stopExcerpt(false);
+    const sequence = this.excerptSequence;
+    const resumed = context.resume().then(() => context.state === "running").catch(() => false);
     this.excerptPlaying = true;
     const bpm = generator.bpm || 96;
     const beatSeconds = 60 / bpm;
@@ -608,8 +611,10 @@ class AudioDirector {
       const totalBeats = (voice.notes || []).reduce((sum, note, index) => sum + (voice.beats?.[index] || 1), 0);
       totalDuration = Math.max(totalDuration, totalBeats * beatSeconds);
     });
-    const startExcerpt = () => {
-      if (!this.excerptPlaying) return;
+    const startExcerpt = async () => {
+      const ready = await resumed;
+      if (!this.excerptPlaying || sequence !== this.excerptSequence) return;
+      if (!ready) { this.stopExcerpt(); onEnded?.(); return; }
       const start = context.currentTime + .05;
       voices.forEach((voice) => {
         let cursor = 0;

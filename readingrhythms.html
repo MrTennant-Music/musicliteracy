@@ -15,7 +15,7 @@
   <script src="./bravura-symbols.js?v=20260629"></script>
   <script src="./shared-notation-config.js?v=20260629"></script>
   <script src="./hub-input.js?v=20260629"></script>
-  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
   <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./reading-rhythms-core.js?v=20260712"></script>
@@ -331,11 +331,16 @@ function App() {
   }
 
   async function startAttempt() {
-    if (activeAttempt) return;
+    if (activeAttempt || audioRef.current) return;
     cancelAudioAndTimers(); setResult(null); setTapPulse(0); tapsRef.current = []; inputTimesRef.current = []; resultsCalculatedRef.current = false; lastPointerTimeRef.current = -Infinity;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) { setStatus("Audio playback is not supported in this browser."); return; }
-    const ctx = new AudioContextClass(); audioRef.current = ctx; await ctx.resume?.(); setLevelOpen(false); setCustomiseOpen(false);
+    const ctx = new AudioContextClass(); audioRef.current = ctx;
+    performanceStartRef.current = Infinity;
+    transition(ACTIVITY_STATES.COUNTING); setLevelOpen(false); setCustomiseOpen(false);
+    const ready = await window.MLH.prepareAudioPlayback(ctx, { metronome: true });
+    if (audioRef.current !== ctx) return;
+    if (!ready) { cancelAudioAndTimers(); transition(ACTIVITY_STATES.READY); return; }
     const pulseSeconds = 60 / tempo, pulsesPerBar = rhythm.timeSignature.pulsesPerBar, countBars = ["2/4", "6/8"].includes(rhythm.timeSignature.id) ? 2 : 1, countPulses = pulsesPerBar * countBars, totalPulses = pulsesPerBar * 2;
     const countStart = ctx.currentTime + .14, performanceStart = countStart + countPulses * pulseSeconds;
     performanceStartRef.current = performanceStart; transition(ACTIVITY_STATES.COUNTING); setStatus(`${countBars === 1 ? "One-bar" : "Two-bar"} count in before you begin.`); tapAreaRef.current?.focus();
@@ -369,9 +374,14 @@ function App() {
   function handlePointer(event) { if (event.target.closest("button,input,select,a,[data-menu-panel],[data-menu-trigger]")) return; if (event.pointerType === "mouse" && event.button !== 0) return; const now = performance.now(); if (now - lastPointerTimeRef.current < 45) return; lastPointerTimeRef.current = now; event.preventDefault(); const rect = tapAreaRef.current?.getBoundingClientRect(); const touchPosition = event.pointerType === "mouse" || !rect ? null : { x: event.clientX - rect.left, y: event.clientY - rect.top }; registerTap(event.pointerType === "mouse" ? "Mouse" : "Touch", touchPosition); }
 
   async function playReference() {
-    if (activeAttempt || activityState !== ACTIVITY_STATES.RESULTS) return;
+    if (activeAttempt || audioRef.current || activityState !== ACTIVITY_STATES.RESULTS) return;
     cancelAudioAndTimers(); const AudioContextClass = window.AudioContext || window.webkitAudioContext; if (!AudioContextClass) return;
-    const ctx = new AudioContextClass(); audioRef.current = ctx; await ctx.resume?.(); transition(ACTIVITY_STATES.REFERENCE); setStatus("Playing the correct rhythm with metronome.");
+    const ctx = new AudioContextClass(); audioRef.current = ctx;
+    transition(ACTIVITY_STATES.REFERENCE);
+    const ready = await window.MLH.prepareAudioPlayback(ctx, { piano: [261.6256], metronome: true });
+    if (audioRef.current !== ctx) return;
+    if (!ready) { cancelAudioAndTimers(); transition(ACTIVITY_STATES.RESULTS); return; }
+    setStatus("Playing the correct rhythm with metronome.");
     const start = ctx.currentTime + .12, pulseSeconds = 60 / tempo, pulsesPerBar = rhythm.timeSignature.pulsesPerBar, totalPulses = pulsesPerBar * 2;
     for (let pulse = 0; pulse < totalPulses; pulse += 1) window.MLH.playMetronomeClick?.(ctx, ctx.destination, start + pulse * pulseSeconds, pulse % pulsesPerBar === 0);
     rhythm.bars.forEach((bar) => bar.events.filter((event) => event.type === "note").forEach((event) => {

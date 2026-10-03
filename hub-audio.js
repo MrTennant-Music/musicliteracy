@@ -2,6 +2,7 @@
   const MLH = window.MLH || {};
   const pianoBuffersByContext = new WeakMap();
   const metronomeBuffersByContext = new WeakMap();
+  const preparedContexts = new WeakSet();
   let pianoMapPromise = null;
   const METRONOME_SAMPLE_URLS = {
     accented: "./Metronome%20-%201st%20beat.ogg",
@@ -61,6 +62,30 @@
     }
   }
 
+  async function prepareAudioPlayback(context, { piano = [], metronome = false } = {}) {
+    if (!context || context.state === "closed") return false;
+    // Resume within the Play gesture, then load every required sound before
+    // callers choose their start time or start score-following timers.
+    const resumed = context.resume().then(() => true).catch(() => false);
+    const samples = ensurePianoMap().then(() => {
+      const layers = new Map();
+      piano.forEach((note) => {
+        const frequency = typeof note === "number" ? note : note?.frequency;
+        if (!Number.isFinite(frequency) || frequency <= 0) return;
+        const layer = pianoLayerForFrequency(frequency, note?.velocity ?? 96);
+        if (layer) layers.set(layer.sample, layer);
+      });
+      return Promise.allSettled([...layers.values()].map((layer) => loadPianoLayer(context, layer)));
+    }).catch(() => {});
+    const clicks = metronome
+      ? Promise.allSettled([metronomeBuffer(context, true), metronomeBuffer(context, false)])
+      : Promise.resolve();
+    const [ready] = await Promise.all([resumed, samples, clicks]);
+    if (!ready || context.state !== "running") return false;
+    preparedContexts.add(context);
+    return true;
+  }
+
   function synthesisedPiano(context, destination, frequency, start, duration, volume) {
     [
       { ratio: 1, gain: 1, type: "triangle" },
@@ -88,6 +113,11 @@
     const layer = pianoLayerForFrequency(frequency, velocity);
     const cached = layer ? pianoBufferCache(context).get(layer.sample) : null;
     if (!cached || typeof cached.duration !== "number") {
+      if (preparedContexts.has(context)) {
+        // If a sample was unavailable, keep the note on time with the fallback.
+        synthesisedPiano(context, destination, frequency, start, duration, volume);
+        return;
+      }
       ensurePianoMap()
         .then(() => {
           const loadedLayer = pianoLayerForFrequency(frequency, velocity);
@@ -134,16 +164,21 @@
   // press of Play can immediately request only the samples that are needed.
   ensurePianoMap().catch(() => {});
 
-  function playFeedbackSound(correct, celebration = false, medal = null) {
+  async function playFeedbackSound(correct, celebration = false, medal = null) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return;
 
     const context = new AudioContextClass();
     const master = context.createGain();
-    const now = context.currentTime + 0.01;
     master.gain.value = 0.18;
     master.connect(context.destination);
-    context.resume?.();
+    try {
+      await context.resume();
+    } catch {
+      try { await context.close(); } catch {}
+      return;
+    }
+    const now = context.currentTime + 0.08;
 
     function tone(freq, start, duration, type = "triangle", volume = 0.12) {
       const osc = context.createOscillator();
@@ -268,6 +303,20 @@
 
   function playMetronomeClick(context, destination, start, accented = false) {
     if (!context || !destination || !Number.isFinite(start)) return;
+    const key = accented ? "accented" : "regular";
+    const readyBuffer = metronomeBuffersByContext.get(context)?.get(key);
+    if (preparedContexts.has(context) && (!readyBuffer || typeof readyBuffer.duration !== "number")) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.setValueAtTime(accented ? 1500 : 1000, start);
+      gain.gain.setValueAtTime(0.16, start);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.045);
+      oscillator.connect(gain);
+      gain.connect(destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.05);
+      return;
+    }
     const cached = metronomeBuffer(context, accented);
     if (cached && typeof cached.duration === "number") {
       scheduleMetronomeSample(context, destination, start, cached);
@@ -296,11 +345,13 @@
     playMetronomeClick,
     metronomePulseOffsets,
     playPianoFrequency,
+    prepareAudioPlayback,
   };
   MLH.playFeedbackSound = playFeedbackSound;
   MLH.getStreakMedal = getStreakMedal;
   MLH.playMetronomeClick = playMetronomeClick;
   MLH.metronomePulseOffsets = metronomePulseOffsets;
   MLH.playPianoFrequency = playPianoFrequency;
+  MLH.prepareAudioPlayback = prepareAudioPlayback;
   window.MLH = MLH;
 })();

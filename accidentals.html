@@ -13,7 +13,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=1.3"></script>
-  <script src="./hub-audio.js?v=20260726-compound-metronome"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
   <script src="./hub-shell.js?v=20260714-controls-removed"></script>
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
@@ -1126,10 +1126,10 @@ function App() {
   function handleLock(event) { if (!selectedSymbol || feedback || !hoverPlacement || !isPlacement) return; event.preventDefault(); setPlacements([{ ...hoverPlacement, localId: Math.random().toString(36).slice(2) }]); setWarning(""); }
   function confirmPlacement() { if (feedback) return; stopAudio(); if (!placements.length) return showWarning("Place an accidental on the score before pressing Confirm."); const missingNow = missingPlacements(question, placements); const wrongNow = wrongPlacements(question, placements); setMissing(missingNow); setWrong(wrongNow); scoreAnswer(placementsMatch(question, placements)); }
   function pitch(barIndex, noteIndex) { const note = question.bars[barIndex].notes[noteIndex]; let accidental = effectiveAccidental(question, barIndex, noteIndex); if (note.hiddenAccidental !== null && note.hiddenAccidental !== undefined) accidental = note.hiddenAccidental; return note.midi + accidental; }
-  function playQuestion() {
+  async function playQuestion() {
     function playChord(context, output, notes, startTime, duration, type = "sine", volume = 0.022) { notes.forEach((midi) => window.MLH?.playPianoFrequency?.(context, output, midiFreq(midi), startTime, duration, volume)); }
     const accompanimentPatterns = { "2/4": [0, 1], "3/4": [0, 1, 2], "4/4": [0, 1, 2, 3], "6/8": [0, 0.5, 1, 1.5, 2, 2.5] };
-    if (playing) return;
+    if (playing || audioContext.current) return;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return showWarning("Audio playback is not supported in this browser.");
     stopAudio();
@@ -1144,6 +1144,16 @@ function App() {
     compressor.release.setValueAtTime(0.18, context.currentTime);
     master.connect(compressor);
     compressor.connect(context.destination);
+    const frequencies = question.bars.flatMap((bar, barIndex) => [
+      ...bar.notes.map((note, noteIndex) => midiFreq(pitch(barIndex, noteIndex))),
+      ...chordForBar(question, barIndex).map((letter, index) => {
+        const tone = noteFromChordTone(letter, 5 + (index === 0 ? 0 : 1));
+        return midiFreq(tone.midi + (tone.writtenAccidental ?? 0) - 12);
+      }),
+    ]);
+    const ready = await window.MLH.prepareAudioPlayback(context, { piano: frequencies });
+    if (audioContext.current !== context) return;
+    if (!ready) { stopAudio(); return; }
     const beat = 60 / (question.audioQuestionKind === "one-bar-hearing" ? 32 : 76);
     const accompaniment = accompanimentPatterns[question.timeSignature.id] ?? [0, 1, 2, 3];
     let time = context.currentTime + 0.08;
