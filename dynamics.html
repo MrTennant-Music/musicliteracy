@@ -14,9 +14,10 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=1.3"></script>
   <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
+  <script src="./hub-progress.js?v=20261005-per-setup"></script>
   <script src="./hub-achievements.js?v=20261005-progress"></script>
-  <script src="./hub-shell.js?v=20261005-achievement-progress"></script>
-  <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-shell.js?v=20261005-per-setup"></script>
+  <script src="./hub-menu.js?v=20261005-per-setup"></script>
   <script src="./bravura-symbols.js"></script>
   <script src="./shared-notation-config.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
@@ -1048,15 +1049,14 @@ function App() {
   const [feedbackFading, setFeedbackFading] = useState(false);
   const [wrong, setWrong] = useState([]);
   const [missing, setMissing] = useState([]);
-  const [correct, setCorrect] = useState(0);
-  const [attempted, setAttempted] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [best, setBest] = useState(0);
+  const [tempo, setTempo] = useState("andante"), [metronomeEnabled, setMetronomeEnabled] = useState(false), [followPlayback, setFollowPlayback] = useState(false);
+  const [correct, setCorrect] = window.MLH.usePersistentScoreState(0, "correct", { level: activeLevel, scope: "", settings: { questions: { enabledTypes, enabledDynamics }, options: { tempo, metronomeEnabled, followPlayback } } });
+  const [attempted, setAttempted] = window.MLH.usePersistentScoreState(0, "attempted", { level: activeLevel, scope: "", settings: { questions: { enabledTypes, enabledDynamics }, options: { tempo, metronomeEnabled, followPlayback } } });
+  const [streak, setStreak] = window.MLH.usePersistentScoreState(0, "streak", { level: activeLevel, scope: "", settings: { questions: { enabledTypes, enabledDynamics }, options: { tempo, metronomeEnabled, followPlayback } } });
+  const [best, setBest] = window.MLH.usePersistentScoreState(0, "best", { level: activeLevel, scope: "", settings: { questions: { enabledTypes, enabledDynamics }, options: { tempo, metronomeEnabled, followPlayback } } });
   const [confettiKey, setConfettiKey] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [followPlayback, setFollowPlayback] = useState(false);
-  const [tempo, setTempo] = useState("andante");
-  const [metronomeEnabled, setMetronomeEnabled] = useState(false);
+
   const [activeNoteId, setActiveNoteId] = useState(null);
   const isMobileScore = false;
   const levelRef = useRef(null);
@@ -1336,7 +1336,7 @@ function App() {
       <div className={`relative top-[22px] mb-[44px] transition-opacity duration-300 md:-top-[18px] md:mb-0 ${questionVisible ? "opacity-100" : "opacity-0"}`}><Score question={question} selectedSymbolId={selectedSymbolId} placements={placements} hoverPlacement={hoverPlacement} feedback={feedback} wrong={wrong} missing={missing} activeNoteId={followPlayback ? activeNoteId : null} onPointerMove={handlePointerMove} onPointerLeave={() => setHoverPlacement(null)} onLockPlacement={handleLockPlacement} isMobile={isMobileScore}/></div>
             <div className={`relative z-10 mt-8 overflow-visible rounded-xl border border-stone-200 bg-stone-50 px-4 pt-2 shadow-md md:-mt-[170px] md:mx-3 md:pb-2 ${isPlacement && question.type === "audio" ? "min-h-[210px] pb-[78px]" : isPlacement ? "min-h-[126px] pb-[78px]" : "min-h-[126px] pb-4"}`}>
         <div className="pr-0 text-stone-900 md:pr-[140px]"><p className="text-base font-semibold leading-tight" dangerouslySetInnerHTML={{ __html: question.prompt }} />{promptMessage && <p className={`mt-2 text-sm ${isStretchPrompt ? "font-normal italic text-stone-950" : "font-bold text-red-600"}`}>{promptMessage}</p>}</div>
-        {isChoice && <ChoiceAnswers choices={question.choices} selectedChoice={selectedChoice} setSelectedChoice={setSelectedChoice} feedback={feedback} answerId={question.answerId} onChoose={chooseChoice}/>} 
+        {isChoice && <ChoiceAnswers choices={question.choices} selectedChoice={selectedChoice} setSelectedChoice={setSelectedChoice} feedback={feedback} answerId={question.answerId} onChoose={chooseChoice}/>}
         {isText && <div className="mt-4 flex flex-col gap-3 md:absolute md:bottom-5 md:left-4 md:right-4 md:mt-0 md:flex-row md:items-end md:justify-between"><div className="flex w-full flex-col gap-2 md:flex-row md:items-center"><input value={typedAnswer} readOnly={Boolean(feedback)} onChange={e => { setTypedAnswer(e.target.value); setPromptMessage(""); }} onKeyDown={e => { if (e.key === "Enter") confirmAnswer(); }} placeholder="Type your answer" className={window.MLH.typedAnswerClass(feedback, "min-h-[48px] min-w-[240px] md:max-w-[520px]")} />{feedback && !feedback.correct && <span className="text-sm font-bold text-green-700 md:whitespace-nowrap">{dyn(question.answerId).description}</span>}</div><window.MLH.ConfirmButton disabled={Boolean(feedback)} onClick={confirmAnswer} className="md:ml-auto">Confirm</window.MLH.ConfirmButton></div>}
         {isPlacement && <><div className="mt-4 overflow-visible pb-[2px] pr-0"><DynamicAnswers filteredDynamics={filteredDynamics} selectedSymbolId={selectedSymbolId} setSelectedSymbolId={(id) => { setSelectedSymbolId(id); setPromptMessage(""); }} feedback={feedback} answerId={question.answerId} compact={question.type === "apply-score"}/></div></>}
         <div className={question.type === "audio" ? "absolute bottom-4 left-4 right-4 flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-between" : "absolute bottom-4 left-4 right-4 flex items-center gap-2 md:left-auto"}>{isPlacement && question.type === "audio" && <button onClick={playExcerpt} disabled={Boolean(feedback)} className={`${window.MLH.PlayButtonClass} disabled:!border-stone-300 disabled:!bg-stone-100 disabled:!text-stone-500 disabled:!opacity-100`}><span className="text-lg leading-none">{playing ? "■" : "▶"}</span><span>{playing ? "Stop" : "Play"}</span></button>}{isPlacement && question.type === "audio" ? <div className={window.MLH.ActionButtonGroupClass}><button disabled={Boolean(feedback) || placements.length === 0} onClick={clearPlacements} className={window.MLH.ClearButtonClass}>Clear</button><window.MLH.ConfirmButton disabled={Boolean(feedback) || placements.length === 0} onClick={confirmAnswer} className={window.MLH.AudioConfirmButtonClass}>Confirm</window.MLH.ConfirmButton></div> : <>{isPlacement && <button disabled={Boolean(feedback) || placements.length === 0} onClick={clearPlacements} className={window.MLH.ClearButtonClass}>Clear</button>}{isPlacement && <window.MLH.ConfirmButton disabled={Boolean(feedback) || placements.length === 0} onClick={confirmAnswer}>Confirm</window.MLH.ConfirmButton>}</>}</div>

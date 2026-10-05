@@ -14,9 +14,10 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=1.3"></script>
   <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
+  <script src="./hub-progress.js?v=20261005-per-setup"></script>
   <script src="./hub-achievements.js?v=20261005-progress"></script>
-  <script src="./hub-shell.js?v=20261005-achievement-progress"></script>
-  <script src="./hub-menu.js?v=20261004-scales-menu-labels"></script>
+  <script src="./hub-shell.js?v=20261005-per-setup"></script>
+  <script src="./hub-menu.js?v=20261005-per-setup"></script>
   <script src="./bravura-symbols.js"></script>
   <script src="./shared-notation-config.js"></script>
   <script src="./melodic-dictation-generator.js?v=20261004-gentler-polytonality"></script>
@@ -1027,6 +1028,7 @@ function App(){
   const [exerciseTempo,setExerciseTempo]=useState(TEMPOS[1]);
   const [scalesTempo,setScalesTempo]=useState(TEMPOS[2]);
   const [chordsTempo,setChordsTempo]=useState(TEMPOS[2]);
+  const [manualListeningTempo,setManualListeningTempo]=useState(null);
   const [metronome,setMetronome]=useState(false);
   const [ornamentPassage,setOrnamentPassage]=useState(false);
   const [scalesPassage,setScalesPassage]=useState(false);
@@ -1036,12 +1038,12 @@ function App(){
   const questionTopic = topicForQuestion(question);
   const randomTempoQuestion = ["metre", "beatsPerBar", "tonality"].includes(questionTopic);
   const tempo = randomTempoQuestion ? question.playbackTempo : activeTopic === "chord" ? chordsTempo : activeTopic === "scales" ? scalesTempo : exerciseTempo;
-  const setTempo = randomTempoQuestion ? value => setQuestion(current => ({ ...current, playbackTempo: value })) : activeTopic === "chord" ? setChordsTempo : activeTopic === "scales" ? setScalesTempo : setExerciseTempo;
+  const setTempo = randomTempoQuestion ? value => { setManualListeningTempo(value.id); setQuestion(current => ({ ...current, playbackTempo: value })); } : activeTopic === "chord" ? setChordsTempo : activeTopic === "scales" ? setScalesTempo : setExerciseTempo;
   const usesIsolatedNotes = ["scales", "ornaments"].includes(questionTopic);
   const isTimeListening = ["beatsPerBar", "metre"].includes(questionTopic);
   const [selected,setSelected]=useState(null), [typed,setTyped]=useState("");
   const [feedback,setFeedback]=useState(null), [feedbackFading,setFeedbackFading]=useState(false), [prompt,setPrompt]=useState("");
-  const [correct,setCorrect]=useState(0), [attempted,setAttempted]=useState(0), [streak,setStreak]=useState(0), [best,setBest]=useState(0), [confetti,setConfetti]=useState(0), [autoShowMedals,setAutoShowMedals]=useState(false);
+  const [correct,setCorrect]=window.MLH.usePersistentScoreState(0, "correct", { level: activeLevel, scope: activeTopic, settings: { questions: answerOptionsFor(activeLevel, enabled, activeTopic), options: { tempo: ["metre", "beatsPerBar", "tonality"].includes(activeTopic) ? manualListeningTempo : activeTopic === "chord" ? chordsTempo.id : activeTopic === "scales" ? scalesTempo.id : exerciseTempo.id, metronome: activeTopic === "ornaments" ? false : metronome, passage: activeTopic === "ornaments" ? ornamentPassage : activeTopic === "scales" ? scalesPassage : activeTopic === "chord" ? chordPassage : false } } }), [attempted,setAttempted]=window.MLH.usePersistentScoreState(0, "attempted", { level: activeLevel, scope: activeTopic, settings: { questions: answerOptionsFor(activeLevel, enabled, activeTopic), options: { tempo: ["metre", "beatsPerBar", "tonality"].includes(activeTopic) ? manualListeningTempo : activeTopic === "chord" ? chordsTempo.id : activeTopic === "scales" ? scalesTempo.id : exerciseTempo.id, metronome: activeTopic === "ornaments" ? false : metronome, passage: activeTopic === "ornaments" ? ornamentPassage : activeTopic === "scales" ? scalesPassage : activeTopic === "chord" ? chordPassage : false } } }), [streak,setStreak]=window.MLH.usePersistentScoreState(0, "streak", { level: activeLevel, scope: activeTopic, settings: { questions: answerOptionsFor(activeLevel, enabled, activeTopic), options: { tempo: ["metre", "beatsPerBar", "tonality"].includes(activeTopic) ? manualListeningTempo : activeTopic === "chord" ? chordsTempo.id : activeTopic === "scales" ? scalesTempo.id : exerciseTempo.id, metronome: activeTopic === "ornaments" ? false : metronome, passage: activeTopic === "ornaments" ? ornamentPassage : activeTopic === "scales" ? scalesPassage : activeTopic === "chord" ? chordPassage : false } } }), [best,setBest]=window.MLH.usePersistentScoreState(0, "best", { level: activeLevel, scope: activeTopic, settings: { questions: answerOptionsFor(activeLevel, enabled, activeTopic), options: { tempo: ["metre", "beatsPerBar", "tonality"].includes(activeTopic) ? manualListeningTempo : activeTopic === "chord" ? chordsTempo.id : activeTopic === "scales" ? scalesTempo.id : exerciseTempo.id, metronome: activeTopic === "ornaments" ? false : metronome, passage: activeTopic === "ornaments" ? ornamentPassage : activeTopic === "scales" ? scalesPassage : activeTopic === "chord" ? chordPassage : false } } }), [confetti,setConfetti]=useState(0), [autoShowMedals,setAutoShowMedals]=useState(false);
   const [levelOpen,setLevelOpen]=useState(false), [topicOpen,setTopicOpen]=useState(false), [customiseOpen,setCustomiseOpen]=useState(false), [playing,setPlaying]=useState(false);
   const levelRef=useRef(null), topicRef=useRef(null), customiseRef=useRef(null), audioRef=useRef(null), timers=useRef([]), levelTaskStatusRef=useRef(null);
   const questionTransitionRef=useRef({ timer: null, frame: null });
@@ -1061,7 +1063,7 @@ function App(){
   const medalEligible=taskMatchesLevel(activeLevel, enabled, activeTopic);
   const displayedLevel=medalEligible ? activeLevel : "Custom";
   const displayedLevelLabel=medalEligible ? LEVELS[activeLevel].label : "Custom";
-  useEffect(()=>{ if(levelTaskStatusRef.current===null){ levelTaskStatusRef.current=medalEligible; return; } if(levelTaskStatusRef.current===medalEligible) return; levelTaskStatusRef.current=medalEligible; if(window.MLH.resetLevelSessionProgress){ window.MLH.resetLevelSessionProgress({ setCorrect, setAttempted, setStreak, setBest }); } else { setCorrect(0); setAttempted(0); setStreak(0); setBest(0); } setConfetti(0); setAutoShowMedals(false); },[medalEligible]);
+  useEffect(()=>{ if(levelTaskStatusRef.current===null){ levelTaskStatusRef.current=medalEligible; return; } if(levelTaskStatusRef.current===medalEligible) return; levelTaskStatusRef.current=medalEligible; if(window.MLH.resetLevelSessionProgress){ window.MLH.resetLevelSessionProgress({ setCorrect, setAttempted, setStreak, setBest }); } else {     } setConfetti(0); setAutoShowMedals(false); },[medalEligible]);
   function clearTimers(){ timers.current.forEach(clearTimeout); timers.current=[]; }
   function stopAudio(){ clearTimers(); if(audioRef.current){ try{audioRef.current.close();}catch{} } audioRef.current=null; setPlaying(false); }
   function resetProgress(){ setCorrect(0); setAttempted(0); setStreak(0); setBest(0); setConfetti(0); setAutoShowMedals(false); }
@@ -1106,7 +1108,7 @@ function App(){
       setActiveLevel(level);
       setActiveTopic(topic);
       setEnabled(ids);
-      resetProgress();
+      setConfetti(0); setAutoShowMedals(false);
       newQuestion(level, ids, topic);
     }
     closeMenus();
@@ -1116,7 +1118,7 @@ function App(){
     const level = levelForTopic(requestedLevel, topic);
     setActiveLevel(level);
     setActiveTopic(topic);
-    resetProgress();
+    setConfetti(0); setAutoShowMedals(false);
     const ids = conceptIdsForLevel(level);
     setEnabled(ids);
     const url = new URL(location.href);

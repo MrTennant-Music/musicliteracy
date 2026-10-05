@@ -16,9 +16,10 @@
   <script src="./shared-notation-config.js?v=20260629"></script>
   <script src="./hub-input.js?v=20260629"></script>
   <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
+  <script src="./hub-progress.js?v=20261005-per-setup"></script>
   <script src="./hub-achievements.js?v=20261005-progress"></script>
-  <script src="./hub-shell.js?v=20261005-achievement-progress"></script>
-  <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-shell.js?v=20261005-per-setup"></script>
+  <script src="./hub-menu.js?v=20261005-per-setup"></script>
   <script src="./reading-rhythms-core.js?v=20260712"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
@@ -264,7 +265,7 @@ function App() {
   const [tapPulse, setTapPulse] = useState(0);
   const [tapFlashPosition, setTapFlashPosition] = useState({ centred: true, x: 0, y: 0 });
   const [status, setStatus] = useState("Ready. Review the rhythm, then start when prepared.");
-  const [correct, setCorrect] = useState(0), [attempted, setAttempted] = useState(0), [streak, setStreak] = useState(0), [bestStreak, setBestStreak] = useState(0), [confettiKey, setConfettiKey] = useState(0);
+  const [correct, setCorrect] = window.MLH.usePersistentScoreState(0, "correct", { level: activeLevel, scope: "", settings: { questions: { enabledRhythms, enabledTimeSignatures, restsEnabled, tiesEnabled }, options: { tempo } } }), [attempted, setAttempted] = window.MLH.usePersistentScoreState(0, "attempted", { level: activeLevel, scope: "", settings: { questions: { enabledRhythms, enabledTimeSignatures, restsEnabled, tiesEnabled }, options: { tempo } } }), [streak, setStreak] = window.MLH.usePersistentScoreState(0, "streak", { level: activeLevel, scope: "", settings: { questions: { enabledRhythms, enabledTimeSignatures, restsEnabled, tiesEnabled }, options: { tempo } } }), [bestStreak, setBestStreak] = window.MLH.usePersistentScoreState(0, "bestStreak", { level: activeLevel, scope: "", settings: { questions: { enabledRhythms, enabledTimeSignatures, restsEnabled, tiesEnabled }, options: { tempo } } }), [confettiKey, setConfettiKey] = useState(0);
   const [levelOpen, setLevelOpen] = useState(false), [customiseOpen, setCustomiseOpen] = useState(false);
   const levelRef = useRef(null), customiseRef = useRef(null), tapAreaRef = useRef(null), audioRef = useRef(null), stateRef = useRef(activityState), performanceStartRef = useRef(0), tapsRef = useRef([]), inputTimesRef = useRef([]), timersRef = useRef([]), lastPointerTimeRef = useRef(-Infinity), resultsCalculatedRef = useRef(false);
   const activeAttempt = [ACTIVITY_STATES.COUNTING, ACTIVITY_STATES.PERFORMING, ACTIVITY_STATES.CALCULATING, ACTIVITY_STATES.REFERENCE].includes(activityState);
@@ -283,7 +284,7 @@ function App() {
   function resetScore() { setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); setConfettiKey(0); resetAttempt(); }
   function generationOptions(times = enabledTimeSignatures, rests = restsEnabled, ties = tiesEnabled) { return { timeSignatureIds: CORE.LEVELS[activeLevel].timeSignatureIds.filter((id) => times[id]), restsEnabled: rests, tiesEnabled: ties }; }
   function makeNewRhythm(level = activeLevel, enabled = enabledRhythms, options = generationOptions()) { const next = CORE.generateRhythm(level, Math.random, CORE.rhythmSignature(rhythm), enabled, options); setRhythm(next); resetAttempt(); setStatus("New rhythm ready."); }
-  function applyLevel(level) { cancelAudioAndTimers(); const levelInfo = CORE.LEVELS[level]; const nextEnabled = Object.fromEntries(levelInfo.rhythmIds.map((id) => [id, true])); const nextTimes = Object.fromEntries(levelInfo.timeSignatureIds.map((id) => [id, true])); const nextOptions = { timeSignatureIds: levelInfo.timeSignatureIds, restsEnabled: levelInfo.rests, tiesEnabled: levelInfo.ties }; setActiveLevel(level); setEnabledRhythms(nextEnabled); setEnabledTimeSignatures(nextTimes); setRestsEnabled(levelInfo.rests); setTiesEnabled(levelInfo.ties); setRhythm(CORE.generateRhythm(level, Math.random, "", nextEnabled, nextOptions)); setLevelOpen(false); setCustomiseOpen(false); setCorrect(0); setAttempted(0); setStreak(0); setBestStreak(0); setConfettiKey(0); setResult(null); transition(ACTIVITY_STATES.READY); setStatus(`${levelInfo.label} rhythm ready.`); }
+  function applyLevel(level) { cancelAudioAndTimers(); const levelInfo = CORE.LEVELS[level]; const nextEnabled = Object.fromEntries(levelInfo.rhythmIds.map((id) => [id, true])); const nextTimes = Object.fromEntries(levelInfo.timeSignatureIds.map((id) => [id, true])); const nextOptions = { timeSignatureIds: levelInfo.timeSignatureIds, restsEnabled: levelInfo.rests, tiesEnabled: levelInfo.ties }; setActiveLevel(level); setEnabledRhythms(nextEnabled); setEnabledTimeSignatures(nextTimes); setRestsEnabled(levelInfo.rests); setTiesEnabled(levelInfo.ties); setRhythm(CORE.generateRhythm(level, Math.random, "", nextEnabled, nextOptions)); setLevelOpen(false); setCustomiseOpen(false);     setConfettiKey(0); setResult(null); transition(ACTIVITY_STATES.READY); setStatus(`${levelInfo.label} rhythm ready.`); }
   function toggleRhythm(id) {
     if (activeAttempt) return;
     setEnabledRhythms((current) => {

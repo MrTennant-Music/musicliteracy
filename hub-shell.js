@@ -407,8 +407,7 @@
         .some((button) => button.textContent.trim() === "Custom")) return;
       MLH.achievements?.record(window.location.pathname, achievementLevel, streak, thresholdValues);
     }, [achievementLevel, attempted, streak, effectiveMedalEligible, medalEligible, thresholdValues.join(",")]);
-    const savedAchievement = effectiveMedalEligible ? MLH.achievements?.get(window.location.pathname, achievementLevel) : null;
-    const highestStreak = Math.max(bestStreak || 0, savedAchievement?.bestStreak || 0);
+    const highestStreak = bestStreak || 0;
     React.useEffect(() => {
       if (!effectiveMedalEligible || confettiKey <= 0) return;
       setDismissedAutoPopoverKey(0);

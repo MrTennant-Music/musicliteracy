@@ -177,15 +177,14 @@
     setAutoShowMedals,
     setScore,
   } = {}) {
-    setCorrect?.(0);
-    setAttempted?.(0);
-    setStreak?.(0);
-    setBestStreak?.(0);
-    setBest?.(0);
+    // Persistent counters restore the selected setup themselves.
+    [setCorrect, setAttempted, setStreak, setBestStreak, setBest].forEach(setter => {
+      if (!setter?.persistentScoreState) setter?.(0);
+    });
     setConfettiKey?.(0);
     setConfetti?.(0);
     setAutoShowMedals?.(false);
-    setScore?.({ correct: 0, attempted: 0, streak: 0, best: 0 });
+    if (!setScore?.persistentScoreState) setScore?.({ correct: 0, attempted: 0, streak: 0, best: 0 });
   }
 
   function SkipButton({ onClick, icon, resetStreak, disabled = false }) {

@@ -14,9 +14,10 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=1.3"></script>
   <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
+  <script src="./hub-progress.js?v=20261005-per-setup"></script>
   <script src="./hub-achievements.js?v=20261005-progress"></script>
-  <script src="./hub-shell.js?v=20261005-achievement-progress"></script>
-  <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-shell.js?v=20261005-per-setup"></script>
+  <script src="./hub-menu.js?v=20261005-per-setup"></script>
   <script src="./bravura-symbols.js"></script>
   <script src="./shared-notation-config.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
@@ -248,7 +249,7 @@ function App(){
   const [question,setQuestion]=useState(()=>buildQuestion(levelFromUrl(), cadenceIdsForLevel(levelFromUrl())));
   const [selected,setSelected]=useState(null), [typed,setTyped]=useState("");
   const [feedback,setFeedback]=useState(null), [feedbackFading,setFeedbackFading]=useState(false), [prompt,setPrompt]=useState("");
-  const [correct,setCorrect]=useState(0), [attempted,setAttempted]=useState(0), [streak,setStreak]=useState(0), [best,setBest]=useState(0), [confetti,setConfetti]=useState(0), [autoShowMedals,setAutoShowMedals]=useState(false);
+  const [correct,setCorrect]=window.MLH.usePersistentScoreState(0, "correct", { level: activeLevel, scope: "", settings: { questions: enabled, options: { tempo: tempo.id, metronome, follow } } }), [attempted,setAttempted]=window.MLH.usePersistentScoreState(0, "attempted", { level: activeLevel, scope: "", settings: { questions: enabled, options: { tempo: tempo.id, metronome, follow } } }), [streak,setStreak]=window.MLH.usePersistentScoreState(0, "streak", { level: activeLevel, scope: "", settings: { questions: enabled, options: { tempo: tempo.id, metronome, follow } } }), [best,setBest]=window.MLH.usePersistentScoreState(0, "best", { level: activeLevel, scope: "", settings: { questions: enabled, options: { tempo: tempo.id, metronome, follow } } }), [confetti,setConfetti]=useState(0), [autoShowMedals,setAutoShowMedals]=useState(false);
   const [levelOpen,setLevelOpen]=useState(false), [customiseOpen,setCustomiseOpen]=useState(false), [playing,setPlaying]=useState(false), [activeNoteId,setActiveNoteId]=useState(null);
   const levelRef=useRef(null), customiseRef=useRef(null), audioRef=useRef(null), timers=useRef([]), levelTaskStatusRef=useRef(null);
   useClickOutside([levelRef,customiseRef],[()=>setLevelOpen(false),()=>setCustomiseOpen(false)]);
@@ -256,11 +257,11 @@ function App(){
   const medalEligible=taskMatchesLevel(activeLevel, enabled);
   const displayedLevel=medalEligible ? activeLevel : "Custom";
   const displayedLevelLabel=medalEligible ? LEVELS[activeLevel].label : "Custom";
-  useEffect(()=>{ if(levelTaskStatusRef.current===null){ levelTaskStatusRef.current=medalEligible; return; } if(levelTaskStatusRef.current===medalEligible) return; levelTaskStatusRef.current=medalEligible; if(window.MLH.resetLevelSessionProgress){ window.MLH.resetLevelSessionProgress({ setCorrect, setAttempted, setStreak, setBest }); } else { setCorrect(0); setAttempted(0); setStreak(0); setBest(0); } setConfetti(0); setAutoShowMedals(false); },[medalEligible]);
+  useEffect(()=>{ if(levelTaskStatusRef.current===null){ levelTaskStatusRef.current=medalEligible; return; } if(levelTaskStatusRef.current===medalEligible) return; levelTaskStatusRef.current=medalEligible; if(window.MLH.resetLevelSessionProgress){ window.MLH.resetLevelSessionProgress({ setCorrect, setAttempted, setStreak, setBest }); } else {     } setConfetti(0); setAutoShowMedals(false); },[medalEligible]);
   function clearTimers(){ timers.current.forEach(clearTimeout); timers.current=[]; }
   function stopAudio(){ clearTimers(); if(audioRef.current){ try{audioRef.current.close();}catch{} } audioRef.current=null; setPlaying(false); setActiveNoteId(null); }
   function newQuestion(level=activeLevel, ids=enabled){ stopAudio(); setQuestion(buildQuestion(level, safeEnabled(ids, level))); setSelected(null); setTyped(""); setFeedback(null); setFeedbackFading(false); setPrompt(""); }
-  function applyLevel(level){ setActiveLevel(level); setCorrect(0); setAttempted(0); setStreak(0); setBest(0); setConfetti(0); setAutoShowMedals(false); const ids=cadenceIdsForLevel(level); setEnabled(ids); const url=new URL(location.href); url.searchParams.set("level",level); history.replaceState(null,"",url.toString()); newQuestion(level,ids); setLevelOpen(false); }
+  function applyLevel(level){ setActiveLevel(level);     setConfetti(0); setAutoShowMedals(false); const ids=cadenceIdsForLevel(level); setEnabled(ids); const url=new URL(location.href); url.searchParams.set("level",level); history.replaceState(null,"",url.toString()); newQuestion(level,ids); setLevelOpen(false); }
   function score(ok){ stopAudio(); const ns=ok?streak+1:0; playFeedbackSound(ok); setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){ const medal=medalSoundForStreak(ns); if(medalEligible && medal && MEDAL_THRESHOLDS.includes(ns)){ setConfetti(v=>v+1); setAutoShowMedals(true); timers.current.push(setTimeout(()=>setAutoShowMedals(false),2000)); timers.current.push(setTimeout(()=>playFeedbackSound(true,true,medal),180)); } timers.current.push(setTimeout(()=>setFeedbackFading(true),1700)); timers.current.push(setTimeout(()=>newQuestion(),2000)); }}
   function confirm(){ if(feedback) return; const ok = question.mode === "choice" ? selected === question.answerId : isCorrectText(typed, question.answerId); if(question.mode === "choice" && !selected){ setPrompt("Select one cadence first."); return; } if(question.mode === "text" && !typed.trim()){ setPrompt("Type your answer first."); return; } score(ok); }
   function clearAnswer(){ setSelected(null); setTyped(""); setPrompt(""); }
