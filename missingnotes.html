@@ -19,12 +19,121 @@
   <script src="./hub-menu.js?v=20260712-profile-sharing"></script>
   <script src="./bravura-symbols.js"></script>
   <script src="./shared-notation-config.js"></script>
+  <script src="./melodic-dictation-generator.js?v=20261004-tonality"></script>
+  <script src="./melodic-dictation-notation.js?v=20261004-tonality"></script>
 </head>
 <body class="overflow-x-hidden bg-stone-50">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useEffect, useMemo, useRef, useState } = React;
+    const {
+      SHARED_SYMBOLS,
+      SHARED_CONFIG,
+      STAFF,
+      BARS_PER_SYSTEM,
+      KEY_SIGNATURE_SPACING,
+      COLOUR,
+      clefStepOffset,
+      displayStep,
+      yForStep,
+      stemDown,
+      sharedActualSymbolKey,
+      sharedSettingsKey,
+      sharedSymbolConfig,
+      sharedSymbolForKey,
+      calibrationAnchorX,
+      calibrationAnchorY,
+      CalibratedSymbol,
+      noteSymbolKey,
+      barStart,
+      barWidth,
+      systemTop,
+      barPositions,
+      isBeamableRhythm,
+      getQuaverGroups,
+      groupContaining,
+      secondaryBeamSegments,
+      getStem,
+      groupHasDownStems,
+      getBeam,
+      beamYAtX,
+      secondaryBeamForSegment,
+      beamPolygonPoints,
+      BeamShape,
+      TieShape,
+      LedgerLines,
+      Accidental,
+      Note,
+      Staff,
+      KeySignature,
+      TimeSignature,
+      BarNotes
+    } = window.MLH.MelodicDictationNotation;
+    const {
+      BAR_COUNT,
+      TIME_SIGNATURES,
+      RHYTHMS,
+      BAR_PATTERNS,
+      AH_BAR_PATTERNS,
+      NOTE_POOL,
+      KEYS,
+      clamp,
+      randomItem,
+      rhythmInfo,
+      isHigherLevel,
+      timeSignaturesForLevel,
+      barPatternsForSignature,
+      hasSemiquaverGroup,
+      isRestRhythm,
+      ahBarPatternsForSignature,
+      noteBaseIndex,
+      LEGACY_NOTE_INDEX_OFFSET,
+      noteByLetter,
+      keyAccidentalForLetter,
+      chordAccidentalForLetter,
+      melodicAccidentalForLetter,
+      cloneNotesForBar,
+      transposeNotesForBar,
+      finalRhythmForSignature,
+      makeNote,
+      levelMode,
+      maxStepForLevel,
+      stepRangeForLevel,
+      noteAllowedForLevel,
+      barCountForLevel,
+      tonicStartNoteForLevel,
+      hasSamePitchPattern,
+      hasSequencePitchPattern,
+      canTransposeBarByStep,
+      targetHasSourcePattern,
+      targetHasAnySourcePattern,
+      chooseNextNote,
+      buildNotesFromPattern,
+      buildFinalBar,
+      buildCadenceBar,
+      applyMelodicAccidentals,
+      targetMovesWithinInterval,
+      melodyHasOctaveLeap,
+      hasEnoughPitchVariety,
+      melodyNotes,
+      dominantLetterForKey,
+      levelMaximumInterval,
+      levelMaximumRange,
+      longestRepeatedPitchRun,
+      hasAwkwardBarlineLeap,
+      hasBalancedContour,
+      leapsRecoverByStep,
+      melodyPassesQualityRules,
+      makeChordProgression,
+      makeEightBarRepetitionProgression,
+      allowedChordsForBar,
+      chordFitScore,
+      fitChordsToMelody,
+      sequenceSourceCandidates,
+      makeCompletionQuestion,
+      makeEightBarRepetitionQuestion
+    } = window.MLH.MelodicDictation;
 
     const ASSET = {
       appIcon: "https://themusicliteracyhub.netlify.app/insert-missing-notes-icon.svg",
@@ -48,322 +157,28 @@
       AH: { label: "Advanced Higher", description: "These questions are based on more challenging melodic variations." },
     };
 
-    const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS ?? {};
-    const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG ?? { symbols: {}, drawing: {} };
-
     const SVG = { width: 920, height: 340 };
-    const STAFF = { left: 58, right: 862, topA: 82, topB: 218, gap: 11 };
-    const BAR_COUNT = 8;
-    const BARS_PER_SYSTEM = 4;
-    const KEY_SIGNATURE_SPACING = 14;
-    const COLOUR = { green: "#16a34a", red: "#dc2626", blue: "#2563eb", guide: "#525252" };
+
     const TEMPOS = [
       { id: "slow", label: "Adagio", bpm: 58 },
       { id: "medium", label: "Andante", bpm: 76 },
       { id: "fast", label: "Allegro", bpm: 96 },
     ];
-    const TIME_SIGNATURES = [
-      { id: "2/4", top: 2, bottom: 4, beats: 2 },
-      { id: "3/4", top: 3, bottom: 4, beats: 3 },
-      { id: "4/4", top: 4, bottom: 4, beats: 4 },
-      { id: "6/8", top: 6, bottom: 8, beats: 3 },
-    ];
-    const RHYTHMS = {
-      semiquaver: { beats: 0.25, spacing: 0.62, label: "semiquaver" },
-      quaver: { beats: 0.5, spacing: 0.95, label: "quaver" },
-      crotchet: { beats: 1, spacing: 1.35, label: "crotchet" },
-      dottedCrotchet: { beats: 1.5, spacing: 1.75, label: "dotted crotchet" },
-      minim: { beats: 2, spacing: 2.15, label: "minim" },
-      dottedMinim: { beats: 3, spacing: 2.75, label: "dotted minim" },
-      semibreve: { beats: 4, spacing: 3.4, label: "semibreve" },
-      crotchetRest: { beats: 1, spacing: 1.15, label: "crotchet rest" },
-      quaverRest: { beats: 0.5, spacing: 0.82, label: "quaver rest" },
-    };
-    const BAR_PATTERNS = {
-      "2/4": [
-        ["crotchet", "crotchet"],
-        ["minim"],
-        ["dottedCrotchet", "quaver"],
-        ["quaver", "quaver", "crotchet"],
-        ["crotchet", "quaver", "quaver"],
-      ],
-      "3/4": [
-        ["crotchet", "crotchet", "crotchet"],
-        ["minim", "crotchet"],
-        ["crotchet", "minim"],
-        ["dottedMinim"],
-        ["dottedCrotchet", "quaver", "crotchet"],
-        ["crotchet", "dottedCrotchet", "quaver"],
-        ["quaver", "quaver", "crotchet", "crotchet"],
-        ["crotchet", "quaver", "quaver", "crotchet"],
-      ],
-      "4/4": [
-        ["crotchet", "crotchet", "crotchet", "crotchet"],
-        ["minim", "crotchet", "crotchet"],
-        ["crotchet", "crotchet", "minim"],
-        ["dottedMinim", "crotchet"],
-        ["crotchet", "dottedMinim"],
-        ["dottedCrotchet", "quaver", "minim"],
-        ["minim", "dottedCrotchet", "quaver"],
-        ["quaver", "quaver", "crotchet", "crotchet", "crotchet"],
-        ["crotchet", "quaver", "quaver", "crotchet", "crotchet"],
-        ["crotchet", "crotchet", "quaver", "quaver", "crotchet"],
-        ["minim", "minim"],
-      ],
-      "6/8": [
-        ["dottedMinim"],
-        ["dottedCrotchet", "dottedCrotchet"],
-        ["dottedCrotchet", "quaver", "crotchet"],
-        ["crotchet", "quaver", "crotchet", "quaver"],
-      ],
-    };
-    const AH_BAR_PATTERNS = {
-      "2/4": [
-        ["quaver", "quaver", "quaver", "quaver"],
-        ["semiquaver", "semiquaver", "semiquaver", "semiquaver", "quaver", "quaver"],
-        ["quaver", "semiquaver", "semiquaver", "crotchet"],
-        ["crotchet", "quaver", "quaver"],
-        ["crotchetRest", "quaver", "quaver"],
-        ["quaverRest", "quaver", "crotchet"],
-      ],
-      "3/4": [
-        ["quaver", "quaver", "crotchet", "quaver", "quaver"],
-        ["crotchet", "semiquaver", "semiquaver", "semiquaver", "semiquaver", "crotchet"],
-        ["dottedCrotchet", "quaver", "crotchet"],
-        ["crotchet", "quaver", "quaver", "crotchet"],
-        ["crotchetRest", "quaver", "quaver", "crotchet"],
-        ["quaverRest", "quaver", "crotchet", "crotchet"],
-      ],
-      "4/4": [
-        ["quaver", "quaver", "crotchet", "quaver", "quaver", "crotchet"],
-        ["crotchet", "semiquaver", "semiquaver", "semiquaver", "semiquaver", "crotchet", "crotchet"],
-        ["dottedCrotchet", "quaver", "crotchet", "crotchet"],
-        ["crotchet", "quaver", "quaver", "crotchetRest", "crotchet"],
-        ["minim", "quaver", "quaver", "crotchet"],
-        ["quaverRest", "quaver", "crotchet", "minim"],
-      ],
-      "6/8": [
-        ["quaver", "quaver", "quaver", "quaver", "quaver", "quaver"],
-        ["dottedCrotchet", "quaver", "quaver", "quaver"],
-        ["quaver", "quaver", "quaver", "dottedCrotchet"],
-        ["crotchet", "quaver", "quaverRest", "quaver", "quaver"],
-      ],
-    };
-    const NOTE_POOL = [
-      { letter: "C", octave: 3, step: -9, midi: 48 },
-      { letter: "D", octave: 3, step: -8, midi: 50 },
-      { letter: "E", octave: 3, step: -7, midi: 52 },
-      { letter: "F", octave: 3, step: -6, midi: 53 },
-      { letter: "G", octave: 3, step: -5, midi: 55 },
-      { letter: "A", octave: 3, step: -4, midi: 57 },
-      { letter: "B", octave: 3, step: -3, midi: 59 },
-      { letter: "C", octave: 4, step: -2, midi: 60 },
-      { letter: "D", octave: 4, step: -1, midi: 62 },
-      { letter: "E", octave: 4, step: 0, midi: 64 },
-      { letter: "F", octave: 4, step: 1, midi: 65 },
-      { letter: "G", octave: 4, step: 2, midi: 67 },
-      { letter: "A", octave: 4, step: 3, midi: 69 },
-      { letter: "B", octave: 4, step: 4, midi: 71 },
-      { letter: "C", octave: 5, step: 5, midi: 72 },
-      { letter: "D", octave: 5, step: 6, midi: 74 },
-      { letter: "E", octave: 5, step: 7, midi: 76 },
-      { letter: "F", octave: 5, step: 8, midi: 77 },
-      { letter: "G", octave: 5, step: 9, midi: 79 },
-      { letter: "A", octave: 5, step: 10, midi: 81 },
-    ];
-    const KEYS = [
-      { id: "C", tonic: "C", signature: [], chords: { I: ["C", "E", "G"], IV: ["F", "A", "C"], V: ["G", "B", "D"], VI: ["A", "C", "E"] } },
-      { id: "F", tonic: "F", signature: [{ type: "flat", step: 4 }], chords: { I: ["F", "A", "C"], IV: ["B", "D", "F"], V: ["C", "E", "G"], VI: ["D", "F", "A"] } },
-      { id: "G", tonic: "G", signature: [{ type: "sharp", step: 8 }], chords: { I: ["G", "B", "D"], IV: ["C", "E", "G"], V: ["D", "F", "A"], VI: ["E", "G", "B"] } },
-      { id: "Am", tonic: "A", signature: [], chords: { I: ["A", "C", "E"], IV: ["D", "F", "A"], V: ["E", "G", "B"], VI: ["F", "A", "C"] }, raised: { V: { G: 1 } } },
-    ];
 
-    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
-    const rhythmInfo = (rhythm) => RHYTHMS[rhythm] ?? RHYTHMS.crotchet;
-    const isHigherLevel = (level) => level === "H" || level === "AH";
-    const timeSignaturesForLevel = (level) => TIME_SIGNATURES.filter((signature) => signature.id !== "6/8" || isHigherLevel(level));
-    const barPatternsForSignature = (signature) => BAR_PATTERNS[signature.id] ?? BAR_PATTERNS["4/4"];
-    const hasSemiquaverGroup = (pattern) => pattern.includes("semiquaver");
-    const isRestRhythm = (rhythm) => rhythm === "crotchetRest" || rhythm === "quaverRest";
     const patternHasRest = (pattern) => pattern.some(isRestRhythm);
     const barsHaveRest = (bars) => bars.some((bar) => bar.notes.some((note) => note.rest));
-    const ahBarPatternsForSignature = (signature, allowSemiquaverGroups = false) => {
-      const patterns = AH_BAR_PATTERNS[signature.id] ?? AH_BAR_PATTERNS["4/4"];
-      return allowSemiquaverGroups ? patterns : patterns.filter((pattern) => !hasSemiquaverGroup(pattern));
-    };
-    const noteBaseIndex = (note) => NOTE_POOL.findIndex((item) => item.letter === note?.letter && item.octave === note?.octave);
-    const clefStepOffset = (clef) => clef === "bass" ? 12 : 0;
-    const displayStep = (note, clef = "treble") => (note?.step ?? 0) + clefStepOffset(clef);
+
     const MIN_DISPLAY_STEP = -4;
     const MAX_DISPLAY_STEP = 12;
-    const yForStep = (step, top) => top + STAFF.gap * 4 - step * (STAFF.gap / 2);
-    const stemDown = (step) => step > 4;
+
     const midiToFrequency = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
-    const LEGACY_NOTE_INDEX_OFFSET = 7;
-    const noteByLetter = (letter, preferredIndex = 6) => {
-      const targetIndex = preferredIndex + LEGACY_NOTE_INDEX_OFFSET;
-      const options = NOTE_POOL.map((note, index) => ({ ...note, index })).filter((note) => note.letter === letter);
-      return options.reduce((best, item) => Math.abs(item.index - targetIndex) < Math.abs(best.index - targetIndex) ? item : best, options[0]);
-    };
-    const keyAccidentalForLetter = (key, letter) => {
-      if (key?.id === "F" && letter === "B") return -1;
-      if (key?.id === "G" && letter === "F") return 1;
-      return 0;
-    };
-    const chordAccidentalForLetter = (key, chordSymbol, letter) => key?.raised?.[chordSymbol]?.[letter] ?? null;
-    const melodicAccidentalForLetter = (key, letter) => key?.id === "Am" && letter === "G" ? 1 : null;
+
     const effectiveMidiForNote = (question, bar, note) => note.midi + keyAccidentalForLetter(question.key, note.letter) + (note.writtenAccidental ?? 0);
     const pitchForChordLetter = (question, bar, letter, preferredIndex = 4) => {
       const base = noteByLetter(letter, preferredIndex);
       const raised = chordAccidentalForLetter(question.key, bar.chordSymbol, letter);
       return base.midi + keyAccidentalForLetter(question.key, letter) + (raised ?? 0);
     };
-    const cloneNotesForBar = (notes, barIndex) => notes.map((note, noteIndex) => ({
-      ...note,
-      id: `${barIndex}-${noteIndex}`,
-      barIndex,
-      noteIndex,
-      beat: note.beat,
-    }));
-    const transposeNotesForBar = (notes, barIndex, offset) => cloneNotesForBar(notes, barIndex).map((note) => ({
-      ...note,
-      ...NOTE_POOL[clamp(noteBaseIndex(note) + offset, 0, NOTE_POOL.length - 1)],
-      writtenAccidental: null,
-    }));
-    const finalRhythmForSignature = (signature) => ({
-      "2/4": "minim",
-      "3/4": "dottedMinim",
-      "4/4": "semibreve",
-      "6/8": "dottedMinim",
-    }[signature.id] ?? "semibreve");
-
-    function makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol) {
-      if (isRestRhythm(rhythm)) {
-        return {
-          id: `${barIndex}-${noteIndex}`,
-          rhythm,
-          beats: rhythmInfo(rhythm).beats,
-          beat,
-          barIndex,
-          noteIndex,
-          rest: true,
-          step: 4,
-          midi: 0,
-          letter: "R",
-          octave: 4,
-          writtenAccidental: null,
-        };
-      }
-      const melodicAccidental = melodicAccidentalForLetter(key, base.letter);
-      const chordAccidental = chordAccidentalForLetter(key, chordSymbol, base.letter);
-      return {
-        ...base,
-        id: `${barIndex}-${noteIndex}`,
-        rhythm,
-        beats: rhythmInfo(rhythm).beats,
-        beat,
-        barIndex,
-        noteIndex,
-        writtenAccidental: melodicAccidental ?? chordAccidental,
-      };
-    }
-
-    function sharedActualSymbolKey(key) {
-      if (key === "flatInScore" || key === "flatKeySignature") return "flat";
-      if (key === "naturalInScore") return "natural";
-      if (key === "sharpInScore" || key === "sharpKeySignature") return "sharp";
-      if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack";
-      if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot";
-      return key;
-    }
-
-    function sharedSettingsKey(key) {
-      if (key === "flatKeySignature" || key === "sharpKeySignature") return SHARED_CONFIG.symbols?.keySignatureAccidentals ? "keySignatureAccidentals" : key;
-      if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return SHARED_CONFIG.symbols?.scoreAccidentals ? "scoreAccidentals" : key;
-      return key;
-    }
-
-    function sharedSymbolConfig(key) {
-      const symbols = SHARED_CONFIG.symbols ?? {};
-      const settingsKey = sharedSettingsKey(key);
-      return symbols[settingsKey] ?? symbols[sharedActualSymbolKey(settingsKey)] ?? {
-        fontSizeScale: 3.4,
-        xOffsetScale: 0,
-        yOffsetScale: 0,
-        widthScale: 1,
-        heightScale: 1,
-        opticalXOffset: 0,
-        opticalYOffset: 0,
-      };
-    }
-
-    function sharedSymbolForKey(key) {
-      return SHARED_SYMBOLS[sharedActualSymbolKey(key)] ?? "";
-    }
-
-    function calibrationAnchorX(symbolKey, left = STAFF.left) {
-      if (symbolKey?.startsWith("timeSig")) return left + 12 * STAFF.gap;
-      return left;
-    }
-
-    function calibrationAnchorY(symbolKey, top = STAFF.topA) {
-      if (symbolKey?.startsWith("timeSig")) return yForStep(5.3, top);
-      return yForStep(4, top);
-    }
-
-    function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = STAFF.gap, settingOverrides = {} }) {
-      const glyph = sharedSymbolForKey(symbolKey);
-      if (!glyph) return null;
-      const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides };
-      const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
-      const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
-      const fontSize = lineGap * Number(settings.fontSizeScale || 3.4);
-      const widthScale = Number(settings.widthScale || 1);
-      const heightScale = Number(settings.heightScale || 1);
-      return (
-        <text className="music-symbol" x={adjustedX} y={adjustedY} fill={colour} opacity={opacity} fontSize={fontSize} textAnchor="middle" transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`} pointerEvents="none">
-          {glyph}
-        </text>
-      );
-    }
-
-    function noteSymbolKey(rhythm, down, beamed = false) {
-      if (rhythm === "semibreve") return "wholeNote";
-      if (rhythm === "minim" || rhythm === "dottedMinim") return down ? "halfNoteStemDown" : "halfNoteStemUp";
-      if (rhythm === "crotchetRest") return "quarterRest";
-      if (rhythm === "quaverRest") return "eighthRest";
-      if (rhythm === "semiquaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
-      if (rhythm === "semiquaver") return down ? "sixteenthNoteStemDown" : "sixteenthNoteStemUp";
-      if (rhythm === "quaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp";
-      if (rhythm === "quaver") return down ? "eighthNoteStemDown" : "eighthNoteStemUp";
-      return down ? "quarterNoteStemDown" : "quarterNoteStemUp";
-    }
-
-    function levelMode(level) {
-      if (level === "N3") return "repetition";
-      if (level === "N4") return "sequence";
-      if (isHigherLevel(level)) return randomItem(["repetition", "sequence", "repetition", "sequence", "free"]);
-      return randomItem(["repetition", "sequence"]);
-    }
-
-    function maxStepForLevel(level, mode) {
-      if (isHigherLevel(level)) return 4;
-      if (level === "N3" || level === "N4" || level === "N5") return 1;
-      return 2;
-    }
-
-    function stepRangeForLevel(level) {
-      if (level === "N3" || level === "N4") return { min: 0, max: 8 };
-      if (level === "N5" || level === "H") return { min: -2, max: 10 };
-      if (level === "AH") return { min: -4, max: 12 };
-      return { min: NOTE_POOL[0].step, max: NOTE_POOL.at(-1).step };
-    }
-
-    function noteAllowedForLevel(level, note) {
-      const range = stepRangeForLevel(level);
-      return note.step >= range.min && note.step <= range.max;
-    }
 
     function noteInClefRange(note, clef) {
       const step = displayStep(note, clef);
@@ -400,515 +215,6 @@
         bar.notes = bar.notes.map((note) => fitNoteToClefRange(note, clef, key));
       });
       return bars;
-    }
-
-    function barCountForLevel(level) {
-      return 4;
-    }
-
-    function tonicStartNoteForLevel(level, key) {
-      if (level === "N3" || level === "N4") return randomItem(NOTE_POOL.filter((note) => note.letter === "C" && (note.octave === 4 || note.octave === 5)));
-      return noteByLetter(key.tonic, 6);
-    }
-
-    function hasSamePitchPattern(first, second) {
-      if (!first?.notes || !second?.notes || first.notes.length !== second.notes.length) return false;
-      return first.notes.every((note, index) => note.step === second.notes[index]?.step);
-    }
-
-    function hasSequencePitchPattern(first, second) {
-      if (!first?.notes || !second?.notes || first.notes.length !== second.notes.length) return false;
-      const offset = second.notes[0].step - first.notes[0].step;
-      if (offset === 0) return false;
-      return first.notes.every((note, index) => second.notes[index]?.step - note.step === offset);
-    }
-
-    function canTransposeBarByStep(bar, offset, level) {
-      if (!bar?.notes?.length) return false;
-      return bar.notes.every((note) => {
-        const target = NOTE_POOL[noteBaseIndex(note) + offset];
-        return target && noteAllowedForLevel(level, target);
-      });
-    }
-
-    function targetHasSourcePattern(bars, targetBar, matcher) {
-      const target = bars[targetBar];
-      return bars.some((bar) => bar.barIndex !== targetBar && matcher(bar, target));
-    }
-
-    function targetHasAnySourcePattern(bars, targetBar) {
-      return targetHasSourcePattern(bars, targetBar, hasSamePitchPattern)
-        || targetHasSourcePattern(bars, targetBar, hasSequencePitchPattern);
-    }
-
-
-    function chooseNextNote({ key, chordLetters, previous, currentIndex, strongBeat, rhythm, maxLeap, level, forceDirection = 0, preferLeap = false }) {
-      const previousIndex = noteBaseIndex(previous) >= 0 ? noteBaseIndex(previous) : currentIndex;
-      const previousMidi = previous?.midi ?? NOTE_POOL[previousIndex]?.midi ?? 72;
-      const candidates = [];
-
-      NOTE_POOL.forEach((candidate, candidateIndex) => {
-        const distance = candidateIndex - previousIndex;
-        const absDistance = Math.abs(distance);
-        const isChordTone = chordLetters.includes(candidate.letter);
-        const pitchDistance = Math.abs((candidate.midi + keyAccidentalForLetter(key, candidate.letter)) - previousMidi);
-
-        if (!noteAllowedForLevel(level, candidate)) return;
-        if (pitchDistance > 12) return;
-        if (absDistance > maxLeap) return;
-        if (strongBeat && !isChordTone) return;
-        if (forceDirection > 0 && distance < 0) return;
-        if (forceDirection < 0 && distance > 0) return;
-        if (rhythm === "quaver" && absDistance > 2) return;
-
-        let weight = isChordTone ? 8 : 2;
-        if (strongBeat) weight *= 2.8;
-        if (absDistance === 0) weight *= 0.6;
-        if (absDistance === 1) weight *= 5;
-        if (absDistance === 2) weight *= level === "H" ? 0.75 : 3;
-        if (absDistance >= 3) weight *= level === "H" ? 0.25 : (preferLeap ? 4 : 0.7);
-        if (candidateIndex < 1 || candidateIndex > NOTE_POOL.length - 2) weight *= 0.35;
-        if (key.id === "Am" && candidate.letter === "G") weight *= 0.8;
-        candidates.push({ candidate, weight });
-      });
-
-      if (!candidates.length) {
-        const fallback = NOTE_POOL
-          .map((note, index) => ({ ...note, index }))
-          .filter((note) => {
-            const distance = note.index - previousIndex;
-            const absDistance = Math.abs(distance);
-            if (!noteAllowedForLevel(level, note)) return false;
-            if (absDistance > maxLeap) return false;
-            if (forceDirection > 0 && distance < 0) return false;
-            if (forceDirection < 0 && distance > 0) return false;
-            if (rhythm === "quaver" && absDistance > 1) return false;
-            return true;
-          });
-        return randomItem(fallback.length ? fallback : [previous]);
-      }
-      let roll = Math.random() * candidates.reduce((sum, item) => sum + item.weight, 0);
-      for (const item of candidates) {
-        roll -= item.weight;
-        if (roll <= 0) return item.candidate;
-      }
-      return candidates.at(-1).candidate;
-    }
-
-    function buildNotesFromPattern({ key, chordSymbol, pattern, barIndex, previousIndex, level, mode }) {
-      const chordLetters = key.chords[chordSymbol] ?? key.chords.I;
-      let currentIndex = previousIndex;
-      let previous = NOTE_POOL[currentIndex] ?? noteByLetter(key.tonic, 6);
-      let beat = 0;
-      const notes = [];
-      const direction = level === "N3" || level === "N4" ? randomItem([-1, 1]) : 0;
-      const maxLeap = maxStepForLevel(level, mode);
-
-      pattern.forEach((rhythm, noteIndex) => {
-        if (isRestRhythm(rhythm)) {
-          const rest = makeNote(null, rhythm, barIndex, noteIndex, beat, key, chordSymbol);
-          notes.push(rest);
-          beat += rhythmInfo(rhythm).beats;
-          return;
-        }
-        const strongBeat = beat === 0 || beat === 2 || (beat === 1.5 && rhythmInfo(rhythm).beats >= 1);
-        const preferLeap = false;
-        let base = chooseNextNote({
-          key,
-          chordLetters,
-          previous,
-          currentIndex,
-          strongBeat,
-          rhythm,
-          maxLeap,
-          level,
-          forceDirection: direction,
-          preferLeap,
-        });
-        if (barIndex === 0 && noteIndex === 0) base = tonicStartNoteForLevel(level, key);
-        const note = makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol);
-        notes.push(note);
-        currentIndex = noteBaseIndex(base) >= 0 ? noteBaseIndex(base) : currentIndex;
-        previous = base;
-        beat += rhythmInfo(rhythm).beats;
-      });
-
-      return { notes, lastIndex: currentIndex };
-    }
-
-    function buildFinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars, level }) {
-      const rhythm = finalRhythmForSignature(timeSignature);
-      const previous = NOTE_POOL[previousIndex] ?? noteByLetter(key.tonic, 6);
-      const tonicOptions = level === "N3" || level === "N4"
-        ? NOTE_POOL.filter((note) => note.letter === "C" && (note.octave === 4 || note.octave === 5))
-        : NOTE_POOL.filter((note) => note.letter === key.tonic && noteAllowedForLevel(level, note));
-      const base = tonicOptions.reduce((best, note) => Math.abs(note.midi - previous.midi) < Math.abs(best.midi - previous.midi) ? note : best, tonicOptions[0] ?? noteByLetter(key.tonic, previousIndex));
-      return {
-        barIndex,
-        chordSymbol,
-        notes: [makeNote(base, rhythm, barIndex, 0, 0, key, chordSymbol)],
-        totalBars,
-        pattern: [rhythm],
-      };
-    }
-
-    function buildCadenceBar({ key, chordSymbol, targetLetter, barIndex, timeSignature, previousIndex, totalBars, level }) {
-      const rhythm = finalRhythmForSignature(timeSignature);
-      const previous = NOTE_POOL[previousIndex] ?? noteByLetter(key.tonic, 6);
-      const options = NOTE_POOL
-        .filter((note) => note.letter === targetLetter && noteAllowedForLevel(level, note));
-      const base = options.reduce((best, note) => Math.abs(note.midi - previous.midi) < Math.abs(best.midi - previous.midi) ? note : best, options[0] ?? noteByLetter(targetLetter, previousIndex));
-      return {
-        barIndex,
-        chordSymbol,
-        notes: [makeNote(base, rhythm, barIndex, 0, 0, key, chordSymbol)],
-        totalBars,
-        pattern: [rhythm],
-      };
-    }
-
-    function applyMelodicAccidentals(notes, key) {
-      return notes.map((note) => {
-        const accidental = melodicAccidentalForLetter(key, note.letter);
-        return accidental === null ? note : { ...note, writtenAccidental: accidental };
-      });
-    }
-
-
-    function targetMovesWithinInterval(bars, targetBar, maximumInterval) {
-      const target = bars[targetBar];
-      const notes = (target?.notes ?? []).filter((note) => !note.rest);
-      if (!notes.length) return false;
-      for (let index = 1; index < notes.length; index += 1) {
-        if (Math.abs(notes[index].step - notes[index - 1].step) > maximumInterval) return false;
-      }
-      return true;
-    }
-
-    function melodyHasOctaveLeap(bars) {
-      const notes = bars.flatMap((bar) => bar.notes ?? []).filter((note) => !note.rest);
-      return notes.some((note, index) => index > 0 && Math.abs(note.step - notes[index - 1].step) >= 7);
-    }
-
-    function hasEnoughPitchVariety(bars, minimum = 3) {
-      const pitches = new Set(bars.flatMap((bar) => bar.notes ?? []).filter((note) => !note.rest).map((note) => `${note.letter}${note.octave}`));
-      return pitches.size >= minimum;
-    }
-
-    function melodyNotes(bars) {
-      return bars.flatMap((bar) => bar.notes ?? []).filter((note) => !note.rest);
-    }
-
-    function dominantLetterForKey(key) {
-      return key?.chords?.V?.[0] ?? "G";
-    }
-
-    function levelMaximumInterval(level) {
-      if (level === "N3") return 2;
-      if (level === "N4") return 1;
-      if (isHigherLevel(level)) return 4;
-      if (level === "N5") return 3;
-      return 3;
-    }
-
-    function levelMaximumRange(level) {
-      if (level === "N3" || level === "N4") return 5;
-      if (level === "N5" || isHigherLevel(level)) return 7;
-      return 7;
-    }
-
-    function longestRepeatedPitchRun(notes) {
-      let longest = 1;
-      let current = 1;
-      for (let index = 1; index < notes.length; index += 1) {
-        if (notes[index].step === notes[index - 1].step) {
-          current += 1;
-          longest = Math.max(longest, current);
-        } else {
-          current = 1;
-        }
-      }
-      return longest;
-    }
-
-    function hasAwkwardBarlineLeap(bars, level) {
-      const maximum = levelMaximumInterval(level);
-      return bars.some((bar, index) => {
-        const nextBar = bars[index + 1];
-        const barNotes = (bar?.notes ?? []).filter((note) => !note.rest);
-        const nextNotes = (nextBar?.notes ?? []).filter((note) => !note.rest);
-        if (!barNotes.length || !nextNotes.length) return false;
-        return Math.abs(nextNotes[0].step - barNotes.at(-1).step) > maximum;
-      });
-    }
-
-    function hasBalancedContour(notes) {
-      let rises = 0;
-      let falls = 0;
-      for (let index = 1; index < notes.length; index += 1) {
-        const interval = notes[index].step - notes[index - 1].step;
-        if (interval > 0) rises += 1;
-        if (interval < 0) falls += 1;
-      }
-      return rises > 0 && falls > 0;
-    }
-
-    function leapsRecoverByStep(notes, level) {
-      const recoveryLimit = 1;
-      const leapThreshold = isHigherLevel(level) ? 3 : 2;
-      for (let index = 1; index < notes.length - 1; index += 1) {
-        const leap = notes[index].step - notes[index - 1].step;
-        if (Math.abs(leap) < leapThreshold) continue;
-        const recovery = notes[index + 1].step - notes[index].step;
-        if (recovery === 0) continue;
-        if (Math.sign(recovery) === Math.sign(leap) || Math.abs(recovery) > recoveryLimit) return false;
-      }
-      return true;
-    }
-
-    function melodyPassesQualityRules(question) {
-      const notes = melodyNotes(question.bars);
-      if (notes.length < 2) return false;
-      const intervals = notes.slice(1).map((note, index) => Math.abs(note.step - notes[index].step));
-      const range = Math.max(...notes.map((note) => note.step)) - Math.min(...notes.map((note) => note.step));
-      const first = notes[0];
-      const last = notes.at(-1);
-      const tonic = question.key.tonic;
-      const maximumRepeatedRun = question.level === "N3" ? 3 : 2;
-
-      if (first.letter !== tonic) return false;
-      if (last.letter !== tonic) return false;
-      if (range > levelMaximumRange(question.level)) return false;
-      if (Math.max(...intervals) > levelMaximumInterval(question.level)) return false;
-      if (hasAwkwardBarlineLeap(question.bars, question.level)) return false;
-      if (!hasBalancedContour(notes)) return false;
-      if (!leapsRecoverByStep(notes, question.level)) return false;
-      if (longestRepeatedPitchRun(notes) > maximumRepeatedRun) return false;
-      return true;
-    }
-
-    function makeChordProgression() {
-      const bar2 = randomItem(["I", "IV", "V", "VI"]);
-      const bar3 = randomItem(["IV", "V"]);
-      return ["I", bar2, bar3, "I"];
-    }
-
-    function makeEightBarRepetitionProgression() {
-      const bar2 = randomItem(["I", "IV", "V", "VI"]);
-      return ["I", bar2, "IV", "V", "I", bar2, "V", "I"];
-    }
-
-    function allowedChordsForBar(barIndex) {
-      if (barIndex === 0 || barIndex === 3) return ["I"];
-      if (barIndex === 1) return ["I", "IV", "V", "VI"];
-      return ["IV", "V"];
-    }
-
-    function chordFitScore(key, bar, chordSymbol) {
-      const chordLetters = key.chords[chordSymbol] ?? [];
-      return (bar.notes ?? []).reduce((score, note) => {
-        if (note.rest) return score;
-        const isChordTone = chordLetters.includes(note.letter);
-        const weight = note.beat === 0 || note.beat === 2 ? 3 : 1;
-        return score + (isChordTone ? weight : -weight);
-      }, 0);
-    }
-
-    function fitChordsToMelody(key, bars) {
-      return bars.map((bar) => {
-        const allowed = allowedChordsForBar(bar.barIndex);
-        const bestChord = allowed.reduce((best, chordSymbol) => (
-          chordFitScore(key, bar, chordSymbol) > chordFitScore(key, bar, best) ? chordSymbol : best
-        ), allowed[0]);
-        return { ...bar, chordSymbol: bestChord };
-      });
-    }
-
-    function sequenceSourceCandidates(bars, targetBar, level) {
-      if (level !== "N4") return bars.filter((bar) => bar.barIndex !== targetBar && bar.notes?.length);
-      return bars.filter((bar) => bar.barIndex === targetBar - 1 && bar.notes?.length);
-    }
-
-    function makeCompletionQuestion(level = "N5", attempt = 0, allowDenseAhPatterns = false) {
-      const activeBarCount = barCountForLevel(level);
-      const timeSignature = randomItem(timeSignaturesForLevel(level));
-      const majorKeys = KEYS.filter((key) => key.id !== "Am");
-      const key = level === "N3" || level === "N4"
-        ? KEYS.find((item) => item.id === "C")
-        : Math.random() < 0.82 ? randomItem(majorKeys) : KEYS.find((item) => item.id === "Am");
-      const progression = makeChordProgression();
-
-      const targetBar = level === "N4" || level === "N5" || isHigherLevel(level)
-        ? randomItem([1, 2])
-        : randomItem(Array.from({ length: activeBarCount }, (_, index) => index));
-      const bars = [];
-      let previousIndex = noteBaseIndex(tonicStartNoteForLevel(level, key));
-      const mode = levelMode(level);
-
-      for (let barIndex = 0; barIndex < activeBarCount; barIndex += 1) {
-        const chordSymbol = progression[barIndex];
-        let bar;
-        if (barIndex === activeBarCount - 1) {
-          bar = buildFinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars: activeBarCount, level });
-          previousIndex = noteBaseIndex(bar.notes[0]);
-        } else {
-          const availablePatterns = level === "AH" ? ahBarPatternsForSignature(timeSignature, allowDenseAhPatterns) : barPatternsForSignature(timeSignature);
-          const pattern = randomItem(availablePatterns);
-          const built = buildNotesFromPattern({ key, chordSymbol, pattern, barIndex, previousIndex, level, mode });
-          previousIndex = built.lastIndex;
-          bar = { barIndex, chordSymbol, notes: built.notes, totalBars: activeBarCount, pattern };
-        }
-        bars.push(bar);
-      }
-
-      if (bars[targetBar]?.notes?.length) {
-        if (mode === "repetition") {
-          let repetitionCandidates = bars.filter((bar) => bar.barIndex !== targetBar && bar.notes?.length);
-          const repetitionSource = randomItem(repetitionCandidates.length ? repetitionCandidates : bars.filter((bar) => bar.barIndex !== targetBar && bar.notes?.length));
-          bars[targetBar] = { ...bars[targetBar], notes: cloneNotesForBar(repetitionSource.notes, targetBar) };
-        } else if (mode === "sequence") {
-          let possibleSources = sequenceSourceCandidates(bars, targetBar, level);
-          const sequenceOptions = possibleSources.flatMap((source) => [-1, 1]
-            .filter((offset) => canTransposeBarByStep(source, offset, level))
-            .map((offset) => ({ source, offset })));
-          const selectedSequence = randomItem(sequenceOptions);
-          if (selectedSequence) {
-            bars[targetBar] = { ...bars[targetBar], notes: transposeNotesForBar(selectedSequence.source.notes, targetBar, selectedSequence.offset) };
-          }
-        }
-        bars[targetBar] = { ...bars[targetBar], notes: applyMelodicAccidentals(bars[targetBar].notes, key), pattern: bars[targetBar].notes.map((note) => note.rhythm) };
-      }
-
-      const fittedBars = fitChordsToMelody(key, bars);
-
-      const question = {
-        id: Math.random().toString(36).slice(2),
-        key,
-        timeSignature,
-        bars: fittedBars,
-        targetBar,
-        level,
-        mode,
-        barCount: activeBarCount,
-      };
-
-      const targetMaximumInterval = isHigherLevel(level) && mode === "free" ? 1 : maxStepForLevel(level, mode);
-
-      if ((level === "N3" || level === "N4" || level === "N5" || isHigherLevel(level)) && !targetMovesWithinInterval(bars, targetBar, targetMaximumInterval) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
-      }
-
-      if ((level === "N3" || level === "N4") && !hasEnoughPitchVariety(bars) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
-      }
-
-      if ((level === "N5" || isHigherLevel(level)) && ((bars[targetBar]?.notes ?? []).filter((note) => !note.rest).length) < 3 && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
-      }
-
-      if (level === "N3" && melodyHasOctaveLeap(bars) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
-      }
-
-      if (level === "N4" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
-      }
-
-      if (level === "N5" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
-      }
-
-      if (isHigherLevel(level) && mode !== "free" && !targetHasSourcePattern(bars, targetBar, mode === "repetition" ? hasSamePitchPattern : hasSequencePitchPattern) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
-      }
-
-      if (isHigherLevel(level) && mode === "free" && targetHasAnySourcePattern(bars, targetBar) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
-      }
-
-      if (!melodyPassesQualityRules(question) && attempt < 160) {
-        return makeCompletionQuestion(level, attempt + 1, allowDenseAhPatterns);
-      }
-
-      return question;
-    }
-
-    function makeEightBarRepetitionQuestion(level = "N5", attempt = 0) {
-      const activeBarCount = BAR_COUNT;
-      const timeSignature = randomItem(timeSignaturesForLevel(level));
-      const majorKeys = KEYS.filter((key) => key.id !== "Am");
-      const key = level === "N3" || level === "N4"
-        ? KEYS.find((item) => item.id === "C")
-        : Math.random() < 0.82 ? randomItem(majorKeys) : KEYS.find((item) => item.id === "Am");
-      const progression = makeEightBarRepetitionProgression();
-      const targetBar = randomItem([4, 5]);
-      const bars = [];
-      let previousIndex = noteBaseIndex(tonicStartNoteForLevel(level, key));
-      const mode = "repetition";
-      const availablePatterns = level === "AH" ? ahBarPatternsForSignature(timeSignature, false) : barPatternsForSignature(timeSignature);
-
-      for (let barIndex = 0; barIndex < activeBarCount; barIndex += 1) {
-        const chordSymbol = progression[barIndex];
-        let bar;
-        if (barIndex === 3) {
-          bar = buildCadenceBar({
-            key,
-            chordSymbol,
-            targetLetter: dominantLetterForKey(key),
-            barIndex,
-            timeSignature,
-            previousIndex,
-            totalBars: activeBarCount,
-            level,
-          });
-        } else if (barIndex === 4) {
-          bar = { ...bars[0], barIndex, chordSymbol, totalBars: activeBarCount, notes: cloneNotesForBar(bars[0].notes, barIndex) };
-        } else if (barIndex === 5) {
-          bar = { ...bars[1], barIndex, chordSymbol, totalBars: activeBarCount, notes: cloneNotesForBar(bars[1].notes, barIndex) };
-        } else if (barIndex === activeBarCount - 1) {
-          bar = buildFinalBar({ key, chordSymbol, barIndex, timeSignature, previousIndex, totalBars: activeBarCount, level });
-        } else {
-          const pattern = randomItem(availablePatterns);
-          const built = buildNotesFromPattern({ key, chordSymbol, pattern, barIndex, previousIndex, level, mode });
-          previousIndex = built.lastIndex;
-          bar = { barIndex, chordSymbol, notes: built.notes, totalBars: activeBarCount, pattern };
-        }
-        bars.push(bar);
-        const lastNote = [...bar.notes].reverse().find((note) => !note.rest);
-        if (lastNote) previousIndex = noteBaseIndex(lastNote);
-      }
-
-      const question = {
-        id: Math.random().toString(36).slice(2),
-        key,
-        timeSignature,
-        bars,
-        targetBar,
-        level,
-        mode,
-        questionType: "eightBarRepetition",
-        barCount: activeBarCount,
-        useShortPrompt: true,
-      };
-
-      const targetMaximumInterval = maxStepForLevel(level, mode);
-      if (!targetMovesWithinInterval(bars, targetBar, targetMaximumInterval) && attempt < 160) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1);
-      }
-
-      if ((level === "N3" || level === "N4") && !hasEnoughPitchVariety(bars) && attempt < 160) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1);
-      }
-
-      if (level === "N5" && ((bars[targetBar]?.notes ?? []).filter((note) => !note.rest).length) < 3 && attempt < 160) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1);
-      }
-
-      if (level === "N3" && melodyHasOctaveLeap(bars) && attempt < 160) {
-        return makeEightBarRepetitionQuestion(level, attempt + 1);
-      }
-
-      return question;
     }
 
     function shuffleItems(items) {
@@ -1185,361 +491,6 @@
         return makeEightBarRepetitionQuestion(level);
       }
       return makeCompletionQuestion(level, attempt);
-    }
-
-    function barStart(barIndex, displayBarCount = BARS_PER_SYSTEM) {
-      const topSystem = barIndex < 4;
-      const musicStart = topSystem ? STAFF.left + 122 : STAFF.left + 74;
-      const width = (STAFF.right - musicStart) / displayBarCount;
-      return musicStart + (barIndex % BARS_PER_SYSTEM) * width;
-    }
-
-    function barWidth(barIndex, displayBarCount = BARS_PER_SYSTEM) {
-      const musicStart = barIndex < 4 ? STAFF.left + 122 : STAFF.left + 74;
-      return (STAFF.right - musicStart) / displayBarCount;
-    }
-
-    function systemTop(barIndex) {
-      return barIndex < 4 ? STAFF.topA : STAFF.topB;
-    }
-
-    function barPositions(bar, displayBarCount = BARS_PER_SYSTEM) {
-      const start = barStart(bar.barIndex, displayBarCount);
-      const end = start + barWidth(bar.barIndex, displayBarCount);
-      const scoreStart = start + (bar.barIndex === 0 ? 4 : 15);
-      const scoreEnd = bar.barIndex === (bar.totalBars ?? BAR_COUNT) - 1 ? end - 24 : end - 4;
-      const units = bar.notes.reduce((sum, note) => sum + rhythmInfo(note.rhythm).spacing, 0);
-      const unit = Math.max(1, scoreEnd - scoreStart) / Math.max(1, units);
-      let cursor = scoreStart + unit * 0.38;
-      return bar.notes.map((note) => {
-        const x = cursor;
-        cursor += rhythmInfo(note.rhythm).spacing * unit;
-        return x;
-      });
-    }
-
-    function isBeamableRhythm(rhythm) {
-      return rhythm === "quaver" || rhythm === "semiquaver";
-    }
-
-    function getQuaverGroups(notes, timeSignature = null) {
-      const groups = [];
-      let index = 0;
-      while (index < notes.length) {
-        if (!isBeamableRhythm(notes[index]?.rhythm)) {
-          index += 1;
-          continue;
-        }
-        const start = index;
-        while (isBeamableRhythm(notes[index + 1]?.rhythm)) {
-          if (timeSignature?.id === "6/8") {
-            const currentGroup = Math.floor((notes[index].beat + 0.001) / 1.5);
-            const nextGroup = Math.floor((notes[index + 1].beat + 0.001) / 1.5);
-            if (currentGroup !== nextGroup) break;
-          }
-          index += 1;
-        }
-        let groupStart = start;
-        while (groupStart <= index) {
-          const remaining = index - groupStart + 1;
-          const groupSize = remaining === 5 ? 3 : remaining >= 4 ? 4 : remaining;
-          const groupEnd = groupStart + groupSize - 1;
-          if (groupEnd > groupStart) groups.push({ start: groupStart, end: groupEnd });
-          groupStart = groupEnd + 1;
-        }
-        index += 1;
-      }
-      return groups;
-    }
-
-    function groupContaining(groups, index) {
-      return groups.find((group) => index >= group.start && index <= group.end) ?? null;
-    }
-
-    function secondaryBeamSegments(groupNotes) {
-      const segments = [];
-      let segmentStart = null;
-      groupNotes.forEach((note, index) => {
-        const isSemiquaver = note?.rhythm === "semiquaver";
-        const nextIsSemiquaver = groupNotes[index + 1]?.rhythm === "semiquaver";
-        if (isSemiquaver && segmentStart === null) segmentStart = index;
-        if (segmentStart !== null && (!nextIsSemiquaver || index === groupNotes.length - 1)) {
-          segments.push({ startIndex: segmentStart, endIndex: index, isHook: index === segmentStart });
-          segmentStart = null;
-        }
-      });
-      return segments;
-    }
-
-    function getStem(x, y, step, down, forcedEndY = null) {
-      const stemLength = STAFF.gap * 3.1;
-      const stemXOffset = STAFF.gap * 0.6;
-      return {
-        down,
-        stemX: x + (down ? -stemXOffset : stemXOffset),
-        startY: y + (down ? 0.5 : -0.5),
-        endY: forcedEndY ?? (down ? y + stemLength : y - stemLength),
-      };
-    }
-
-    function groupHasDownStems(notes, clef = "treble") {
-      let down = 0;
-      let up = 0;
-      notes.forEach((note) => stemDown(displayStep(note, clef)) ? down += 1 : up += 1);
-      return down > up;
-    }
-
-    function getBeam(notes, positions, top, forcedDown = null, clef = "treble") {
-      const down = forcedDown ?? groupHasDownStems(notes, clef);
-      const settings = sharedSymbolConfig("quaverBeam");
-      const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0);
-      const yOffset = STAFF.gap * Number(settings.yOffsetScale || 0);
-      const stemLength = STAFF.gap * 3.1 * Number(settings.heightScale || 1);
-      const beamWidthAdjust = STAFF.gap * 0.6 * (Number(settings.widthScale || 1) - 1);
-      const firstStep = displayStep(notes[0], clef);
-      const lastStep = displayStep(notes.at(-1), clef);
-      const firstY = yForStep(firstStep, top);
-      const lastY = yForStep(lastStep, top);
-      const firstStem = getStem(positions[0] + xOffset, firstY + yOffset, firstStep, down, down ? firstY + yOffset + stemLength : firstY + yOffset - stemLength);
-      const lastStem = getStem(positions.at(-1) + xOffset, lastY + yOffset, lastStep, down, down ? lastY + yOffset + stemLength : lastY + yOffset - stemLength);
-      let startY = firstStem.endY;
-      let endY = lastStem.endY;
-      const beamPoints = notes.map((note, index) => ({
-        x: positions[index],
-        y: yForStep(displayStep(note, clef), top),
-      }));
-
-      if (notes.length > 2 && notes.some((note) => note.rhythm === "semiquaver")) {
-        const steps = beamPoints.map((point) => point.y);
-        const spread = Math.max(...steps) - Math.min(...steps);
-
-        if (spread >= STAFF.gap * 0.75) {
-          const xMean = beamPoints.reduce((sum, point) => sum + point.x, 0) / beamPoints.length;
-          const yMean = beamPoints.reduce((sum, point) => sum + point.y, 0) / beamPoints.length;
-          const xVariance = beamPoints.reduce((sum, point) => sum + ((point.x - xMean) ** 2), 0);
-          const covariance = beamPoints.reduce((sum, point) => sum + ((point.x - xMean) * (point.y - yMean)), 0);
-          let slope = xVariance ? covariance / xVariance : 0;
-          const maxSlope = 0.11;
-          slope = clamp(slope, -maxSlope, maxSlope);
-
-          if (Math.abs(slope) < 0.035) {
-            const firstNoteY = beamPoints[0].y;
-            const lastNoteY = beamPoints.at(-1).y;
-            slope = lastNoteY <= firstNoteY ? -0.045 : 0.045;
-          }
-
-          const centreX = (firstStem.stemX + lastStem.stemX) / 2;
-          const centreY = (firstStem.endY + lastStem.endY) / 2;
-          startY = centreY + slope * (firstStem.stemX - centreX);
-          endY = centreY + slope * (lastStem.stemX - centreX);
-        }
-      }
-
-      const minStemLength = STAFF.gap * 2.45;
-      let beamShift = 0;
-      beamPoints.forEach((point, index) => {
-        const noteStep = displayStep(notes[index], clef);
-        const stemX = getStem(positions[index], point.y, noteStep, down).stemX;
-        const projectedY = startY + ((stemX - firstStem.stemX) / ((lastStem.stemX - firstStem.stemX) || 1)) * (endY - startY);
-        if (down) {
-          beamShift = Math.max(beamShift, (point.y + minStemLength) - projectedY);
-        } else {
-          beamShift = Math.min(beamShift, (point.y - minStemLength) - projectedY);
-        }
-      });
-      startY += beamShift;
-      endY += beamShift;
-
-      return {
-        down,
-        start: { x: firstStem.stemX, y: startY },
-        end: { x: lastStem.stemX, y: endY },
-      };
-    }
-
-    function beamYAtX(x, beam) {
-      const progress = (x - beam.start.x) / (beam.end.x - beam.start.x || 1);
-      return beam.start.y + progress * (beam.end.y - beam.start.y);
-    }
-
-    function secondaryBeamForSegment(beam, segment, groupNotes, groupPositions, top, clef) {
-      const secondaryOffset = beam.down ? -STAFF.gap * 0.85 : STAFF.gap * 0.85;
-      const hookLength = STAFF.gap * 1.25;
-      function stemXFor(index) {
-        const noteStep = displayStep(groupNotes[index], clef);
-        const y = yForStep(noteStep, top);
-        return getStem(groupPositions[index], y, noteStep, beam.down).stemX;
-      }
-      const x1 = stemXFor(segment.startIndex);
-      const x2 = segment.isHook
-        ? x1 + (segment.startIndex > 0 ? -hookLength : hookLength)
-        : stemXFor(segment.endIndex);
-      return {
-        down: beam.down,
-        start: { x: x1, y: beamYAtX(x1, beam) + secondaryOffset },
-        end: { x: x2, y: (segment.isHook ? beamYAtX(x1, beam) : beamYAtX(x2, beam)) + secondaryOffset },
-      };
-    }
-
-    function beamPolygonPoints(x1, y1, x2, y2, thickness) {
-      const halfThickness = thickness / 2;
-      return [`${x1},${y1 - halfThickness}`, `${x2},${y2 - halfThickness}`, `${x2},${y2 + halfThickness}`, `${x1},${y1 + halfThickness}`].join(" ");
-    }
-
-    function BeamShape({ beam, colour = "currentColor", opacity = 1 }) {
-      const thickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42));
-      return <polygon points={beamPolygonPoints(beam.start.x - 0.5, beam.start.y, beam.end.x + 0.5, beam.end.y, thickness)} fill={colour} opacity={opacity} />;
-    }
-
-    function TieShape({ firstNote, secondNote, firstX, secondX, top, clef = "treble", colour = "currentColor" }) {
-      if (!firstNote || !secondNote) return null;
-      const firstStep = displayStep(firstNote, clef);
-      const secondStep = displayStep(secondNote, clef);
-      const firstY = yForStep(firstStep, top);
-      const secondY = yForStep(secondStep, top);
-      const averageStep = (firstStep + secondStep) / 2;
-      const tieAbove = stemDown(averageStep);
-      const leftX = Math.min(firstX, secondX) + STAFF.gap * 0.08;
-      const rightX = Math.max(firstX, secondX) - STAFF.gap * 0.08;
-      const width = Math.max(STAFF.gap * 1.4, rightX - leftX);
-      const baseY = (firstY + secondY) / 2 + (tieAbove ? -STAFF.gap * 1.0 : STAFF.gap * 1.0);
-      const archDepth = clamp(width * 0.12, STAFF.gap * 0.55, STAFF.gap * 1.45);
-      const thickness = Math.max(1.6, STAFF.gap * 0.22);
-      const outerY = baseY + (tieAbove ? -archDepth : archDepth);
-      const innerY = outerY + (tieAbove ? thickness : -thickness);
-      const path = [
-        `M ${leftX} ${baseY}`,
-        `C ${leftX + width * 0.22} ${outerY}, ${rightX - width * 0.22} ${outerY}, ${rightX} ${baseY}`,
-        `C ${rightX - width * 0.22} ${innerY}, ${leftX + width * 0.22} ${innerY}, ${leftX} ${baseY}`,
-        "Z",
-      ].join(" ");
-      return <path d={path} fill={colour} transform={`translate(0 ${tieAbove ? -1 : 1})`} pointerEvents="none" />;
-    }
-
-    function LedgerLines({ x, step, top, colour = "currentColor", opacity = 1 }) {
-      const ledgerSteps = [];
-      for (let ledgerStep = -2; ledgerStep >= step; ledgerStep -= 2) ledgerSteps.push(ledgerStep);
-      for (let ledgerStep = 10; ledgerStep <= step; ledgerStep += 2) ledgerSteps.push(ledgerStep);
-      const settings = sharedSymbolConfig("ledgerLines");
-      const xOffset = STAFF.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
-      const yOffset = STAFF.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
-      const halfWidth = (STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineWidthScale || 2.4) * Number(settings.widthScale || 1)) / 2;
-      const thickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11) * Number(settings.heightScale || 1));
-      return <g>{ledgerSteps.map((ledgerStep) => <line key={ledgerStep} x1={x - halfWidth + xOffset} x2={x + halfWidth + xOffset} y1={yForStep(ledgerStep, top) + yOffset} y2={yForStep(ledgerStep, top) + yOffset} stroke={colour} strokeWidth={thickness} strokeLinecap="butt" opacity={opacity} />)}</g>;
-    }
-
-        function Accidental({ value, x, y, colour = "currentColor" }) {
-            if (!value) return null;
-            const sharpOffsetX = value === 1 ? -2 : 0;
-            return <CalibratedSymbol symbolKey={value === 1 ? "sharpInScore" : "flatInScore"} x={x + sharpOffsetX} y={y} colour={colour} />;
-        }
-
-    function Note({ note, x, top, colour = "currentColor", opacity = 1, active = false, faint = false, showFlag = true, forcedDown = null, forcedEndY = null, scale = 1, clef = "treble" }) {
-      if (!note) return null;
-      const step = displayStep(note, clef);
-      const y = note.rest ? yForStep(4, top) : yForStep(step, top);
-      const down = forcedDown ?? stemDown(step);
-      const beamed = isBeamableRhythm(note.rhythm) && !showFlag;
-      const stem = getStem(x, y, step, down, forcedEndY);
-      const dotKey = step % 2 === 0 ? "augmentationDotLine" : "augmentationDotSpace";
-      const dotY = step % 2 === 0 ? y - STAFF.gap * 0.25 : y;
-      const noteColour = active ? COLOUR.blue : colour;
-      const stemThickness = Math.max(1, STAFF.gap * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12));
-      return (
-        <g pointerEvents="none" opacity={faint ? 0.32 : opacity} transform={scale !== 1 ? `translate(${x} ${y}) scale(${scale}) translate(${-x} ${-y})` : undefined}>
-          {!note.rest && <LedgerLines x={x} step={step} top={top} colour={noteColour} />}
-          <Accidental value={note.writtenAccidental} x={x - STAFF.gap * 1.75} y={y} colour={noteColour} />
-          <CalibratedSymbol symbolKey={noteSymbolKey(note.rhythm, down, beamed)} x={x} y={y} colour={noteColour} />
-          {(note.rhythm === "dottedMinim" || note.rhythm === "dottedCrotchet") && <CalibratedSymbol symbolKey={dotKey} x={x + STAFF.gap * 1.3} y={dotY} colour={noteColour} />}
-          {beamed && <line x1={stem.stemX} x2={stem.stemX} y1={stem.startY} y2={stem.endY} stroke={noteColour} strokeWidth={stemThickness} />}
-        </g>
-      );
-    }
-
-    function Staff({ top, systemIndex, question, displayBarCount = BARS_PER_SYSTEM, colour = "currentColor" }) {
-      const finalBar = Math.min(systemIndex * BARS_PER_SYSTEM + BARS_PER_SYSTEM - 1, question.bars.length - 1);
-      const staffEnd = barStart(finalBar, displayBarCount) + barWidth(finalBar, displayBarCount);
-      const clef = question.clef ?? "treble";
-      return (
-        <g>
-          {[0, 1, 2, 3, 4].map((line) => <line key={line} x1={STAFF.left} x2={staffEnd} y1={top + line * STAFF.gap} y2={top + line * STAFF.gap} stroke="currentColor" strokeWidth="1.25" />)}
-          <CalibratedSymbol symbolKey={clef === "bass" ? "fClef" : "gClef"} x={STAFF.left + 32} y={clef === "bass" ? yForStep(6, top) : yForStep(2, top)} colour={colour} />
-          {systemIndex === 0 && <KeySignature keySignature={question.key} top={top} clef={clef} colour={colour} />}
-          {systemIndex === 0 && <TimeSignature signature={question.timeSignature} top={top} colour={colour} />}
-        </g>
-      );
-    }
-
-    function KeySignature({ keySignature, top, clef = "treble", colour = "currentColor" }) {
-      return <g>{keySignature.signature.map((item, index) => {
-        const clefStep = clef === "bass" ? item.step - 2 : item.step;
-        return <CalibratedSymbol key={`${item.type}-${index}`} symbolKey={item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature"} x={STAFF.left + 54 + index * KEY_SIGNATURE_SPACING} y={yForStep(clefStep, top)} colour={colour} />;
-      })}</g>;
-    }
-
-    function TimeSignature({ signature, top, colour = "currentColor" }) {
-      const key = `timeSig${signature.top}${signature.bottom}`;
-      const settings = sharedSymbolConfig(key);
-      const topGlyph = sharedSymbolForKey(`timeSig${signature.top}`);
-      const bottomGlyph = sharedSymbolForKey(`timeSig${signature.bottom}`);
-      const x = calibrationAnchorX(key) + STAFF.gap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0);
-      const y = calibrationAnchorY(key, top) + STAFF.gap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0);
-      const fontSize = STAFF.gap * Number(settings.fontSizeScale || 3.4);
-      return <g pointerEvents="none"><text className="music-symbol" x={x} y={y - fontSize * 0.14} fill={colour} fontSize={fontSize} textAnchor="middle">{topGlyph}</text><text className="music-symbol" x={x} y={y + fontSize * 0.43} fill={colour} fontSize={fontSize} textAnchor="middle">{bottomGlyph}</text></g>;
-    }
-
-    function BarNotes({ bar, notes, positions, top, colour = "currentColor", feedback = null, hidden = false, activeNoteId = null, forceStemUp = false, timeSignature = null, clef = "treble" }) {
-      const groups = getQuaverGroups(hidden ? bar.notes : notes, timeSignature);
-      const shownAccidentals = new Set();
-      return (
-        <g>
-          {notes.map((note, index) => {
-            if (!note) return null;
-            const accidentalKey = `${note.letter}:${note.writtenAccidental}`;
-            const showAccidental = Boolean(note.writtenAccidental) && !shownAccidentals.has(accidentalKey);
-            if (note.writtenAccidental) shownAccidentals.add(accidentalKey);
-            const displayNote = showAccidental ? note : { ...note, writtenAccidental: null };
-            const group = groupContaining(groups, index);
-            const groupNotes = group ? notes.slice(group.start, group.end + 1) : [];
-            const groupPositions = group ? positions.slice(group.start, group.end + 1) : [];
-            const beam = group && groupNotes.every(Boolean) ? getBeam(groupNotes, groupPositions, top, forceStemUp ? false : null, clef) : null;
-            const noteStemDown = forceStemUp ? false : beam?.down ?? null;
-            const noteStep = displayStep(note, clef);
-            const stem = beam ? getStem(positions[index], yForStep(noteStep, top), noteStep, beam.down) : null;
-            const forcedEndY = beam && stem ? beamYAtX(stem.stemX, beam) : null;
-            const expected = bar.notes[index];
-            const resultColour = feedback && hidden ? (note.step === expected?.step ? COLOUR.green : COLOUR.red) : colour;
-            return <Note key={note.id ?? `${bar.barIndex}-${index}`} note={displayNote} x={positions[index]} top={top} colour={resultColour} active={activeNoteId === note.id} showFlag={!beam} forcedDown={noteStemDown} forcedEndY={forcedEndY} opacity={feedback && hidden && note.step !== expected?.step ? 0.58 : 1} clef={clef} />;
-          })}
-          {groups.map((group, index) => {
-            const groupNotes = notes.slice(group.start, group.end + 1);
-            if (!groupNotes.every(Boolean)) return null;
-            const beam = getBeam(groupNotes, positions.slice(group.start, group.end + 1), top, forceStemUp ? false : null, clef);
-            const groupCorrect = groupNotes.every((note, noteIndex) => note?.step === bar.notes[group.start + noteIndex]?.step);
-            const beamColour = feedback && hidden ? (groupCorrect ? COLOUR.green : COLOUR.red) : colour;
-            return (
-              <g key={`beam-${bar.barIndex}-${index}`}>
-                <BeamShape beam={beam} colour={beamColour} />
-                {secondaryBeamSegments(groupNotes).map((segment, segmentIndex) => (
-                  <BeamShape
-                    key={`secondary-${segmentIndex}`}
-                    beam={secondaryBeamForSegment(beam, segment, groupNotes, positions.slice(group.start, group.end + 1), top, clef)}
-                    colour={beamColour}
-                  />
-                ))}
-              </g>
-            );
-          })}
-          {notes.map((note, index) => {
-            if (!note?.tieToNext || !notes[index + 1]) return null;
-            const expected = bar.notes[index];
-            const nextExpected = bar.notes[index + 1];
-            const tieCorrect = note.step === expected?.step && notes[index + 1]?.step === nextExpected?.step;
-            const tieColour = feedback && hidden ? (tieCorrect ? COLOUR.green : COLOUR.red) : colour;
-            return <TieShape key={`tie-${bar.barIndex}-${index}`} firstNote={note} secondNote={notes[index + 1]} firstX={positions[index]} secondX={positions[index + 1]} top={top} clef={clef} colour={tieColour} />;
-          })}
-        </g>
-      );
     }
 
     function RhythmGuide({ bar, positions, top, activeNoteId, timeSignature, clef = "treble" }) {
@@ -2306,6 +1257,6 @@
     ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
 
-  <script src="./footer.js?v=1.3"></script>
+  <script src="./footer.js?v=20261005-update-history"></script>
 </body>
 </html>

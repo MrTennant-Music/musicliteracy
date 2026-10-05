@@ -44,15 +44,15 @@
     }, [refs, handlers]);
   }
 
-  function MenuPanel({ title, children, position = "left-0", variant = "level", dataMenuPanel = false, className: extraClass = "" }) {
-    const panelClassName = `${variant === "customise" ? CUSTOMISE_MENU_PANEL_CLASS : MENU_PANEL_CLASS} ${position} ${extraClass}`.trim();
+  function MenuPanel({ title, children, position = "left-0", variant = "level", dataMenuPanel = false, floating = false, className: extraClass = "" }) {
     const anchorRef = useRef(null);
     const panelRef = useRef(null);
     const [floatingStyle, setFloatingStyle] = useState(null);
-    const isFloatingCustomise = variant === "customise" && typeof ReactDOM !== "undefined" && ReactDOM.createPortal;
+    const isFloating = Boolean((variant === "customise" || floating) && typeof ReactDOM !== "undefined" && ReactDOM.createPortal);
+    const panelClassName = `${variant === "customise" ? CUSTOMISE_MENU_PANEL_CLASS : MENU_PANEL_CLASS} ${position} ${isFloating ? "hub-menu-panel-floating" : ""} ${extraClass}`.trim();
 
     useLayoutEffect(() => {
-      if (!isFloatingCustomise) return undefined;
+      if (!isFloating) return undefined;
       function updatePosition() {
         const anchor = anchorRef.current;
         if (!anchor) return;
@@ -74,16 +74,16 @@
         window.removeEventListener("resize", updatePosition);
         window.removeEventListener("scroll", updatePosition, true);
       };
-    }, [isFloatingCustomise]);
+    }, [isFloating]);
 
     const props = { className: panelClassName };
-    if (dataMenuPanel || isFloatingCustomise) props["data-menu-panel"] = true;
+    if (dataMenuPanel || isFloating) props["data-menu-panel"] = true;
     const panel = e(
       "div",
       {
         ...props,
-        ref: isFloatingCustomise ? panelRef : undefined,
-        style: isFloatingCustomise ? floatingStyle || { left: "-9999px", top: "-9999px" } : undefined,
+        ref: isFloating ? panelRef : undefined,
+        style: isFloating ? floatingStyle || { left: "-9999px", top: "-9999px" } : undefined,
       },
       title != null && e(
         "div",
@@ -92,7 +92,7 @@
       ),
       children,
     );
-    if (!isFloatingCustomise) return panel;
+    if (!isFloating) return panel;
     return e(React.Fragment, null, e("span", { ref: anchorRef, className: "hub-menu-portal-anchor", "aria-hidden": true }), ReactDOM.createPortal(panel, document.body));
   }
 
@@ -247,7 +247,7 @@
     };
   }
 
-  function MenuToggleRow({ glyph, label, checked, disabled = false, onChange, labelWidthClass = "min-w-[145px]", profileKey = null }) {
+  function MenuToggleRow({ glyph, showGlyph = true, label, checked, disabled = false, onChange, labelWidthClass = "min-w-[145px]", profileKey = null }) {
     const toggleKey = profileKey ?? (typeof label === "string" ? label : null);
     useEffect(() => {
       if (!toggleKey) return undefined;
@@ -274,7 +274,7 @@
       e(
         "span",
         { className: `hub-toggle-label ${labelWidthClass}` },
-        e("span", { className: "hub-toggle-glyph flex items-center justify-center" }, glyph),
+        showGlyph && e("span", { className: "hub-toggle-glyph flex items-center justify-center" }, glyph),
         e("span", { className: "leading-none" }, label),
       ),
       e(

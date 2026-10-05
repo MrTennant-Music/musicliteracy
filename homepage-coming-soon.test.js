@@ -6,14 +6,14 @@ const fs = require("node:fs");
 
 const source = fs.readFileSync("index.html", "utf8");
 
-test("Aural Recognition stays planned while Family Fortunes is playable at every level", () => {
-  assert.match(source, /title: "Aural Recognition", desc: "Test your ears on chords, scales, tonalities and more\."[\s\S]*?comingSoon: true/);
-  assert.match(source, /title: "Family Fortunes", desc: "Challenge another team to name musical concepts linked to each question\.", keywords: "family fortunes national 3 national 4 national 5 higher advanced higher game show quiz popular answers teams music concepts", audio: true, disabled: \[\]/);
+test("Aural Recognition and Family Fortunes are playable at every level", () => {
+  assert.match(source, /href: "aural-recognition\.html", title: "Aural Recognition", desc: "Test your ears on chords, scales, tonalities and more\.", keywords: "aural recognition listening chords scales tonality harmonic devices", audio: true, disabled: \[\]/);
+  assert.match(source, /title: "Family Fortunes", desc: "Name the most popular musical answers in this game-show challenge\.", keywords: "family fortunes national 3 national 4 national 5 higher advanced higher game show quiz popular answers teams music concepts", audio: true, disabled: \[\]/);
   assert.match(source, /"Aural Recognition": "aural-recognition-icon\.svg"/);
   assert.match(source, /"Family Fortunes": "familyfortunes-icon\.svg"/);
   assert.match(source, /app\.comingSoon \? 'disabled aria-disabled="true"'/);
   assert.match(source, /Coming soon/);
-  assert.equal(fs.existsSync("aural-recognition.html"), false);
+  assert.equal(fs.existsSync("aural-recognition.html"), true);
   assert.equal(fs.existsSync("familyfortunes.html"), true);
 });
 

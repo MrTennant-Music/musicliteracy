@@ -1,0 +1,1396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1280" />
+  <link rel="stylesheet" href="./desktop-layout.css?v=4" />
+  <title>Aural Recognition</title>
+  <link rel="icon" type="image/svg+xml" href="./aural-recognition-icon.svg" />
+  <link rel="apple-touch-icon" href="./aural-recognition-icon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./desktop-layout.js?v=2"></script>
+  <link rel="stylesheet" href="./hub-ui.css?v=20261004-floating-topics" />
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="./hub-input.js?v=1.3"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
+  <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-menu.js?v=20261004-scales-menu-labels"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="./shared-notation-config.js"></script>
+  <script src="./melodic-dictation-generator.js?v=20261004-gentler-polytonality"></script>
+  <script src="./melodic-dictation-notation.js?v=20261004-polytonal-score"></script>
+  <script src="./time-signatures-listening.js?v=20261004-listening"></script>
+  <script src="./tempo-changes-listening.js?v=20261004-rubato"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+    @font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+    .music-symbol { font-family: "Bravura", serif; font-weight: 400; dominant-baseline: alphabetic; text-rendering: geometricPrecision; }
+    .hub-menu-panel.recognition-topic-panel { width: 280px; max-width: 280px; }
+    .recognition-exercise-bravura { position: relative; display: inline-block; color: #020617; font-family: "Bravura", serif; font-weight: 400; line-height: 1; }
+    .recognition-exercise-bravura-glyph { position: absolute; left: 50%; top: 50%; line-height: 1; transform: translate(-50%, calc(-50% + 3px)); }
+    .recognition-question { opacity: 1; transition: opacity 280ms ease; }
+    .recognition-question.is-changing { opacity: 0; pointer-events: none; }
+    @media (prefers-reduced-motion: reduce) {
+      .recognition-question { transition: none; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useEffect, useMemo, useRef, useState } = React;
+const useClickOutside = window.MLH.useClickOutside;
+const W = 920, H = 250, GAP = 11, BAR_COUNT = 4, BARS_PER_SYSTEM = 4;
+const STAFF_LEFT = 58, STAFF_RIGHT = 870, CLEF_X = STAFF_LEFT + 32, KEY_SIG_X = STAFF_LEFT + 62, TIME_SIG_X = STAFF_LEFT + 116, MUSIC_START = STAFF_LEFT + 144, SYSTEM_TOPS = [92];
+const COLOUR = { green: "#16a34a", red: "#dc2626", blue: "#2563eb", black: "#000" };
+const NOTE = { rx: 8.2, stemLength: 21 };
+const SHARED_SYMBOLS = window.BRAVURA_SYMBOLS || {};
+const SHARED_CONFIG = window.SHARED_NOTATION_CONFIG || { symbols: {}, drawing: {} };
+const MEDAL_THRESHOLDS = [2, 4, 6, 10];
+const ASSET = { appIcon: "./aural-recognition-icon.svg", level: "https://themusicliteracyhub.netlify.app/levels.svg", customise: "https://themusicliteracyhub.netlify.app/customise.svg", next: "https://themusicliteracyhub.netlify.app/next.svg", eye: "./eye.svg", metronome: "./metronome.svg", tempo: "./tempo.svg", audio: "./audio-svgrepo-com.svg?v=20260722-smaller15", bronze: "https://themusicliteracyhub.netlify.app/bronze.svg", silver: "https://themusicliteracyhub.netlify.app/silver.svg", gold: "https://themusicliteracyhub.netlify.app/gold.svg", diamond: "https://themusicliteracyhub.netlify.app/diamond.svg" };
+function r(items) { return items[Math.floor(Math.random() * items.length)]; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function midiToFrequency(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+function yForStep(step, top) { return top + GAP * 4 - step * (GAP / 2); }
+function barWidth() { return (STAFF_RIGHT - MUSIC_START) / BARS_PER_SYSTEM; }
+function medalSoundForStreak(streak) { if (streak >= 10) return "platinum"; if (streak >= 6) return "gold"; if (streak >= 4) return "silver"; if (streak >= 2) return "bronze"; return null; }
+function playFeedbackSound(correct, celebration = false, medal = null) { window.MLH?.playFeedbackSound?.(correct, celebration, medal); }
+function oscillator(ctx, gainNode, frequency, start, duration, volume = 0.035) { window.MLH?.playPianoFrequency?.(ctx, gainNode, frequency, start, duration, volume); }
+function playClick(ctx, gainNode, start, accented) { window.MLH?.playMetronomeClick?.(ctx, gainNode, start, accented); }
+function sharedActualSymbolKey(key) { if (key === "flatInScore" || key === "flatKeySignature") return "flat"; if (key === "naturalInScore") return "natural"; if (key === "sharpInScore" || key === "sharpKeySignature") return "sharp"; if (key === "noteheadBlackStemUp" || key === "noteheadBlackStemDown") return "noteheadBlack"; if (key === "augmentationDotLine" || key === "augmentationDotSpace") return "augmentationDot"; return key; }
+function sharedSettingsKey(key) { if (key === "flatKeySignature" || key === "sharpKeySignature") return SHARED_CONFIG.symbols?.keySignatureAccidentals ? "keySignatureAccidentals" : key; if (key === "flatInScore" || key === "naturalInScore" || key === "sharpInScore") return SHARED_CONFIG.symbols?.scoreAccidentals ? "scoreAccidentals" : key; return key; }
+function sharedSymbolConfig(key) { const symbols = SHARED_CONFIG.symbols || {}; const settingsKey = sharedSettingsKey(key); return symbols[settingsKey] || symbols[sharedActualSymbolKey(settingsKey)] || { fontSizeScale: 3.4, xOffsetScale: 0, yOffsetScale: 0, widthScale: 1, heightScale: 1, opticalXOffset: 0, opticalYOffset: 0 }; }
+function sharedSymbolForKey(key) { return SHARED_SYMBOLS[sharedActualSymbolKey(key)] || ""; }
+function CalibratedSymbol({ symbolKey, x, y, colour = "currentColor", opacity = 1, lineGap = GAP, settingOverrides = {} }) { const glyph = sharedSymbolForKey(symbolKey); if (!glyph) return null; const settings = { ...sharedSymbolConfig(symbolKey), ...settingOverrides }; const adjustedX = x + lineGap * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0); const adjustedY = y + lineGap * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0); const fontSize = lineGap * Number(settings.fontSizeScale || 3.4); const widthScale = Number(settings.widthScale || 1); const heightScale = Number(settings.heightScale || 1); return <text className="music-symbol" x={adjustedX} y={adjustedY} fill={colour} opacity={opacity} fontSize={fontSize} textAnchor="middle" transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`} pointerEvents="none">{glyph}</text>; }
+function CalibratedTimeSignature({ x, y }) { const settings = sharedSymbolConfig("timeSig44"); const adjustedX = x + GAP * Number(settings.xOffsetScale || 0) + Number(settings.opticalXOffset || 0); const adjustedY = y + GAP * Number(settings.yOffsetScale || 0) + Number(settings.opticalYOffset || 0); const fontSize = GAP * Number(settings.fontSizeScale || 3.5); const widthScale = Number(settings.widthScale || 1); const heightScale = Number(settings.heightScale || 1); return <g transform={`translate(${adjustedX} ${adjustedY}) scale(${widthScale} ${heightScale}) translate(${-adjustedX} ${-adjustedY})`} fill="currentColor"><text className="music-symbol" x={adjustedX} y={adjustedY - fontSize * 0.14} fontSize={fontSize} textAnchor="middle">{sharedSymbolForKey("timeSig4")}</text><text className="music-symbol" x={adjustedX} y={adjustedY + fontSize * 0.43} fontSize={fontSize} textAnchor="middle">{sharedSymbolForKey("timeSig4")}</text></g>; }
+function noteSymbolKey(rhythm, down, beamed = false) { if (rhythm === "semibreve") return "wholeNote"; if (rhythm === "minim" || rhythm === "dottedMinim") return down ? "halfNoteStemDown" : "halfNoteStemUp"; if (rhythm === "quaver" && beamed) return down ? "noteheadBlackStemDown" : "noteheadBlackStemUp"; if (rhythm === "quaver") return down ? "eighthNoteStemDown" : "eighthNoteStemUp"; return down ? "quarterNoteStemDown" : "quarterNoteStemUp"; }
+function LedgerLines({ x, step, top, colour = "currentColor" }) { const ledgerSteps = []; for (let s = -2; s >= step; s -= 2) ledgerSteps.push(s); for (let s = 10; s <= step; s += 2) ledgerSteps.push(s); const settings = sharedSymbolConfig("ledgerLines"); const halfWidth = (GAP * Number(SHARED_CONFIG.drawing?.ledgerLineWidthScale || 2.4) * Number(settings.widthScale || 1)) / 2; const thickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.ledgerLineThicknessScale || 0.11) * Number(settings.heightScale || 1)); return <g>{ledgerSteps.map(s => <line key={s} x1={x - halfWidth} x2={x + halfWidth} y1={yForStep(s, top)} y2={yForStep(s, top)} stroke={colour} strokeWidth={thickness}/>)}</g>; }
+function Accidental({ value, x, y, colour = "currentColor" }) { if (!value) return null; return <CalibratedSymbol symbolKey={value === 1 ? "sharpInScore" : "flatInScore"} x={x + (value === 1 ? -2 : 0)} y={y} colour={colour}/>; }
+function KeySignature({ keySignature, top }) { return <g>{(keySignature.signature || []).map((item, index) => <CalibratedSymbol key={`${item.type}-${index}`} symbolKey={item.type === "sharp" ? "sharpKeySignature" : "flatKeySignature"} x={KEY_SIG_X + index * 14} y={yForStep(item.step, top)}/>)}</g>; }
+function TimeSignature({ top }) { return <CalibratedTimeSignature x={TIME_SIG_X} y={top + 14.8}/>; }
+function Staff({ top, question }) { const finalX = MUSIC_START + BARS_PER_SYSTEM * barWidth(); return <g>{[0,1,2,3,4].map(i => <line key={i} x1={STAFF_LEFT} x2={STAFF_RIGHT} y1={top + i * GAP} y2={top + i * GAP} stroke="currentColor" strokeWidth="1.2"/>)}<CalibratedSymbol symbolKey="gClef" x={CLEF_X} y={yForStep(2, top)}/><KeySignature keySignature={question.key} top={top}/><TimeSignature top={top}/>{[1,2,3].map(i => <line key={i} x1={MUSIC_START + i * barWidth()} x2={MUSIC_START + i * barWidth()} y1={top} y2={top + GAP * 4} stroke="currentColor" strokeWidth="1.2"/>)}<line x1={finalX - 5} x2={finalX - 5} y1={top - 0.5} y2={top + GAP * 4 + 0.5} stroke="currentColor" strokeWidth="1.4"/><line x1={finalX} x2={finalX} y1={top - 0.5} y2={top + GAP * 4 + 0.5} stroke="currentColor" strokeWidth="4"/></g>; }
+function stemData(note, x, y, stemDownOverride = null, forcedStemEndY = null) { const stemDown = stemDownOverride ?? note.step > 4; const isDownQuaver = stemDown && note.rhythm === "quaver"; let stemX = stemDown ? x - NOTE.rx + 2 : x + NOTE.rx; if (stemDown) { stemX += 1.25; if (note.rhythm === "minim") stemX -= 1; else if (note.rhythm === "quaver") stemX -= 2; else if (note.rhythm === "crotchet" || note.rhythm === "dottedCrotchet") stemX -= 1; } else { stemX -= 1.65; } const naturalStemEndY = stemDown ? y + NOTE.stemLength : y - NOTE.stemLength; const adjustedStemEndY = forcedStemEndY ?? naturalStemEndY; return { down:stemDown, stemDown, stemX:isDownQuaver ? stemX + 1 : stemX, startY:y, stemEndY:stemDown ? adjustedStemEndY + (isDownQuaver ? 3 : 5) : adjustedStemEndY - 4 }; }
+function getQuaverGroup(notes, index) { if (notes[index]?.rhythm !== "quaver") return null; let start = index, end = index; while (start > 0 && notes[start - 1]?.rhythm === "quaver") start--; while (end < notes.length - 1 && notes[end + 1]?.rhythm === "quaver") end++; return end > start ? { start, end } : null; }
+function beamYAtX(x, start, end) { if (!start || !end || start.x === end.x) return start?.y ?? end?.y ?? 0; return start.y + ((x - start.x) / (end.x - start.x)) * (end.y - start.y); }
+function notesWithBarAccidentals(notes) { const shown = new Set(); return notes.map(note => { if (!note.writtenAccidental) return note; const key = `${note.letter}:${note.writtenAccidental}`; if (shown.has(key)) return { ...note, writtenAccidental:null }; shown.add(key); return note; }); }
+function calculateBarPositions(notes, startX, endX) { const totalSpacing = notes.reduce((sum, note, index) => { const isGroupedQuaver = note.rhythm === "quaver" && (notes[index - 1]?.rhythm === "quaver" || notes[index + 1]?.rhythm === "quaver"); const boost = isGroupedQuaver ? 1.15 : 1; const accidentalSpace = note.writtenAccidental ? 0.45 : 0; return sum + rhythmInfo(note.rhythm).spacing * boost + accidentalSpace; }, 0); const unit = Math.max(1, endX - startX - 18) / Math.max(1, totalSpacing); let cursor = startX + 12; return notes.map((note, index) => { if (note.writtenAccidental) cursor += unit * 0.45; const x = cursor; const isGroupedQuaver = note.rhythm === "quaver" && (notes[index - 1]?.rhythm === "quaver" || notes[index + 1]?.rhythm === "quaver"); const boost = isGroupedQuaver ? 1.15 : 1; cursor += rhythmInfo(note.rhythm).spacing * unit * boost; return x; }); }
+function getLayout(question) { const width = barWidth(); const positions = {}; question.bars.forEach((bar, barIndex) => { const displayNotes = notesWithBarAccidentals(bar.notes); const startX = MUSIC_START + barIndex * width + 10; const endX = MUSIC_START + (barIndex + 1) * width - 7; const xs = calculateBarPositions(displayNotes, startX, endX); bar.notes.forEach((note, noteIndex) => { positions[note.id] = { x:xs[noteIndex], y:yForStep(note.step, SYSTEM_TOPS[0]), step:note.step }; }); }); return { positions, barWidth:width }; }
+function getPositionedNotes(bar, layout) { return notesWithBarAccidentals(bar.notes).map(note => ({ ...note, x:layout.positions[note.id].x })); }
+function getBeamData(notes, group) { const groupNotes = notes.slice(group.start, group.end + 1); const steps = groupNotes.map(note => note.step); const averageStep = steps.reduce((sum, step) => sum + step, 0) / steps.length; const down = averageStep > 4; const stems = groupNotes.map(note => stemData(note, note.x, yForStep(note.step, SYSTEM_TOPS[0]), down)); const directions = steps.slice(1).map((step, index) => Math.sign(step - steps[index])).filter(direction => direction !== 0); const changesDirection = directions.some((direction, index) => index > 0 && direction !== directions[index - 1]); const isStepwise = steps.every((step, index) => index === 0 || Math.abs(step - steps[index - 1]) <= 2); const extend = 0.5; if (changesDirection || !isStepwise) { const anchorY = stems.reduce((sum, stem) => sum + stem.stemEndY, 0) / stems.length; return { down, stemDown:down, start:{ x:stems[0].stemX - extend, y:anchorY }, end:{ x:stems.at(-1).stemX + extend, y:anchorY } }; } const sortedSteps = [...steps].sort((a, b) => a - b); const anchorStep = sortedSteps[Math.floor(sortedSteps.length / 2)]; const anchorIndex = steps.findIndex(step => step === anchorStep); const anchorStem = stems[anchorIndex]; const firstStem = stems[0]; const lastStem = stems.at(-1); const slope = clamp((steps.at(-1) - steps[0]) * -1.2, -4, 4); const slopePerX = slope / Math.max(1, lastStem.stemX - firstStem.stemX); return { down, stemDown:down, start:{ x:firstStem.stemX - extend, y:anchorStem.stemEndY - slopePerX * (anchorStem.stemX - firstStem.stemX) }, end:{ x:lastStem.stemX + extend, y:anchorStem.stemEndY + slopePerX * (lastStem.stemX - anchorStem.stemX) } }; }
+function Note({ note, position, active=false, beamed=false, stemDownOverride=null, forcedStemEndY=null }) { const top = SYSTEM_TOPS[0]; const xx = position.x; const yy = position.y - 1; const down = stemDownOverride ?? position.step > 4; const colour = active ? COLOUR.blue : "currentColor"; const dotKey = Math.abs(position.step % 2) === 1 ? "augmentationDotSpace" : "augmentationDotLine"; const dotY = Math.abs(position.step % 2) === 1 ? yy : yy - GAP * 0.25; const stem = stemData(note, xx, yy, down, forcedStemEndY); const stemThickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.stemThicknessScale || 0.12)); return <g opacity={active ? 1 : 0.98}><LedgerLines x={xx} step={position.step} top={top} colour={colour}/><Accidental value={note.writtenAccidental} x={xx - GAP * 1.75} y={yy + 2} colour={colour}/><CalibratedSymbol symbolKey={noteSymbolKey(note.rhythm, stem.stemDown, beamed)} x={xx} y={yy + 1} colour={colour}/>{beamed && <line x1={stem.stemX} x2={stem.stemX} y1={yy} y2={stem.stemEndY} stroke={colour} strokeWidth={stemThickness}/>} {(note.rhythm === "dottedMinim" || note.rhythm === "dottedCrotchet") && <CalibratedSymbol symbolKey={dotKey} x={xx + GAP * 1.35} y={dotY} colour={colour}/>}</g>; }
+function Beam({ beam }) { const beamShift = beam.stemDown ? -1 : 1; const beamYOffset = beam.stemDown ? 5.5 : -1.5; const beamStartX = beam.stemDown ? beam.start.x + beamShift + 1 : beam.start.x + beamShift - 1; const beamEndX = beam.stemDown ? beam.end.x + beamShift + 1 : beam.end.x + beamShift - 1; const beamSettings = sharedSymbolConfig("quaverBeam"); const beamThickness = Math.max(1, GAP * Number(SHARED_CONFIG.drawing?.beamThicknessScale || 0.42) * Number(beamSettings.fontSizeScale || 1)); return <line x1={beamStartX} y1={beam.start.y + beamYOffset} x2={beamEndX} y2={beam.end.y + beamYOffset} stroke="currentColor" strokeWidth={beamThickness} strokeLinecap="butt"/>; }
+function Score({ question, activeNoteId=null }) { const top = SYSTEM_TOPS[0]; const layout = getLayout(question); return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none overflow-visible touch-none"><rect width={W} height={H} fill="transparent"/><Staff top={top} question={question}/>{question.bars.map(bar => { const rendered = new Set(); const notes = getPositionedNotes(bar, layout); return <g key={bar.barIndex}>{notes.map((note, index) => { const group = getQuaverGroup(notes, index); const beam = group ? getBeamData(notes, group) : null; const position = layout.positions[note.id]; const stem = beam ? stemData(note, position.x, position.y, beam.stemDown) : null; let forcedStemEndY = beam && stem ? beamYAtX(stem.stemX, beam.start, beam.end) : null; if (beam && stem && forcedStemEndY !== null) { const stemLength = Math.abs(forcedStemEndY - position.y); if (stemLength > 24) forcedStemEndY = stem.stemDown ? position.y + 24 : position.y - 24; if (stemLength < 15) forcedStemEndY = stem.stemDown ? position.y + 15 : position.y - 15; } return <React.Fragment key={note.id}><Note note={note} position={position} active={activeNoteId === note.id} beamed={Boolean(group)} stemDownOverride={beam?.stemDown ?? null} forcedStemEndY={forcedStemEndY}/>{group && group.start === index && !rendered.has(`${bar.barIndex}-${group.start}`) && (() => { rendered.add(`${bar.barIndex}-${group.start}`); return <Beam beam={beam}/>; })()}</React.Fragment>; })}</g>; })}</svg>; }
+function ChordListeningScore({ question, activeNoteId = null }) {
+  const top = SYSTEM_TOPS[0], staffStart = 396, staffEnd = 528, noteX = 477;
+  const fadeId = `chord-staff-fade-${question.id}`;
+  const note = question.notes[0], active = activeNoteId === note.id;
+  const colour = active ? COLOUR.blue : "currentColor";
+  const offsets = new Map();
+  const sorted = note.stack.map((tone, index) => ({ tone, index })).sort((a, b) => a.tone.step - b.tone.step);
+  let cluster = [];
+  function flush() {
+    cluster.forEach((item, index) => offsets.set(item.index, cluster.length > 1 && index % 2 === 1 ? 12 : 0));
+    cluster = [];
+  }
+  sorted.forEach(item => {
+    if (cluster.length && item.tone.step - cluster.at(-1).tone.step !== 1) flush();
+    cluster.push(item);
+  });
+  flush();
+  const accidentals = note.stack.map((tone, index) => ({ tone, index })).filter(item => item.tone.writtenAccidental);
+  function accidentalOffset(index) {
+    const position = accidentals.findIndex(item => item.index === index);
+    if (accidentals.length <= 1 || position < 0) return 0;
+    if (accidentals.length === 2) return position === 0 ? 10 : 0;
+    if (accidentals.length === 3) return position === 1 ? 12 : 0;
+    return position % 2 === 1 ? 12 : 0;
+  }
+  return <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none overflow-visible">
+    <defs><linearGradient id={fadeId} gradientUnits="userSpaceOnUse" x1={staffStart} x2={staffEnd} y1="0" y2="0">
+      <stop offset="0%" stopColor="#000" stopOpacity="1"/>
+      <stop offset="78%" stopColor="#000" stopOpacity="1"/>
+      <stop offset="100%" stopColor="#000" stopOpacity="0"/>
+    </linearGradient></defs>
+    <rect width={W} height={H} fill="transparent"/>
+    <g transform={`translate(${W / 2} ${top + GAP * 2}) scale(2.45) translate(${-W / 2} ${-(top + GAP * 2)})`}>
+      {[0, 1, 2, 3, 4].map(line => <line key={line} x1={staffStart} x2={staffEnd} y1={top + line * GAP} y2={top + line * GAP} stroke={`url(#${fadeId})`} strokeWidth="1.2"/>)}
+      <CalibratedSymbol symbolKey="gClef" x={staffStart + 32} y={yForStep(2, top)}/>
+      {note.stack.map((tone, index) => <g key={index} opacity={active ? 1 : 0.98}>
+        <LedgerLines x={noteX} step={tone.step} top={top} colour={colour}/>
+        <Accidental value={tone.writtenAccidental} x={noteX - GAP * 2.1 - accidentalOffset(index)} y={yForStep(tone.step, top)} colour={colour}/>
+        <CalibratedSymbol symbolKey="wholeNote" x={noteX + (offsets.get(index) || 0)} y={yForStep(tone.step, top)} colour={colour}/>
+      </g>)}
+    </g>
+  </svg>;
+}
+function AnswerOptionLabel({ id }) {
+  const concept = CONCEPTS[id];
+  if (concept.family !== "beatsPerBar") return concept.label;
+  // Reuse the Bravura digits and stacking from Time Signatures answer buttons.
+  return <span className="inline-flex items-center justify-center gap-3">
+    <svg viewBox="0 0 76 84" className="h-7 w-6 shrink-0 overflow-visible" aria-hidden="true" focusable="false">
+      <text className="music-symbol" x="38" y="24" textAnchor="middle" fontSize="56" fill="currentColor">{sharedSymbolForKey(`timeSig${concept.count}`)}</text>
+      <text className="music-symbol" x="38" y="63" textAnchor="middle" fontSize="56" fill="currentColor">{sharedSymbolForKey("timeSig4")}</text>
+    </svg>
+    <span>{concept.label}</span>
+  </span>;
+}
+function MenuSvgGlyph({ src, alt = "" }) {
+  return <img src={src} alt={alt} className="h-[20px] w-[20px] object-contain" />;
+}
+function TempoDropdownRow({ tempo, setTempo, stopAudio }) {
+  const selectedTempo = TEMPOS.find(speed => speed.id === tempo.id) || TEMPOS[1];
+  function cycleTempo() {
+    const currentIndex = TEMPOS.findIndex(speed => speed.id === selectedTempo.id);
+    setTempo(TEMPOS[(currentIndex + 1) % TEMPOS.length]);
+    stopAudio();
+  }
+  return <div className="hub-toggle-row relative min-h-[44px] overflow-visible">
+    <span className="hub-toggle-label min-w-[145px]">
+      <span className="hub-toggle-glyph">
+        <MenuSvgGlyph src={ASSET.tempo} alt="" />
+      </span>
+      <span className="leading-none">Tempo</span>
+    </span>
+    <button
+      type="button"
+      onClick={cycleTempo}
+      className="flex h-7 w-[86px] items-center justify-center rounded-xl border border-stone-300 bg-white px-2.5 text-sm font-bold text-stone-950 shadow-sm"
+    >
+      <span>{selectedTempo.label}</span>
+    </button>
+  </div>;
+}
+
+const LEVELS = {
+  N3: { label: "National 3" },
+  N4: { label: "National 4" },
+  N5: { label: "National 5" },
+  H: { label: "Higher" },
+  AH: { label: "Advanced Higher" },
+};
+const TEMPOS = [{ id:"slow", label:"Adagio", bpm:60 }, { id:"middle", label:"Andante", bpm:90 }, { id:"fast", label:"Allegro", bpm:130 }];
+const CADENCES = {
+  perfect: { label:"Perfect cadence", short:"Perfect", glyph:"V-I", levels:["N5","H","AH"], progression:["V","I"], majorOnly:false, aliases:["perfect","perfectcadence"] },
+  imperfect: { label:"Imperfect cadence", short:"Imperfect", glyph:"-V", levels:["N5","H","AH"], progression:["I","V"], starts:["I","II","IV","VI"], majorOnly:false, aliases:["imperfect","imperfectcadence"] },
+  plagal: { label:"Plagal cadence", short:"Plagal", glyph:"IV-I", levels:["H","AH"], progression:["IV","I"], majorOnly:true, aliases:["plagal","plagalcadence"] },
+  interrupted: { label:"Interrupted cadence", short:"Interrupted", glyph:"V-VI", levels:["H","AH"], progression:["V","VI"], majorOnly:true, aliases:["interrupted","interupted","interuppted","intrupted","intarupted","interruptedcadence","interuptedcadence","interupptedcadence","intruptedcadence","intaruptedcadence"] },
+};
+// Chord definitions, spellings and answer normalisation reused from chords.html.
+const CHORD_TYPES = [
+  { id:"dim7", label:"Diminished 7th", intervals:[0,3,6,9], aliases:["diminished7th","diminishedseventh","dim7","dimseventh"] },
+  { id:"dom7", label:"Dominant 7th", intervals:[0,4,7,10], aliases:["dominant7th","dominantseventh","dom7","domseventh"] },
+  { id:"add6", label:"Added 6th", intervals:[0,4,7,9], aliases:["added6th","addedsixth","add6","added6"] },
+  { id:"aug", label:"Augmented triad", intervals:[0,4,8], aliases:["augmentedtriad","augmented","aug"] },
+  { id:"dim", label:"Diminished triad", intervals:[0,3,6], aliases:["diminishedtriad","diminished","dim","dimtriad"], optional:true, levels:["H","AH"] },
+];
+const CHORD_SPELLINGS = [
+  { root:"C", type:"dom7", tones:[["C",4,0],["E",4,0],["G",4,0],["B",4,-1]] },
+  { root:"C", type:"dim7", tones:[["C",4,0],["E",4,-1],["G",4,-1],["A",4,0]] },
+  { root:"C", type:"dim", tones:[["C",4,0],["E",4,-1],["G",4,-1]] },
+  { root:"C", type:"aug", tones:[["C",4,0],["E",4,0],["G",4,1]] },
+  { root:"C", type:"add6", tones:[["C",4,0],["E",4,0],["G",4,0],["A",4,0]] },
+  { root:"D", type:"dom7", tones:[["D",4,0],["F",4,1],["A",4,0],["C",5,0]] },
+  { root:"D", type:"dim7", tones:[["D",4,0],["F",4,0],["A",4,-1],["C",5,-1]] },
+  { root:"D", type:"dim", tones:[["D",4,0],["F",4,0],["A",4,-1]] },
+  { root:"D", type:"aug", tones:[["D",4,0],["F",4,1],["A",4,1]] },
+  { root:"D", type:"add6", tones:[["D",4,0],["F",4,1],["A",4,0],["B",4,0]] },
+  { root:"E", type:"dom7", tones:[["E",4,0],["G",4,1],["B",4,0],["D",5,0]] },
+  { root:"E", type:"dim7", tones:[["E",4,0],["G",4,0],["B",4,-1],["D",5,-1]] },
+  { root:"E", type:"dim", tones:[["E",4,0],["G",4,0],["B",4,-1]] },
+  { root:"E", type:"aug", tones:[["E",4,0],["G",4,1],["C",5,0]] },
+  { root:"E", type:"add6", tones:[["E",4,0],["G",4,1],["B",4,0],["C",5,1]] },
+  { root:"F", type:"dom7", tones:[["F",4,0],["A",4,0],["C",5,0],["E",5,-1]] },
+  { root:"F", type:"dim7", tones:[["F",4,0],["A",4,-1],["B",4,0],["D",5,0]] },
+  { root:"F", type:"dim", tones:[["F",4,0],["A",4,-1],["C",5,-1]] },
+  { root:"F", type:"aug", tones:[["F",4,0],["A",4,0],["C",5,1]] },
+  { root:"F", type:"add6", tones:[["F",4,0],["A",4,0],["C",5,0],["D",5,0]] },
+  { root:"G", type:"dom7", tones:[["G",4,0],["B",4,0],["D",5,0],["F",5,0]] },
+  { root:"G", type:"dim7", tones:[["G",4,0],["B",4,-1],["D",5,-1],["F",5,-1]] },
+  { root:"G", type:"dim", tones:[["G",4,0],["B",4,-1],["D",5,-1]] },
+  { root:"G", type:"aug", tones:[["G",4,0],["B",4,0],["D",5,1]] },
+  { root:"G", type:"add6", tones:[["G",4,0],["B",4,0],["D",5,0],["E",5,0]] },
+  { root:"A", type:"dom7", tones:[["A",4,0],["C",5,1],["E",5,0],["G",5,0]] },
+  { root:"A", type:"dim7", tones:[["A",4,0],["C",5,0],["E",5,-1],["G",5,-1]] },
+  { root:"A", type:"dim", tones:[["A",4,0],["C",5,0],["E",5,-1]] },
+  { root:"A", type:"aug", tones:[["A",4,0],["C",5,1],["F",5,0]] },
+  { root:"A", type:"add6", tones:[["A",4,0],["C",5,1],["E",5,0],["F",5,1]] },
+  { root:"B", type:"dom7", tones:[["B",4,0],["D",5,1],["F",5,1],["A",5,0]] },
+  { root:"B", type:"dim7", tones:[["B",4,0],["D",5,0],["F",5,0],["A",5,-1]] },
+  { root:"B", type:"dim", tones:[["B",4,0],["D",5,0],["F",5,0]] },
+  { root:"B", type:"aug", tones:[["B",4,0],["D",5,1],["G",5,0]] },
+  { root:"B", type:"add6", tones:[["B",4,0],["D",5,1],["F",5,1],["G",5,1]] },
+];
+function normaliseAHChordTypeAnswer(value){ return String(value||"").trim().toLowerCase().replace(/[\s\-]+/g,"").replace(/7/g,"7th").replace(/6/g,"6th").replace(/7thth/g,"7th").replace(/6thth/g,"6th"); }
+const CHORD_GLYPHS = { add6: "6", dom7: "7", dim7: "°7", aug: "+", dim: "°" };
+const TIME_LISTENING = window.MLH.TimeSignaturesListening;
+const TEMPO_CHANGES = window.MLH.TempoChangesListening;
+// Semitone offsets from the tonic. Each example spans one octave up and down.
+const SCALE_TYPES = {
+  "scale-major": { label: "Major scale", glyph: "M", ascending: [0, 2, 4, 5, 7, 9, 11, 12], aliases: ["major", "major scale"] },
+  "scale-minor": { label: "Minor scale", glyph: "m", ascending: [0, 2, 3, 5, 7, 8, 11, 12], aliases: ["minor", "minor scale", "harmonic minor", "harmonic minor scale", "harmonic", "harmonique minor", "harmonic minior"] },
+  "scale-pentatonic": { label: "Pentatonic scale", glyph: "5", ascending: [0, 2, 4, 7, 9, 12], aliases: ["pentatonic", "pentatonic scale", "major pentatonic", "major pentatonic scale", "pentatonnic", "pentatonic sclae"] },
+  "scale-chromatic": { label: "Chromatic scale", glyph: "12", ascending: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], aliases: ["chromatic", "chromatic scale", "cromatic", "cromatic scale", "chromatic sclae"] },
+  "scale-whole-tone": { label: "Whole-tone scale", glyph: "6", ascending: [0, 2, 4, 6, 8, 10, 12], aliases: ["whole tone", "whole tone scale", "whole-tone", "whole-tone scale", "wholetone", "whole tones", "wholetones", "wholetonescale"] },
+  "scale-melodic-minor": { label: "Melodic minor scale", glyph: "mm", ascending: [0, 2, 3, 5, 7, 9, 11, 12], descending: [12, 10, 8, 7, 5, 3, 2, 0], aliases: ["melodic minor", "melodic minor scale", "melodic", "melodic minior", "melodicminor sclae"] },
+  "scale-harmonic-minor": { label: "Harmonic minor scale", glyph: "hm", ascending: [0, 2, 3, 5, 7, 8, 11, 12], aliases: ["harmonic minor", "harmonic minor scale", "harmonic", "harmonique minor", "harmonic minior", "harmonicminor sclae"] },
+};
+function scaleIdsForLevel(level) {
+  if (level === "N3") return [];
+  const national4 = ["scale-major", "scale-minor", "scale-pentatonic"];
+  if (level === "N4") return national4;
+  const national5 = [...national4, "scale-chromatic", "scale-whole-tone"];
+  if (level === "N5") return national5;
+  // At Higher the explicit harmonic-minor option replaces the earlier Minor label.
+  return [...national5.filter(id => id !== "scale-minor"), "scale-melodic-minor", "scale-harmonic-minor"];
+}
+// Isolated realisations: pitches are diatonic neighbours of the main note.
+// A short acciaccatura is unaccented; an appoggiatura has a sustained, accented first note.
+// Every ornament resolves to a held two-beat main note.
+const ACCIACCATURA_PATTERN = [
+  { pitch: "upper", beats: 0.1, volume: 0.65 },
+  { pitch: "main", beats: 2, volume: 1 },
+];
+const ORNAMENT_TYPES = {
+  "ornament-grace-note": {
+    label: "Grace note", pattern: ACCIACCATURA_PATTERN,
+    aliases: ["grace note", "grace notes", "grace", "gracenote", "grase note", "acciaccatura", "acciacatura", "aciaccatura", "crushed grace note"],
+  },
+  "ornament-trill": {
+    label: "Trill",
+    pattern: [
+      ...Array.from({ length: 14 }, (_, index) => ({ pitch: index % 2 === 0 ? "main" : "upper", beats: 0.125, volume: 0.95 })),
+      { pitch: "main", beats: 2, volume: 1 },
+    ],
+    aliases: ["trill", "trills", "tril", "trill ornament", "shake"],
+  },
+  "ornament-acciaccatura": {
+    label: "Acciaccatura", pattern: ACCIACCATURA_PATTERN,
+    aliases: ["acciaccatura", "acciacatura", "aciaccatura", "aciacatura", "acciaccattura", "acciaccatura ornament", "crushed grace note", "short appoggiatura"],
+  },
+  "ornament-mordent": {
+    label: "Mordent",
+    pattern: [
+      { pitch: "main", beats: 0.125, volume: 0.95 },
+      { pitch: "lower", beats: 0.125, volume: 0.85 },
+      { pitch: "main", beats: 2, volume: 1 },
+    ],
+    aliases: ["mordent", "mordant", "mordent ornament", "lower mordent", "downward mordent"],
+  },
+  "ornament-turn": {
+    label: "Turn",
+    pattern: [
+      { pitch: "upper", beats: 0.25, volume: 0.95 },
+      { pitch: "main", beats: 0.25, volume: 0.95 },
+      { pitch: "lower", beats: 0.25, volume: 0.95 },
+      { pitch: "main", beats: 2, volume: 1 },
+    ],
+    aliases: ["turn", "turn ornament", "gruppetto", "grupetto"],
+  },
+  "ornament-appoggiatura": {
+    label: "Appoggiatura",
+    pattern: [
+      { pitch: "upper", beats: 1, volume: 1.12 },
+      { pitch: "main", beats: 2, volume: 0.95 },
+    ],
+    aliases: ["appoggiatura", "appogiatura", "apoggiatura", "apogiatura", "appoggiattura", "appoggiatura ornament", "leaning note", "long appoggiatura"],
+  },
+};
+function ornamentIdsForLevel(level) {
+  if (["N3", "N4"].includes(level)) return [];
+  if (level === "N5") return ["ornament-grace-note", "ornament-trill"];
+  const higher = ["ornament-acciaccatura", "ornament-trill", "ornament-mordent"];
+  return level === "AH" ? [...higher, "ornament-turn", "ornament-appoggiatura"] : higher;
+}
+const CONCEPTS = {
+  ...Object.fromEntries(Object.entries(CADENCES).map(([id, cadence]) => [id, { ...cadence, family: "cadence" }])),
+  ...Object.fromEntries(CHORD_TYPES.map(chord => [chord.id, { ...chord, short: chord.label, glyph: CHORD_GLYPHS[chord.id], family: "chord" }])),
+  major: { label: "Major", short: "Major", family: "tonality", aliases: ["major", "major tonality", "major key"] },
+  minor: { label: "Minor", short: "Minor", family: "tonality", aliases: ["minor", "minor tonality", "minor key"] },
+  atonal: { label: "Atonal", short: "Atonal", family: "tonality", aliases: ["atonal", "atonality", "a tonal", "atonal tonality", "no key", "no home key", "no tonal centre", "no tonal center", "without a tonal centre", "without a tonal center", "not in a key", "attonal", "atonol", "atonall", "atonnal"] },
+  modal: { label: "Modal", short: "Modal", family: "tonality", aliases: ["modal", "modal tonality", "modality", "modal mode", "dorian", "dorian mode", "dorian tonality", "d dorian", "d dorian mode", "modle", "modall", "modla", "dorien"] },
+  polytonality: { label: "Polytonal or bitonal", short: "Polytonal or bitonal", family: "tonality", aliases: ["polytonality", "polytonal", "poly tonal", "poly tonality", "bitonality", "bitonal", "bi tonal", "bi tonality", "polytonal or bitonal", "bitonal or polytonal", "two keys at once", "two keys at the same time", "two tonal centres", "two tonal centers", "multiple keys", "politonality", "polytonallity", "bitonallity"] },
+  ...Object.fromEntries([2, 3, 4, 5].map(count => {
+    const word = { 2: "two", 3: "three", 4: "four", 5: "five" }[count];
+    return [`beats-${count}`, { label: `${count} beats per bar`, short: `${count} beats per bar`, glyph: String(count), count, family: "beatsPerBar", aliases: [String(count), word, `${count} beats`, `${word} beats`, `${count} beats per bar`, `${word} beats per bar`] }];
+  })),
+  simple: { label: "Simple time", short: "Simple time", family: "metre", aliases: ["simple", "simple time", "simple metre", "simple meter"] },
+  compound: { label: "Compound time", short: "Compound time", family: "metre", aliases: ["compound", "compound time", "compound metre", "compound meter"] },
+  ...Object.fromEntries(Object.entries(SCALE_TYPES).map(([id, scale]) => [id, { ...scale, short: scale.label, family: "scales" }])),
+  ...Object.fromEntries(Object.entries(ORNAMENT_TYPES).map(([id, ornament]) => [id, { ...ornament, short: ornament.label, family: "ornaments" }])),
+  ...TEMPO_CHANGES.concepts,
+};
+const RHYTHMS = {
+  quaver: { beats: 0.5, spacing: 1.45 },
+  crotchet: { beats: 1, spacing: 2.25 },
+  dottedCrotchet: { beats: 1.5, spacing: 3.1 },
+  minim: { beats: 2, spacing: 4 },
+  dottedMinim: { beats: 3, spacing: 6 },
+  semibreve: { beats: 4, spacing: 8 },
+};
+const BAR_PATTERNS = [
+  ["crotchet", "crotchet", "crotchet", "crotchet"],
+  ["minim", "crotchet", "crotchet"],
+  ["crotchet", "crotchet", "minim"],
+  ["dottedMinim", "crotchet"],
+  ["crotchet", "dottedMinim"],
+  ["dottedCrotchet", "quaver", "minim"],
+  ["minim", "dottedCrotchet", "quaver"],
+  ["quaver", "quaver", "crotchet", "crotchet", "crotchet"],
+  ["crotchet", "quaver", "quaver", "crotchet", "crotchet"],
+];
+const NOTE_POOL = [
+  { letter: "C", octave: 4, step: -2, midi: 60 },
+  { letter: "D", octave: 4, step: -1, midi: 62 },
+  { letter: "E", octave: 4, step: 0, midi: 64 },
+  { letter: "F", octave: 4, step: 1, midi: 65 },
+  { letter: "G", octave: 4, step: 2, midi: 67 },
+  { letter: "A", octave: 4, step: 3, midi: 69 },
+  { letter: "B", octave: 4, step: 4, midi: 71 },
+  { letter: "C", octave: 5, step: 5, midi: 72 },
+  { letter: "D", octave: 5, step: 6, midi: 74 },
+  { letter: "E", octave: 5, step: 7, midi: 76 },
+  { letter: "F", octave: 5, step: 8, midi: 77 },
+  { letter: "G", octave: 5, step: 9, midi: 79 },
+  { letter: "A", octave: 5, step: 10, midi: 81 },
+];
+const KEYS = [
+  { id:"C", name:"C major", major:true, tonic:"C", signature:[], chords:{ I:["C", "E", "G"], II:["D", "F", "A"], IV:["F", "A", "C"], V:["G", "B", "D"], VI:["A", "C", "E"] } },
+  { id:"F", name:"F major", major:true, tonic:"F", signature:[{ type:"flat", step:4 }], chords:{ I:["F", "A", "C"], II:["G", "B", "D"], IV:["B", "D", "F"], V:["C", "E", "G"], VI:["D", "F", "A"] } },
+  { id:"G", name:"G major", major:true, tonic:"G", signature:[{ type:"sharp", step:8 }], chords:{ I:["G", "B", "D"], II:["A", "C", "E"], IV:["C", "E", "G"], V:["D", "F", "A"], VI:["E", "G", "B"] } },
+  { id:"Am", name:"A minor", major:false, tonic:"A", signature:[], chords:{ I:["A", "C", "E"], II:["B", "D", "F"], IV:["D", "F", "A"], V:["E", "G", "B"], VI:["F", "A", "C"] }, raised:{ V:{ G:1 } } },
+];
+const SELECTION_STORAGE_KEY = "mlh:aural-recognition:selection";
+function initialSelection() {
+  const params = new URLSearchParams(location.search);
+  let saved = {};
+  try {
+    const value = JSON.parse(window.localStorage.getItem(SELECTION_STORAGE_KEY));
+    if (value && typeof value === "object") saved = value;
+  } catch {}
+  // Explicit links take priority over the last selection saved on this device.
+  const requestedLevel = params.get("level") || saved.level || "N5";
+  const level = typeof requestedLevel === "string" && Object.prototype.hasOwnProperty.call(LEVELS, requestedLevel) ? requestedLevel : "N5";
+  const requestedTopic = params.get("exercise") || saved.topic || "cadence";
+  const validTopic = typeof requestedTopic === "string" && Object.prototype.hasOwnProperty.call(TOPICS, requestedTopic) && !TOPICS[requestedTopic].placeholder ? requestedTopic : "cadence";
+  const topic = topicForLevel(validTopic, level);
+  return { level: levelForTopic(level, topic), topic };
+}
+function conceptIdsForLevel(level) {
+  const beatCounts = [...new Set(TIME_LISTENING.signaturesForLevel(level).map(TIME_LISTENING.pulseCount))].sort((a, b) => a - b).map(count => `beats-${count}`);
+  const tempoChanges = TEMPO_CHANGES.questionConceptIdsForLevel(level);
+  const scales = scaleIdsForLevel(level);
+  const ornaments = ornamentIdsForLevel(level);
+  if (level === "N3") return [...beatCounts, ...tempoChanges];
+  const national4 = ["major", "minor"];
+  if (level === "N4") return [...national4, "simple", "compound", ...beatCounts, ...tempoChanges, ...scales];
+  const national5 = ["perfect", "imperfect", ...national4, "atonal"];
+  const higher = [...national5, "modal", "plagal", "interrupted", "add6", "dom7", "dim7"];
+  const concepts = level === "AH" ? [...higher, "aug", "polytonality"] : level === "H" ? higher : national5;
+  return [...concepts, ...beatCounts, ...tempoChanges, ...scales, ...ornaments];
+}
+function availableConceptIdsForLevel(level) {
+  // Optional chord types appear in Customise without joining the default pool.
+  const optionalChords = CHORD_TYPES.filter(chord => chord.optional && chord.levels.includes(level)).map(chord => chord.id);
+  return [...conceptIdsForLevel(level), ...optionalChords];
+}
+const TOPICS = {
+  cadence: { label: "Cadences", icon: "./cadences-icon.svg" },
+  chord: { label: "Chords", icon: "./chords-icon.svg" },
+  tonality: { label: "Tonalities", icon: "./insert-missing-notes-icon.svg" },
+  beatsPerBar: { label: "Beats Per Bar", icon: "./time-signatures-icon.svg" },
+  scales: { label: "Scales", icon: "./scale-degrees-icon.svg" },
+  ornaments: { label: "Ornaments", glyph: "\uE566" },
+  metre: { label: "Metres", icon: "./barlines-icon.svg" },
+  tempoChanges: { label: "Tempo Changes", icon: "./tempo-icon.svg" },
+};
+function ExerciseIcon({ topic, menu = false }) {
+  const sizeClass = menu ? "h-[38px] w-[38px]" : "h-[26px] w-[26px]";
+  // Reuse Concept Recall's ornament glyph and optical vertical offset.
+  if (TOPICS[topic].glyph) return <span aria-hidden="true" className={`${sizeClass} recognition-exercise-bravura`} style={{ fontSize: menu ? 26 : 18 }}><span className="recognition-exercise-bravura-glyph">{TOPICS[topic].glyph}</span></span>;
+  return <img src={TOPICS[topic].icon} alt="" className={`${sizeClass}${menu ? " object-contain" : ""}`}/>;
+}
+function topicsForLevel(level, includePlaceholders = false) {
+  return Object.keys(TOPICS).filter(topic => TOPICS[topic].placeholder ? includePlaceholders : conceptIdsForLevel(level).some(id => CONCEPTS[id].family === topic));
+}
+function subtitleConceptIdsForLevel(level, topic) {
+  return topic === "tempoChanges" ? TEMPO_CHANGES.subtitleConceptIdsForLevel(level) : conceptIdsForLevel(level).filter(id => CONCEPTS[id].family === topic);
+}
+function levelForTopic(level, topic) {
+  if (topic === "tempoChanges" && ["H", "AH"].includes(level)) return "N5";
+  const requestedOptions = subtitleConceptIdsForLevel(level, topic);
+  const availableLevels = Object.keys(LEVELS).filter(candidate => conceptIdsForLevel(candidate).some(id => CONCEPTS[id].family === topic));
+  if (!requestedOptions.length) return availableLevels[0] || level;
+  return availableLevels.find(candidate => {
+    const options = subtitleConceptIdsForLevel(candidate, topic);
+    return options.length === requestedOptions.length && options.every(id => requestedOptions.includes(id));
+  }) || level;
+}
+function levelsForTopic(topic) {
+  const introducedConcepts = new Set();
+  return Object.fromEntries(Object.entries(LEVELS).filter(([level]) => topicsForLevel(level).includes(topic) && levelForTopic(level, topic) === level).map(([level, details]) => {
+    const concepts = subtitleConceptIdsForLevel(level, topic);
+    const newConcepts = concepts.filter(id => !introducedConcepts.has(id));
+    concepts.forEach(id => introducedConcepts.add(id));
+    const description = newConcepts
+      .map(id => topic === "beatsPerBar" ? `${CONCEPTS[id].count} beats per bar` : CONCEPTS[id].label);
+    // Diminished triad is listed at Higher and can be enabled in Customise.
+    if (topic === "chord" && level === "H") description.push("Diminished triad");
+    return [level, {
+      ...details,
+      description: description.join(" • "),
+    }];
+  }));
+}
+function topicForLevel(topic, level) { const topics = topicsForLevel(level); return topics.includes(topic) ? topic : topics[0]; }
+function topicForQuestion(question) { return CONCEPTS[question.answerId]?.family || question.type || "cadence"; }
+function acceptedAnswerIds(question) {
+  if (topicForQuestion(question) === "beatsPerBar" && ["beats-2", "beats-4"].includes(question.answerId)) return ["beats-2", "beats-4"];
+  if (topicForQuestion(question) === "tempoChanges") return Object.keys(TEMPO_CHANGES.concepts).filter(id => CONCEPTS[id].direction === question.answer.direction);
+  return [question.answerId];
+}
+function isCorrectChoice(answerId, question) { return acceptedAnswerIds(question).includes(answerId); }
+function normalize(value){ return String(value||"").toLowerCase().replace(/[\s\-]+/g,""); }
+function isCorrectText(value, question) {
+  if (topicForQuestion(question) === "tempoChanges") return TEMPO_CHANGES.acceptsText(value, question.answer.direction);
+  return acceptedAnswerIds(question).some(answerId => {
+    const concept = CONCEPTS[answerId];
+    const normalise = concept.family === "chord" ? normaliseAHChordTypeAnswer : normalize;
+    return concept.aliases.map(normalise).includes(normalise(value));
+  });
+}
+function answerOptionsFor(level, enabledIds, family) {
+  const available = availableConceptIdsForLevel(level).filter(id => CONCEPTS[id].family === family);
+  const selected = safeEnabled(enabledIds, level).filter(id => available.includes(id));
+  return selected.length >= 2 ? selected : conceptIdsForLevel(level).filter(id => CONCEPTS[id].family === family);
+}
+function safeEnabled(ids, level){ const available = availableConceptIdsForLevel(level); const filtered = ids.filter(id => available.includes(id)); return filtered.length >= 2 ? filtered : conceptIdsForLevel(level); }
+function taskMatchesLevel(level, enabledIds, topic){ const expected = conceptIdsForLevel(level).filter(id => CONCEPTS[id].family === topic); const actual = answerOptionsFor(level, enabledIds, topic); return expected.length === actual.length && expected.every(id => actual.includes(id)); }
+// Match Keys: occasional typed answers across every active exercise.
+function chooseAnswerMode(typedOnly = false) { return (typedOnly || Math.random() < 0.35) ? "text" : "choice"; }
+function chooseCadenceStart(id){ const cadence = CADENCES[id]; if (id !== "imperfect") return cadence.progression[0]; return r(cadence.starts); }
+const rhythmInfo = (rhythm) => RHYTHMS[rhythm] || RHYTHMS.crotchet;
+const noteBaseIndex = (note) => NOTE_POOL.findIndex(item => item.letter === note?.letter && item.octave === note?.octave);
+const noteByLetter = (letter, preferredOctave = 5) => {
+  const options = NOTE_POOL.map((note, index) => ({ ...note, index })).filter(note => note.letter === letter);
+  return options.reduce((best, item) => Math.abs(item.octave - preferredOctave) < Math.abs(best.octave - preferredOctave) ? item : best, options[0]);
+};
+const keyAccidentalForLetter = (key, letter) => key?.id === "F" && letter === "B" ? -1 : key?.id === "G" && letter === "F" ? 1 : 0;
+const chordAccidentalForLetter = (key, chordSymbol, letter) => key?.raised?.[chordSymbol]?.[letter] ?? null;
+const melodicAccidentalForLetter = (key, letter) => key?.id === "Am" && letter === "G" ? 1 : null;
+const effectiveMidiForNote = (question, bar, note) => note.soundingMidi ?? (["beatsPerBar", "metre"].includes(topicForQuestion(question)) ? note.midi : note.midi + keyAccidentalForLetter(question.key, note.letter) + (note.writtenAccidental ?? 0));
+function pitchForChordLetter(question, bar, letter, preferredOctave = 4) {
+  if (["tonality", "tempoChanges"].includes(topicForQuestion(question)) || question.accompanimentStyle === "tonality") return window.MLH.MelodicDictation.pitchForChordLetter(question, bar, letter, preferredOctave);
+  let note = noteByLetter(letter, preferredOctave);
+  let midi = note.midi + keyAccidentalForLetter(question.key, letter) + (chordAccidentalForLetter(question.key, bar.chordSymbol, letter) ?? 0);
+  while (midi > 67) midi -= 12;
+  return midi;
+}
+function melodyPianoFrequencies(content, chordRegister = 3, bassRegister = 2) {
+  return content.bars.flatMap(bar => {
+    const letters = Array.isArray(bar.accompaniment) ? [] : content.key.chords[bar.chordSymbol] || [];
+    const chord = letters.map((letter, index) => pitchForChordLetter(content, bar, letter, chordRegister + index));
+    const bass = letters.length ? [
+      chord[0] - 12,
+      pitchForChordLetter(content, bar, letters[0], bassRegister) - 12,
+      pitchForChordLetter(content, bar, letters[1] || letters[0], bassRegister) - 12,
+    ] : [];
+    const accompaniment = (bar.accompaniment || []).flatMap(event => event.pitches);
+    return [...bar.notes.filter(note => !note.rest).map(note => effectiveMidiForNote(content, bar, note)), ...chord, ...bass, ...accompaniment].map(midiToFrequency);
+  });
+}
+function makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol) {
+  const writtenAccidental = melodicAccidentalForLetter(key, base.letter) ?? chordAccidentalForLetter(key, chordSymbol, base.letter);
+  return { ...base, id:`${barIndex}-${noteIndex}`, bar:barIndex, barIndex, noteIndex, rhythm, beats:rhythmInfo(rhythm).beats, beat, writtenAccidental };
+}
+function chooseNextNote({ key, chordSymbol, previous, rhythm, strongBeat }) {
+  const chordLetters = key.chords[chordSymbol] || key.chords.I;
+  const previousIndex = Math.max(0, noteBaseIndex(previous));
+  const candidates = NOTE_POOL.map((candidate, index) => {
+    const distance = Math.abs(index - previousIndex);
+    const isChordTone = chordLetters.includes(candidate.letter);
+    if (distance > 3) return null;
+    if (strongBeat && !isChordTone) return null;
+    let weight = isChordTone ? 8 : 2;
+    if (strongBeat) weight *= 2.6;
+    if (distance === 0) weight *= 1.2;
+    if (distance === 1) weight *= 7;
+    if (distance === 2) weight *= 1.1;
+    if (distance >= 3) weight *= 0.2;
+    if (rhythm === "quaver" && distance > 1) return null;
+    return { candidate, weight };
+  }).filter(Boolean);
+  let roll = Math.random() * candidates.reduce((sum, item) => sum + item.weight, 0);
+  for (const item of candidates) { roll -= item.weight; if (roll <= 0) return item.candidate; }
+  return candidates.at(-1)?.candidate || previous;
+}
+function buildBar({ key, chordSymbol, pattern, barIndex, previous }) {
+  let beat = 0;
+  let current = previous;
+  const notes = pattern.map((rhythm, noteIndex) => {
+    const strongBeat = beat === 0 || beat === 2;
+    const base = barIndex === 0 && noteIndex === 0 ? noteByLetter(key.tonic, 5) : chooseNextNote({ key, chordSymbol, previous: current, rhythm, strongBeat });
+    const note = makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol);
+    current = base;
+    beat += rhythmInfo(rhythm).beats;
+    return note;
+  });
+  return { barIndex, chordSymbol, pattern, notes, last: current };
+}
+function buildFinalBar({ key, chordSymbol, barIndex, previous }) {
+  const chord = key.chords[chordSymbol] || key.chords.I;
+  const options = NOTE_POOL.filter(note => note.letter === chord[0]);
+  const base = options.reduce((best, note) => Math.abs(note.midi - previous.midi) < Math.abs(best.midi - previous.midi) ? note : best, options[0] || noteByLetter(chord[0], 5));
+  const note = makeNote(base, "semibreve", barIndex, 0, 0, key, chordSymbol);
+  return { barIndex, chordSymbol, pattern:["semibreve"], notes:[note], last: base };
+}
+function buildChordPassage(answerId) {
+  const generator = window.MLH.MelodicDictation;
+  const keys = generator.KEYS.filter(key => answerId !== "add6" || key.id !== "Am");
+  const melody = generator.makeEightBarRepetitionQuestion("N5", 0, r(keys));
+  const chordType = CONCEPTS[answerId];
+  const candidates = melody.bars.slice(0, -1)
+    .filter(bar => answerId !== "add6" || bar.chordSymbol !== "VI");
+  const targetBars = new Set();
+  while (targetBars.size < 4 && candidates.length) {
+    const index = Math.floor(Math.random() * candidates.length);
+    targetBars.add(candidates.splice(index, 1)[0].barIndex);
+  }
+  function nearestChordPitch(midi, pitches) {
+    const octave = Math.floor(midi / 12) * 12;
+    const options = pitches.flatMap(pitch => {
+      const pitchClass = ((pitch % 12) + 12) % 12;
+      return [-12, 0, 12].map(offset => octave + pitchClass + offset);
+    });
+    return options.reduce((best, pitch) => Math.abs(pitch - midi) < Math.abs(best - midi) ? pitch : best, options[0]);
+  }
+  const bars = melody.bars.map(bar => {
+    if (!targetBars.has(bar.barIndex)) return {
+      ...bar,
+      notes: bar.notes.map(note => ({ ...note, soundingMidi: effectiveMidiForNote(melody, bar, note), volume: 0.7 })),
+    };
+    const letters = melody.key.chords[bar.chordSymbol];
+    const resolutionRoot = generator.pitchForChordLetter(melody, bar, letters[0], 3);
+    const resolutionPitches = letters.map(letter => {
+      let midi = generator.pitchForChordLetter(melody, bar, letter, 3);
+      while (midi < resolutionRoot) midi += 12;
+      while (midi >= resolutionRoot + 12) midi -= 12;
+      return midi - 12;
+    }).sort((a, b) => a - b);
+    // Dominant sevenths and augmented dominants lead into the generated chord.
+    // Leading-note diminished chords resolve upwards into its root.
+    let targetRoot = answerId === "add6" ? resolutionRoot
+      : ["dim", "dim7"].includes(answerId) ? resolutionRoot - 1
+      : resolutionRoot + 7;
+    if (["dom7", "aug"].includes(answerId) && targetRoot > 71) targetRoot -= 12;
+    const targetPitches = chordType.intervals.map(interval => targetRoot - 12 + interval);
+    const changeBeat = melody.timeSignature.beats / 2;
+    const notes = bar.notes.flatMap(note => {
+      const endBeat = note.beat + note.beats;
+      const boundaries = [note.beat, ...(note.beat < changeBeat && endBeat > changeBeat ? [changeBeat] : []), endBeat];
+      return boundaries.slice(0, -1).map((startBeat, index) => {
+        const pitches = startBeat < changeBeat ? targetPitches : resolutionPitches;
+        return {
+          ...note, beat: startBeat, beats: boundaries[index + 1] - startBeat,
+          soundingMidi: nearestChordPitch(effectiveMidiForNote(melody, bar, note), pitches), volume: 0.7,
+        };
+      });
+    }).map((note, noteIndex) => ({ ...note, noteIndex, id: `chord-passage-${bar.barIndex}-${noteIndex}` }));
+    return {
+      ...bar, notes, answerChord: answerId,
+      accompaniment: [
+        { beat: 0, beats: changeBeat * 0.96, pitches: [targetRoot - 24] },
+        { beat: 0, beats: changeBeat * 0.96, pitches: targetPitches, volume: 1.5 },
+        { beat: changeBeat, beats: changeBeat * 0.96, pitches: [resolutionRoot - 24, ...resolutionPitches] },
+      ],
+    };
+  });
+  return {
+    ...melody, type: "chord", accompanimentStyle: "tonality", bars,
+    notes: bars.flatMap(bar => bar.notes.filter(note => !note.rest).map(note => ({
+      ...note, midi: note.soundingMidi, beat: bar.barIndex * melody.timeSignature.beats + note.beat,
+    }))),
+    totalBeats: bars.length * melody.timeSignature.beats, chordCount: targetBars.size,
+  };
+}
+function buildChordQuestion(level, enabledIds, answerId) {
+  const spelling = r(CHORD_SPELLINGS.filter(item => item.type === answerId));
+  const chordType = CONCEPTS[answerId];
+  const stack = spelling.tones.map(([letter, octave, accidental = 0]) => {
+    const base = NOTE_POOL.find(note => note.letter === letter && note.octave === octave);
+    return { ...base, midi: base.midi + accidental, writtenAccidental: accidental || null };
+  });
+  const root = stack[0];
+  const note = { ...root, id: "chord-0", barIndex: 0, noteIndex: 0, rhythm: "semibreve", beats: 4, beat: 0, stack };
+  return {
+    id: Date.now() + Math.random(), type: "chord", level,
+    key: KEYS.find(key => key.id === "C"), timeSignature: { id: "4/4", top: 4, bottom: 4, beats: 4 },
+    answerId, answer: chordType, chordType, rootMidi: root.midi,
+    mode: chooseAnswerMode(),
+    options: answerOptionsFor(level, enabledIds, "chord"),
+    bars: [{ barIndex: 0, chordSymbol: answerId, notes: [note] }], notes: [note],
+    passage: buildChordPassage(answerId),
+  };
+}
+function buildTonalityQuestion(level, enabledIds, answerId) {
+  const melody = window.MLH.MelodicDictation.buildTonalityMelody(answerId);
+  return {
+    ...melody, type: "tonality", level, answerId, answer: CONCEPTS[answerId],
+    mode: chooseAnswerMode(), options: answerOptionsFor(level, enabledIds, "tonality"),
+    notes: (melody.layers || [melody]).flatMap(layer => layer.bars.flatMap(bar => bar.notes)),
+  };
+}
+function buildScalePassage(answerId, tonicMidi) {
+  const scale = SCALE_TYPES[answerId];
+  const ascending = scale.ascending;
+  const descending = scale.descending || [...ascending].reverse();
+  const lastDegree = ascending.length - 1;
+  const melodicMinor = answerId === "scale-melodic-minor";
+  // Melodic minor must expose its raised sixth and seventh on the way up.
+  const direction = melodicMinor ? "ascending" : r(["ascending", "descending"]);
+  const run = direction === "ascending" ? ascending : descending;
+  const endingScale = melodicMinor ? [...descending].reverse() : ascending;
+  // These contours use a common 0–7 range, then map onto the chosen scale.
+  const cells = [
+    { contour: [0, 2, 4, 3, 2], beats: [1, 0.5, 0.5, 1, 1] },
+    { contour: [0, 1, 2, 4, 3, 2], beats: [0.5, 0.5, 1, 0.5, 0.5, 1] },
+    { contour: [0, 3, 2, 5], beats: [1.5, 0.5, 1, 1] },
+    { contour: [4, 3, 2, 1, 0], beats: [1.5, 0.5, 0.5, 0.5, 1] },
+    { contour: [4, 6, 5, 3], beats: [1, 0.5, 0.5, 2] },
+    { contour: [2, 4, 3, 2], beats: [0.5, 0.5, 1, 2] },
+    { contour: [6, 4, 2], beats: [2, 1, 1] },
+    { contour: [0, 1, 2, 3, 4, 3, 2, 1], beats: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
+  ];
+  const endings = [
+    { contour: [4, 2, 0], beats: [1, 1, 2] },
+    { contour: [2, 1, 0], beats: [0.5, 0.5, 3] },
+    { contour: [0], beats: [4] },
+  ];
+  const openingCell = r(cells.filter(cell => cell.contour[0] === 0));
+  const replyCell = r(cells.filter(cell => cell !== openingCell));
+  const runBeats = Math.ceil(run.length / 8) * 8;
+  const runStartBar = r(melodicMinor ? [1, 2] : runBeats === 16 ? [1, 2, 3] : [1, 2, 3, 4]);
+  const descendingStartBar = melodicMinor ? runStartBar + 2 + r([0, 1]) : null;
+  const runs = [{ barIndex: runStartBar, intervals: run }];
+  if (melodicMinor) runs.push({ barIndex: descendingStartBar, intervals: descending });
+  const notes = [];
+  let beat = 0;
+  function appendPhrase(intervals, durations) {
+    intervals.forEach((interval, index) => {
+      const beats = durations[index];
+      notes.push({ id: `scale-passage-${notes.length}`, midi: tonicMidi + interval, beat, beats, barIndex: Math.floor(beat / 4) });
+      beat += beats;
+    });
+  }
+  function appendCell(cell, intervals, shift = 0, inverted = false) {
+    // Outside the two full runs, keep melodic-minor motifs below its changing sixth/seventh.
+    const limit = melodicMinor ? 4 : lastDegree;
+    const pitches = cell.contour.map(degree => {
+      const mapped = Math.round((inverted ? 7 - degree : degree) * limit / 7) + shift;
+      return intervals[Math.max(0, Math.min(limit, mapped))];
+    });
+    appendPhrase(pitches, cell.beats);
+  }
+  for (let barIndex = 0; barIndex < 8;) {
+    const section = runs.find(item => item.barIndex === barIndex);
+    if (section) {
+      // Keep the complete octave run uninterrupted, with every note a crotchet.
+      const intervals = section.intervals;
+      appendPhrase(intervals, intervals.map(() => 1));
+      const sectionBeats = Math.ceil(intervals.length / 8) * 8;
+      const padding = sectionBeats - intervals.length;
+      if (padding) {
+        const tail = [...Array.from({ length: padding - 1 }, (_, index) => intervals[intervals.length - 2 - index]), intervals[intervals.length - 1]];
+        appendPhrase(tail, tail.map(() => 1));
+      }
+      barIndex += sectionBeats / 4;
+      continue;
+    }
+    const intervals = melodicMinor && barIndex >= descendingStartBar ? endingScale : ascending;
+    if (barIndex === 7) appendCell(r(endings), intervals);
+    else {
+      const cell = barIndex === 0 ? openingCell : barIndex === 1 ? replyCell : r([openingCell, replyCell, ...cells]);
+      appendCell(cell, intervals, barIndex < 2 ? 0 : r([-1, 0, 1]), barIndex > 1 && Math.random() < 0.25);
+    }
+    barIndex++;
+  }
+  const roots = r([
+    [0, 4, 0, 4, 3, 0, 4, 0],
+    [0, 3, 0, 4, 5, 1, 4, 0],
+    [0, 5, 3, 4, 1, 3, 4, 0],
+  ]);
+  const accompanimentStyle = r(["held", "pulse", "broken"]);
+  const bars = Array.from({ length: 8 }, (_, barIndex) => {
+    const intervals = melodicMinor && barIndex >= descendingStartBar ? endingScale : ascending;
+    const degreeMidi = degree => tonicMidi + 12 * Math.floor(degree / lastDegree) + intervals[degree % lastDegree];
+    let pitches;
+    if (answerId === "scale-chromatic") {
+      // A quiet octave avoids imposing a major or minor chord on the chromatic melody.
+      pitches = [tonicMidi - 24, tonicMidi - 12];
+    } else {
+      let chord;
+      if (answerId === "scale-pentatonic") chord = barIndex !== 0 && barIndex !== 7 && Math.random() < 0.5 ? [4, 5, 7] : [0, 2, 3];
+      else if (answerId === "scale-whole-tone") {
+        const root = barIndex === 0 || barIndex === 7 ? 0 : r([0, 1, 2]);
+        chord = [root, root + 2, root + 4];
+      }
+      else chord = [roots[barIndex], roots[barIndex] + 2, roots[barIndex] + 4];
+      pitches = [degreeMidi(chord[0]) - 24, ...chord.map(degree => degreeMidi(degree) - 12)];
+    }
+    const upperPitches = pitches.slice(1);
+    const style = barIndex === 7 ? "held" : accompanimentStyle;
+    const accompaniment = style === "held"
+      ? [{ beat: 0, beats: 3.85, pitches }]
+      : style === "pulse"
+      ? [
+          { beat: 0, beats: 0.9, pitches: [pitches[0]] },
+          { beat: 1, beats: 0.75, pitches: upperPitches },
+          { beat: 2, beats: 0.9, pitches: [pitches[0]] },
+          { beat: 3, beats: 0.75, pitches: upperPitches },
+        ]
+      : [
+          { beat: 0, beats: 0.9, pitches: [pitches[0]] },
+          ...[0.5, 1, 1.5, 2, 2.5, 3, 3.5].map((pulse, index) => ({
+            beat: pulse, beats: 0.45, pitches: [upperPitches[index % upperPitches.length]],
+          })),
+        ];
+    return {
+      barIndex,
+      notes: notes.filter(note => note.barIndex === barIndex).map(note => ({ ...note, beat: note.beat - barIndex * 4 })),
+      accompaniment,
+    };
+  });
+  return { notes, bars, timeSignature: { id: "4/4", top: 4, bottom: 4, beats: 4 }, totalBeats: beat, scaleDirection: direction };
+}
+function buildScaleQuestion(level, enabledIds, answerId) {
+  const scale = SCALE_TYPES[answerId];
+  const tonicMidi = r([55, 57, 60, 62, 64, 65, 67]);
+  const descending = scale.descending || [...scale.ascending].reverse();
+  // Play the upper tonic once at the turn; every note, including the last, is a crotchet.
+  const intervals = [...scale.ascending, ...descending.slice(1)];
+  const notes = intervals.map((interval, index) => ({
+    id: `scale-${index}`, midi: tonicMidi + interval, beat: index, beats: 1, rhythm: "crotchet",
+  }));
+  return {
+    id: Date.now() + Math.random(), type: "scales", level, answerId, answer: CONCEPTS[answerId],
+    mode: chooseAnswerMode(), options: answerOptionsFor(level, enabledIds, "scales"),
+    tonicMidi, notes, totalBeats: notes.length, passage: buildScalePassage(answerId, tonicMidi),
+  };
+}
+function buildOrnamentPassage(answerId) {
+  const generator = window.MLH.MelodicDictation;
+  // Use the same eight-bar melody/harmony engine as major/minor Tonalities.
+  const melody = generator.makeEightBarRepetitionQuestion("N5", 0, r(generator.KEYS));
+  const candidates = melody.bars.slice(0, -1).map(bar => {
+    const windows = [];
+    bar.notes.forEach((note, startIndex) => {
+      if (note.rest) return;
+      let beats = 0;
+      for (let endIndex = startIndex; endIndex < bar.notes.length; endIndex++) {
+        if (bar.notes[endIndex].rest) break;
+        beats += bar.notes[endIndex].beats;
+        if (beats < 2) continue;
+        // Prefer an existing held note, then a chord tone on a strong beat.
+        const chordTone = melody.key.chords[bar.chordSymbol].includes(note.letter);
+        const strongBeat = note.beat === 0 || note.beat === 2;
+        windows.push({ startIndex, endIndex, beats, weight: (startIndex === endIndex ? 8 : 0) + (chordTone ? 2 : 0) + (strongBeat ? 1 : 0) });
+        break;
+      }
+    });
+    return { bar, windows };
+  }).filter(candidate => candidate.windows.length);
+  const selectedWindows = new Map();
+  // Vary the four ornament positions and leave the final tonic unornamented.
+  while (selectedWindows.size < 4 && candidates.length) {
+    const candidateIndex = Math.floor(Math.random() * candidates.length);
+    const [{ bar, windows }] = candidates.splice(candidateIndex, 1);
+    const bestWeight = Math.max(...windows.map(window => window.weight));
+    selectedWindows.set(bar.barIndex, r(windows.filter(window => window.weight === bestWeight)));
+  }
+  const letters = ["C", "D", "E", "F", "G", "A", "B"];
+  function neighbourMidi(note, offset, bar) {
+    const position = note.octave * 7 + letters.indexOf(note.letter) + offset;
+    const letter = letters[((position % 7) + 7) % 7];
+    const octave = Math.floor(position / 7);
+    const naturalMidi = 12 * (octave + 1) + [0, 2, 4, 5, 7, 9, 11][letters.indexOf(letter)];
+    const raised = generator.melodicAccidentalForLetter(melody.key, letter) ?? generator.chordAccidentalForLetter(melody.key, bar.chordSymbol, letter) ?? 0;
+    return naturalMidi + generator.keyAccidentalForLetter(melody.key, letter) + raised;
+  }
+  const bars = melody.bars.map(bar => {
+    const window = selectedWindows.get(bar.barIndex);
+    const notes = bar.notes.flatMap((note, noteIndex) => {
+      if (!window || noteIndex < window.startIndex || noteIndex > window.endIndex) {
+        return [{ ...note, soundingMidi: effectiveMidiForNote(melody, bar, note), gateRelease: false }];
+      }
+      if (noteIndex !== window.startIndex) return [];
+      let pattern = ORNAMENT_TYPES[answerId].pattern.map(event => ({ ...event }));
+      if (answerId === "ornament-appoggiatura") pattern[0].beats = window.beats / 2;
+      if (answerId === "ornament-trill") {
+        // Keep the alternations at their original speed, with a longer main-note resolution.
+        const count = Math.min(14, 2 * Math.floor(window.beats * 2));
+        pattern = [...pattern.slice(0, count), pattern[pattern.length - 1]];
+      }
+      const approachBeats = pattern.slice(0, -1).reduce((sum, event) => sum + event.beats, 0);
+      pattern[pattern.length - 1].beats = window.beats - approachBeats;
+      const pitches = {
+        main: effectiveMidiForNote(melody, bar, note),
+        upper: neighbourMidi(note, 1, bar),
+        lower: neighbourMidi(note, -1, bar),
+      };
+      let beat = note.beat;
+      return pattern.map((event, index) => {
+        const decorated = { ...note, ...event, beat, soundingMidi: pitches[event.pitch], ornament: answerId, gateRelease: index < pattern.length - 1 };
+        beat += event.beats;
+        return decorated;
+      });
+    }).map((note, noteIndex) => ({ ...note, noteIndex, id: `ornament-passage-${bar.barIndex}-${noteIndex}` }));
+    return { ...bar, notes };
+  });
+  return {
+    ...melody, type: "ornaments", accompanimentStyle: "tonality", bars,
+    notes: bars.flatMap(bar => bar.notes.filter(note => !note.rest).map(note => ({
+      ...note, midi: note.soundingMidi, beat: bar.barIndex * melody.timeSignature.beats + note.beat,
+    }))),
+    totalBeats: bars.length * melody.timeSignature.beats, ornamentCount: selectedWindows.size,
+  };
+}
+function buildOrnamentQuestion(level, enabledIds, answerId) {
+  const ornament = ORNAMENT_TYPES[answerId];
+  const transpose = r([0, 2, 5, 7]);
+  const neighbours = r([
+    { main: 60, lower: 59, upper: 62 },
+    { main: 62, lower: 60, upper: 64 },
+    { main: 64, lower: 62, upper: 65 },
+    { main: 65, lower: 64, upper: 67 },
+    { main: 67, lower: 65, upper: 69 },
+  ]);
+  let beat = 0;
+  const notes = ornament.pattern.map((event, index) => {
+    const note = { ...event, id: `ornament-${index}`, midi: neighbours[event.pitch] + transpose, beat };
+    beat += event.beats;
+    return note;
+  });
+  return {
+    id: Date.now() + Math.random(), type: "ornaments", level, answerId, answer: CONCEPTS[answerId],
+    mode: chooseAnswerMode(), options: answerOptionsFor(level, enabledIds, "ornaments"),
+    notes, totalBeats: beat, passage: buildOrnamentPassage(answerId),
+  };
+}
+function buildTimeListeningQuestion(level, enabledIds, answerId) {
+  const answer = CONCEPTS[answerId];
+  const topic = answer.family;
+  const signatures = topic === "metre"
+    ? TIME_LISTENING.timeSignatures.filter(signature => ["2/4", "3/4", "4/4", "6/8"].includes(signature.id) && signature.type === answerId)
+    : TIME_LISTENING.signaturesForLevel(level).filter(signature => TIME_LISTENING.pulseCount(signature) === answer.count);
+  const melody = TIME_LISTENING.buildListeningMelody(level, signatures.map(signature => signature.id));
+  return {
+    ...melody, type: topic, level, answerId, answer,
+    mode: chooseAnswerMode(), options: answerOptionsFor(level, enabledIds, topic),
+    notes: melody.bars.flatMap(bar => bar.notes),
+  };
+}
+function buildTempoChangesQuestion(level, enabledIds, answerId) {
+  const slowOption = level === "N3" ? "slower" : level !== "N4" && Math.random() < 0.5 ? "ritardando" : "rallentando";
+  const displayId = CONCEPTS[answerId].direction === "slower" ? slowOption : answerId;
+  const melody = TEMPO_CHANGES.buildMelody();
+  const answer = CONCEPTS[displayId];
+  const options = answerOptionsFor(level, enabledIds, "tempoChanges")
+    .filter(id => !CONCEPTS[id].typedOnly)
+    .map(id => CONCEPTS[id].direction === "slower" ? slowOption : id);
+  return {
+    ...melody, type: "tempoChanges", level, answerId: displayId, answer,
+    mode: chooseAnswerMode(answer.typedOnly || options.length < 2),
+    rubatoProfile: answer.direction === "rubato" ? TEMPO_CHANGES.createRubatoProfile() : null,
+    options,
+    notes: melody.bars.flatMap(bar => bar.notes),
+  };
+}
+function promptForQuestion(question, ornamentPassage = false, scalesPassage = false, chordPassage = false) {
+  const topic = topicForQuestion(question);
+  if (topic === "chord") return chordPassage ? "Listen to the music and identify the chord type heard repeatedly." : "Listen to the music and identify the chord.";
+  if (topic === "tonality") return "Name the tonality.";
+  if (topic === "scales") return scalesPassage ? "Listen to the melody and name the scale on which it is based." : "Listen to the music and name the scale.";
+  if (topic === "ornaments") return ornamentPassage ? "Listen to the music and name the ornament." : "Listen to the notes and name the ornament.";
+  if (topic === "beatsPerBar") return "How many beats are there in each bar?";
+  if (topic === "metre") return "Is the music in simple time or compound time?";
+  if (topic === "tempoChanges") return "Listen to the music and identify the concept which best describes the tempo.";
+  return <>Listen to the music and identify the type of <strong>cadence</strong> heard at the end.</>;
+}
+function answerLabelForQuestion(question) {
+  if (topicForQuestion(question) === "tempoChanges" && question.level === "N5" && question.answer.direction === "slower") return "Rallentando or Ritardando";
+  return question.answer.label;
+}
+function buildQuestion(level, enabledIds, topic = "cadence"){
+  const answerId = r(answerOptionsFor(level, enabledIds, topicForLevel(topic, level)));
+  if (CONCEPTS[answerId].family === "chord") return buildChordQuestion(level, enabledIds, answerId);
+  if (CONCEPTS[answerId].family === "tonality") return buildTonalityQuestion(level, enabledIds, answerId);
+  if (CONCEPTS[answerId].family === "scales") return buildScaleQuestion(level, enabledIds, answerId);
+  if (CONCEPTS[answerId].family === "ornaments") return buildOrnamentQuestion(level, enabledIds, answerId);
+  if (["beatsPerBar", "metre"].includes(CONCEPTS[answerId].family)) return buildTimeListeningQuestion(level, enabledIds, answerId);
+  if (CONCEPTS[answerId].family === "tempoChanges") return buildTempoChangesQuestion(level, enabledIds, answerId);
+  const cadence = CADENCES[answerId];
+  const keys = KEYS.filter(k => !cadence.majorOnly || k.major);
+  const key = r(keys);
+  const startChord = chooseCadenceStart(answerId);
+  const progression = ["I", r(["IV","V","VI"]), startChord, cadence.progression[1]];
+  let previous = noteByLetter(key.tonic, 5);
+  const bars = progression.map((symbol, barIndex) => {
+    if (barIndex === 3) {
+      const bar = buildFinalBar({ key, chordSymbol:symbol, barIndex, previous });
+      previous = bar.last;
+      return bar;
+    }
+    const pattern = barIndex === 2 ? r([["minim","crotchet","crotchet"], ["crotchet","crotchet","minim"], ["dottedMinim","crotchet"]]) : r(BAR_PATTERNS);
+    const bar = buildBar({ key, chordSymbol:symbol, pattern, barIndex, previous });
+    previous = bar.last;
+    return bar;
+  });
+  return { id:Date.now()+Math.random(), type:"cadence", options:answerOptionsFor(level, enabledIds, "cadence"), level, key, timeSignature:{ id:"4/4", top:4, bottom:4, beats:4 }, progression, answerId, answer:cadence, mode:chooseAnswerMode(), bars, notes:bars.flatMap(bar => bar.notes) };
+}
+function RecognitionMenuRows({ level, topic, enabled, setEnabled, tempo, setTempo, metronome, setMetronome, playChordNotes, setPlayChordNotes, ornamentPassage, setOrnamentPassage, scalesPassage, setScalesPassage, chordPassage, setChordPassage, stopAudio }) {
+  const available = availableConceptIdsForLevel(level).filter(id => CONCEPTS[id].family === topic);
+  const selectedCount = available.filter(id => enabled.includes(id)).length;
+  function toggle(id) {
+    const next = enabled.includes(id) ? enabled.filter(item => item !== id) : [...enabled, id];
+    if (available.filter(item => next.includes(item)).length >= 2) setEnabled(safeEnabled(next, level));
+  }
+  return <>
+    <window.MLH.MenuSubheading>Audio</window.MLH.MenuSubheading>
+    <TempoDropdownRow tempo={tempo} setTempo={setTempo} stopAudio={stopAudio}/>
+    {topic !== "ornaments" && <window.MLH.MenuToggleRow glyph={<MenuSvgGlyph src={ASSET.metronome} />} label="Metronome" checked={metronome} onChange={() => { setMetronome(value => !value); stopAudio(); }}/>}
+    {topic === "chord" && <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Full Passage" profileKey="Aural Recognition chord full passage" checked={chordPassage} onChange={() => { setChordPassage(value => !value); stopAudio(); }}/>}
+    {topic === "chord" && <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Broken Chord" profileKey="Aural Recognition chord individual notes" checked={playChordNotes} disabled={chordPassage} onChange={() => { setPlayChordNotes(value => !value); stopAudio(); }}/>}
+    {topic === "ornaments" && <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Full Passage" profileKey="Aural Recognition ornament full passage" checked={ornamentPassage} onChange={() => { setOrnamentPassage(value => !value); stopAudio(); }}/>}
+    {topic === "scales" && <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Full Passage" profileKey="Aural Recognition scale full passage" checked={scalesPassage} onChange={() => { setScalesPassage(value => !value); stopAudio(); }}/>}
+    {available.length > 2 && <>
+      <window.MLH.MenuSubheading>{TOPICS[topic].label}</window.MLH.MenuSubheading>
+      {available.map(id => <window.MLH.MenuToggleRow
+        key={id} showGlyph={false}
+        label={CONCEPTS[id].short} checked={enabled.includes(id)}
+        disabled={enabled.includes(id) && selectedCount <= 2} onChange={() => toggle(id)}
+      />)}
+    </>}
+  </>;
+}
+function App(){
+  const [startingSelection]=useState(initialSelection);
+  const [activeLevel,setActiveLevel]=useState(startingSelection.level);
+  const [activeTopic,setActiveTopic]=useState(startingSelection.topic);
+  const [enabled,setEnabled]=useState(()=>conceptIdsForLevel(startingSelection.level));
+  const [exerciseTempo,setExerciseTempo]=useState(TEMPOS[1]);
+  const [scalesTempo,setScalesTempo]=useState(TEMPOS[2]);
+  const [chordsTempo,setChordsTempo]=useState(TEMPOS[2]);
+  const tempo = activeTopic === "chord" ? chordsTempo : activeTopic === "scales" ? scalesTempo : exerciseTempo;
+  const setTempo = activeTopic === "chord" ? setChordsTempo : activeTopic === "scales" ? setScalesTempo : setExerciseTempo;
+  const [metronome,setMetronome]=useState(false);
+  const [playChordNotes,setPlayChordNotes]=useState(true);
+  const [ornamentPassage,setOrnamentPassage]=useState(false);
+  const [scalesPassage,setScalesPassage]=useState(false);
+  const [chordPassage,setChordPassage]=useState(false);
+  const [question,setQuestion]=useState(()=>buildQuestion(startingSelection.level, conceptIdsForLevel(startingSelection.level), startingSelection.topic));
+  const [questionVisible,setQuestionVisible]=useState(true);
+  const questionTopic = topicForQuestion(question);
+  const usesIsolatedNotes = ["scales", "ornaments"].includes(questionTopic);
+  const isTimeListening = ["beatsPerBar", "metre"].includes(questionTopic);
+  const [selected,setSelected]=useState(null), [typed,setTyped]=useState("");
+  const [feedback,setFeedback]=useState(null), [feedbackFading,setFeedbackFading]=useState(false), [prompt,setPrompt]=useState("");
+  const [correct,setCorrect]=useState(0), [attempted,setAttempted]=useState(0), [streak,setStreak]=useState(0), [best,setBest]=useState(0), [confetti,setConfetti]=useState(0), [autoShowMedals,setAutoShowMedals]=useState(false);
+  const [levelOpen,setLevelOpen]=useState(false), [topicOpen,setTopicOpen]=useState(false), [customiseOpen,setCustomiseOpen]=useState(false), [playing,setPlaying]=useState(false);
+  const levelRef=useRef(null), topicRef=useRef(null), customiseRef=useRef(null), audioRef=useRef(null), timers=useRef([]), levelTaskStatusRef=useRef(null);
+  const questionTransitionRef=useRef({ timer: null, frame: null });
+  useClickOutside([levelRef,topicRef,customiseRef],[()=>setLevelOpen(false),()=>setTopicOpen(false),()=>setCustomiseOpen(false)]);
+  useEffect(()=>()=>{ stopAudio(); clearQuestionTransition(); },[]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify({ level: activeLevel, topic: activeTopic }));
+    } catch {}
+    const url = new URL(location.href);
+    url.searchParams.set("level", activeLevel);
+    url.searchParams.set("exercise", activeTopic);
+    if (url.toString() !== location.href) {
+      history.replaceState(null, "", url.toString());
+    }
+  }, [activeLevel, activeTopic]);
+  const medalEligible=taskMatchesLevel(activeLevel, enabled, activeTopic);
+  const displayedLevel=medalEligible ? activeLevel : "Custom";
+  const displayedLevelLabel=medalEligible ? LEVELS[activeLevel].label : "Custom";
+  useEffect(()=>{ if(levelTaskStatusRef.current===null){ levelTaskStatusRef.current=medalEligible; return; } if(levelTaskStatusRef.current===medalEligible) return; levelTaskStatusRef.current=medalEligible; if(window.MLH.resetLevelSessionProgress){ window.MLH.resetLevelSessionProgress({ setCorrect, setAttempted, setStreak, setBest }); } else { setCorrect(0); setAttempted(0); setStreak(0); setBest(0); } setConfetti(0); setAutoShowMedals(false); },[medalEligible]);
+  function clearTimers(){ timers.current.forEach(clearTimeout); timers.current=[]; }
+  function stopAudio(){ clearTimers(); if(audioRef.current){ try{audioRef.current.close();}catch{} } audioRef.current=null; setPlaying(false); }
+  function resetProgress(){ setCorrect(0); setAttempted(0); setStreak(0); setBest(0); setConfetti(0); setAutoShowMedals(false); }
+  function closeMenus(){ setLevelOpen(false); setTopicOpen(false); setCustomiseOpen(false); }
+  function clearQuestionTransition() {
+    const transition = questionTransitionRef.current;
+    if (transition.timer !== null) clearTimeout(transition.timer);
+    if (transition.frame !== null) cancelAnimationFrame(transition.frame);
+    transition.timer = null;
+    transition.frame = null;
+  }
+  function newQuestion(level=activeLevel, ids=enabled, topic=activeTopic) {
+    stopAudio();
+    clearQuestionTransition();
+    const nextQuestion = buildQuestion(level, safeEnabled(ids, level), topic);
+    setQuestionVisible(false);
+    setFeedbackFading(true);
+    setAutoShowMedals(false);
+    questionTransitionRef.current.timer = setTimeout(() => {
+      questionTransitionRef.current.timer = null;
+      setQuestion(nextQuestion);
+      setSelected(null);
+      setTyped("");
+      setFeedback(null);
+      setFeedbackFading(false);
+      setPrompt("");
+      questionTransitionRef.current.frame = requestAnimationFrame(() => {
+        questionTransitionRef.current.frame = requestAnimationFrame(() => {
+          questionTransitionRef.current.frame = null;
+          setQuestionVisible(true);
+        });
+      });
+    }, 280);
+  }
+  function applyTopic(topic) {
+    if (!TOPICS[topic] || TOPICS[topic].placeholder) return;
+    const level = levelForTopic(activeLevel, topic);
+    if (topic !== activeTopic || level !== activeLevel) {
+      const available = conceptIdsForLevel(level).filter(id => CONCEPTS[id].family === topic);
+      let ids = safeEnabled(enabled, level);
+      if (ids.filter(id => available.includes(id)).length < 2) ids = [...new Set([...ids, ...available])];
+      setActiveLevel(level);
+      setActiveTopic(topic);
+      setEnabled(ids);
+      resetProgress();
+      newQuestion(level, ids, topic);
+    }
+    closeMenus();
+  }
+  function applyLevel(requestedLevel) {
+    const topic = topicForLevel(activeTopic, requestedLevel);
+    const level = levelForTopic(requestedLevel, topic);
+    setActiveLevel(level);
+    setActiveTopic(topic);
+    resetProgress();
+    const ids = conceptIdsForLevel(level);
+    setEnabled(ids);
+    const url = new URL(location.href);
+    url.searchParams.set("level", level);
+    history.replaceState(null, "", url.toString());
+    newQuestion(level, ids, topic);
+    closeMenus();
+  }
+  function score(ok){ if(feedback || !questionVisible) return; stopAudio(); const ns=ok?streak+1:0; playFeedbackSound(ok); setAttempted(v=>v+1); setCorrect(v=>v+(ok?1:0)); setStreak(ns); setBest(v=>Math.max(v,ns)); setFeedback({correct:ok}); if(ok){ const medal=medalSoundForStreak(ns); if(medalEligible && medal && MEDAL_THRESHOLDS.includes(ns)){ setConfetti(v=>v+1); setAutoShowMedals(true); timers.current.push(setTimeout(()=>setAutoShowMedals(false),2000)); timers.current.push(setTimeout(()=>playFeedbackSound(true,true,medal),180)); } timers.current.push(setTimeout(()=>setFeedbackFading(true),1700)); timers.current.push(setTimeout(()=>newQuestion(),2000)); }}
+  function confirm(){ if(feedback || !questionVisible) return; const ok = question.mode === "choice" ? isCorrectChoice(selected, question) : isCorrectText(typed, question); if(question.mode === "choice" && !selected){ setPrompt("Select an answer first."); return; } if(question.mode === "text" && !typed.trim()){ setPrompt("Type your answer first."); return; } score(ok); }
+  function clearAnswer(){ setSelected(null); setTyped(""); setPrompt(""); }
+  function playMelodyNote(ctx, gainNode, frequency, start, duration) { oscillator(ctx, gainNode, frequency, start, duration, 0.078); }
+  function playRhythmAccompaniment(ctx, gainNode, barStart, quarterBeat, startTime) {
+    const signature = question.timeSignature;
+    const pulseDuration = signature.pulseQuarterBeats * quarterBeat;
+    for (let pulse = 0; pulse < signature.pulseCount; pulse++) {
+      const pulseStart = startTime + barStart + pulse * pulseDuration;
+      oscillator(ctx, gainNode, midiToFrequency(question.pulsePitches[0]), pulseStart, pulseDuration * 0.75, pulse === 0 ? 0.048 : 0.022);
+      question.pulsePitches.slice(1).forEach(midi => oscillator(ctx, gainNode, midiToFrequency(midi), pulseStart, pulseDuration * 0.6, pulse === 0 ? 0.022 : 0.014));
+      if (questionTopic === "metre") {
+        const divisions = signature.type === "compound" ? 3 : 2;
+        const subdivision = pulseDuration / divisions;
+        for (let division = 1; division < divisions; division++) {
+          oscillator(ctx, gainNode, midiToFrequency(question.pulsePitches[2]), pulseStart + division * subdivision, subdivision * 0.65, 0.02);
+        }
+      }
+    }
+  }
+  function playAccompaniment(ctx, gainNode, bar, barStart, beat, startTime, content = question) {
+    if (Array.isArray(bar.accompaniment)) {
+      bar.accompaniment.forEach(event => event.pitches.forEach(midi => oscillator(
+        ctx, gainNode, midiToFrequency(midi), startTime + barStart + event.beat * beat,
+        event.beats * beat, 0.018 * (event.volume ?? 1)
+      )));
+      return;
+    }
+    const chordLetters = content.key.chords[bar.chordSymbol] || [];
+    if (!chordLetters.length) return;
+    const isTonality = topicForQuestion(content) === "tonality" || content.accompanimentStyle === "tonality";
+    const chordRegister = isTonality ? 3 : 4;
+    const bassRegister = isTonality ? 2 : 3;
+    if (bar.barIndex === content.bars.length - 1) {
+      const chordDuration = beat * (isTonality ? content.timeSignature.beats * 0.96 : 3.75);
+      chordLetters.forEach((letter, index) => {
+        const midi = pitchForChordLetter(content, bar, letter, chordRegister + index);
+        oscillator(ctx, gainNode, midiToFrequency(midi), startTime + barStart, chordDuration, 0.026, "triangle", 0.08);
+        if (index === 0) oscillator(ctx, gainNode, midiToFrequency(midi - 12), startTime + barStart, chordDuration, 0.02, "sine", 0.08);
+      });
+      return;
+    }
+    const bassMidi = pitchForChordLetter(content, bar, chordLetters[0], bassRegister) - 12;
+    oscillator(ctx, gainNode, midiToFrequency(bassMidi), startTime + barStart, beat * 0.88, 0.024, "sine", 0.06);
+    const pulses = content.timeSignature.id === "4/4"
+      ? [{ beat:1, type:"chord" }, { beat:2, type:"bass5" }, { beat:3, type:"chord" }]
+      : Array.from({ length: content.timeSignature.beats - 1 }, (_, index) => ({ beat: index + 1, type: "chord" }));
+    pulses.forEach(event => {
+      const pulseStart = barStart + event.beat * beat;
+      const pulseDuration = beat * 0.42;
+      if (event.type === "bass5") {
+        const fifthMidi = pitchForChordLetter(content, bar, chordLetters[1] || chordLetters[0], bassRegister) - 12;
+        oscillator(ctx, gainNode, midiToFrequency(fifthMidi), startTime + pulseStart, pulseDuration, 0.024, "sine", 0.06);
+        return;
+      }
+      chordLetters.forEach((letter, index) => oscillator(ctx, gainNode, midiToFrequency(pitchForChordLetter(content, bar, letter, chordRegister + index)), startTime + pulseStart, pulseDuration, 0.018, "triangle", 0.05));
+    });
+  }
+  function playTempoChanges(ctx, gainNode, startTime) {
+    const beatsPerBar = question.timeSignature.beats;
+    const clock = TEMPO_CHANGES.createTempoClock({
+      startBpm: tempo.bpm,
+      direction: question.answer.direction,
+      totalBeats: question.bars.length * beatsPerBar,
+      profile: question.rubatoProfile || undefined,
+    });
+    question.bars.forEach(bar => {
+      const barBeat = bar.barIndex * beatsPerBar;
+      const chordLetters = question.key.chords[bar.chordSymbol] || [];
+      for (let pulse = 0; pulse < beatsPerBar; pulse++) {
+        const pulseBeat = barBeat + pulse;
+        const pulseStart = startTime + clock.timeAtBeat(pulseBeat);
+        const pulseDuration = clock.durationAtBeat(pulseBeat, 1);
+        if (metronome) playClick(ctx, gainNode, pulseStart, pulse === 0);
+        if (chordLetters.length) {
+          const bassLetter = pulse % 2 === 0 ? chordLetters[0] : chordLetters[1] || chordLetters[0];
+          const bass = pitchForChordLetter(question, bar, bassLetter, 2) - 12;
+          oscillator(ctx, gainNode, midiToFrequency(bass), pulseStart, pulseDuration * 0.7, pulse === 0 ? 0.026 : 0.018);
+          chordLetters.forEach((letter, index) => oscillator(
+            ctx, gainNode, midiToFrequency(pitchForChordLetter(question, bar, letter, 3 + index)),
+            pulseStart, pulseDuration * 0.55, pulse === 0 ? 0.018 : 0.013
+          ));
+        }
+      }
+      bar.notes.forEach(note => {
+        if (note.rest) return;
+        const noteBeat = barBeat + note.beat;
+        const noteStart = startTime + clock.timeAtBeat(noteBeat);
+        const duration = clock.durationAtBeat(noteBeat, note.beats) * 0.96;
+        playMelodyNote(ctx, gainNode, midiToFrequency(effectiveMidiForNote(question, bar, note)), noteStart, duration);
+      });
+    });
+    timers.current.push(setTimeout(stopAudio, Math.max(0, (startTime + clock.duration - ctx.currentTime) * 1000) + 250));
+  }
+  function playPolytonality(ctx, gainNode, startTime, beat) {
+    const beatsPerBar = question.timeSignature.beats;
+    const totalBeats = question.barCount * beatsPerBar;
+    if (metronome) {
+      for (let pulse = 0; pulse < totalBeats; pulse++) {
+        playClick(ctx, gainNode, startTime + pulse * beat, pulse % beatsPerBar === 0);
+      }
+    }
+    question.layers.forEach(layer => {
+      const layerGain = ctx.createGain();
+      layerGain.gain.setValueAtTime(layer.volume, ctx.currentTime);
+      if (typeof ctx.createStereoPanner === "function") {
+        const panner = ctx.createStereoPanner();
+        panner.pan.setValueAtTime(layer.pan, ctx.currentTime);
+        layerGain.connect(panner);
+        panner.connect(gainNode);
+      } else layerGain.connect(gainNode);
+      layer.bars.forEach(bar => {
+        const barStart = bar.barIndex * beatsPerBar * beat;
+        playAccompaniment(ctx, layerGain, bar, barStart, beat, startTime);
+        bar.notes.forEach(note => {
+          if (note.rest) return;
+          const noteStart = startTime + barStart + note.beat * beat;
+          const duration = note.beats * beat * 0.96;
+          playMelodyNote(ctx, layerGain, midiToFrequency(effectiveMidiForNote(layer, bar, note)), noteStart, duration);
+        });
+      });
+    });
+    timers.current.push(setTimeout(stopAudio, Math.max(0, (startTime + totalBeats * beat - ctx.currentTime) * 1000) + 250));
+  }
+  function playAudioOnlyNotes(ctx, gainNode, startTime, beat, content = question) {
+    if (metronome && questionTopic !== "ornaments" && content.timeSignature) {
+      for (let pulse = 0; pulse < content.totalBeats; pulse++) {
+        playClick(ctx, gainNode, startTime + pulse * beat, pulse % content.timeSignature.beats === 0);
+      }
+    }
+    content.notes.forEach((note, index) => {
+      const noteStart = startTime + note.beat * beat;
+      const duration = note.beats * beat;
+      let destination = gainNode;
+      if (questionTopic === "ornaments" && (note.gateRelease ?? index < content.notes.length - 1)) {
+        // Gate intermediate notes; let the held final note release naturally.
+        const noteGain = ctx.createGain();
+        noteGain.connect(gainNode);
+        noteGain.gain.setValueAtTime(1, noteStart);
+        noteGain.gain.setValueAtTime(1, noteStart + duration - Math.min(0.012, duration * 0.2));
+        noteGain.gain.linearRampToValueAtTime(0, noteStart + duration);
+        destination = noteGain;
+      } else if (questionTopic !== "ornaments" && metronome && !content.timeSignature) playClick(ctx, gainNode, noteStart, false);
+      oscillator(ctx, destination, midiToFrequency(note.midi), noteStart, duration * 0.96, 0.078 * (note.volume ?? 1));
+    });
+    timers.current.push(setTimeout(stopAudio, Math.max(0, (startTime + content.totalBeats * beat - ctx.currentTime) * 1000) + 250));
+  }
+  function playFullChord(ctx, gainNode, startTime, duration) {
+    question.notes[0].stack.forEach(tone => {
+      oscillator(ctx, gainNode, midiToFrequency(tone.midi), startTime, duration * 0.96 * 0.82, 0.052);
+      oscillator(ctx, gainNode, midiToFrequency(tone.midi + 12), startTime, duration * 0.96 * 0.5, 0.012);
+    });
+    question.chordType.intervals.forEach(interval => {
+      oscillator(ctx, gainNode, midiToFrequency(question.rootMidi + interval), startTime, duration * 0.92, 0.052);
+    });
+  }
+  function playChord(ctx, gainNode, startTime, beat) {
+    const chordBeats = 4;
+    const pitches = [...new Set(question.notes[0].stack.map(tone => tone.midi))].sort((a, b) => a - b);
+    // A beat of silence separates the full chords from the individual notes.
+    const individualStartBeat = chordBeats + 1;
+    const finalChordBeat = individualStartBeat + pitches.length + 1;
+    const totalBeats = playChordNotes ? finalChordBeat + chordBeats : chordBeats;
+    playFullChord(ctx, gainNode, startTime, chordBeats * beat);
+    if (playChordNotes) {
+      pitches.forEach((midi, index) => {
+        const noteStart = startTime + (individualStartBeat + index) * beat;
+        const noteGain = ctx.createGain();
+        noteGain.connect(gainNode);
+        // End each piano release before the next pitch so the notes stay separate.
+        noteGain.gain.setValueAtTime(1, noteStart);
+        noteGain.gain.setValueAtTime(1, noteStart + beat * 0.84);
+        noteGain.gain.linearRampToValueAtTime(0, noteStart + beat * 0.94);
+        playMelodyNote(ctx, noteGain, midiToFrequency(midi), noteStart, beat * 0.82);
+      });
+      playFullChord(ctx, gainNode, startTime + finalChordBeat * beat, chordBeats * beat);
+    }
+    if (metronome) {
+      for (let pulse = 0; pulse < totalBeats; pulse++) {
+        const accented = pulse === 0 || (playChordNotes && [individualStartBeat, finalChordBeat].includes(pulse));
+        playClick(ctx, gainNode, startTime + pulse * beat, accented);
+      }
+    }
+    timers.current.push(setTimeout(stopAudio, Math.max(0, (startTime + totalBeats * beat - ctx.currentTime) * 1000) + 250));
+  }
+  async function play() {
+    if (!questionVisible) return;
+    if (playing || audioRef.current) { stopAudio(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { setPrompt("Audio playback is not supported in this browser."); return; }
+    stopAudio();
+    const ctx = new AC();
+    audioRef.current = ctx;
+    setPlaying(true);
+    setPrompt("");
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(questionTopic === "chord" ? 1 : 1.25, ctx.currentTime);
+    master.connect(ctx.destination);
+    const usesDictationMelody = ["tonality", "tempoChanges"].includes(questionTopic);
+    const chordRegister = usesDictationMelody ? 3 : 4;
+    const bassRegister = usesDictationMelody ? 2 : 3;
+    const playbackLayers = question.layers || [question];
+    const passage = (questionTopic === "ornaments" && ornamentPassage) || (questionTopic === "scales" && scalesPassage) || (questionTopic === "chord" && chordPassage) ? question.passage : null;
+    const frequencies = passage
+      ? melodyPianoFrequencies(passage)
+      : usesIsolatedNotes
+      ? question.notes.map(note => midiToFrequency(note.midi))
+      : questionTopic === "chord"
+      ? [
+          ...question.notes[0].stack.flatMap(tone => [tone.midi, tone.midi + 12]),
+          ...question.chordType.intervals.map(interval => question.rootMidi + interval),
+        ].map(midiToFrequency)
+      : isTimeListening
+      ? [...question.notes.filter(note => !note.rest).map(note => note.midi), ...question.pulsePitches].map(midiToFrequency)
+      : playbackLayers.flatMap(layer => melodyPianoFrequencies(layer, chordRegister, bassRegister));
+    const ready = await window.MLH.prepareAudioPlayback(ctx, { piano: frequencies, metronome: metronome && questionTopic !== "ornaments" });
+    if (audioRef.current !== ctx) return;
+    if (!ready) { stopAudio(); return; }
+    const beat = (60 / tempo.bpm) / (isTimeListening ? question.timeSignature.pulseQuarterBeats : 1);
+    const start = ctx.currentTime + 0.12;
+    if (passage) {
+      passage.bars.forEach(bar => playAccompaniment(ctx, master, bar, bar.barIndex * passage.timeSignature.beats * beat, beat, start, passage));
+      playAudioOnlyNotes(ctx, master, start, beat, passage);
+      return;
+    }
+    if (usesIsolatedNotes) {
+      playAudioOnlyNotes(ctx, master, start, beat);
+      return;
+    }
+    if (question.layers) {
+      playPolytonality(ctx, master, start, beat);
+      return;
+    }
+    if (questionTopic === "chord") {
+      playChord(ctx, master, start, beat);
+      return;
+    }
+    if (questionTopic === "tempoChanges") {
+      playTempoChanges(ctx, master, start);
+      return;
+    }
+    question.bars.forEach(bar => {
+      const barStart = bar.barIndex * question.timeSignature.beats * beat;
+      if (metronome) {
+        const pulses = isTimeListening ? question.timeSignature.pulseCount : question.timeSignature.beats;
+        const pulseBeats = isTimeListening ? question.timeSignature.pulseQuarterBeats : 1;
+        for (let b = 0; b < pulses; b++) playClick(ctx, master, start + barStart + b * pulseBeats * beat, b === 0);
+      }
+      if (isTimeListening) playRhythmAccompaniment(ctx, master, barStart, beat, start);
+      else playAccompaniment(ctx, master, bar, barStart, beat, start);
+      bar.notes.forEach(note => {
+        if (note.rest) return;
+        const noteStart = barStart + note.beat * beat;
+        const duration = note.beats * beat * 0.96;
+        playMelodyNote(ctx, master, midiToFrequency(effectiveMidiForNote(question, bar, note)), start + noteStart, duration);
+      });
+    });
+    const duration = question.bars.length * question.timeSignature.beats * beat;
+    timers.current.push(setTimeout(stopAudio, Math.max(0, (start + duration - ctx.currentTime) * 1000) + 250));
+  }
+  function answerButtonClass(id){ const base="min-h-12 rounded-xl border px-3 py-2 text-sm font-bold"; if(!feedback) return `${base} border-stone-300 bg-white text-black`; if(isCorrectChoice(id, question)) return `${base} border-green-600 bg-green-600 text-white`; if(id===selected) return `${base} border-red-600 bg-red-600 text-white`; return `${base} border-stone-300 bg-white text-stone-500 opacity-70`; }
+  const acc=attempted?Math.round(correct/attempted*100):0;
+  const disabledConfirm=!questionVisible || feedback || (question.mode==="choice" ? !selected : !typed.trim());
+  return <div className={window.MLH.shell.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Aural Recognition" subtitle="Test your ears on chords, scales, tonalities and more."><window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={acc} streak={streak} bestStreak={best} resetScore={()=>{setCorrect(0);setAttempted(0);setStreak(0);setBest(0);setConfetti(0);}} confettiKey={confetti} autoShowMedals={autoShowMedals} medalEligible={medalEligible} medalThresholdValues={MEDAL_THRESHOLDS}/></window.MLH.AppHeader><div className={window.MLH.shell.pageContentClass}><main className={window.MLH.shell.mainShellClass} onPointerDown={e=>{if(questionVisible&&feedback&&!e.target.closest("button,input,[data-menu-trigger],[data-menu-panel]"))newQuestion();}}>
+    <div className="hub-toolbar relative z-20">
+      <div className="hub-toolbar-left">
+        <div className="hub-menu-anchor relative" ref={levelRef}>
+          <window.MLH.LevelButton icon={<img src={ASSET.level} alt="" className="h-[26px] w-[28px]"/>} activeLevel={displayedLevel} activeLabel={displayedLevelLabel} isCustom={!medalEligible} onClick={()=>{setTopicOpen(false);setCustomiseOpen(false);setLevelOpen(v=>!v);}} dataMenuTrigger={true}/>
+          {levelOpen && <window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true} floating={true}>
+            <window.MLH.LevelMenu activeLevel={activeLevel} onSelect={applyLevel} levels={levelsForTopic(activeTopic)}/>
+          </window.MLH.MenuPanel>}
+        </div>
+        <div className="hub-menu-anchor relative" ref={topicRef}>
+          <button type="button" className={`${window.MLH.ToolbarButtonClass} gap-2`} data-menu-trigger={true} aria-label={`Exercise: ${TOPICS[activeTopic].label}`} aria-expanded={topicOpen} aria-controls="recognition-exercise-menu" onClick={()=>{setLevelOpen(false);setCustomiseOpen(false);setTopicOpen(v=>!v);}}>
+            <ExerciseIcon topic={activeTopic}/>
+            <span>{TOPICS[activeTopic].label}</span>
+          </button>
+          {topicOpen && <window.MLH.MenuPanel title="Exercise" position="left-0" className="recognition-topic-panel" dataMenuPanel={true} floating={true}>
+            <div id="recognition-exercise-menu" role="group" aria-label="Exercise" className="flex w-full min-w-0 flex-col gap-2">
+              {Object.keys(TOPICS).map(topic => <button key={topic} type="button" disabled={Boolean(TOPICS[topic].placeholder)} aria-pressed={topic === activeTopic} onClick={()=>applyTopic(topic)} className={`w-full rounded-xl border px-4 py-2 text-left transition ${TOPICS[topic].placeholder ? "cursor-not-allowed border-stone-200 bg-stone-100 opacity-50" : topic === activeTopic ? "border-stone-400 bg-stone-100" : "border-stone-200 bg-stone-50 hover:bg-stone-100"}`}>
+                <div className="flex min-h-[46px] min-w-0 items-center justify-between gap-3 text-stone-900">
+                  <div className="flex min-h-[46px] min-w-[42px] items-center justify-center">
+                    <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white shadow-sm scale-[1.08]">
+                      <ExerciseIcon topic={topic} menu={true}/>
+                    </span>
+                  </div>
+                  <div className="flex min-h-[46px] min-w-0 flex-1 flex-col justify-center pr-2">
+                    <div className="pb-[1px] text-[13px] font-black leading-[1.2] whitespace-normal">{TOPICS[topic].label}</div>
+                    {TOPICS[topic].placeholder && <div className="mt-[2px] pb-[2px] text-[11px] leading-[1.25] text-stone-600">Coming soon</div>}
+                  </div>
+                  {topic === activeTopic && <img src="./tick.svg" alt="" aria-hidden="true" className="h-[22px] w-[22px] shrink-0 self-center object-contain"/>}
+                </div>
+              </button>)}
+            </div>
+          </window.MLH.MenuPanel>}
+        </div>
+        <div className="hub-menu-anchor relative" ref={customiseRef}>
+          <window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" className="h-[26px] w-[26px]"/>} onClick={()=>{setLevelOpen(false);setTopicOpen(false);setCustomiseOpen(v=>!v);}} dataMenuTrigger={true}/>
+          {customiseOpen && <window.MLH.MenuPanel title="Customise" position="chords-customise-panel left-0" variant="customise" dataMenuPanel={true}>
+            <RecognitionMenuRows level={activeLevel} topic={activeTopic} enabled={enabled} setEnabled={(ids)=>{setEnabled(ids);newQuestion(activeLevel,ids);}} tempo={tempo} setTempo={setTempo} metronome={metronome} setMetronome={setMetronome} playChordNotes={playChordNotes} setPlayChordNotes={setPlayChordNotes} ornamentPassage={ornamentPassage} setOrnamentPassage={setOrnamentPassage} scalesPassage={scalesPassage} setScalesPassage={setScalesPassage} chordPassage={chordPassage} setChordPassage={setChordPassage} stopAudio={stopAudio}/>
+          </window.MLH.MenuPanel>}
+        </div>
+      </div>
+      <div className="hub-toolbar-feedback"><window.MLH.FeedbackBadge feedback={feedback} fading={feedbackFading} animationPrefix="note"/></div>
+      <div className="hub-toolbar-right"><window.MLH.SkipButton resetStreak={()=>setStreak(0)} onClick={()=>newQuestion()} icon={<img src={ASSET.next} alt="" className="h-[27.8px] w-[27.8px]"/>}/></div>
+    </div>
+    <div className={`recognition-question ${questionVisible ? "" : "is-changing"}`} aria-busy={!questionVisible}>
+    <div className="chords-question-card relative z-10 mt-6 flex flex-col rounded-xl border border-stone-200 bg-stone-50 px-4 py-4 shadow-md mx-3"><div><p className="text-base font-semibold leading-tight">{promptForQuestion(question, ornamentPassage, scalesPassage, chordPassage)}</p>{prompt&&<p className="mt-2 text-sm font-bold text-red-600">{prompt}</p>}<div className="mt-2">{question.mode==="choice"?<div className="flex flex-col gap-3"><div className={`grid gap-2 ${question.options.length <= 2 ? "w-1/2 grid-cols-2" : question.options.length === 3 ? "w-full grid-cols-3" : question.options.length === 5 ? "w-full grid-cols-5" : question.options.length === 6 ? "w-full grid-cols-3" : "w-full grid-cols-4"}`}>{question.options.map(id=><button key={id} disabled={Boolean(feedback) || !questionVisible} onClick={()=>{setSelected(id);score(isCorrectChoice(id, question));}} className={answerButtonClass(id)}><AnswerOptionLabel id={id}/></button>)}</div><button type="button" onClick={play} disabled={Boolean(feedback) || !questionVisible} className={window.MLH.PlayButtonClass}><span>{playing?"■":"▶"}</span><span>{playing?"Stop":"Play"}</span></button></div>:<div className="flex flex-wrap items-center gap-3"><input value={typed} disabled={Boolean(feedback) || !questionVisible} onChange={e=>setTyped(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!disabledConfirm){e.preventDefault();confirm();}}} placeholder="Type your answer" className={window.MLH.typedAnswerClass(feedback?{correct:isCorrectText(typed,question)}:null,"w-1/2")}/>{feedback&&!feedback.correct&&<div className="text-base font-bold text-green-600">{answerLabelForQuestion(question)}</div>}</div>}</div></div>{question.mode==="text"&&<div className={window.MLH.PlayClearConfirmRowClass}><button type="button" onClick={play} disabled={Boolean(feedback) || !questionVisible} className={window.MLH.PlayButtonClass}><span>{playing?"■":"▶"}</span><span>{playing?"Stop":"Play"}</span></button><div className={window.MLH.ActionButtonGroupClass}><button type="button" disabled={Boolean(feedback) || !questionVisible || !typed.trim()} onClick={clearAnswer} className={window.MLH.ClearButtonClass}>Clear</button><window.MLH.ConfirmButton disabled={disabledConfirm} onClick={confirm} className={window.MLH.AudioConfirmButtonClass}>Confirm</window.MLH.ConfirmButton></div></div>}</div></div></main></div></div>;
+}
+const root=document.getElementById("root"); if(ReactDOM.createRoot) ReactDOM.createRoot(root).render(<App/>); else ReactDOM.render(<App/>,root);
+
+</script>
+<script src="./footer.js?v=20261005-update-history"></script>
+</body>
+</html>
