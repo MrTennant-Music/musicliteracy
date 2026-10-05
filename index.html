@@ -499,6 +499,10 @@ a { color: inherit; }
   pointer-events: auto;
 }
 .level-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -523,6 +527,25 @@ a { color: inherit; }
   border-color: var(--ink);
   background: var(--ink);
   color: #fff;
+}
+.level-choice[data-medal] {
+  background: var(--medal-background);
+  border-color: var(--medal-colour);
+  color: var(--ink);
+}
+.level-choice[data-medal]:hover,
+.level-choice[data-medal]:focus-visible,
+.level-choice[data-medal].is-selected {
+  background: var(--medal-background);
+  color: var(--ink);
+  outline: 2px solid var(--medal-colour);
+  outline-offset: -2px;
+}
+.level-medal {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 .exercise-picker,
 .aural-level-picker {
@@ -824,20 +847,22 @@ a { color: inherit; }
     width: 56px;
   }
 
-  .level-choice {
+  .level-choice-label {
     font-size: 0;
   }
 
-  .level-choice[data-level="N3"]::after { content: "N3"; }
-  .level-choice[data-level="N4"]::after { content: "N4"; }
-  .level-choice[data-level="N5"]::after { content: "N5"; }
-  .level-choice[data-level="H"]::after { content: "H"; }
-  .level-choice[data-level="AH"]::after { content: "AH"; }
+  .level-choice[data-level="N3"] .level-choice-label::after { content: "N3"; }
+  .level-choice[data-level="N4"] .level-choice-label::after { content: "N4"; }
+  .level-choice[data-level="N5"] .level-choice-label::after { content: "N5"; }
+  .level-choice[data-level="H"] .level-choice-label::after { content: "H"; }
+  .level-choice[data-level="AH"] .level-choice-label::after { content: "AH"; }
 
-  .level-choice::after {
+  .level-choice-label::after {
     font-size: .82rem;
     font-weight: 800;
   }
+  .level-choice { gap: 3px; }
+  .level-medal { width: 16px; height: 16px; }
 }
 
 @media (max-width: 980px) {
@@ -947,6 +972,7 @@ a { color: inherit; }
 
 <div id="questionPaperAnalysisOverlay" class="overlay"><div class="modal wide"><button class="close-btn" type="button" data-close aria-label="Close Question Paper Analysis">×</button><h2>Question Paper Analysis</h2><div class="question-paper-viewer"><iframe src="Music%20Literacy%20Question%20Analysis.pdf" title="Music Literacy Question Analysis"><p>Your browser cannot display this document here. <a class="concept-link" href="Music%20Literacy%20Question%20Analysis.pdf" target="_blank" rel="noopener">Open the Question Paper Analysis PDF</a>.</p></iframe></div></div></div>
 
+<script src="./hub-achievements.js?v=20261005-progress"></script>
 <script>
 const iconBase = "https://themusicliteracyhub.netlify.app/";
 const levels = [
@@ -973,7 +999,7 @@ function filteredAuralLevel(exercise, filter = activeLevelFilter) {
 }
 function renderAuralRecognitionPickers() {
   return `<div class="aural-level-picker" id="aural-recognition-levels" role="group" aria-label="Choose level">
-    ${levels.map(([level, label]) => `<button class="level-choice aural-level-choice" type="button" data-level="${level}" aria-expanded="false" aria-controls="aural-recognition-exercises">${label}</button>`).join("")}
+    ${levels.map(([level, label]) => `<button class="level-choice aural-level-choice" type="button" data-level="${level}" aria-expanded="false" aria-controls="aural-recognition-exercises"><span class="level-choice-label">${label}</span></button>`).join("")}
   </div><div class="exercise-picker" id="aural-recognition-exercises" role="group" aria-label="Choose exercise"></div>`;
 }
 function resetAuralExercisePicker(card) {
@@ -1159,13 +1185,45 @@ function renderApps() {
               ${app.comingSoon ? '<span class="coming-soon-label">Coming soon</span>' : '<span class="arrow"><svg viewBox="0 0 24 24" aria-hidden="true" style="width:24px;height:24px;display:block;"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>'}
             </button>
             ${app.title === "Aural Recognition" ? renderAuralRecognitionPickers() : app.comingSoon || app.direct === true ? "" : `<div class="level-picker" aria-label="Choose level">
-              ${levels.map(([key, label]) => `<button class="level-choice ${app.disabled.includes(key) ? "disabled" : ""}" type="button" data-level="${key}" ${app.disabled.includes(key) ? "disabled aria-disabled=\"true\"" : ""} ${app.title === "Digital Question Papers" && digitalPaperYears[key] ? "aria-expanded=\"false\" aria-controls=\"interactive-exam-years\"" : ""}>${label}</button>`).join("")}
+              ${levels.map(([key, label]) => `<button class="level-choice ${app.disabled.includes(key) ? "disabled" : ""}" type="button" data-level="${key}" ${app.disabled.includes(key) ? "disabled aria-disabled=\"true\"" : ""} ${app.title === "Digital Question Papers" && digitalPaperYears[key] ? "aria-expanded=\"false\" aria-controls=\"interactive-exam-years\"" : ""}><span class="level-choice-label">${label}</span></button>`).join("")}
             </div>`}
             ${app.title === "Digital Question Papers" ? `<div class="year-picker" id="interactive-exam-years" aria-label="Choose year">${Object.entries(digitalPaperYears).map(([level, years]) => years.length ? years.map(year => `<button class="year-choice" type="button" data-level="${level}" hidden data-href="interactive-exams/exam.html?paper=${level === "N5" ? "national5" : "higher"}-${year}">${year}</button>`).join("") : `<p class="year-coming-soon" data-level="${level}" hidden>Coming soon</p>`).join("")}</div>` : ""}
           </div>`).join("")}
       </div>
     </section>`).join("");
 }
+
+function updateAchievementButtons() {
+  document.querySelectorAll(".card .level-choice").forEach(button => {
+    const activity = button.closest(".card").dataset.href;
+    const level = button.dataset.level;
+    const label = levels.find(([key]) => key === level)?.[1] || level;
+    const achievement = button.disabled ? null : window.MLH.achievements.get(activity, level);
+    const medal = window.MLH.achievements.medals[achievement?.tier];
+    button.querySelector(".level-medal")?.remove();
+    delete button.dataset.medal;
+    button.style.removeProperty("--medal-background");
+    button.style.removeProperty("--medal-colour");
+    button.setAttribute("aria-label", label);
+    button.removeAttribute("title");
+    if (!medal) return;
+    button.dataset.medal = achievement.tier;
+    button.style.setProperty("--medal-background", medal.backgroundColor);
+    button.style.setProperty("--medal-colour", medal.color);
+    const description = `${label}, ${medal.label} medal, highest streak ${achievement.bestStreak}`;
+    button.setAttribute("aria-label", description);
+    button.title = description;
+    const icon = document.createElement("img");
+    icon.className = "level-medal";
+    icon.src = medal.icon;
+    icon.alt = "";
+    icon.setAttribute("aria-hidden", "true");
+    button.append(icon);
+  });
+}
+window.addEventListener("mlh-achievements-change", updateAchievementButtons);
+window.addEventListener("pageshow", updateAchievementButtons);
+window.addEventListener("focus", updateAchievementButtons);
 
 function closeMenus() {
   moreDropdown.classList.remove("open");
@@ -1234,6 +1292,7 @@ async function copyText(button, text, successText, failText, resetHtml, resetDel
 }
 
 renderApps();
+updateAchievementButtons();
 renderConceptGrid();
 const activitySearch = document.getElementById("activitySearch");
 const activitySearchWrap = activitySearch?.closest(".category-search");

@@ -1,5 +1,6 @@
 // Rhythm generation and Bravura notation reused from timesig.html.
 // The listening adapter hides time signatures and counts dotted-crotchet pulses in compound time.
+// Beats Per Bar and Metres use the shared 16-bar Advanced Higher Practice Questions generator.
 (function attachTimeSignaturesListening(MLH) {
   const STAFF_LEFT = 24;
   const STAFF_RIGHT = 896;
@@ -1213,6 +1214,65 @@
       pulsePitches
     };
   }
+  function practiceScaleMidi(generator, relativeStep, tonicMidi, minor) {
+    const degree = ((relativeStep % 7) + 7) % 7;
+    // Match Practice Questions' raised leading note and dominant harmony.
+    return generator.relativeStepToMidi(relativeStep, tonicMidi, minor ? "minor" : "major")
+      + (minor && degree === 6 ? 1 : 0);
+  }
+
+  function practiceAccompanimentForBar(generator, bar, key, signature, style, finalBar, subdivisions) {
+    const minor = key.id.endsWith("m");
+    const tonicMidi = midiForPitch({ name: key.tonic + "3", letter: key.tonic }, key);
+    const degrees = generator.CHORD_DEGREES[bar.chordSymbol] || generator.CHORD_DEGREES.I;
+    const rootStep = degrees[0] - 1;
+    const pitches = degrees.map(degree => {
+      let step = degree - 1;
+      while (step < rootStep) step += 7;
+      return practiceScaleMidi(generator, step, tonicMidi, minor);
+    });
+    return MLH.AuralAccompaniment.eventsForBar({
+      signature, style, finalBar: finalBar && !subdivisions, subdivisions, notes: bar.notes,
+      segments: [{ beat: 0, pitches }]
+    });
+  }
+
+  function buildAdvancedHigherListeningMelody(signatureIds, { subdivisions = false } = {}) {
+    const generator = window.PracticeMelodyGenerator;
+    if (!generator?.generateAdvancedHigherPlan) throw new Error("The Practice Questions melody generator is unavailable.");
+    const sourceSignature = randomItem(TIME_SIGNATURES.filter(signature => signatureIds.includes(signature.id)));
+    if (!sourceSignature) throw new Error("No available listening time signature.");
+    const timeSignature = {
+      ...sourceSignature, beats: sourceSignature.beatsPerBar,
+      pulseCount: pulseCount(sourceSignature),
+      pulseQuarterBeats: sourceSignature.type === "compound" ? 1.5 : 1
+    };
+    const key = randomItem(Object.values(KEYS));
+    const minor = key.id.endsWith("m");
+    const tonicMidi = midiForPitch({ name: key.tonic + (key.id === "C" ? "5" : "4"), letter: key.tonic }, key);
+    const plan = generator.generateAdvancedHigherPlan({
+      seed: `${Date.now()}-${Math.random()}`,
+      cadenceId: "perfect", timeSignatureId: timeSignature.id, allowRests: true
+    });
+    const accompanimentStyle = MLH.AuralAccompaniment.chooseStyle();
+    const bars = plan.bars.map(plannedBar => {
+      const bar = {
+        ...plannedBar, totalBars: plan.bars.length, timeSignature,
+        notes: plannedBar.notes.map((note, noteIndex) => ({
+          ...note, id: `${plannedBar.barIndex}-${noteIndex}`, barIndex: plannedBar.barIndex, noteIndex,
+          midi: note.rest ? 0 : practiceScaleMidi(generator, note.relativeStep, tonicMidi, minor)
+        }))
+      };
+      bar.accompaniment = practiceAccompanimentForBar(generator, bar, key, timeSignature, accompanimentStyle, bar.barIndex === plan.bars.length - 1, subdivisions);
+      return bar;
+    });
+    return {
+      id: Math.random().toString(36).slice(2), key, timeSignature, bars,
+      barCount: bars.length, totalBeats: bars.length * timeSignature.beats,
+      generationLevel: "AH", melodyGenerationStyle: "advancedHigher", melodyPlan: plan,
+      accompanimentStyle
+    };
+  }
   function ListeningScore({
     question,
     activeNoteId = null
@@ -1259,6 +1319,7 @@
     signaturesForLevel,
     pulseCount,
     buildListeningMelody,
+    buildAdvancedHigherListeningMelody,
     ListeningScore
   };
 })(window.MLH || (window.MLH = {}));

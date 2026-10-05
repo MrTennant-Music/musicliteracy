@@ -347,12 +347,15 @@
     showMedalPopover = false,
     medalEligible = null,
     medalThresholdValues = null,
+    achievementLevel = null,
   }) {
     const [popover, setPopover] = React.useState(null);
     const [autoPopoverKey, setAutoPopoverKey] = React.useState(0);
     const [dismissedAutoPopoverKey, setDismissedAutoPopoverKey] = React.useState(0);
     const [autoMedalEligible, setAutoMedalEligible] = React.useState(true);
     const ref = React.useRef(null);
+    const achievementAttemptRef = React.useRef(null);
+    const [, refreshAchievements] = React.useState(0);
     useClickAway(ref, () => {
       setPopover(null);
       setAutoPopoverKey(0);
@@ -390,6 +393,23 @@
     const effectiveMedalEligible = medalEligible ?? autoMedalEligible;
     const medal = effectiveMedalEligible ? thresholds.find((item) => item.active) : null;
     React.useEffect(() => {
+      const refresh = () => refreshAchievements((value) => value + 1);
+      window.addEventListener("mlh-achievements-change", refresh);
+      return () => window.removeEventListener("mlh-achievements-change", refresh);
+    }, []);
+    React.useEffect(() => {
+      const previous = achievementAttemptRef.current;
+      const context = `${achievementLevel}|${effectiveMedalEligible}`;
+      achievementAttemptRef.current = { context, attempted };
+      // Only a newly marked answer can earn progress; switching level or settings cannot.
+      if (!previous || previous.context !== context || attempted <= previous.attempted || !effectiveMedalEligible || !achievementLevel || MLH.worksheetHeaderMode) return;
+      if (medalEligible == null && Array.from(document.querySelectorAll("button[data-menu-trigger]"))
+        .some((button) => button.textContent.trim() === "Custom")) return;
+      MLH.achievements?.record(window.location.pathname, achievementLevel, streak, thresholdValues);
+    }, [achievementLevel, attempted, streak, effectiveMedalEligible, medalEligible, thresholdValues.join(",")]);
+    const savedAchievement = effectiveMedalEligible ? MLH.achievements?.get(window.location.pathname, achievementLevel) : null;
+    const highestStreak = Math.max(bestStreak || 0, savedAchievement?.bestStreak || 0);
+    React.useEffect(() => {
       if (!effectiveMedalEligible || confettiKey <= 0) return;
       setDismissedAutoPopoverKey(0);
       setAutoPopoverKey(confettiKey);
@@ -401,7 +421,7 @@
     const shouldShowMedalPopover = popover === "streak" || autoMedalPopover;
     const medalStyle = !effectiveMedalEligible
       ? { backgroundColor: "#f5f5f4", color: "#a8a29e" }
-      : medal?.tier === "diamond"
+      : MLH.achievements?.medals[medal?.tier] || (medal?.tier === "diamond"
       ? { backgroundColor: "rgba(34, 211, 238, .25)", color: "#06b6d4" }
       : medal?.tier === "gold"
         ? { backgroundColor: "rgba(250, 204, 21, .25)", color: "#eab308" }
@@ -409,7 +429,7 @@
           ? { backgroundColor: "rgba(203, 213, 225, .3)", color: "#64748b" }
           : medal?.tier === "bronze"
             ? { backgroundColor: "rgba(180, 83, 9, .2)", color: "#b45309" }
-            : { backgroundColor: "#fafaf9", color: "#000000" };
+            : { backgroundColor: "#fafaf9", color: "#000000" });
     const tile = MLH.shell.scoreTileClass;
     const active = MLH.shell.scoreTileActiveClass;
 
@@ -467,7 +487,7 @@
           React.createElement("div", { className: "relative z-10 flex h-full flex-col items-center justify-center pt-[1px] text-center" },
             React.createElement("div", { className: "text-[12px] font-bold uppercase leading-none tracking-[0.08em] text-black sm:text-[11px]" }, "Streak"),
             React.createElement("div", { className: "mt-[3px] text-[20px] font-black leading-none tracking-tight sm:text-[22px]", style: { color: medalStyle.color } }, streak),
-            React.createElement("div", { className: "mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]" }, `Highest: ${bestStreak}`)
+            React.createElement("div", { className: "mt-[3px] text-[11px] font-medium leading-none text-stone-500 sm:text-[12px]" }, `Highest: ${highestStreak}`)
           ),
           shouldShowMedalPopover && React.createElement("div", {
             className: "fixed-popover-button absolute left-1/2 top-full z-[120] mt-2 -translate-x-1/2 rounded-xl border border-stone-200 bg-white px-2.5 py-3 text-[12px] leading-none text-stone-700 shadow-lg sm:text-[13px]",

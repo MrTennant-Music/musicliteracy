@@ -14,13 +14,17 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="./hub-input.js?v=1.3"></script>
   <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
-  <script src="./hub-shell.js?v=20260712-profile-sharing"></script>
+  <script src="./hub-achievements.js?v=20261005-progress"></script>
+  <script src="./hub-shell.js?v=20261005-achievement-progress"></script>
   <script src="./hub-menu.js?v=20261004-scales-menu-labels"></script>
   <script src="./bravura-symbols.js"></script>
   <script src="./shared-notation-config.js"></script>
   <script src="./melodic-dictation-generator.js?v=20261004-gentler-polytonality"></script>
   <script src="./melodic-dictation-notation.js?v=20261004-polytonal-score"></script>
-  <script src="./time-signatures-listening.js?v=20261004-listening"></script>
+  <script src="./practice-melody-generator.js?v=20260710-ah-rules"></script>
+  <script src="./aural-accompaniment.js?v=20261005-shared-styles"></script>
+  <script src="./aural-tonalities.js?v=20261005-ah-tonalities"></script>
+  <script src="./time-signatures-listening.js?v=20261005-ah-metres"></script>
   <script src="./tempo-changes-listening.js?v=20261004-rubato"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
   <style>
@@ -379,7 +383,7 @@ function initialSelection() {
 }
 function conceptIdsForLevel(level) {
   const beatCounts = [...new Set(TIME_LISTENING.signaturesForLevel(level).map(TIME_LISTENING.pulseCount))].sort((a, b) => a - b).map(count => `beats-${count}`);
-  const tempoChanges = TEMPO_CHANGES.questionConceptIdsForLevel(level);
+  const tempoChanges = TEMPO_CHANGES.questionConceptIdsForLevel(level).filter(id => id !== "rubato");
   const scales = scaleIdsForLevel(level);
   const ornaments = ornamentIdsForLevel(level);
   if (level === "N3") return [...beatCounts, ...tempoChanges];
@@ -391,9 +395,10 @@ function conceptIdsForLevel(level) {
   return [...concepts, ...beatCounts, ...tempoChanges, ...scales, ...ornaments];
 }
 function availableConceptIdsForLevel(level) {
-  // Optional chord types appear in Customise without joining the default pool.
+  // Optional concepts appear in Customise without joining the default pool.
   const optionalChords = CHORD_TYPES.filter(chord => chord.optional && chord.levels.includes(level)).map(chord => chord.id);
-  return [...conceptIdsForLevel(level), ...optionalChords];
+  const optionalTempoChanges = level === "N5" ? ["rubato"] : [];
+  return [...conceptIdsForLevel(level), ...optionalChords, ...optionalTempoChanges];
 }
 const TOPICS = {
   cadence: { label: "Cadences", icon: "./cadences-icon.svg" },
@@ -500,6 +505,63 @@ function melodyPianoFrequencies(content, chordRegister = 3, bassRegister = 2) {
     return [...bar.notes.filter(note => !note.rest).map(note => effectiveMidiForNote(content, bar, note)), ...chord, ...bass, ...accompaniment].map(midiToFrequency);
   });
 }
+function withAccompanimentStyles(content, style = window.MLH.AuralAccompaniment.chooseStyle()) {
+  if (content.layers) {
+    const layers = content.layers.map(layer => withAccompanimentStyles(layer, style));
+    return { ...content, layers, bars: layers[0].bars, accompanimentPattern: style };
+  }
+  const bars = content.bars.map(bar => {
+    let segments = bar.accompanimentHarmony;
+    if (!segments) {
+      const letters = content.key?.chords?.[bar.chordSymbol];
+      if (letters?.length) {
+        let root = pitchForChordLetter(content, bar, letters[0], 3);
+        while (root >= 60) root -= 12;
+        while (root < 48) root += 12;
+        const pitches = letters.map(letter => {
+          let midi = pitchForChordLetter(content, bar, letter, 3);
+          while (midi < root) midi += 12;
+          while (midi >= root + 12) midi -= 12;
+          return midi;
+        });
+        segments = [{ beat: 0, pitches }];
+      } else if (content.key?.id === "atonal") {
+        // Retain the original shifting chromatic sonorities without adding
+        // a tonal chord or a repeated tonic pedal.
+        segments = bar.accompaniment.map((event, index, events) => ({
+          beat: index === 0 ? 0 : event.beat,
+          beats: (events[index + 1]?.beat ?? content.timeSignature.beats) - (index === 0 ? 0 : event.beat),
+          pitches: event.pitches,
+        }));
+      } else if (bar.accompaniment?.length) {
+        // Each polytonal layer keeps the complete chord from its own key.
+        const chord = bar.accompaniment.reduce((best, event) => event.pitches.length > best.pitches.length ? event : best);
+        segments = [{ beat: 0, pitches: chord.pitches }];
+      } else {
+        // Keep the metre exercise's tonic support in the same register as
+        // the other passage accompaniments.
+        let root = content.pulsePitches[0];
+        while (root < 48) root += 12;
+        const pitches = content.pulsePitches.map(pitch => {
+          while (pitch < root) pitch += 12;
+          while (pitch >= root + 12) pitch -= 12;
+          return pitch;
+        });
+        segments = [{ beat: 0, pitches }];
+      }
+    }
+    return {
+      ...bar, accompanimentHarmony: segments,
+      accompaniment: window.MLH.AuralAccompaniment.eventsForBar({
+        signature: content.timeSignature, style, segments,
+        notes: bar.notes.map(note => ({ ...note, midi: effectiveMidiForNote(content, bar, note) })),
+        finalBar: bar.barIndex === content.bars.length - 1 && topicForQuestion(content) !== "metre",
+        subdivisions: topicForQuestion(content) === "metre",
+      }),
+    };
+  });
+  return { ...content, bars, accompanimentPattern: style };
+}
 function makeNote(base, rhythm, barIndex, noteIndex, beat, key, chordSymbol) {
   const writtenAccidental = melodicAccidentalForLetter(key, base.letter) ?? chordAccidentalForLetter(key, chordSymbol, base.letter);
   return { ...base, id:`${barIndex}-${noteIndex}`, bar:barIndex, barIndex, noteIndex, rhythm, beats:rhythmInfo(rhythm).beats, beat, writtenAccidental };
@@ -599,20 +661,19 @@ function buildChordPassage(answerId) {
     }).map((note, noteIndex) => ({ ...note, noteIndex, id: `chord-passage-${bar.barIndex}-${noteIndex}` }));
     return {
       ...bar, notes, answerChord: answerId,
-      accompaniment: [
-        { beat: 0, beats: changeBeat * 0.96, pitches: [targetRoot - 24] },
-        { beat: 0, beats: changeBeat * 0.96, pitches: targetPitches, volume: 1.5 },
-        { beat: changeBeat, beats: changeBeat * 0.96, pitches: [resolutionRoot - 24, ...resolutionPitches] },
+      accompanimentHarmony: [
+        { beat: 0, beats: changeBeat, pitches: targetPitches, bass: targetRoot - 24, revealChord: true },
+        { beat: changeBeat, beats: changeBeat, pitches: resolutionPitches, bass: resolutionRoot - 24 },
       ],
     };
   });
-  return {
+  return withAccompanimentStyles({
     ...melody, type: "chord", accompanimentStyle: "tonality", bars,
     notes: bars.flatMap(bar => bar.notes.filter(note => !note.rest).map(note => ({
       ...note, midi: note.soundingMidi, beat: bar.barIndex * melody.timeSignature.beats + note.beat,
     }))),
     totalBeats: bars.length * melody.timeSignature.beats, chordCount: targetBars.size,
-  };
+  });
 }
 function buildChordQuestion(level, enabledIds, answerId) {
   const spelling = r(CHORD_SPELLINGS.filter(item => item.type === answerId));
@@ -634,9 +695,10 @@ function buildChordQuestion(level, enabledIds, answerId) {
   };
 }
 function buildTonalityQuestion(level, enabledIds, answerId) {
-  const melody = window.MLH.MelodicDictation.buildTonalityMelody(answerId);
+  const melody = window.MLH.AuralTonalities.buildMelody(answerId);
   return {
     ...melody, type: "tonality", level, answerId, answer: CONCEPTS[answerId],
+    playbackTempo: r(TEMPOS),
     mode: chooseAnswerMode(), options: answerOptionsFor(level, enabledIds, "tonality"),
     notes: (melody.layers || [melody]).flatMap(layer => layer.bars.flatMap(bar => bar.notes)),
   };
@@ -663,7 +725,7 @@ function buildScalePassage(answerId, tonicMidi) {
     { contour: [0, 1, 2, 3, 4, 3, 2, 1], beats: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5] },
   ];
   const endings = [
-    { contour: [4, 2, 0], beats: [1, 1, 2] },
+    { contour: [4, 2, 0], beats: [0.5, 0.5, 3] },
     { contour: [2, 1, 0], beats: [0.5, 0.5, 3] },
     { contour: [0], beats: [4] },
   ];
@@ -720,7 +782,6 @@ function buildScalePassage(answerId, tonicMidi) {
     [0, 3, 0, 4, 5, 1, 4, 0],
     [0, 5, 3, 4, 1, 3, 4, 0],
   ]);
-  const accompanimentStyle = r(["held", "pulse", "broken"]);
   const bars = Array.from({ length: 8 }, (_, barIndex) => {
     const intervals = melodicMinor && barIndex >= descendingStartBar ? endingScale : ascending;
     const degreeMidi = degree => tonicMidi + 12 * Math.floor(degree / lastDegree) + intervals[degree % lastDegree];
@@ -738,50 +799,36 @@ function buildScalePassage(answerId, tonicMidi) {
       else chord = [roots[barIndex], roots[barIndex] + 2, roots[barIndex] + 4];
       pitches = [degreeMidi(chord[0]) - 24, ...chord.map(degree => degreeMidi(degree) - 12)];
     }
-    const upperPitches = pitches.slice(1);
-    const style = barIndex === 7 ? "held" : accompanimentStyle;
-    const accompaniment = style === "held"
-      ? [{ beat: 0, beats: 3.85, pitches }]
-      : style === "pulse"
-      ? [
-          { beat: 0, beats: 0.9, pitches: [pitches[0]] },
-          { beat: 1, beats: 0.75, pitches: upperPitches },
-          { beat: 2, beats: 0.9, pitches: [pitches[0]] },
-          { beat: 3, beats: 0.75, pitches: upperPitches },
-        ]
-      : [
-          { beat: 0, beats: 0.9, pitches: [pitches[0]] },
-          ...[0.5, 1, 1.5, 2, 2.5, 3, 3.5].map((pulse, index) => ({
-            beat: pulse, beats: 0.45, pitches: [upperPitches[index % upperPitches.length]],
-          })),
-        ];
     return {
       barIndex,
       notes: notes.filter(note => note.barIndex === barIndex).map(note => ({ ...note, beat: note.beat - barIndex * 4 })),
-      accompaniment,
+      accompanimentHarmony: [{ beat: 0, pitches: pitches.slice(1), bass: pitches[0], volume: 0.75 }],
     };
   });
-  return { notes, bars, timeSignature: { id: "4/4", top: 4, bottom: 4, beats: 4 }, totalBeats: beat, scaleDirection: direction };
+  return withAccompanimentStyles({ type: "scales", notes, bars, timeSignature: { id: "4/4", top: 4, bottom: 4, beats: 4 }, totalBeats: beat, scaleDirection: direction });
 }
 function buildScaleQuestion(level, enabledIds, answerId) {
   const scale = SCALE_TYPES[answerId];
   const tonicMidi = r([55, 57, 60, 62, 64, 65, 67]);
   const descending = scale.descending || [...scale.ascending].reverse();
-  // Play the upper tonic once at the turn; every note, including the last, is a crotchet.
+  // Play the upper tonic once at the turn. Hold the final tonic for four
+  // beats so the scale settles naturally after the crotchet movement.
   const intervals = [...scale.ascending, ...descending.slice(1)];
   const notes = intervals.map((interval, index) => ({
-    id: `scale-${index}`, midi: tonicMidi + interval, beat: index, beats: 1, rhythm: "crotchet",
+    id: `scale-${index}`, midi: tonicMidi + interval, beat: index,
+    beats: index === intervals.length - 1 ? 4 : 1,
+    rhythm: index === intervals.length - 1 ? "semibreve" : "crotchet",
   }));
   return {
     id: Date.now() + Math.random(), type: "scales", level, answerId, answer: CONCEPTS[answerId],
     mode: chooseAnswerMode(), options: answerOptionsFor(level, enabledIds, "scales"),
-    tonicMidi, notes, totalBeats: notes.length, passage: buildScalePassage(answerId, tonicMidi),
+    tonicMidi, notes, totalBeats: notes.reduce((total, note) => total + note.beats, 0), passage: buildScalePassage(answerId, tonicMidi),
   };
 }
 function buildOrnamentPassage(answerId) {
-  const generator = window.MLH.MelodicDictation;
-  // Use the same eight-bar melody/harmony engine as major/minor Tonalities.
-  const melody = generator.makeEightBarRepetitionQuestion("N5", 0, r(generator.KEYS));
+  // Share Tonalities' sixteen-bar AH melody/harmony engine and its varied
+  // accompaniment, then decorate windows within that generated melody.
+  const melody = window.MLH.AuralTonalities.buildMelody(r(["major", "minor"]));
   const candidates = melody.bars.slice(0, -1).map(bar => {
     const windows = [];
     bar.notes.forEach((note, startIndex) => {
@@ -792,7 +839,7 @@ function buildOrnamentPassage(answerId) {
         beats += bar.notes[endIndex].beats;
         if (beats < 2) continue;
         // Prefer an existing held note, then a chord tone on a strong beat.
-        const chordTone = melody.key.chords[bar.chordSymbol].includes(note.letter);
+        const chordTone = bar.accompanimentHarmony.some(segment => segment.pitches.some(pitch => (note.soundingMidi - pitch) % 12 === 0));
         const strongBeat = note.beat === 0 || note.beat === 2;
         windows.push({ startIndex, endIndex, beats, weight: (startIndex === endIndex ? 8 : 0) + (chordTone ? 2 : 0) + (strongBeat ? 1 : 0) });
         break;
@@ -808,14 +855,10 @@ function buildOrnamentPassage(answerId) {
     const bestWeight = Math.max(...windows.map(window => window.weight));
     selectedWindows.set(bar.barIndex, r(windows.filter(window => window.weight === bestWeight)));
   }
-  const letters = ["C", "D", "E", "F", "G", "A", "B"];
-  function neighbourMidi(note, offset, bar) {
-    const position = note.octave * 7 + letters.indexOf(note.letter) + offset;
-    const letter = letters[((position % 7) + 7) % 7];
-    const octave = Math.floor(position / 7);
-    const naturalMidi = 12 * (octave + 1) + [0, 2, 4, 5, 7, 9, 11][letters.indexOf(letter)];
-    const raised = generator.melodicAccidentalForLetter(melody.key, letter) ?? generator.chordAccidentalForLetter(melody.key, bar.chordSymbol, letter) ?? 0;
-    return naturalMidi + generator.keyAccidentalForLetter(melody.key, letter) + raised;
+  const scale = melody.key.id === "Am" ? [0, 2, 3, 5, 7, 8, 11] : [0, 2, 4, 5, 7, 9, 11];
+  function neighbourMidi(note, offset) {
+    const step = note.relativeStep + offset;
+    return melody.tonicMidi + Math.floor(step / 7) * 12 + scale[((step % 7) + 7) % 7];
   }
   const bars = melody.bars.map(bar => {
     const window = selectedWindows.get(bar.barIndex);
@@ -835,8 +878,8 @@ function buildOrnamentPassage(answerId) {
       pattern[pattern.length - 1].beats = window.beats - approachBeats;
       const pitches = {
         main: effectiveMidiForNote(melody, bar, note),
-        upper: neighbourMidi(note, 1, bar),
-        lower: neighbourMidi(note, -1, bar),
+        upper: neighbourMidi(note, 1),
+        lower: neighbourMidi(note, -1),
       };
       let beat = note.beat;
       return pattern.map((event, index) => {
@@ -847,13 +890,13 @@ function buildOrnamentPassage(answerId) {
     }).map((note, noteIndex) => ({ ...note, noteIndex, id: `ornament-passage-${bar.barIndex}-${noteIndex}` }));
     return { ...bar, notes };
   });
-  return {
+  return withAccompanimentStyles({
     ...melody, type: "ornaments", accompanimentStyle: "tonality", bars,
     notes: bars.flatMap(bar => bar.notes.filter(note => !note.rest).map(note => ({
       ...note, midi: note.soundingMidi, beat: bar.barIndex * melody.timeSignature.beats + note.beat,
     }))),
     totalBeats: bars.length * melody.timeSignature.beats, ornamentCount: selectedWindows.size,
-  };
+  }, melody.accompanimentPattern);
 }
 function buildOrnamentQuestion(level, enabledIds, answerId) {
   const ornament = ORNAMENT_TYPES[answerId];
@@ -883,9 +926,13 @@ function buildTimeListeningQuestion(level, enabledIds, answerId) {
   const signatures = topic === "metre"
     ? TIME_LISTENING.timeSignatures.filter(signature => ["2/4", "3/4", "4/4", "6/8"].includes(signature.id) && signature.type === answerId)
     : TIME_LISTENING.signaturesForLevel(level).filter(signature => TIME_LISTENING.pulseCount(signature) === answer.count);
-  const melody = TIME_LISTENING.buildListeningMelody(level, signatures.map(signature => signature.id));
+  const signatureIds = signatures.map(signature => signature.id);
+  const melody = TIME_LISTENING.buildAdvancedHigherListeningMelody(signatureIds, {
+    subdivisions: topic === "metre",
+  });
   return {
     ...melody, type: topic, level, answerId, answer,
+    playbackTempo: r(TEMPOS),
     mode: chooseAnswerMode(), options: answerOptionsFor(level, enabledIds, topic),
     notes: melody.bars.flatMap(bar => bar.notes),
   };
@@ -893,7 +940,7 @@ function buildTimeListeningQuestion(level, enabledIds, answerId) {
 function buildTempoChangesQuestion(level, enabledIds, answerId) {
   const slowOption = level === "N3" ? "slower" : level !== "N4" && Math.random() < 0.5 ? "ritardando" : "rallentando";
   const displayId = CONCEPTS[answerId].direction === "slower" ? slowOption : answerId;
-  const melody = TEMPO_CHANGES.buildMelody();
+  const melody = withAccompanimentStyles({ ...TEMPO_CHANGES.buildMelody(), type: "tempoChanges" });
   const answer = CONCEPTS[displayId];
   const options = answerOptionsFor(level, enabledIds, "tempoChanges")
     .filter(id => !CONCEPTS[id].typedOnly)
@@ -946,9 +993,9 @@ function buildQuestion(level, enabledIds, topic = "cadence"){
     previous = bar.last;
     return bar;
   });
-  return { id:Date.now()+Math.random(), type:"cadence", options:answerOptionsFor(level, enabledIds, "cadence"), level, key, timeSignature:{ id:"4/4", top:4, bottom:4, beats:4 }, progression, answerId, answer:cadence, mode:chooseAnswerMode(), bars, notes:bars.flatMap(bar => bar.notes) };
+  return withAccompanimentStyles({ id:Date.now()+Math.random(), type:"cadence", options:answerOptionsFor(level, enabledIds, "cadence"), level, key, timeSignature:{ id:"4/4", top:4, bottom:4, beats:4 }, progression, answerId, answer:cadence, mode:chooseAnswerMode(), bars, notes:bars.flatMap(bar => bar.notes) });
 }
-function RecognitionMenuRows({ level, topic, enabled, setEnabled, tempo, setTempo, metronome, setMetronome, playChordNotes, setPlayChordNotes, ornamentPassage, setOrnamentPassage, scalesPassage, setScalesPassage, chordPassage, setChordPassage, stopAudio }) {
+function RecognitionMenuRows({ level, topic, enabled, setEnabled, tempo, setTempo, metronome, setMetronome, ornamentPassage, setOrnamentPassage, scalesPassage, setScalesPassage, chordPassage, setChordPassage, stopAudio }) {
   const available = availableConceptIdsForLevel(level).filter(id => CONCEPTS[id].family === topic);
   const selectedCount = available.filter(id => enabled.includes(id)).length;
   function toggle(id) {
@@ -960,14 +1007,13 @@ function RecognitionMenuRows({ level, topic, enabled, setEnabled, tempo, setTemp
     <TempoDropdownRow tempo={tempo} setTempo={setTempo} stopAudio={stopAudio}/>
     {topic !== "ornaments" && <window.MLH.MenuToggleRow glyph={<MenuSvgGlyph src={ASSET.metronome} />} label="Metronome" checked={metronome} onChange={() => { setMetronome(value => !value); stopAudio(); }}/>}
     {topic === "chord" && <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Full Passage" profileKey="Aural Recognition chord full passage" checked={chordPassage} onChange={() => { setChordPassage(value => !value); stopAudio(); }}/>}
-    {topic === "chord" && <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Broken Chord" profileKey="Aural Recognition chord individual notes" checked={playChordNotes} disabled={chordPassage} onChange={() => { setPlayChordNotes(value => !value); stopAudio(); }}/>}
     {topic === "ornaments" && <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Full Passage" profileKey="Aural Recognition ornament full passage" checked={ornamentPassage} onChange={() => { setOrnamentPassage(value => !value); stopAudio(); }}/>}
     {topic === "scales" && <window.MLH.MenuToggleRow glyph={<img src={ASSET.audio} alt="" aria-hidden="true" className="h-[21px] w-[21px] scale-[1.5] object-contain" />} label="Full Passage" profileKey="Aural Recognition scale full passage" checked={scalesPassage} onChange={() => { setScalesPassage(value => !value); stopAudio(); }}/>}
     {available.length > 2 && <>
       <window.MLH.MenuSubheading>{TOPICS[topic].label}</window.MLH.MenuSubheading>
       {available.map(id => <window.MLH.MenuToggleRow
         key={id} showGlyph={false}
-        label={CONCEPTS[id].short} checked={enabled.includes(id)}
+        label={topic === "beatsPerBar" ? String(CONCEPTS[id].count) : topic === "scales" ? CONCEPTS[id].short.replace(/ scale$/i, "") : CONCEPTS[id].short} checked={enabled.includes(id)}
         disabled={enabled.includes(id) && selectedCount <= 2} onChange={() => toggle(id)}
       />)}
     </>}
@@ -981,16 +1027,16 @@ function App(){
   const [exerciseTempo,setExerciseTempo]=useState(TEMPOS[1]);
   const [scalesTempo,setScalesTempo]=useState(TEMPOS[2]);
   const [chordsTempo,setChordsTempo]=useState(TEMPOS[2]);
-  const tempo = activeTopic === "chord" ? chordsTempo : activeTopic === "scales" ? scalesTempo : exerciseTempo;
-  const setTempo = activeTopic === "chord" ? setChordsTempo : activeTopic === "scales" ? setScalesTempo : setExerciseTempo;
   const [metronome,setMetronome]=useState(false);
-  const [playChordNotes,setPlayChordNotes]=useState(true);
   const [ornamentPassage,setOrnamentPassage]=useState(false);
   const [scalesPassage,setScalesPassage]=useState(false);
   const [chordPassage,setChordPassage]=useState(false);
   const [question,setQuestion]=useState(()=>buildQuestion(startingSelection.level, conceptIdsForLevel(startingSelection.level), startingSelection.topic));
   const [questionVisible,setQuestionVisible]=useState(true);
   const questionTopic = topicForQuestion(question);
+  const randomTempoQuestion = ["metre", "beatsPerBar", "tonality"].includes(questionTopic);
+  const tempo = randomTempoQuestion ? question.playbackTempo : activeTopic === "chord" ? chordsTempo : activeTopic === "scales" ? scalesTempo : exerciseTempo;
+  const setTempo = randomTempoQuestion ? value => setQuestion(current => ({ ...current, playbackTempo: value })) : activeTopic === "chord" ? setChordsTempo : activeTopic === "scales" ? setScalesTempo : setExerciseTempo;
   const usesIsolatedNotes = ["scales", "ornaments"].includes(questionTopic);
   const isTimeListening = ["beatsPerBar", "metre"].includes(questionTopic);
   const [selected,setSelected]=useState(null), [typed,setTyped]=useState("");
@@ -1083,22 +1129,6 @@ function App(){
   function confirm(){ if(feedback || !questionVisible) return; const ok = question.mode === "choice" ? isCorrectChoice(selected, question) : isCorrectText(typed, question); if(question.mode === "choice" && !selected){ setPrompt("Select an answer first."); return; } if(question.mode === "text" && !typed.trim()){ setPrompt("Type your answer first."); return; } score(ok); }
   function clearAnswer(){ setSelected(null); setTyped(""); setPrompt(""); }
   function playMelodyNote(ctx, gainNode, frequency, start, duration) { oscillator(ctx, gainNode, frequency, start, duration, 0.078); }
-  function playRhythmAccompaniment(ctx, gainNode, barStart, quarterBeat, startTime) {
-    const signature = question.timeSignature;
-    const pulseDuration = signature.pulseQuarterBeats * quarterBeat;
-    for (let pulse = 0; pulse < signature.pulseCount; pulse++) {
-      const pulseStart = startTime + barStart + pulse * pulseDuration;
-      oscillator(ctx, gainNode, midiToFrequency(question.pulsePitches[0]), pulseStart, pulseDuration * 0.75, pulse === 0 ? 0.048 : 0.022);
-      question.pulsePitches.slice(1).forEach(midi => oscillator(ctx, gainNode, midiToFrequency(midi), pulseStart, pulseDuration * 0.6, pulse === 0 ? 0.022 : 0.014));
-      if (questionTopic === "metre") {
-        const divisions = signature.type === "compound" ? 3 : 2;
-        const subdivision = pulseDuration / divisions;
-        for (let division = 1; division < divisions; division++) {
-          oscillator(ctx, gainNode, midiToFrequency(question.pulsePitches[2]), pulseStart + division * subdivision, subdivision * 0.65, 0.02);
-        }
-      }
-    }
-  }
   function playAccompaniment(ctx, gainNode, bar, barStart, beat, startTime, content = question) {
     if (Array.isArray(bar.accompaniment)) {
       bar.accompaniment.forEach(event => event.pitches.forEach(midi => oscillator(
@@ -1147,22 +1177,18 @@ function App(){
     });
     question.bars.forEach(bar => {
       const barBeat = bar.barIndex * beatsPerBar;
-      const chordLetters = question.key.chords[bar.chordSymbol] || [];
       for (let pulse = 0; pulse < beatsPerBar; pulse++) {
         const pulseBeat = barBeat + pulse;
         const pulseStart = startTime + clock.timeAtBeat(pulseBeat);
-        const pulseDuration = clock.durationAtBeat(pulseBeat, 1);
         if (metronome) playClick(ctx, gainNode, pulseStart, pulse === 0);
-        if (chordLetters.length) {
-          const bassLetter = pulse % 2 === 0 ? chordLetters[0] : chordLetters[1] || chordLetters[0];
-          const bass = pitchForChordLetter(question, bar, bassLetter, 2) - 12;
-          oscillator(ctx, gainNode, midiToFrequency(bass), pulseStart, pulseDuration * 0.7, pulse === 0 ? 0.026 : 0.018);
-          chordLetters.forEach((letter, index) => oscillator(
-            ctx, gainNode, midiToFrequency(pitchForChordLetter(question, bar, letter, 3 + index)),
-            pulseStart, pulseDuration * 0.55, pulse === 0 ? 0.018 : 0.013
-          ));
-        }
       }
+      bar.accompaniment.forEach(event => {
+        const eventBeat = barBeat + event.beat;
+        event.pitches.forEach(midi => oscillator(
+          ctx, gainNode, midiToFrequency(midi), startTime + clock.timeAtBeat(eventBeat),
+          clock.durationAtBeat(eventBeat, event.beats), 0.018 * (event.volume ?? 1)
+        ));
+      });
       bar.notes.forEach(note => {
         if (note.rest) return;
         const noteBeat = barBeat + note.beat;
@@ -1192,7 +1218,7 @@ function App(){
       } else layerGain.connect(gainNode);
       layer.bars.forEach(bar => {
         const barStart = bar.barIndex * beatsPerBar * beat;
-        playAccompaniment(ctx, layerGain, bar, barStart, beat, startTime);
+        playAccompaniment(ctx, layerGain, bar, barStart, beat, startTime, layer);
         bar.notes.forEach(note => {
           if (note.rest) return;
           const noteStart = startTime + barStart + note.beat * beat;
@@ -1241,24 +1267,22 @@ function App(){
     // A beat of silence separates the full chords from the individual notes.
     const individualStartBeat = chordBeats + 1;
     const finalChordBeat = individualStartBeat + pitches.length + 1;
-    const totalBeats = playChordNotes ? finalChordBeat + chordBeats : chordBeats;
+    const totalBeats = finalChordBeat + chordBeats;
     playFullChord(ctx, gainNode, startTime, chordBeats * beat);
-    if (playChordNotes) {
-      pitches.forEach((midi, index) => {
-        const noteStart = startTime + (individualStartBeat + index) * beat;
-        const noteGain = ctx.createGain();
-        noteGain.connect(gainNode);
-        // End each piano release before the next pitch so the notes stay separate.
-        noteGain.gain.setValueAtTime(1, noteStart);
-        noteGain.gain.setValueAtTime(1, noteStart + beat * 0.84);
-        noteGain.gain.linearRampToValueAtTime(0, noteStart + beat * 0.94);
-        playMelodyNote(ctx, noteGain, midiToFrequency(midi), noteStart, beat * 0.82);
-      });
-      playFullChord(ctx, gainNode, startTime + finalChordBeat * beat, chordBeats * beat);
-    }
+    pitches.forEach((midi, index) => {
+      const noteStart = startTime + (individualStartBeat + index) * beat;
+      const noteGain = ctx.createGain();
+      noteGain.connect(gainNode);
+      // End each piano release before the next pitch so the notes stay separate.
+      noteGain.gain.setValueAtTime(1, noteStart);
+      noteGain.gain.setValueAtTime(1, noteStart + beat * 0.84);
+      noteGain.gain.linearRampToValueAtTime(0, noteStart + beat * 0.94);
+      playMelodyNote(ctx, noteGain, midiToFrequency(midi), noteStart, beat * 0.82);
+    });
+    playFullChord(ctx, gainNode, startTime + finalChordBeat * beat, chordBeats * beat);
     if (metronome) {
       for (let pulse = 0; pulse < totalBeats; pulse++) {
-        const accented = pulse === 0 || (playChordNotes && [individualStartBeat, finalChordBeat].includes(pulse));
+        const accented = pulse === 0 || [individualStartBeat, finalChordBeat].includes(pulse);
         playClick(ctx, gainNode, startTime + pulse * beat, accented);
       }
     }
@@ -1292,7 +1316,7 @@ function App(){
           ...question.chordType.intervals.map(interval => question.rootMidi + interval),
         ].map(midiToFrequency)
       : isTimeListening
-      ? [...question.notes.filter(note => !note.rest).map(note => note.midi), ...question.pulsePitches].map(midiToFrequency)
+      ? melodyPianoFrequencies(question)
       : playbackLayers.flatMap(layer => melodyPianoFrequencies(layer, chordRegister, bassRegister));
     const ready = await window.MLH.prepareAudioPlayback(ctx, { piano: frequencies, metronome: metronome && questionTopic !== "ornaments" });
     if (audioRef.current !== ctx) return;
@@ -1327,8 +1351,7 @@ function App(){
         const pulseBeats = isTimeListening ? question.timeSignature.pulseQuarterBeats : 1;
         for (let b = 0; b < pulses; b++) playClick(ctx, master, start + barStart + b * pulseBeats * beat, b === 0);
       }
-      if (isTimeListening) playRhythmAccompaniment(ctx, master, barStart, beat, start);
-      else playAccompaniment(ctx, master, bar, barStart, beat, start);
+      playAccompaniment(ctx, master, bar, barStart, beat, start);
       bar.notes.forEach(note => {
         if (note.rest) return;
         const noteStart = barStart + note.beat * beat;
@@ -1342,7 +1365,7 @@ function App(){
   function answerButtonClass(id){ const base="min-h-12 rounded-xl border px-3 py-2 text-sm font-bold"; if(!feedback) return `${base} border-stone-300 bg-white text-black`; if(isCorrectChoice(id, question)) return `${base} border-green-600 bg-green-600 text-white`; if(id===selected) return `${base} border-red-600 bg-red-600 text-white`; return `${base} border-stone-300 bg-white text-stone-500 opacity-70`; }
   const acc=attempted?Math.round(correct/attempted*100):0;
   const disabledConfirm=!questionVisible || feedback || (question.mode==="choice" ? !selected : !typed.trim());
-  return <div className={window.MLH.shell.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Aural Recognition" subtitle="Test your ears on chords, scales, tonalities and more."><window.MLH.ScoreStreakPanel assets={ASSET} correct={correct} attempted={attempted} accuracy={acc} streak={streak} bestStreak={best} resetScore={()=>{setCorrect(0);setAttempted(0);setStreak(0);setBest(0);setConfetti(0);}} confettiKey={confetti} autoShowMedals={autoShowMedals} medalEligible={medalEligible} medalThresholdValues={MEDAL_THRESHOLDS}/></window.MLH.AppHeader><div className={window.MLH.shell.pageContentClass}><main className={window.MLH.shell.mainShellClass} onPointerDown={e=>{if(questionVisible&&feedback&&!e.target.closest("button,input,[data-menu-trigger],[data-menu-panel]"))newQuestion();}}>
+  return <div className={window.MLH.shell.pageShellClass}><window.MLH.AppHeader icon={ASSET.appIcon} title="Aural Recognition" subtitle="Test your ears on chords, scales, tonalities and more."><window.MLH.ScoreStreakPanel achievementLevel={activeLevel} assets={ASSET} correct={correct} attempted={attempted} accuracy={acc} streak={streak} bestStreak={best} resetScore={()=>{setCorrect(0);setAttempted(0);setStreak(0);setBest(0);setConfetti(0);}} confettiKey={confetti} autoShowMedals={autoShowMedals} medalEligible={medalEligible} medalThresholdValues={MEDAL_THRESHOLDS}/></window.MLH.AppHeader><div className={window.MLH.shell.pageContentClass}><main className={window.MLH.shell.mainShellClass} onPointerDown={e=>{if(questionVisible&&feedback&&!e.target.closest("button,input,[data-menu-trigger],[data-menu-panel]"))newQuestion();}}>
     <div className="hub-toolbar relative z-20">
       <div className="hub-toolbar-left">
         <div className="hub-menu-anchor relative" ref={levelRef}>
@@ -1378,7 +1401,7 @@ function App(){
         <div className="hub-menu-anchor relative" ref={customiseRef}>
           <window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" className="h-[26px] w-[26px]"/>} onClick={()=>{setLevelOpen(false);setTopicOpen(false);setCustomiseOpen(v=>!v);}} dataMenuTrigger={true}/>
           {customiseOpen && <window.MLH.MenuPanel title="Customise" position="chords-customise-panel left-0" variant="customise" dataMenuPanel={true}>
-            <RecognitionMenuRows level={activeLevel} topic={activeTopic} enabled={enabled} setEnabled={(ids)=>{setEnabled(ids);newQuestion(activeLevel,ids);}} tempo={tempo} setTempo={setTempo} metronome={metronome} setMetronome={setMetronome} playChordNotes={playChordNotes} setPlayChordNotes={setPlayChordNotes} ornamentPassage={ornamentPassage} setOrnamentPassage={setOrnamentPassage} scalesPassage={scalesPassage} setScalesPassage={setScalesPassage} chordPassage={chordPassage} setChordPassage={setChordPassage} stopAudio={stopAudio}/>
+            <RecognitionMenuRows level={activeLevel} topic={activeTopic} enabled={enabled} setEnabled={(ids)=>{setEnabled(ids);newQuestion(activeLevel,ids);}} tempo={tempo} setTempo={setTempo} metronome={metronome} setMetronome={setMetronome} ornamentPassage={ornamentPassage} setOrnamentPassage={setOrnamentPassage} scalesPassage={scalesPassage} setScalesPassage={setScalesPassage} chordPassage={chordPassage} setChordPassage={setChordPassage} stopAudio={stopAudio}/>
           </window.MLH.MenuPanel>}
         </div>
       </div>
