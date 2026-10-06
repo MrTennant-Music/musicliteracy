@@ -192,7 +192,7 @@
     return ({ N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher" })[level] || "Custom";
   }
 
-  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, profileUsesSharedSettings = true, profileShowLabel = true, profileShareDisabled = false, worksheetConfig, worksheetMode = false }) {
+  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, profileUsesSharedSettings = true, profileShowLabel = true, profileShareDisabled = false, worksheetConfig, worksheetMode = false, classroomPilotUrl }) {
     const [qrOpen, setQrOpen] = React.useState(false);
     const [worksheetOpening, setWorksheetOpening] = React.useState(false);
     const [, setProfileRevision] = React.useState(0);
@@ -303,7 +303,12 @@
                 React.createElement("h1", { className: "relative top-[1px] inline-flex items-center gap-2 text-[2.2rem] font-semibold leading-none tracking-tight md:text-3xl" },
                   displayedTitle,
                   React.createElement(ProfileQrButton, { disabled: activeWorksheetMode || profileShareDisabled, onClick: () => setQrOpen(true) }),
-                  React.createElement(WorksheetButton, { enabled: worksheetEnabled && !worksheetOpening, selected: activeWorksheetMode, returnLabel: typeof displayedTitle === "string" ? displayedTitle : "activity", onClick: activeWorksheetMode ? worksheetHeader?.onExit : createWorksheet })
+                  React.createElement(WorksheetButton, { enabled: worksheetEnabled && !worksheetOpening, selected: activeWorksheetMode, returnLabel: typeof displayedTitle === "string" ? displayedTitle : "activity", onClick: activeWorksheetMode ? worksheetHeader?.onExit : createWorksheet }),
+                  classroomPilotUrl && !activeWorksheetMode && React.createElement("a", {
+                    href: classroomPilotUrl, target: "_blank", rel: "noopener noreferrer",
+                    className: "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 shadow-sm transition hover:border-stone-500 hover:bg-stone-50",
+                    "aria-label": "Open classroom pilot", title: "Classroom Pilot",
+                  }, React.createElement("img", { src: "classroom-pilot.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain" }))
                 ),
                 React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[1rem] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[15.36px] xl:whitespace-nowrap" }, displayedSubtitle)
               )
