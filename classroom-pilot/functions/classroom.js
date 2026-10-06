@@ -6,7 +6,7 @@ const reply=(statusCode,value)=>({statusCode,headers:{'Content-Type':'applicatio
 exports.handler=async event=>{
  if(event.httpMethod!=='POST')return reply(405,{error:'Use POST.'});
  if(process.env.CLASSROOM_ENABLED!=='true')return reply(503,{error:'Classroom pilot is switched off. Individual practice is still available.'});
- if(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_ROLE_KEY||!process.env.CLASSROOM_HOST_KEY)return reply(503,{error:'Classroom pilot has not been configured.'});
+ if(!process.env.SUPABASE_URL||!process.env.SUPABASE_SERVICE_ROLE_KEY)return reply(503,{error:'Classroom pilot has not been configured.'});
  if(event.body?.length>4096)return reply(413,{error:'Request too large.'});
  try{
   const input=JSON.parse(event.body||'{}'),action=input.action;
@@ -14,7 +14,6 @@ exports.handler=async event=>{
   let pin=String(input.pin||''),token=String(input.token||''),data={};
   if(action!=='check'&&action!=='create'&&!/^\d{6}$/.test(pin))return reply(400,{error:'Enter a six-digit game PIN.'});
   if(action==='create'){
-   if(!crypto.timingSafeEqual(Buffer.from(hash(String(input.hostKey||''))),Buffer.from(hash(process.env.CLASSROOM_HOST_KEY))))return reply(403,{error:'Teacher access key not recognised.'});
    const level=['N3','N4','N5'].includes(input.level)?input.level:'N3',options=K.defaults[level];
    const count=Math.max(5,Math.min(20,Number(input.count)||10));
    const questions=[];let previous=null;

@@ -28,7 +28,6 @@ branch and local development contexts blank:
 
 - SUPABASE_URL: the project URL
 - SUPABASE_SERVICE_ROLE_KEY: server-only service-role key
-- CLASSROOM_HOST_KEY: a randomly generated long teacher invitation key
 - CLASSROOM_ENABLED: true after validation
 
 Then enable the database switch using the commented statement in schema.sql.
@@ -42,14 +41,15 @@ usage. Answers and teacher actions return an immediate refreshed snapshot.
 Two concurrent rooms, 35 pupils each, five new games daily, 50,000 successful
 service requests monthly, 45-minute room expiry, 5–20 questions, 20 seconds per
 question, 1,000 points per correct answer (no speed bonus). N3/N4 white keys;
-N5 standard sharps/flats. Nicknames and temporary scores only. Room and player
+N5 standard sharps/flats. Nicknames and temporary scores only. The creator alone receives the room-control token. Room and player
 credentials are random tokens stored hashed in Supabase; pupil tokens stay in
 memory and refresh requires rejoining. Expired rooms are deleted on the next
 service request. No browser can access the room tables or RPC directly using a
 public key. Service-role credentials belong only in the isolated backend.
 
 Application limits do not prevent all malicious HTTP requests from consuming
-hosting quota. Keep the teacher key private and do not promote this pilot to the
+hosting quota. Hosting needs no teacher key: anyone with site access can create games and use
+the shared daily allowance. Do not promote this pilot to the
 Hub's public audience. Review usage after each session, and set provider-side
 rate limits/alerts before a broader rollout. Monthly budget is not a substitute
 for verifying Netlify's compute, request and bandwidth allowances.
