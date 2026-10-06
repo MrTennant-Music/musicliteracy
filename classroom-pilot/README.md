@@ -6,7 +6,7 @@ and its database is enabled for testing. Pupil access still awaits approval.
 Pilot: https://mlh-keyboard-classroom-pilot.netlify.app/
 Project: https://supabase.com/dashboard/project/kqunooxqmvkvnlechzcq
 Normal `keyboard-notes.html` and the homepage are untouched. Pilot entry is
-`keyboard-classroom.html`, and Individual Practice links to the normal activity.
+`keyboard-classroom.html`; the normal activity remains at `keyboard-notes.html`.
 
 ## Isolated deployment
 
@@ -77,7 +77,7 @@ update public.keyboard_pilot_settings set enabled=false where id=true;
 ```
 
 The database switch blocks existing sessions on their next request. Pupils can
-choose Individual Practice. The normal Hub has no dependencies on this service.
+open `keyboard-notes.html` for individual practice. The normal Hub has no dependencies on this service.
 To fully remove the pilot, unpublish the isolated site and delete the pilot-only
 files. Do not reset the repository: unrelated activity edits may be present.
 
