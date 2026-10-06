@@ -92,3 +92,19 @@ by a regression test. The actual school network and classroom load still need
 verification. The database off switch was verified against the deployed site.
 The build always runs for pilot-branch updates because its keyboard source and
 shared assets live outside the Netlify base directory.
+
+## Teacher and pupil entry
+
+The homepage Games section has a Join a Game entry using classroom-pilot.svg.
+It opens the pilot in pupil mode (`?mode=join`, also the default). Pupils enter
+only a game PIN and nickname. The keyboard activity header's Host a Game button
+opens `?mode=host&setup=...` with its current level, note groups, octave range and
+C labels. The host view offers question count, with no separate level selector.
+The server validates this configuration and creates questions from exactly the
+enabled note groups. The selected classroom header button restores the supplied
+configuration when returning to Individual Practice. Host QR links use pupil
+mode with the current PIN, never the teacher setup URL.
+
+This pilot remains keyboard-only. The main homepage changes are prepared locally
+and on the pilot branch; publication to the main Hub and public pupil access
+require the final release step. Netlify's private-site gate still applies.

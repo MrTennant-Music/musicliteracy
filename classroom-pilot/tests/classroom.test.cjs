@@ -39,3 +39,30 @@ test('pupil action waits for an active poll and prevents a duplicate click',asyn
  release();await answer;
  assert.equal(calls,1);assert.equal(busy,false);assert.equal(refs.actionPending.current,false);
 });
+
+test('teacher customisation controls room questions, answers and C labels',async()=>{
+ env();const original=global.fetch;let payload;
+ global.fetch=async(url,options)=>{payload=JSON.parse(options.body);return {ok:true,json:async()=>({phase:'lobby'})};};
+ try{
+  const options={octaves:2,naturals:false,sharps:false,flats:true,enharmonics:true};
+  const response=await handler({httpMethod:'POST',body:JSON.stringify({action:'create',level:'N5',options,showC:true,count:5})});
+  assert.equal(response.statusCode,200);assert.deepEqual(payload.p_data.options,options);assert.equal(payload.p_data.showC,true);
+  assert.ok(payload.p_data.allowedAnswers.every(answer=>answer.endsWith('b')));
+  const K=require('../../keyboard-notes.js');
+  const allowed=new Set(K.answers(options).map(a=>a.pitch));
+  assert.ok(payload.p_data.questions.every(q=>allowed.has(q.pitch%12)));
+ }finally{global.fetch=original;vars.forEach(key=>delete process.env[key]);}
+});
+
+test('empty or out-of-level classroom customisation is rejected before database access',async()=>{
+ env();const original=global.fetch;let called=false;
+ global.fetch=async()=>{called=true;throw Error('Unexpected database call');};
+ try{
+  for(const setup of [
+   {level:'N5',options:{octaves:2,naturals:false,sharps:false,flats:false,enharmonics:true}},
+   {level:'N3',options:{octaves:1,naturals:true,sharps:true,flats:false,enharmonics:false}},
+   {level:'N5',options:{octaves:200,naturals:true,sharps:true,flats:true,enharmonics:false}},
+  ])assert.equal((await handler({httpMethod:'POST',body:JSON.stringify({action:'create',...setup,count:5})})).statusCode,400);
+  assert.equal(called,false);
+ }finally{global.fetch=original;vars.forEach(key=>delete process.env[key]);}
+});

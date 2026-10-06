@@ -14,12 +14,14 @@ exports.handler=async event=>{
   let pin=String(input.pin||''),token=String(input.token||''),data={};
   if(action!=='check'&&action!=='create'&&!/^\d{6}$/.test(pin))return reply(400,{error:'Enter a six-digit game PIN.'});
   if(action==='create'){
-   const level=['N3','N4','N5'].includes(input.level)?input.level:'N3',options=K.defaults[level];
+   const settings=K.classroomSettings({level:input.level,options:input.options||K.defaults[input.level],showC:input.showC});
+   if(!settings)return reply(400,{error:'Return to individual practice and choose valid game settings.'});
+   const {level,options,showC}=settings;
    const count=Math.max(5,Math.min(20,Number(input.count)||10));
    const questions=[];let previous=null;
    for(let i=0;i<count;i++){const q=K.question(options,previous);questions.push(q);previous=q.pitch;}
    pin=String(crypto.randomInt(100000,1000000));token=crypto.randomBytes(32).toString('hex');
-   data={phase:'lobby',level,options,questions,allowedAnswers:K.answers(options).map(a=>a.id),index:0};
+   data={phase:'lobby',level,options,showC,questions,allowedAnswers:K.answers(options).map(a=>a.id),index:0};
   }else if(action!=='check'){
    if(!/^[a-f0-9]{64}$/.test(token))return reply(400,{error:'Please rejoin this game.'});
    if(action==='join'){const name=String(input.name||'').trim();if(!name||name.length>24)return reply(400,{error:'Use a nickname of 1–24 characters.'});data={name};}

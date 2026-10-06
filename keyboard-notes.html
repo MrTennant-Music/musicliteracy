@@ -44,7 +44,8 @@ const K = window.KeyboardNotes;
 const LEVELS = Object.fromEntries(Object.entries({N3:'National 3',N4:'National 4',N5:'National 5'}).map(([id,label])=>[id,{label,description: K.subtitles[id]}]));
 const ASSET = {appIcon:'./keyboard-icon.svg',level:'./levels.svg',customise:'./customise.svg',next:'./next.svg',bronze:'./bronze.svg',silver:'./silver.svg',gold:'./gold.svg',diamond:'./diamond.svg'};
 const MEDAL_THRESHOLDS = [10,15,20,30];
-function initialLevel(){const requested=new URLSearchParams(location.search).get('level');return LEVELS[requested]?requested:'N3';}
+function classroomReturnSettings(){try{return K.classroomSettings(JSON.parse(new URLSearchParams(location.search).get('classroomSetup')));}catch{return null;}}
+function initialLevel(){const restored=classroomReturnSettings();if(restored)return restored.level;const requested=new URLSearchParams(location.search).get('level');return LEVELS[requested]?requested:'N3';}
 function Keyboard({question,feedback,options,showC}){
   const width=options.octaves===1?384:720;
   return <svg className="keyboard-score" width={width} viewBox={`-1 -1 ${width+2} 252`} role="img" aria-label="Piano keyboard with one key highlighted. Identify the highlighted note.">
@@ -60,9 +61,9 @@ function NoteGroupGlyph({type}){
 }
 function App(){
   const [level,setLevel]=useState(initialLevel);
-  const [showC,setShowC]=useState(false);
-  const [options,setOptions]=useState(()=>({...K.defaults[initialLevel()]}));
-  const [question,setQuestion]=useState(()=>K.question(K.defaults[initialLevel()]));
+  const [showC,setShowC]=useState(()=>classroomReturnSettings()?.showC||false);
+  const [options,setOptions]=useState(()=>({...classroomReturnSettings()?.options||K.defaults[initialLevel()]}));
+  const [question,setQuestion]=useState(()=>K.question(classroomReturnSettings()?.options||K.defaults[initialLevel()]));
   const [questionVisible,setQuestionVisible]=useState(true);
   const [selected,setSelected]=useState(null),[feedback,setFeedback]=useState(null),[fading,setFading]=useState(false);
   const [levelOpen,setLevelOpen]=useState(false),[customiseOpen,setCustomiseOpen]=useState(false);
@@ -99,7 +100,7 @@ function App(){
     }
   }
   return <div className={window.MLH.shell.pageShellClass}>
-    <window.MLH.AppHeader icon={ASSET.appIcon} title="Keyboard Note Identification" subtitle="Identify note names on the piano keyboard." classroomPilotUrl="https://mlh-keyboard-classroom-pilot.netlify.app/" worksheetConfig={() => ({ version: 1, activityId: "keyboard-notes", sourceUrl: window.location.href, settings: { level, options, showC } })}>
+    <window.MLH.AppHeader icon={ASSET.appIcon} title="Keyboard Note Identification" subtitle="Identify note names on the piano keyboard." classroomPilotUrl="https://mlh-keyboard-classroom-pilot.netlify.app/" classroomPilotConfig={() => ({level,options,showC})} worksheetConfig={() => ({ version: 1, activityId: "keyboard-notes", sourceUrl: window.location.href, settings: { level, options, showC } })}>
       <window.MLH.ScoreStreakPanel achievementLevel={level} assets={ASSET} correct={correct} attempted={attempted} accuracy={attempted?Math.round(correct/attempted*100):0} streak={streak} bestStreak={best} resetScore={reset} confettiKey={confetti} autoShowMedals={autoShowMedals} medalEligible={medalEligible} medalThresholdValues={MEDAL_THRESHOLDS}/>
     </window.MLH.AppHeader>
     <div className={window.MLH.shell.pageContentClass}><main className={window.MLH.shell.mainShellClass} onPointerDown={event=>{if(feedback&&questionVisible&&!event.target.closest('button,input,[data-menu-trigger],[data-menu-panel]'))next();}}>
