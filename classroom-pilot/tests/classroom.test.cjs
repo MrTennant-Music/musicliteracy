@@ -20,10 +20,10 @@ test('host creates a game without a teacher key and never receives server creden
   assert.ok(!response.body.includes('test-server-secret'));assert.ok(!response.body.includes('test-invite'));
  }finally{global.fetch=original;vars.forEach(key=>delete process.env[key]);}
 });
-test('database denies public access and atomically limits rooms and duplicate answers',()=>{
+test('database denies public access and prevents duplicate answers without capacity caps',()=>{
  const sql=require('node:fs').readFileSync(require('node:path').join(__dirname,'../schema.sql'),'utf8');
  assert.match(sql,/enable row level security/);assert.match(sql,/from public,anon,authenticated/);
- assert.match(sql,/for update/);assert.match(sql,/Answer already submitted/);assert.match(sql,/Pilot usage limit reached/);
+ assert.match(sql,/for update/);assert.match(sql,/Answer already submitted/);assert.doesNotMatch(sql,/request_limit|daily_game_limit|room_limit|player_limit|Pilot capacity reached/);
 });
 
 test('pupil action waits for an active poll and prevents a duplicate click',async()=>{

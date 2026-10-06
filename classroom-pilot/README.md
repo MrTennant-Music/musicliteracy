@@ -36,10 +36,10 @@ The browser calls only its own pilot site's .netlify/functions/classroom endpoin
 Updates poll every five seconds; this deliberately trades a small delay for lower
 usage. Answers and teacher actions return an immediate refreshed snapshot.
 
-## Pilot limits and data
+## Game configuration and data
 
-Two concurrent rooms, 35 pupils each, five new games daily, 50,000 successful
-service requests monthly, 45-minute room expiry, 5–20 questions, 20 seconds per
+No application caps on simultaneous rooms, pupils, daily games or monthly
+service requests. Provider free-plan allowances still apply. 45-minute room expiry, 5–20 questions, 20 seconds per
 question, 1,000 points per correct answer (no speed bonus). N3/N4 white keys;
 N5 standard sharps/flats. Nicknames and temporary scores only. The creator alone receives the room-control token. Room and player
 credentials are random tokens stored hashed in Supabase; pupil tokens stay in
@@ -47,10 +47,8 @@ memory and refresh requires rejoining. Expired rooms are deleted on the next
 service request. No browser can access the room tables or RPC directly using a
 public key. Service-role credentials belong only in the isolated backend.
 
-Application limits do not prevent all malicious HTTP requests from consuming
-hosting quota. Hosting needs no teacher key: anyone with site access can create games and use
-the shared daily allowance. Do not promote this pilot to the
-Hub's public audience. Review usage after each session, and set provider-side
+Hosting needs no teacher key: anyone with site access can create games and consume
+shared hosting quota. Review usage after each session, and set provider-side
 rate limits/alerts before a broader rollout. Monthly budget is not a substitute
 for verifying Netlify's compute, request and bandwidth allowances.
 
@@ -62,7 +60,7 @@ for verifying Netlify's compute, request and bandwidth allowances.
 2. Verify RLS and function grants: anon/authenticated cannot read either table or
    execute keyboard_pilot. Ensure no service key appears in published assets.
 3. Check all three levels, all accepted enharmonic answers for enabled options,
-   room/player/day/month limits, expired rooms, disconnect/reconnect and closure.
+   unrestricted room creation and pupil joining, expired rooms, disconnect/reconnect and closure.
 4. Create a game on the teacher computer and join from a pupil device over
    the actual school Wi-Fi. A home-network pass cannot prove school access.
 5. Trial one class before inviting other teachers; inspect Supabase and Netlify
@@ -108,3 +106,6 @@ mode with the current PIN, never the teacher setup URL.
 This pilot remains keyboard-only. The main homepage changes are prepared locally
 and on the pilot branch; publication to the main Hub and public pupil access
 require the final release step. Netlify's private-site gate still applies.
+
+Capacity caps were removed at the user's request. Apply `remove-capacity-limits.sql`
+to an existing pilot database; existing limit-setting columns are ignored.

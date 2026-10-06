@@ -1,18 +1,5 @@
--- Run in a NEW Supabase Free project. No access for public database clients.
-create table public.keyboard_pilot_settings (
-  id boolean primary key default true check(id), enabled boolean not null default false,
-  month date not null default date_trunc('month',now())::date,
-  requests integer not null default 0,
-  day date not null default current_date, games integer not null default 0
-);
-insert into public.keyboard_pilot_settings(id) values(true);
-create table public.keyboard_pilot_rooms (
-  pin text primary key, host_hash text not null, expires timestamptz not null,
-  state jsonb not null, players jsonb not null default '[]'
-);
-alter table public.keyboard_pilot_settings enable row level security;
-alter table public.keyboard_pilot_rooms enable row level security;
-revoke all on public.keyboard_pilot_settings,public.keyboard_pilot_rooms from anon,authenticated;
+-- Remove application capacity caps; keep authentication, validation and room expiry.
+BEGIN;
 create or replace function public.keyboard_pilot(p_action text,p_pin text,p_token text,p_data jsonb default '{}')
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
 declare
@@ -80,7 +67,6 @@ begin
 end $$;
 revoke all on function public.keyboard_pilot(text,text,text,jsonb) from public,anon,authenticated;
 grant execute on function public.keyboard_pilot(text,text,text,jsonb) to service_role;
--- Enable only after the isolated deployment is ready:
--- update public.keyboard_pilot_settings set enabled=true where id=true;
--- Emergency stop (also disables all existing rooms):
--- update public.keyboard_pilot_settings set enabled=false where id=true;
+
+-- Existing capacity-setting columns are retained but no longer enforced.
+COMMIT;
