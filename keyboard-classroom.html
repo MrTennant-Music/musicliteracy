@@ -55,14 +55,16 @@ function Keyboard({question,feedback,options,showC}){
 function Classroom(){
  const [game,setGame]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[connected,setConnected]=useState(true);
  const [pin,setPin]=useState(new URLSearchParams(location.search).get('pin')||''),[name,setName]=useState(''),[hostKey,setHostKey]=useState(''),[level,setLevel]=useState('N3'),[count,setCount]=useState('10'),[selected,setSelected]=useState(null),[now,setNow]=useState(Date.now()),[status,setStatus]=useState('');
- const session=useRef(null),inFlight=useRef(false),failures=useRef(0),mounted=useRef(true),clockOffset=useRef(0);
+ const session=useRef(null),inFlight=useRef(false),actionPending=useRef(false),pendingRead=useRef(null),failures=useRef(0),mounted=useRef(true),clockOffset=useRef(0);
  async function request(action,extra={},identity=session.current){
   const response=await fetch('./.netlify/functions/classroom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...identity,...extra}),signal:AbortSignal.timeout(12000)});
   let result;try{result=await response.json();}catch{throw Error('Classroom service is not available on this site. Individual practice is still available.');}if(!response.ok)throw Error(result.error||'Classroom service unavailable.');return result;
  }
  function update(result){if(!mounted.current)return;clockOffset.current=result.serverTime-Date.now();setNow(result.serverTime);setGame(result);setConnected(true);setError('');failures.current=0;}
  async function act(action,extra){
-  if(inFlight.current)return;inFlight.current=true;setBusy(true);setError('');
+  if(actionPending.current)return;actionPending.current=true;setBusy(true);setError('');
+  if(pendingRead.current)await pendingRead.current.catch(()=>{});
+  inFlight.current=true;
   try{
    if(action==='check'){await request('check',{},{});setStatus('Connected. This browser can reach the classroom service. Test on a pupil device too.');return;}
    let identity=session.current;
@@ -73,13 +75,14 @@ function Classroom(){
    if(result.closed){session.current=null;setGame(null);setSelected(null);return;}
    update(result);
    if(action==='answer')setSelected(extra.answer);
-  }catch(e){setError(e.message);}finally{inFlight.current=false;setBusy(false);}
+  }catch(e){setError(e.message);}finally{inFlight.current=false;actionPending.current=false;setBusy(false);}
  }
  useEffect(()=>{let timeout;mounted.current=true;
   async function poll(){
-   if(session.current&&!inFlight.current&&failures.current<3){
+   if(session.current&&!inFlight.current&&!actionPending.current&&failures.current<3){
     inFlight.current=true;
-    try{const result=await request('read');update(result);}catch(e){failures.current++;setConnected(false);setError(e.message+' Live updates paused.');}finally{inFlight.current=false;}
+    pendingRead.current=request('read');
+    try{const result=await pendingRead.current;update(result);}catch(e){failures.current++;setConnected(false);setError(e.message+' Live updates paused.');}finally{inFlight.current=false;pendingRead.current=null;}
    }
    timeout=setTimeout(poll,failures.current?Math.min(30000,5000*2**failures.current):5000);
   }
