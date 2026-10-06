@@ -317,7 +317,7 @@
                     "aria-pressed": classroomPilotMode,
                     "aria-label": classroomPilotMode ? "Return to individual practice" : "Host a game",
                     title: classroomPilotMode ? "Return to Individual Practice" : "Host a Game",
-                  }, React.createElement("img", { src: "classroom-pilot.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain", style: classroomPilotMode ? { filter: "invert(1)" } : undefined }))
+                  }, React.createElement("img", { src: "group-icon.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain", style: classroomPilotMode ? { filter: "invert(1)" } : undefined }))
                 ),
                 React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[1rem] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[15.36px] xl:whitespace-nowrap" }, displayedSubtitle)
               )
