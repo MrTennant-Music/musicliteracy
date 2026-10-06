@@ -106,11 +106,12 @@
     );
   }
 
-  function ToolbarButton({ icon, label, mobileLabel = "", onClick, className = "", textClassName = "", iconClassName = "", dataMenuTrigger = false, dataProfileCustomise = false }) {
+  function ToolbarButton({ icon, label, mobileLabel = "", onClick, className = "", textClassName = "", iconClassName = "", dataMenuTrigger = false, dataProfileCustomise = false, disabled = false }) {
     const props = {
       type: "button",
       onClick,
-      className: `${TOOLBAR_BUTTON_CLASS} ${className}`.trim(),
+      disabled,
+      className: `${TOOLBAR_BUTTON_CLASS} ${className} disabled:cursor-default disabled:opacity-40`.trim(),
     };
     const children = [iconClassName ? e("span", { key: "icon", className: iconClassName }, icon) : icon];
     if (mobileLabel) {
@@ -140,13 +141,14 @@
     });
   }
 
-  function CustomiseButton({ icon, onClick, dataMenuTrigger = false }) {
+  function CustomiseButton({ icon, onClick, dataMenuTrigger = false, disabled = false }) {
     return e(ToolbarButton, {
       icon,
       label: "Customise",
       onClick,
       dataMenuTrigger,
       dataProfileCustomise: true,
+      disabled,
       className: "gap-2",
     });
   }

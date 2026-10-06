@@ -98,6 +98,8 @@ document.body.insertAdjacentHTML("beforeend", `
     <ul class="release-notes-list">
       <li>Added Aural Recognition with listening exercises for cadences, chords, tonalities, beats per bar, scales, ornaments, metres and tempo changes. Includes multiple choice and typed answers, customisable content and optional full passages.</li>
       <li>Added Family Fortunes from National 3 to Advanced Higher, with two-team play, face-offs, play or pass, steals, scoring and editable rounds.</li>
+      <li>Added Keyboard Note Identification from National 3 to National 5, with highlighted piano keys, a guide note, customisable accidentals and score, streak and medal tracking.</li>
+      <li>Added Metronome with adjustable tempo, tap tempo, beats per bar, first-beat accents, subdivisions and an animated metronome.</li>
       <li>Bug fixes and other improvements across the Hub.</li>
     </ul>
     <p class="release-notes-version"><strong>Version 1.0 • <time datetime="2026-08">August 2026</time></strong></p>

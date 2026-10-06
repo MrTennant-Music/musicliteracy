@@ -5,6 +5,7 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
   if (!CONFIG || CONFIG.version !== 1 || CONFIG.activityId === "intervals") return;
 
   const DEFINITIONS = {
+    "keyboard-notes": { title: "Keyboard Note Identification", subtitle: "Identify note names on the piano keyboard.", icon: "keyboard-icon.svg", instructions: "Name each marked note on the piano keyboard.", response: "text" },
     enharmonics: { title: "Enharmonic Equivalents", subtitle: "Identify and rewrite enharmonic equivalent notes.", icon: "enharmonic-icon.svg", instructions: "Write the enharmonic equivalent of each note.", response: "stave" },
     keysig: { title: "Key Signatures", subtitle: "Identify key signatures.", icon: "key-signatures-icon.svg", instructions: "Identify the key signatures shown below.", response: "mixed" },
     notenaming: { title: "Note Identification", subtitle: "Identify note names in the treble and bass clef.", icon: "notenaming-icon.svg", instructions: "Name each note shown below.", response: "text" },
@@ -508,6 +509,12 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     const step = random(NOTES), step2 = Math.max(0, Math.min(8, step + random([-3,-2,-1,1,2,3])));
     const base = { id: id(), step, step2, prompt: "", answer: "", response: DEF.response };
     switch (CONFIG.activityId) {
+      case "keyboard-notes": {
+        const options = CONFIG.settings?.options || window.KeyboardNotes.defaults[level] || window.KeyboardNotes.defaults.N3;
+        const keyboardKey = window.KeyboardNotes.question(options);
+        const names = window.KeyboardNotes.answers(options).filter(answer => window.KeyboardNotes.correct(answer, keyboardKey));
+        return {...base, keyboardKey, prompt: "Name the marked note.", answer: names.map(answer => answer.label).join(" or "), response: "text"};
+      }
       case "enharmonics": {
         return makeEnharmonicQuestion(index,base);
       }
@@ -1080,6 +1087,12 @@ const { useEffect: useGenericEffect, useMemo: useGenericMemo, useRef: useGeneric
     if (CONFIG.activityId === "accidentals") return <AccidentalsStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "enharmonics") return <EnharmonicsStaff question={question} completed={completed} muted={muted} />;
     if (CONFIG.activityId === "keysig") return <KeySignatureStaff question={question} completed={completed} muted={muted} />;
+    if (CONFIG.activityId === "keyboard-notes") return <svg viewBox={`-1 -1 ${(CONFIG.settings?.options?.octaves===1?384:720)+2} 252`} className="w-full" aria-label="Piano keyboard with a marked note">
+      {window.KeyboardNotes.visibleKeys(CONFIG.settings?.options || window.KeyboardNotes.defaults[level] || window.KeyboardNotes.defaults.N3).filter(key=>!key.black).map(key=><rect key={key.pitch} x={key.x} width="48" height="248" rx="5" fill="white" stroke="black"/>)}
+      {window.KeyboardNotes.visibleKeys(CONFIG.settings?.options || window.KeyboardNotes.defaults[level] || window.KeyboardNotes.defaults.N3).filter(key=>key.black).map(key=><rect key={key.pitch} x={key.x} width="30" height="155" rx="5" fill="#292524" stroke="black"/>)}
+      {CONFIG.settings?.showC&&window.KeyboardNotes.visibleKeys(CONFIG.settings?.options || window.KeyboardNotes.defaults[level] || window.KeyboardNotes.defaults.N3).filter(key=>!key.black&&key.pitch%12===0).map(key=><text key={`label-${key.pitch}`} x={key.x+24} y="190" textAnchor="middle" fontSize="17" fontWeight="700">C</text>)}
+      <circle cx={question.keyboardKey.x+(question.keyboardKey.black?15:24)} cy={question.keyboardKey.black?130:220} r="11" fill={question.keyboardKey.black?"white":"black"}/>
+    </svg>;
     if (CONFIG.activityId === "notenaming") return <NoteNamingStaff question={question} muted={muted} />;
     if (CONFIG.activityId === "tonic") return <div className="tonic-staff-wrap flex min-h-0 flex-1 flex-col"><TonicStaff question={question} completed={completed} muted={muted}/><p className="text-center text-sm">The key is <strong>{question.key.name}</strong>.</p></div>;
     if (CONFIG.activityId === "transposing") return <TransposingStaff question={question} completed={completed} muted={muted} />;

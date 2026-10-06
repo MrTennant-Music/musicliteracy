@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1280" />
+  <link rel="stylesheet" href="./desktop-layout.css?v=4" />
+  <title>Keyboard Note Identification</title>
+  <link rel="icon" type="image/svg+xml" href="./keyboard-icon.svg" />
+  <link rel="apple-touch-icon" href="./keyboard-icon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./desktop-layout.js?v=2"></script>
+  <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
+  <script src="./hub-input.js?v=1.4"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="./hub-progress.js?v=20261005-per-setup"></script>
+  <script src="./hub-achievements.js?v=20261005-progress"></script>
+  <script src="./hub-shell.js?v=20261005-per-setup"></script>
+  <script src="./hub-menu.js?v=20261006-disabled-customise"></script>
+  <script src="./keyboard-notes.js?v=20261006-level-descriptions"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+.keyboard-area { width: max-content; margin: 32px auto; }
+.keyboard-score { display: block; height: 250px; }
+@font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+.music-symbol { font-family: "Bravura", serif; font-weight: 400; }
+.keyboard-answers { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; margin: 16px 0 0; }
+.keyboard-answer { display: flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 12px; border: 1px solid #d6d3d1; border-radius: 12px; background: white; color: black; font-size: 1.05rem; font-weight: 700; }
+.keyboard-answer:hover:not(:disabled) { border-color: black; }
+.keyboard-answer:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.keyboard-answer.correct { background: #16a34a; border-color: #16a34a; color: white; }
+.keyboard-answer.incorrect { background: #dc2626; border-color: #dc2626; color: white; }
+.keyboard-empty { min-height: 46px; }
+.keyboard-question-transition { transition: opacity 260ms ease; }
+@media (prefers-reduced-motion: reduce) { .keyboard-question-transition { transition: none; } }
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const {useState, useRef, useEffect} = React;
+const K = window.KeyboardNotes;
+const LEVELS = Object.fromEntries(Object.entries({N3:'National 3',N4:'National 4',N5:'National 5'}).map(([id,label])=>[id,{label,description: K.subtitles[id]}]));
+const ASSET = {appIcon:'./keyboard-icon.svg',level:'./levels.svg',customise:'./customise.svg',next:'./next.svg',bronze:'./bronze.svg',silver:'./silver.svg',gold:'./gold.svg',diamond:'./diamond.svg'};
+const MEDAL_THRESHOLDS = [10,15,20,30];
+function initialLevel(){const requested=new URLSearchParams(location.search).get('level');return LEVELS[requested]?requested:'N3';}
+function Keyboard({question,feedback,options,showC}){
+  const width=options.octaves===1?384:720;
+  return <svg className="keyboard-score" width={width} viewBox={`-1 -1 ${width+2} 252`} role="img" aria-label="Piano keyboard with one key highlighted. Identify the highlighted note.">
+    {K.visibleKeys(options).filter(key=>!key.black).map(key=><rect key={key.pitch} x={key.x} y="0" width="48" height="248" rx="5" fill={key.pitch===question.pitch?(feedback?(feedback.correct?'#16a34a':'#dc2626'):'#2563eb'):'#fff'} stroke="#78716c"/>)}
+    {K.visibleKeys(options).filter(key=>key.black).map(key=><rect key={key.pitch} x={key.x} y="0" width="30" height="155" rx="5" fill={key.pitch===question.pitch?(feedback?(feedback.correct?'#16a34a':'#dc2626'):'#2563eb'):'#292524'} stroke="#0c0a09"/>)}
+    {showC&&K.visibleKeys(options).filter(key=>!key.black&&key.pitch%12===0).map(key=><text key={`label-${key.pitch}`} x={key.x+24} y="225" textAnchor="middle" fontSize="17" fontWeight="700" fill={key.pitch===question.pitch?'white':'#57534e'} pointerEvents="none">C</text>)}
+  </svg>;
+}
+function NoteGroupGlyph({type}){
+  const symbols=window.BRAVURA_SYMBOLS;
+  const names=type==='enharmonics'?['sharp','flat']:[type==='naturals'?'natural':type==='sharps'?'sharp':'flat'];
+  return <span aria-hidden="true" className="inline-flex h-[22px] w-[28px] items-center justify-center gap-[3px] text-black">{names.map(name=><span key={name} className={`music-symbol relative leading-none ${name==='flat'?'top-[2px] text-[23px]':'top-[1px] text-[21px]'}`}>{symbols[name]}</span>)}</span>;
+}
+function App(){
+  const [level,setLevel]=useState(initialLevel);
+  const [showC,setShowC]=useState(false);
+  const [options,setOptions]=useState(()=>({...K.defaults[initialLevel()]}));
+  const [question,setQuestion]=useState(()=>K.question(K.defaults[initialLevel()]));
+  const [questionVisible,setQuestionVisible]=useState(true);
+  const [selected,setSelected]=useState(null),[feedback,setFeedback]=useState(null),[fading,setFading]=useState(false);
+  const [levelOpen,setLevelOpen]=useState(false),[customiseOpen,setCustomiseOpen]=useState(false);
+  const [confetti,setConfetti]=useState(0),[autoShowMedals,setAutoShowMedals]=useState(false);
+  const context={level,settings:{questions:Object.fromEntries(Object.entries(options).filter(([key])=>key!=='octaves')), ...(showC?{options:{showC:true}}:{})}};
+  const [correct,setCorrect]=window.MLH.usePersistentScoreState(0,'correct',context);
+  const [attempted,setAttempted]=window.MLH.usePersistentScoreState(0,'attempted',context);
+  const [streak,setStreak]=window.MLH.usePersistentScoreState(0,'streak',context);
+  const [best,setBest]=window.MLH.usePersistentScoreState(0,'best',context);
+  const levelRef=useRef(null),customiseRef=useRef(null),timers=useRef([]),answerLock=useRef(false);
+  window.MLH.useClickOutside([levelRef,customiseRef],[()=>setLevelOpen(false),()=>setCustomiseOpen(false)]);
+  function clearTimers(){timers.current.forEach(clearTimeout);timers.current=[];}
+  useEffect(()=>()=>clearTimers(),[]);
+  const medalEligible=Object.keys(options).every(key=>options[key]===K.defaults[level][key]);
+  const answers=K.answers(options);
+  function next(nextOptions=options){
+    clearTimers();answerLock.current=true;setQuestionVisible(false);setFading(true);setAutoShowMedals(false);
+    timers.current.push(setTimeout(()=>{
+      setQuestion(current=>K.question(nextOptions,current.pitch));setSelected(null);setFeedback(null);setFading(false);setQuestionVisible(true);answerLock.current=false;
+    },260));
+  }
+  function applyLevel(id){const values={...K.defaults[id]};setLevel(id);setOptions(values);setShowC(false);setConfetti(0);setLevelOpen(false);setCustomiseOpen(false);next(values);}
+  function toggle(key){if(level!=='N5'||key==='naturals')return;const values={...options,[key]:!options[key]};if(!K.answers(values).length)return;setOptions(values);setConfetti(0);next(values);}
+  function reset(){clearTimers();setCorrect(0);setAttempted(0);setStreak(0);setBest(0);setConfetti(0);next();}
+  function submit(answer){
+    if(answerLock.current)return;
+    answerLock.current=true;
+    const ok=K.correct(answer,question), count=ok?streak+1:0;
+    setSelected(answer.id);setAttempted(value=>value+1);setCorrect(value=>value+(ok?1:0));setStreak(count);setBest(value=>Math.max(value,count));setFeedback({correct:ok});
+    window.MLH?.playFeedbackSound?.(ok);
+    if(ok){
+      if(medalEligible&&MEDAL_THRESHOLDS.includes(count)){setConfetti(value=>value+1);setAutoShowMedals(true);const sound=window.MLH?.getStreakMedal?.(count)?.sound;timers.current.push(setTimeout(()=>window.MLH?.playFeedbackSound?.(true,true,sound),180));}
+      timers.current.push(setTimeout(()=>setFading(true),1700));timers.current.push(setTimeout(()=>next(),2000));
+    }
+  }
+  return <div className={window.MLH.shell.pageShellClass}>
+    <window.MLH.AppHeader icon={ASSET.appIcon} title="Keyboard Note Identification" subtitle="Identify note names on the piano keyboard." worksheetConfig={() => ({ version: 1, activityId: "keyboard-notes", sourceUrl: window.location.href, settings: { level, options, showC } })}>
+      <window.MLH.ScoreStreakPanel achievementLevel={level} assets={ASSET} correct={correct} attempted={attempted} accuracy={attempted?Math.round(correct/attempted*100):0} streak={streak} bestStreak={best} resetScore={reset} confettiKey={confetti} autoShowMedals={autoShowMedals} medalEligible={medalEligible} medalThresholdValues={MEDAL_THRESHOLDS}/>
+    </window.MLH.AppHeader>
+    <div className={window.MLH.shell.pageContentClass}><main className={window.MLH.shell.mainShellClass} onPointerDown={event=>{if(feedback&&questionVisible&&!event.target.closest('button,input,[data-menu-trigger],[data-menu-panel]'))next();}}>
+      <div className="hub-toolbar relative z-20">
+        <div className="hub-toolbar-left">
+          <div className="hub-menu-anchor relative" ref={levelRef}>
+            <window.MLH.LevelButton icon={<img src={ASSET.level} alt="" className="h-[26px] w-[28px]"/>} activeLevel={medalEligible?level:'Custom'} activeLabel={medalEligible?LEVELS[level].label:'Custom'} isCustom={!medalEligible} onClick={()=>{setCustomiseOpen(false);setLevelOpen(value=>!value);}} dataMenuTrigger={true}/>
+            {levelOpen&&<window.MLH.MenuPanel title="Level" position="left-0" dataMenuPanel={true}><window.MLH.LevelMenu activeLevel={level} onSelect={applyLevel} levels={LEVELS}/></window.MLH.MenuPanel>}
+          </div>
+          <div className="hub-menu-anchor relative" ref={customiseRef}>
+            <window.MLH.CustomiseButton icon={<img src={ASSET.customise} alt="" className="h-[26px] w-[26px]"/>} onClick={()=>{setLevelOpen(false);setCustomiseOpen(value=>!value);}} dataMenuTrigger={true}/>
+            {customiseOpen&&<window.MLH.MenuPanel title="Customise" position="left-0" variant="customise" dataMenuPanel={true}>
+              <window.MLH.MenuSubheading>Help</window.MLH.MenuSubheading>
+              <window.MLH.MenuToggleRow glyph={<img src="./guide.svg" alt="" aria-hidden="true" className="h-[22px] w-[22px] object-contain"/>} label="Guide Note" checked={showC} onChange={()=>setShowC(value=>!value)}/>
+              {level==='N5'&&<><window.MLH.MenuSubheading>Note names</window.MLH.MenuSubheading>
+              {Object.entries({sharps:'Sharps',flats:'Flats',enharmonics:'E♯, B♯, C♭ and F♭'}).filter(([key])=>key!=='enharmonics'||level==='N5').map(([key,label])=><window.MLH.MenuToggleRow key={key} glyph={<NoteGroupGlyph type={key}/>} label={label} checked={options[key]} disabled={key==='enharmonics'?!(options.sharps||options.flats):!K.answers({...options,[key]:false}).length} onChange={()=>toggle(key)}/>)}</>}
+            </window.MLH.MenuPanel>}
+          </div>
+        </div>
+        <div className="hub-toolbar-feedback" aria-live="polite"><window.MLH.FeedbackBadge feedback={feedback} fading={fading} animationPrefix="note"/></div>
+        <div className="hub-toolbar-right"><window.MLH.SkipButton resetStreak={()=>setStreak(0)} onClick={()=>next()} icon={<img src={ASSET.next} alt="" className="h-[27.8px] w-[27.8px]"/>}/></div>
+      </div>
+      <div className="keyboard-area keyboard-question-transition" style={{opacity:questionVisible?1:0}}><Keyboard question={question} feedback={feedback} options={options} showC={showC}/></div>
+      <div className="chords-question-card relative z-10 mx-3 overflow-hidden rounded-xl border border-stone-200 bg-stone-50 p-4 shadow-md">
+        <p className="text-base font-semibold leading-tight">Identify the highlighted <strong>note</strong>.</p>
+        <div className="keyboard-answers keyboard-question-transition" style={{opacity:questionVisible?1:0}}>{[1,0,-1].filter(offset=>answers.some(answer=>answer.offset===offset)).flatMap(offset=>K.letters.map((letter,index)=>{const answer=answers.find(item=>item.offset===offset&&item.index===index);return answer?<button type="button" key={answer.id} disabled={Boolean(feedback)||!questionVisible} aria-label={answer.id.replace('#',' sharp').replace('b',' flat')} onClick={event=>{event.currentTarget.blur();submit(answer);}} className={`keyboard-answer ${answer.offset?'accidental':''} ${feedback&&(K.correct(answer,question)?'correct':selected===answer.id?'incorrect':'')}`}>{answer.offset?<span className="flex items-center justify-center gap-[3px]"><span>{letter}</span><span className={`music-symbol relative inline-block leading-none ${answer.offset===1?'top-[1px] text-[1.1em]':'top-[2px] text-[1.15em]'}`}>{window.BRAVURA_SYMBOLS[answer.offset===1?'sharp':'flat']}</span></span>:letter}</button>:<div className="keyboard-empty" key={`${letter}:${offset}`} aria-hidden="true"/>;}))}</div>
+      </div>
+    </main></div>
+  </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+<script src="./footer.js?v=20261005-update-history"></script>
+</body></html>
