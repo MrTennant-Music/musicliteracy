@@ -63,7 +63,7 @@ for verifying Netlify's compute, request and bandwidth allowances.
    execute keyboard_pilot. Ensure no service key appears in published assets.
 3. Check all three levels, all accepted enharmonic answers for enabled options,
    room/player/day/month limits, expired rooms, disconnect/reconnect and closure.
-4. Run School Connection Check on the teacher computer AND a pupil device over
+4. Create a game on the teacher computer and join from a pupil device over
    the actual school Wi-Fi. A home-network pass cannot prove school access.
 5. Trial one class before inviting other teachers; inspect Supabase and Netlify
    usage afterwards. No automatic paid-plan upgrade is part of this setup.
