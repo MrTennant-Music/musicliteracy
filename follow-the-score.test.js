@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const vm = require("node:vm");
 
 const source = fs.readFileSync("wheredidthemusicstop.html", "utf8");
 const homepage = fs.readFileSync("index.html", "utf8");
@@ -48,4 +49,16 @@ test("the Hub lists Follow the Score with the requested icon", () => {
   assert.match(homepage, /href: "wheredidthemusicstop\.html"[\s\S]*?disabled: \[\]/);
   assert.match(homepage, /"Follow the Score": "stopmusic-icon\.svg"/);
   assert.match(homepage, /app\.comingSoon \|\| app\.title === "Digital Question Papers" \|\| app\.title === "Follow the Score"/);
+});
+
+
+test("National 3 never generates repeat signs even when the repeat chance succeeds", () => {
+  const code = source.slice(source.indexOf("function followScoreRange"), source.indexOf("function followScoreNoteSounds"));
+  const context = vm.createContext({ Math: Object.assign(Object.create(Math), { random: () => 0 }), randomItem: items => items[0] });
+  vm.runInContext(code, context);
+  const n3 = JSON.parse(JSON.stringify(vm.runInContext('makeFollowScoreRepeat("N3", 8)', context)));
+  assert.equal(n3.type, "none");
+  assert.deepEqual(n3.placements, []);
+  assert.deepEqual(n3.order, [0,1,2,3,4,5,6,7]);
+  assert.equal(vm.runInContext('makeFollowScoreRepeat("N4", 8).type', context), "repeat");
 });

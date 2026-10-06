@@ -27,7 +27,17 @@
     return candidates[Math.min(candidates.length - 1, Math.floor(random() * candidates.length))];
   }
   function correct(answer, key) { return answer.pitch === key.pitch % 12; }
-  const api = { letters, defaults, subtitles, keys, visibleKeys, answers, pool, question, correct };
+  function classroomSettings(input) {
+    if (!input || !defaults[input.level]) return null;
+    const options = input.options;
+    if (!options || options.octaves !== defaults[input.level].octaves) return null;
+    if (!['naturals','sharps','flats','enharmonics'].every(key => typeof options[key] === 'boolean')) return null;
+    if (input.level !== 'N5' && (!options.naturals || options.sharps || options.flats || options.enharmonics)) return null;
+    const clean = Object.fromEntries(['octaves','naturals','sharps','flats','enharmonics'].map(key => [key,options[key]]));
+    if (!answers(clean).length) return null;
+    return { level: input.level, options: clean, showC: input.showC === true };
+  }
+  const api = { letters, defaults, subtitles, keys, visibleKeys, answers, pool, question, correct, classroomSettings };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.KeyboardNotes = api;
 })(typeof window !== 'undefined' ? window : globalThis);
