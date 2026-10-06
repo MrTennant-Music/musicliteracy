@@ -192,7 +192,7 @@
     return ({ N3: "National 3", N4: "National 4", N5: "National 5", H: "Higher", AH: "Advanced Higher" })[level] || "Custom";
   }
 
-  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, profileUsesSharedSettings = true, profileShowLabel = true, profileShareDisabled = false, worksheetConfig, worksheetMode = false, classroomPilotUrl }) {
+  function AppHeader({ icon, title, subtitle, children, profileTitle, profileLabel, profileShareUrl, profileUsesSharedSettings = true, profileShowLabel = true, profileShareDisabled = false, worksheetConfig, worksheetMode = false, classroomPilotUrl, classroomPilotMode = false }) {
     const [qrOpen, setQrOpen] = React.useState(false);
     const [worksheetOpening, setWorksheetOpening] = React.useState(false);
     const [, setProfileRevision] = React.useState(0);
@@ -304,11 +304,13 @@
                   displayedTitle,
                   React.createElement(ProfileQrButton, { disabled: activeWorksheetMode || profileShareDisabled, onClick: () => setQrOpen(true) }),
                   React.createElement(WorksheetButton, { enabled: worksheetEnabled && !worksheetOpening, selected: activeWorksheetMode, returnLabel: typeof displayedTitle === "string" ? displayedTitle : "activity", onClick: activeWorksheetMode ? worksheetHeader?.onExit : createWorksheet }),
-                  classroomPilotUrl && !activeWorksheetMode && React.createElement("a", {
-                    href: classroomPilotUrl, target: "_blank", rel: "noopener noreferrer",
-                    className: "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white text-stone-700 shadow-sm transition hover:border-stone-500 hover:bg-stone-50",
-                    "aria-label": "Open classroom pilot", title: "Classroom Pilot",
-                  }, React.createElement("img", { src: "classroom-pilot.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain" }))
+                  classroomPilotUrl && !activeWorksheetMode && React.createElement("button", {
+                    type: "button", onClick: () => { window.location.href = classroomPilotUrl; },
+                    className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border shadow-sm transition ${classroomPilotMode ? "border-black bg-black text-white hover:bg-stone-800" : "border-stone-300 bg-white text-stone-700 hover:border-stone-500 hover:bg-stone-50"}`,
+                    "aria-pressed": classroomPilotMode,
+                    "aria-label": classroomPilotMode ? "Return to individual practice" : "Open classroom pilot",
+                    title: classroomPilotMode ? "Return to Individual Practice" : "Classroom Pilot",
+                  }, React.createElement("img", { src: "classroom-pilot.svg", alt: "", "aria-hidden": "true", className: "h-5 w-5 object-contain", style: classroomPilotMode ? { filter: "invert(1)" } : undefined }))
                 ),
                 React.createElement("p", { className: "relative top-[5px] whitespace-nowrap text-[1rem] leading-[1.05] text-stone-600 sm:top-0 sm:max-w-2xl sm:text-[15.36px] xl:whitespace-nowrap" }, displayedSubtitle)
               )
