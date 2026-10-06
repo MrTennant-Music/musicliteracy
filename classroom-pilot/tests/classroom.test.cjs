@@ -25,3 +25,17 @@ test('database denies public access and atomically limits rooms and duplicate an
  assert.match(sql,/enable row level security/);assert.match(sql,/from public,anon,authenticated/);
  assert.match(sql,/for update/);assert.match(sql,/Answer already submitted/);assert.match(sql,/Pilot usage limit reached/);
 });
+
+test('pupil action waits for an active poll and prevents a duplicate click',async()=>{
+ const html=require('node:fs').readFileSync(require('node:path').join(__dirname,'../../keyboard-classroom.html'),'utf8');
+ const body=html.slice(html.indexOf(' async function act('),html.indexOf(' useEffect(()=>{let timeout;'));
+ let release;const read=new Promise(resolve=>{release=resolve;});let calls=0,busy=false;
+ const refs={session:{current:{pin:'123456',token:'test'}},inFlight:{current:true},actionPending:{current:false},pendingRead:{current:read}};
+ const context={...refs,setBusy:value=>{busy=value;},setError:()=>{},request:async()=>{calls++;return {phase:'question'};},update:()=>{},setSelected:()=>{}};
+ require('node:vm').runInNewContext(body+';this.act=act;',context);
+ const answer=context.act('answer',{answer:'E',index:0});
+ assert.equal(busy,true);assert.equal(calls,0);
+ await context.act('answer',{answer:'E',index:0});
+ release();await answer;
+ assert.equal(calls,1);assert.equal(busy,false);assert.equal(refs.actionPending.current,false);
+});

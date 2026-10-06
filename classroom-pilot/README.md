@@ -1,7 +1,9 @@
 # Keyboard classroom pilot
 
 Status: Supabase Free project provisioned; schema and rolled-back synthetic game
-verified on 6 October 2026. Disabled by default and not published yet.
+verified on 6 October 2026. The separate Netlify pilot is deployed privately,
+and its database is enabled for testing. Pupil access still awaits approval.
+Pilot: https://mlh-keyboard-classroom-pilot.netlify.app/
 Project: https://supabase.com/dashboard/project/kqunooxqmvkvnlechzcq
 Normal `keyboard-notes.html` and the homepage are untouched. Pilot entry is
 `keyboard-classroom.html`, and Individual Practice links to the normal activity.
@@ -12,8 +14,8 @@ Use a new Supabase **Free** project and a separate Netlify pilot site, not the
 main Hub deployment. The pilot site may use the same repository, with base
 directory `classroom-pilot` and its included netlify.toml. Check the current
 Netlify account allowance first: separate sites in the same team can still
-share a quota. Use an isolated team/account allocation if the main Hub shares
-that quota; do not assume a separate site alone provides billing isolation.
+share a quota. The user selected the existing free team, so the pilot and main Hub share
+Netlify credits. A separate site does not provide billing isolation.
 The pilot build publishes only the keyboard pages and shared assets (about
 4.3 MB), not the complete Hub or any database/server setup files.
 
@@ -83,5 +85,10 @@ Local tests cover request validation, default-off behaviour and question creatio
 The real Supabase database passed smoke.sql: create, join, host-only control,
 answer, duplicate rejection, score hiding until reveal, scoring, finish and end.
 The transaction rolled back; enabled=false, requests=0, games=0, rooms=0.
-Public table and RPC access are denied. Deployment, browser-to-server gameplay,
-multi-device behaviour and the actual school network still need verification.
+Public table and RPC access are denied. Two live browser sessions verified
+create, join, shared questions, answering, the 1,000-point leaderboard and host
+closure. A polling collision that could discard a click was fixed and protected
+by a regression test. The actual school network and classroom load still need
+verification. The database off switch was verified against the deployed site.
+The build always runs for pilot-branch updates because its keyboard source and
+shared assets live outside the Netlify base directory.
