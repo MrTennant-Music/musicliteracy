@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
-const {handler}=require('./classroom.js');
+const {handler}=require('../functions/classroom.js');
 const vars=['CLASSROOM_ENABLED','SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','CLASSROOM_HOST_KEY'];
 function env(){Object.assign(process.env,{CLASSROOM_ENABLED:'true',SUPABASE_URL:'https://example.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'test-server-secret',CLASSROOM_HOST_KEY:'test-invite'});}
 test('pilot fails closed before any Supabase request',async()=>{

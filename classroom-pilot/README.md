@@ -18,8 +18,11 @@ The pilot build publishes only the keyboard pages and shared assets (about
 4.3 MB), not the complete Hub or any database/server setup files.
 
 Run schema.sql in the new project's SQL editor. Keep the default database switch
-off until checks pass. Add these environment values to the pilot site's Functions
-scope, never to browser code or Git:
+off until checks pass. Add these environment values to the pilot site's protected
+configuration, never to browser code or Git. The Netlify Free plan makes secret
+values available to builds, functions and runtime; limiting them to Functions
+alone requires an upgrade. Set secrets for Production only and leave preview,
+branch and local development contexts blank:
 
 - SUPABASE_URL: the project URL
 - SUPABASE_SERVICE_ROLE_KEY: server-only service-role key
