@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1280" />
+  <link rel="stylesheet" href="./desktop-layout.css?v=4" />
+  <title>Keyboard Note Identification · Classroom Pilot</title>
+  <link rel="icon" type="image/svg+xml" href="./keyboard-icon.svg" />
+  <link rel="apple-touch-icon" href="./keyboard-icon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./desktop-layout.js?v=2"></script>
+  <link rel="stylesheet" href="./hub-ui.css?v=1.6" />
+  <script src="./hub-input.js?v=1.4"></script>
+  <script src="./hub-audio.js?v=20261002-ready-before-play"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="./hub-progress.js?v=20261005-per-setup"></script>
+  <script src="./hub-achievements.js?v=20261005-progress"></script>
+  <script src="./hub-shell.js?v=20261005-per-setup"></script>
+  <script src="./hub-menu.js?v=20261006-disabled-customise"></script>
+  <script src="./keyboard-notes.js?v=20261006-level-descriptions"></script>
+  <script src="./bravura-symbols.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"></script>
+  <style>
+.keyboard-area { width: max-content; margin: 32px auto; }
+.keyboard-score { display: block; height: 250px; }
+@font-face { font-family: "Bravura"; src: url("./Bravura.otf") format("opentype"); font-display: block; }
+.music-symbol { font-family: "Bravura", serif; font-weight: 400; }
+.keyboard-answers { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; margin: 16px 0 0; }
+.keyboard-answer { display: flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 12px; border: 1px solid #d6d3d1; border-radius: 12px; background: white; color: black; font-size: 1.05rem; font-weight: 700; }
+.keyboard-answer:hover:not(:disabled) { border-color: black; }
+.keyboard-answer:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.keyboard-answer.correct { background: #16a34a; border-color: #16a34a; color: white; }
+.keyboard-answer.incorrect { background: #dc2626; border-color: #dc2626; color: white; }
+.keyboard-empty { min-height: 46px; }
+.keyboard-question-transition { transition: opacity 260ms ease; }
+@media (prefers-reduced-motion: reduce) { .keyboard-question-transition { transition: none; } }
+.pilot-field { display:block; width:100%; margin-top:6px; padding:10px 12px; border:1px solid #d6d3d1; border-radius:10px; background:white; }
+button:disabled { opacity:.5; cursor:default; }
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const {useState,useRef,useEffect}=React;
+const K=window.KeyboardNotes;
+function Keyboard({question,feedback,options,showC}){
+  const width=options.octaves===1?384:720;
+  return <svg className="keyboard-score" width={width} viewBox={`-1 -1 ${width+2} 252`} role="img" aria-label="Piano keyboard with one key highlighted. Identify the highlighted note.">
+    {K.visibleKeys(options).filter(key=>!key.black).map(key=><rect key={key.pitch} x={key.x} y="0" width="48" height="248" rx="5" fill={key.pitch===question.pitch?(feedback?(feedback.correct?'#16a34a':'#dc2626'):'#2563eb'):'#fff'} stroke="#78716c"/>)}
+    {K.visibleKeys(options).filter(key=>key.black).map(key=><rect key={key.pitch} x={key.x} y="0" width="30" height="155" rx="5" fill={key.pitch===question.pitch?(feedback?(feedback.correct?'#16a34a':'#dc2626'):'#2563eb'):'#292524'} stroke="#0c0a09"/>)}
+    {showC&&K.visibleKeys(options).filter(key=>!key.black&&key.pitch%12===0).map(key=><text key={`label-${key.pitch}`} x={key.x+24} y="225" textAnchor="middle" fontSize="17" fontWeight="700" fill={key.pitch===question.pitch?'white':'#57534e'} pointerEvents="none">C</text>)}
+  </svg>;
+}
+
+function Classroom(){
+ const [game,setGame]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[connected,setConnected]=useState(true);
+ const [pin,setPin]=useState(new URLSearchParams(location.search).get('pin')||''),[name,setName]=useState(''),[hostKey,setHostKey]=useState(''),[level,setLevel]=useState('N3'),[count,setCount]=useState('10'),[selected,setSelected]=useState(null),[now,setNow]=useState(Date.now()),[status,setStatus]=useState('');
+ const session=useRef(null),inFlight=useRef(false),failures=useRef(0),mounted=useRef(true),clockOffset=useRef(0);
+ async function request(action,extra={},identity=session.current){
+  const response=await fetch('./.netlify/functions/classroom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...identity,...extra}),signal:AbortSignal.timeout(12000)});
+  let result;try{result=await response.json();}catch{throw Error('Classroom service is not available on this site. Individual practice is still available.');}if(!response.ok)throw Error(result.error||'Classroom service unavailable.');return result;
+ }
+ function update(result){if(!mounted.current)return;clockOffset.current=result.serverTime-Date.now();setNow(result.serverTime);setGame(result);setConnected(true);setError('');failures.current=0;}
+ async function act(action,extra){
+  if(inFlight.current)return;inFlight.current=true;setBusy(true);setError('');
+  try{
+   if(action==='check'){await request('check',{},{});setStatus('Connected. This browser can reach the classroom service. Test on a pupil device too.');return;}
+   let identity=session.current;
+   if(action==='join'){const bytes=crypto.getRandomValues(new Uint8Array(32));identity={pin,token:Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('')};}
+   const result=await request(action,extra,identity);
+   if(action==='create'){session.current={pin:result.pin,token:result.token};setHostKey('');}
+   if(action==='join')session.current=identity;
+   if(result.closed){session.current=null;setGame(null);setSelected(null);return;}
+   update(result);
+   if(action==='answer')setSelected(extra.answer);
+  }catch(e){setError(e.message);}finally{inFlight.current=false;setBusy(false);}
+ }
+ useEffect(()=>{let timeout;mounted.current=true;
+  async function poll(){
+   if(session.current&&!inFlight.current&&failures.current<3){
+    inFlight.current=true;
+    try{const result=await request('read');update(result);}catch(e){failures.current++;setConnected(false);setError(e.message+' Live updates paused.');}finally{inFlight.current=false;}
+   }
+   timeout=setTimeout(poll,failures.current?Math.min(30000,5000*2**failures.current):5000);
+  }
+  timeout=setTimeout(poll,5000);const clock=setInterval(()=>setNow(Date.now()+clockOffset.current),250);
+  return()=>{mounted.current=false;clearTimeout(timeout);clearInterval(clock);};
+ },[]);
+ useEffect(()=>setSelected(null),[game?.index]);
+ const live=game?.phase==='question',review=game?.phase==='review'||game?.phase==='finished';
+ const answers=game?K.answers(game.options):[];
+ const seconds=game?.deadline?Math.max(0,Math.ceil((game.deadline-now)/1000)):0;
+ return <div className={window.MLH.shell.pageShellClass}>
+  <window.MLH.AppHeader icon="./keyboard-icon.svg" title="Keyboard Note Identification" subtitle="Classroom Pilot · Play together with your class." profileUsesSharedSettings={false}/>
+  <div className={window.MLH.shell.pageContentClass}><main className={window.MLH.shell.mainShellClass}>
+   <div className="flex items-center justify-between mb-5"><strong>Classroom Pilot</strong><a className="keyboard-answer" href="./keyboard-notes.html">Individual Practice</a></div>
+   {error&&<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 mb-4">{error} {!connected&&<button className="keyboard-answer mt-3" disabled={busy} onClick={()=>{failures.current=0;act('read');}}>Reconnect</button>}</div>}
+   {!game?<div className="grid grid-cols-2 gap-6">
+    <section className="rounded-xl border border-stone-200 p-5"><h2 className="text-xl font-bold mb-4">Join a Game</h2><label className="block mb-3">Game PIN<input className="pilot-field" value={pin} maxLength="6" inputMode="numeric" onChange={e=>setPin(e.target.value.replace(/[^0-9]/g,''))}/></label><label className="block mb-4">Nickname<input className="pilot-field" value={name} maxLength="24" autoComplete="off" onChange={e=>setName(e.target.value)}/></label><button className="keyboard-answer w-full" disabled={busy||pin.length!==6||!name.trim()} onClick={()=>act('join',{name:name.trim()})}>Join</button><p className="text-sm text-stone-500 mt-3">Use a nickname rather than your full name. No pupil account needed.</p></section>
+    <section className="rounded-xl border border-stone-200 p-5"><h2 className="text-xl font-bold mb-4">Host a Game</h2><label className="block mb-3">Teacher Access Key<input className="pilot-field" type="password" value={hostKey} autoComplete="off" onChange={e=>setHostKey(e.target.value)}/></label><div className="grid grid-cols-2 gap-4 mb-4"><label>Level<select className="pilot-field" value={level} onChange={e=>setLevel(e.target.value)}>{['N3','N4','N5'].map(id=><option key={id} value={id}>National {id.slice(1)}</option>)}</select></label><label>Questions<select className="pilot-field" value={count} onChange={e=>setCount(e.target.value)}>{[5,10,15,20].map(n=><option key={n}>{n}</option>)}</select></label></div><button className="keyboard-answer w-full" disabled={busy||!hostKey} onClick={()=>act('create',{hostKey,level,count:Number(count)})}>Create Game</button><p className="text-sm text-stone-500 mt-3">Invitation-only pilot · 35 pupils per room · Each correct answer earns 1,000 points.</p></section>
+    <section className="col-span-2 rounded-xl border border-stone-200 p-5"><h2 className="font-bold mb-3">School Connection Check</h2><button className="keyboard-answer" disabled={busy} onClick={()=>act('check')}>Check Connection</button><p role="status" className="mt-3">{status}</p></section>
+   </div>:<>
+    <div className="flex items-center justify-between"><p className="text-xl font-bold">Game PIN: {game.pin}</p><p>{game.level} · {game.phase==='lobby'?'Waiting for pupils':`Question ${game.index+1} of ${game.total}`}</p>{game.host&&<button className="keyboard-answer" disabled={busy} onClick={()=>act('end')}>End Game</button>}</div>
+    {game.phase==='lobby'?<div className="text-center py-10"><h2 className="text-2xl font-bold">{game.host?'Invite your class using the game PIN':'Waiting for the teacher'}</h2><p className="mt-3">{game.players.length} joined</p>{game.host&&<button className="keyboard-answer mx-auto mt-5" disabled={busy||!game.players.length||!connected} onClick={()=>act('start')}>Start Game</button>}</div>:game.phase==='finished'?<h2 className="text-2xl font-bold text-center py-8">Final Results</h2>:<>
+     <div className="keyboard-area"><Keyboard question={game.question} options={game.options} showC={false} feedback={null}/></div>
+     <div className="flex justify-between font-semibold mb-3"><p>Identify the highlighted note.</p><p>{live?`${seconds} seconds`:'Answers Revealed'}</p></div>
+     {!game.host&&<div className="keyboard-answers">{answers.map(answer=><button key={answer.id} className={`keyboard-answer ${review&&K.correct(answer,game.question)?'correct':''} ${review&&selected===answer.id&&!K.correct(answer,game.question)?'incorrect':''}`} disabled={busy||!live||game.submitted||!connected||seconds===0} onClick={()=>act('answer',{answer:answer.id,index:game.index})}>{answer.label}</button>)}</div>}
+     {live&&game.submitted&&<p role="status" className="text-center mt-4">Answer submitted. Wait for the teacher.</p>}
+     {game.host&&<button className="keyboard-answer mx-auto" disabled={busy||!connected} onClick={()=>act(live?'reveal':'next')}>{live?'Reveal Answers':game.index+1===game.total?'Finish Game':'Next Question'}</button>}
+    </>}
+    <section className="mt-6 rounded-xl border border-stone-200 p-4"><h2 className="text-lg font-bold mb-3">{review?'Leaderboard':'Class'}</h2>{game.players.map((p,i)=><div key={i} className="flex justify-between py-2 border-b border-stone-100"><span>{review?`${i+1}. `:''}{p.name}</span><span>{review?`${p.score} points`:p.answered?'Answered':'Waiting'}</span></div>)}</section>
+   </>}
+  </main></div>
+ </div>;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Classroom/>);
+
+</script><script src="./footer.js?v=20261005-update-history"></script></body></html>
