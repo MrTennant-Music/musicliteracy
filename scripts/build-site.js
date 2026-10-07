@@ -60,6 +60,8 @@ function compileJsx(source, filename) {
     filename,
     presets: ["react"],
     sourceMaps: false,
+    compact: true,
+    comments: false,
   }).code;
 }
 

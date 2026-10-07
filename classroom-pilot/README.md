@@ -1,111 +1,84 @@
-# Keyboard classroom pilot
+# Keyboard classroom service
 
-Status: Supabase Free project provisioned; schema and rolled-back synthetic game
-verified on 6 October 2026. The separate Netlify pilot is deployed privately,
-and its database is enabled for testing. Pupil access still awaits approval.
-Pilot: https://mlh-keyboard-classroom-pilot.netlify.app/
-Project: https://supabase.com/dashboard/project/kqunooxqmvkvnlechzcq
-Normal `keyboard-notes.html` and the homepage are untouched. Pilot entry is
-`keyboard-classroom.html`; the normal activity remains at `keyboard-notes.html`.
+The classroom feature is part of `main`. `Join a Game` opens
+`keyboard-classroom.html?mode=join` on the main Hub, and `Host a Game` opens
+that same page with the teacher's current keyboard settings. No second Netlify
+project is needed once the main deployment is configured and verified.
 
-## Isolated deployment
+## Main Hub deployment
 
-Use a new Supabase **Free** project and a separate Netlify pilot site, not the
-main Hub deployment. The pilot site may use the same repository, with base
-directory `classroom-pilot` and its included netlify.toml. Check the current
-Netlify account allowance first: separate sites in the same team can still
-share a quota. The user selected the existing free team, so the pilot and main Hub share
-Netlify credits. A separate site does not provide billing isolation.
-The pilot build publishes only the keyboard pages and shared assets (about
-4.3 MB), not the complete Hub or any database/server setup files.
+The repository-root `netlify.toml` builds the complete Hub into `dist` and
+bundles `classroom-pilot/functions/classroom.js` as the main project's
+`/.netlify/functions/classroom` endpoint. The historical `classroom-pilot`
+folder contains backend code, schema and tests; its name does not require a
+separate hosted site. The public build excludes this folder and server files.
 
-Run schema.sql in the new project's SQL editor. Keep the default database switch
-off until checks pass. Add these environment values to the pilot site's protected
-configuration, never to browser code or Git. The Netlify Free plan makes secret
-values available to builds, functions and runtime; limiting them to Functions
-alone requires an upgrade. Set secrets for Production only and leave preview,
-branch and local development contexts blank:
+The existing Supabase database is retained; no new database or data migration
+is needed. Configure these variables on the **main** Netlify project, for
+Production only. Leave preview and branch contexts unset. On plans that allow
+scope selection, choose Functions only; Personal currently limits secret
+variables to Builds, Functions and Runtime. The build never embeds these
+variables in public assets. Root configuration disables classroom access in
+Deploy Previews and branch deploys:
 
-- SUPABASE_URL: the project URL
-- SUPABASE_SERVICE_ROLE_KEY: server-only service-role key
-- CLASSROOM_ENABLED: true after validation
+- `SUPABASE_URL`: copy the existing pilot project's database URL.
+- `SUPABASE_SERVICE_ROLE_KEY`: copy the existing server-only credential; mark
+  it as secret. Never put its value in Git or public browser assets.
+- `CLASSROOM_ENABLED`: `true` after the deployment is ready to verify.
 
-Then enable the database switch using the commented statement in schema.sql.
-No Supabase browser SDK, Realtime connections, or pupil accounts are required.
-The browser calls only its own pilot site's .netlify/functions/classroom endpoint.
-Updates poll every five seconds; this deliberately trades a small delay for lower
-usage. Answers and teacher actions return an immediate refreshed snapshot.
+The Supabase database's existing enabled switch must also be on. Service
+credentials are used only by the backend; browsers call the same-origin
+Netlify endpoint and have no direct access to the database.
 
-## Game configuration and data
+## Retiring the separate project
 
-No application caps on simultaneous rooms, pupils, daily games or monthly
-service requests. Provider free-plan allowances still apply. 45-minute room expiry, 5–20 questions, 20 seconds per
-question, 1,000 points per correct answer (no speed bonus). N3/N4 white keys;
-N5 standard sharps/flats. Nicknames and temporary scores only. The creator alone receives the room-control token. Room and player
-credentials are random tokens stored hashed in Supabase; pupil tokens stay in
-memory and refresh requires rejoining. Expired rooms are deleted on the next
-service request. No browser can access the room tables or RPC directly using a
-public key. Service-role credentials belong only in the isolated backend.
+1. Stop automatic builds on `mlh-keyboard-classroom-pilot` while leaving its
+   current deployment available during the transition.
+2. Configure the main project's Production/Functions variables above.
+3. Commit and push the consolidated changes to `main` once. Confirm the main
+   Netlify build succeeds and deploys the classroom function.
+4. On the main Hub, verify create, join, start, answer, reveal, next and end in
+   two browser sessions. Verify host settings, game PIN/QR links, rejection of
+   duplicate/late answers and host-only room control.
+5. Only after that check, delete the obsolete Netlify project with explicit
+   deletion confirmation. Keep the Supabase project: the main site uses it.
 
-Hosting needs no teacher key: anyone with site access can create games and consume
-shared hosting quota. Review usage after each session, and set provider-side
-rate limits/alerts before a broader rollout. Monthly budget is not a substitute
-for verifying Netlify's compute, request and bandwidth allowances.
+Deleting the old project removes its Netlify URL and deployment history.
+Existing bookmarks to the old pilot URL must be updated to the main Hub.
 
-## Required verification before activation
+The former `classroom-pilot/netlify.toml` and `build.cjs` remain historical
+rollback tools and must not be used to create another production site.
+GitHub Pages can still host the static Hub, but cannot execute this Netlify
+backend; the classroom feature requires the main Netlify deployment.
 
-1. Apply SQL to the new project and test create/join/start/answer/reveal/next/end
-   with at least two browser sessions. Verify duplicate answers and late answers
-   are rejected and that only the teacher can control a room.
-2. Verify RLS and function grants: anon/authenticated cannot read either table or
-   execute keyboard_pilot. Ensure no service key appears in published assets.
-3. Check all three levels, all accepted enharmonic answers for enabled options,
-   unrestricted room creation and pupil joining, expired rooms, disconnect/reconnect and closure.
-4. Create a game on the teacher computer and join from a pupil device over
-   the actual school Wi-Fi. A home-network pass cannot prove school access.
-5. Trial one class before inviting other teachers; inspect Supabase and Netlify
-   usage afterwards. No automatic paid-plan upgrade is part of this setup.
+## Game behaviour and checks
 
-## Emergency revert
+Rooms expire after 45 minutes. Teachers choose 5–20 questions, with 20 seconds
+per question and 1,000 points per correct answer. Questions honour the selected
+level, note groups, octave range and C labels. Nicknames and temporary scores
+only are stored. Random room/player tokens are hashed in the database; pupil
+tokens stay in browser memory and refreshing requires rejoining. The creator
+alone receives the room-control token. Public database table/RPC access is
+blocked. Expired rooms are deleted on the next service request.
 
-Set CLASSROOM_ENABLED=false on the pilot deployment, or execute:
+Updates poll every five seconds; answers and teacher actions refresh
+immediately. There are no application-level room, pupil or monthly caps, but
+Netlify and Supabase plan allowances still apply. Hosting needs no teacher
+key, so site visitors can create games and consume shared service quota.
+
+`pnpm test` includes `classroom-pilot/tests/classroom.test.cjs`. Before wider
+classroom use, verify the school Wi-Fi and trial one class, then inspect both
+providers' usage. An existing database from before cap removal needs
+`remove-capacity-limits.sql`; do not recreate or reset the database.
+
+## Emergency switch-off
+
+Set `CLASSROOM_ENABLED=false` on the main Netlify project and redeploy, or
+immediately disable the service in Supabase with:
 
 ```sql
 update public.keyboard_pilot_settings set enabled=false where id=true;
 ```
 
-The database switch blocks existing sessions on their next request. Pupils can
-open `keyboard-notes.html` for individual practice. The normal Hub has no dependencies on this service.
-To fully remove the pilot, unpublish the isolated site and delete the pilot-only
-files. Do not reset the repository: unrelated activity edits may be present.
-
-Local tests cover request validation, default-off behaviour and question creation.
-The real Supabase database passed smoke.sql: create, join, host-only control,
-answer, duplicate rejection, score hiding until reveal, scoring, finish and end.
-The transaction rolled back; enabled=false, requests=0, games=0, rooms=0.
-Public table and RPC access are denied. Two live browser sessions verified
-create, join, shared questions, answering, the 1,000-point leaderboard and host
-closure. A polling collision that could discard a click was fixed and protected
-by a regression test. The actual school network and classroom load still need
-verification. The database off switch was verified against the deployed site.
-The build always runs for pilot-branch updates because its keyboard source and
-shared assets live outside the Netlify base directory.
-
-## Teacher and pupil entry
-
-The homepage Games section has a Join a Game entry using classroom-pilot.svg.
-It opens the pilot in pupil mode (`?mode=join`, also the default). Pupils enter
-only a game PIN and nickname. The keyboard activity header's Host a Game button
-opens `?mode=host&setup=...` with its current level, note groups, octave range and
-C labels. The host view offers question count, with no separate level selector.
-The server validates this configuration and creates questions from exactly the
-enabled note groups. The selected classroom header button restores the supplied
-configuration when returning to Individual Practice. Host QR links use pupil
-mode with the current PIN, never the teacher setup URL.
-
-This pilot remains keyboard-only. The main homepage changes are prepared locally
-and on the pilot branch; publication to the main Hub and public pupil access
-require the final release step. Netlify's private-site gate still applies.
-
-Capacity caps were removed at the user's request. Apply `remove-capacity-limits.sql`
-to an existing pilot database; existing limit-setting columns are ignored.
+The database switch blocks existing sessions on their next request.
+`keyboard-notes.html` remains available for individual practice.
